@@ -1,0 +1,166 @@
+root {
+    --brand: #0f8b8d;            /* botón/acentos (turquesa) */
+    --brand-dark: #0c6f71;
+    --ink: #0d1b2a;              /* texto principal */
+    --muted: #6b7280;            /* texto secundario */
+    --danger: #b91c1c;
+    --field: #ffffff;
+    --field-border: #9fb8bb;     /* borde inputs */
+    --bg: #fbf6ec;               /* fondo crema */
+    --shadow: 0 10px 25px rgba(0,0,0,.08);
+    --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+
+.page {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--bg);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    color: var(--ink);
+}
+
+.card {
+    width: 100%;
+    max-width: 440px;
+    background: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 32px;
+}
+
+.logo {
+    width: 100px;
+    height: auto;
+    object-fit: contain;
+}
+.logo::before,
+.logo::after {
+    content: "";
+    position: absolute;
+    width: 6px; height: 6px;
+    background: #ffd166;
+    border-radius: 50%;
+    top: -6px; left: 6px;
+    box-shadow: 12px -4px 0 #ffd166, 22px 2px 0 #ffd166;
+}
+
+.brandName {
+    font-family: 'Nunito', sans-serif;
+    font-size: 48px;
+    font-weight: 900;
+    color: #0d1b2a;
+    margin: 0;
+    line-height: 1;
+}
+
+.title {
+    font-family: 'Nunito', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    margin: 12px 0 20px;
+    color: #0d1b2a;
+}
+
+.label {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+    letter-spacing: .6px;
+    color: var(--muted);
+}
+
+.input {
+    width: 100%;
+    margin-top: 6px;
+    padding: 12px 14px;
+    border: 2px solid var(--field-border);
+    border-radius: 12px;
+    background: var(--field);
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+}
+.input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 4px rgba(15, 139, 141, .15);
+}
+.inputError {
+    border-color: var(--danger);
+}
+
+.error {
+    margin: 6px 0 0;
+    color: var(--danger);
+    font-size: 12px;
+}
+
+.rememberRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 0 4px;
+}
+
+.checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--brand);
+}
+
+.rememberLabel { font-size: 14px; }
+
+.serverError {
+    margin: 6px 0 0;
+    color: var(--danger);
+    font-size: 13px;
+}
+
+.primaryBtn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform .02s ease-in, background .2s ease;
+}
+.primaryBtn:active { transform: translateY(1px); }
+.primaryBtn:disabled { opacity: .7; cursor: not-allowed; }
+.primaryBtn:hover:not([disabled]) { background: var(--brand-dark); }
+
+.linksRow {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.link {
+    font-size: 14px;
+    text-decoration: none;
+    color: var(--brand);
+}
+.dotSep { color: #cbd5e1; }
+
+/* --- Responsivo --- */
+@media (max-width: 480px) {
+    .card { padding: 22px; border-radius: 14px; }
+    .title { font-size: 20px; }
+    .logo { width: 70px; }
+    .brandName { font-size: 32px; }
+}

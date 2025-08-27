@@ -1,7 +1,10 @@
+/* useState: Used to save values (data, errors, etc.) in the component's state.
+useEffect: Used to execute code when the component is mounted (or when dependencies change).*/
 import { useEffect, useState } from 'react'
 
 type HealthResponse = {
     status?: string
+    //It means that other fields may appear that you don't know, but it won't give you an error.
     [key: string]: unknown
 }
 
@@ -39,14 +42,14 @@ export default function HealthPage() {
     const isOk = data && !error && (data.status === 'ok' || data.status === 'OK')
 
     return (
-        <div className="health-container">
-            <h2>Health Check</h2>
-            <div className="health-status" aria-live="polite" aria-busy={loading}>
+        <div className = "health-container">
+            <h2> Health Check </h2>
+            <div className = "health-status" aria-live = "polite" aria-busy = {loading}>
                 {loading
                     ? 'Checking…'
                     : isOk
-                        ? 'FUNCIONO'
-                        : 'NO FUNCIONO'}
+                        ? 'Ok'
+                        : 'Error'}
             </div>
         </div>
     )
