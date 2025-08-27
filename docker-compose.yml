@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    ports:
+      - "5173:80"
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    depends_on:
+      - backend
+
+  db-init:
+    image: ghcr.io/celuma/celuma-backend:latest
+    environment:
+      - APP_NAME=celuma
+      - ENV=dev
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/celumadb
+      - JWT_SECRET=secret
+      - JWT_EXPIRES_MIN=480
+    command: bash init_db.sh
+    depends_on:
+      - db
+    restart: "no"
+
+  backend:
+    image: ghcr.io/celuma/celuma-backend:latest
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/celumadb
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - JWT_EXPIRES_MIN=480
+      - APP_NAME=celuma
+      - ENV=production
+      - DB_HOST=db
+      - DB_PORT=5432
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db-init
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: celumadb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+

@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.github
+.idea
+.vscode
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+coverage
+*.local
+*.env
+
+
