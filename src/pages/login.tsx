@@ -29,7 +29,7 @@ const schema = z.object({
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
             "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."
         ),
-    remember: z.boolean().default(false),
+    remember: z.boolean(),
 });
 
 /* Type of form data */
