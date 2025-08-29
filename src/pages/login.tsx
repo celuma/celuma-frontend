@@ -1,25 +1,17 @@
 import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Link } from "react-router-dom";
 import * as z from "zod";
 import styles from "../styles/login.module.css";
 import celumaLogo from "../images/celuma-isotipo.png";
 import { Input, Checkbox, Button } from "antd";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 
-/* Validation email address */
-const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-
 const schema = z.object({
     /* Validation user or email */
     identifier: z
-        .string()
-        .trim()
-        .nonempty("El usuario o email es obligatorio.")
-        .refine(
-            (v) => isEmail(v) || (v.length >= 8 && v.length <= 24),
-            { message: "Escriba un email válido o un usuario (8 - 24 caracteres)" }
-        ),
+        .string().trim().nonempty("El usuario o email es obligatorio."),
     /* Validation password */
     password: z
         .string()
@@ -59,9 +51,11 @@ export default function Login() {
     const onSubmit = async (data: FormData) => {
         setServerError(null);
 
-        const payload = isEmail(data.identifier)
-            ? { email: data.identifier.trim(), password: data.password, remember: data.remember }
-            : { username: data.identifier.trim(), password: data.password, remember: data.remember };
+        const payload = {
+            identifier: data.identifier.trim(),
+            password: data.password,
+            remember: data.remember,
+        };
 
         try {
             /* API call to the backend */
@@ -177,7 +171,7 @@ export default function Login() {
                     <div className={styles.linksRow}>
                         <a href="#" className={styles.link}>¿Olvidó su contraseña?</a>
                         <span className={styles.dotSep} aria-hidden>•</span>
-                        <a href="#" className={styles.link}>Registrarme</a>
+                        <Link to="/register" className={styles.link}>Registrarme</Link>
                     </div>
                 </form>
             </section>
