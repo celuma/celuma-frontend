@@ -38,7 +38,7 @@ export default function Login() {
         clearErrors,
     } = useForm<FormData>({
         resolver: zodResolver(schema),
-        mode: "onBlur",
+        mode: "onSubmit",
         reValidateMode: "onChange",
         defaultValues: { identifier: "", password: "", remember: false },
     });
