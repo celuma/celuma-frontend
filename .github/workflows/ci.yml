@@ -52,11 +52,9 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            # GHCR (unchanged)
             ghcr.io/${{ github.repository }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}:main
             ghcr.io/${{ github.repository }}:latest
-            # ECR STG (NEW)
             ${{ steps.login-ecr.outputs.registry }}/celuma-stg/celuma-frontend:stg-${{ github.sha }}
             ${{ steps.login-ecr.outputs.registry }}/celuma-stg/celuma-frontend:stg-latest
           labels: |
@@ -133,11 +131,9 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            # GHCR (unchanged)
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:${{ steps.release_version.outputs.version }}
             ghcr.io/${{ github.repository }}:latest
-            # ECR PROD (NEW)
             ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:${{ github.ref_name }}
             ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:${{ steps.release_version.outputs.version }}
             ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:latest
