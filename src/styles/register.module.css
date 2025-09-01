@@ -1,1 +1,143 @@
+/* register.module.css */
+/* ====== Theme (matching Login) ====== */
+:root{
+    --bg: #0b0c10;               /* page background (dark) */
+    --card: #101218;             /* card background */
+    --card-border: #1e2230;      /* subtle border */
+    --text: #e6e8ee;             /* primary text */
+    --muted: #94a3b8;            /* muted text */
+    --accent: #14b8a6;           /* turquoise accent like login */
+    --ring: rgba(20,184,166,.25);/* focus ring */
+    --danger: #ef4444;           /* errors */
+    --danger-bg: rgba(239,68,68,.10);
+    --danger-border: rgba(239,68,68,.35);
+    --success: #22c55e;
+    --success-bg: rgba(34,197,94,.10);
+    --success-border: rgba(34,197,94,.35);
+}
+
+/* ====== Page ====== */
+.container{
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    color: var(--text);
+    background:
+            radial-gradient(70rem 70rem at -10% -10%, rgba(20,184,166,.15), transparent 60%),
+            radial-gradient(60rem 60rem at 110% 0%, rgba(99,102,241,.12), transparent 55%),
+            var(--bg);
+    padding: 24px;
+}
+.wrapper{ width: 100%; max-width: 920px; }
+
+.header{ margin: 0 0 8px 0; }
+.title{ font-size: 24px; font-weight: 700; letter-spacing: .2px; }
+.subtitle{ color: var(--muted); font-size: 13px; }
+
+/* ====== Card ====== */
+.card{
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+/* ====== Sections ====== */
+.section{ margin-bottom: 18px; }
+.sectionTitle{ font-size: 16px; font-weight: 600; margin: 0 0 12px 0; }
+
+.grid{
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+}
+@media (min-width: 900px){
+    .grid{ grid-template-columns: 1fr 1fr; }
+}
+
+/* ====== Fields ====== */
+.field{}
+.label{
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 6px 4px;
+}
+
+/* AntD input overrides to match login */
+.field :global(.ant-input),
+.field :global(.ant-input-affix-wrapper){
+    background: #0d0f15;
+    border-color: #23283a;
+    color: var(--text);
+}
+.field :global(.ant-input::placeholder),
+.field :global(.ant-input-affix-wrapper input::placeholder){ color: #6b7280; }
+
+.field :global(.ant-input:hover),
+.field :global(.ant-input-affix-wrapper:hover){ border-color: #2e3550; }
+
+.field :global(.ant-input:focus),
+.field :global(.ant-input-affix-wrapper-focused){
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--ring) !important;
+}
+
+/* Numbers-only hint (optional small helper text) */
+.hint{ color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+/* ====== Inline error (same look as login) ====== */
+.error{
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--danger);
+}
+
+/* ====== Submit row ====== */
+.submitRow{ display: flex; align-items: center; gap: 12px; }
+.tenantId{ font-size: 12px; color: var(--muted); }
+
+.submitButton :global(.ant-btn){
+    border-radius: 12px;
+    height: 38px;
+}
+.submitButton :global(.ant-btn-primary){
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.submitButton :global(.ant-btn-primary:hover){
+    filter: brightness(1.05);
+}
+
+/* ====== Alerts / Results ====== */
+.alertDanger{
+    border: 1px solid var(--danger-border);
+    background: var(--danger-bg);
+    color: #fecaca;
+    border-radius: 12px;
+    padding: 12px;
+}
+.alertSuccess{
+    border: 1px solid var(--success-border);
+    background: var(--success-bg);
+    color: #bbf7d0;
+    border-radius: 12px;
+    padding: 12px;
+}
+.resultBox{
+    background: rgba(0,0,0,.28);
+    border-radius: 10px;
+    padding: 10px;
+    overflow: auto;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* ====== Small utilities ====== */
+.row{ display: grid; gap: 14px; }
+@media (min-width: 900px){ .row{ grid-template-columns: 1fr 1fr; } }
+
+.link{ color: var(--muted); text-decoration: none; }
+.link:hover{ color: var(--accent); }
 
