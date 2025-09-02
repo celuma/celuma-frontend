@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link } from "react-router-dom";
 import * as z from "zod";
-import styles from "../styles/login.module.css";
-import celumaLogo from "../images/celuma-isotipo.png";
-import { Input, Checkbox, Button } from "antd";
+import { Link, useNavigate } from "react-router-dom";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 
+/* Reutilizables */
+import AuthCard from "../components/auth/auth_card";
+import BrandHeader from "../components/auth/brand_header";
+import FormField from "../components/ui/form_field";
+import TextField from "../components/ui/text_field";
+import PasswordField from "../components/ui/password_field";
+import Checkbox from "../components/ui/checkbox";
+import Button from "../components/ui/button";
+import AlertText from "../components/ui/error_text";
+
+/* --------- Validación --------- */
 const schema = z.object({
-    /* Validation user or email */
-    identifier: z
-        .string().trim().nonempty("El usuario o email es obligatorio."),
-    /* Validation password */
+    identifier: z.string().trim().nonempty("El usuario o email es obligatorio."),
     password: z
         .string()
         .nonempty("La contraseña es obligatoria.")
@@ -24,17 +29,26 @@ const schema = z.object({
     remember: z.boolean(),
 });
 
-/* Type of form data */
 type FormData = z.infer<typeof schema>;
+
+/* --------- Utils --------- */
+function apiBase(): string {
+    return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
+}
+
+type LoginSuccess = {
+    access_token: string;
+    token_type: string;
+};
 
 export default function Login() {
     const [serverError, setServerError] = useState<string | null>(null);
+    const navigate = useNavigate();
 
-    /* React Hook Form setup */
     const {
         control,
         handleSubmit,
-        formState: { errors, isSubmitting, touchedFields, submitCount },
+        formState: { isSubmitting },
         clearErrors,
     } = useForm<FormData>({
         resolver: zodResolver(schema),
@@ -43,138 +57,129 @@ export default function Login() {
         defaultValues: { identifier: "", password: "", remember: false },
     });
 
-    /* Function to determine if an error should be shown */
-    const showError = (name: keyof FormData) =>
-        errors[name] && (touchedFields[name] || submitCount > 0);
-
-    /* Form submission handler */
-    const onSubmit = async (data: FormData) => {
+    const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
 
+        // Payload requerido por el backend (tenant_id vacío, no visible al usuario)
         const payload = {
-            identifier: data.identifier.trim(),
+            username_or_email: data.identifier.trim(),
             password: data.password,
-            remember: data.remember,
+            tenant_id: "", // ← por ahora vacío
         };
 
         try {
-            /* API call to the backend */
-            const response = await fetch(`${import.meta.env.VITE_API_BACKEND_HOST}/auth/login`, {
+            const resp = await fetch(`${apiBase()}/v1/auth/login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    accept: "application/json",
+                },
                 body: JSON.stringify(payload),
                 credentials: "include",
             });
 
-            if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.message || "Error en la autenticación.");
+            const text = await resp.text();
+            let json: unknown = undefined;
+            try { json = text ? JSON.parse(text) : undefined; } catch { /* respuesta no-JSON */ }
+
+            if (!resp.ok) {
+                const msg =
+                    (json as { message?: string } | undefined)?.message ??
+                    `${resp.status} ${resp.statusText}`;
+                throw new Error(msg);
             }
 
-            alert("¡Login exitoso!");
+            const { access_token, token_type } = (json ?? {}) as LoginSuccess;
+            if (access_token && token_type) {
+                const bearer = `${token_type} ${access_token}`;
+                // Guarda el token según "Recuérdame"
+                if (data.remember) {
+                    localStorage.setItem("auth_token", bearer);
+                } else {
+                    sessionStorage.setItem("auth_token", bearer);
+                }
+            }
+
+            // ✅ Navega al health endpoint
+            navigate("/endpoint-health", { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         }
-    };
+    });
 
     return (
-        <main className={styles.page}>
-            <section className={styles.card} role="form" aria-labelledby="title">
-                {/* Logo and brand */}
-                <header className={styles.brand}>
-                    <img src={celumaLogo} alt="Logo Céluma" className={styles.logo} />
-                    <h1 className={styles.brandName}>Céluma</h1>
-                </header>
-                <h2 id="title" className={styles.title}>Inicio de Sesión</h2>
+        <AuthCard
+            header={<BrandHeader title="Céluma"/>}
+            footer={
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", fontSize: 14 }}>
+                    <a href="#">¿Olvidó su contraseña?</a>
+                    <span aria-hidden>•</span>
+                    <Link to="/register">Registrarme</Link>
+                </div>
+            }
+            maxWidth={460}
+        >
+            <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
+                {/* Usuario / email */}
+                <FormField
+                    control={control}
+                    name="identifier"
+                    render={(p) => (
+                        <TextField
+                            {...p}
+                            placeholder="Escriba su usuario o email"
+                            prefixNode={<UserOutlined />}
+                            showClear
+                            error={p.error}
+                            value={typeof p.value === "string" ? p.value : ""}
+                            onChange={(e) => {
+                                p.onChange(e);
+                                clearErrors("identifier");
+                            }}
+                        />
+                    )}
+                />
 
-                <form onSubmit={handleSubmit(onSubmit)} noValidate>
-                    {/* User or email field */}
-                    <Controller
-                        name="identifier"
-                        control={control}
-                        render={({ field }) => (
-                            <>
-                                <Input
-                                    {...field}
-                                    onChange={(e) => {
-                                        field.onChange(e);
-                                        clearErrors("identifier");
-                                    }}
-                                    className={styles.inputs}
-                                    placeholder="Escriba su usuario o email"
-                                    prefix={<UserOutlined />}
-                                    allowClear
-                                    size="large"
-                                    status={showError("identifier") ? "error" : ""}
-                                    aria-invalid={!!errors.identifier}
-                                />
-                                {showError("identifier") && (
-                                    <p role="alert" className={styles.error}>{errors.identifier?.message}</p>
-                                )}
-                            </>
-                        )}
-                    />
+                {/* Contraseña */}
+                <FormField
+                    control={control}
+                    name="password"
+                    render={(p) => (
+                        <PasswordField
+                            {...p}
+                            placeholder="Escriba su contraseña"
+                            prefixNode={<LockOutlined />}
+                            error={p.error}
+                            value={typeof p.value === "string" ? p.value : ""}
+                            onChange={(e) => {
+                                p.onChange(e);
+                                clearErrors("password");
+                            }}
+                        />
+                    )}
+                />
 
-                    {/* Password field */}
-                    <Controller
-                        name="password"
-                        control={control}
-                        render={({ field }) => (
-                            <>
-                                <Input.Password
-                                    {...field}
-                                    onChange={(e) => {
-                                        field.onChange(e);
-                                        clearErrors("password");
-                                    }}
-                                    className={styles.inputs}
-                                    placeholder="Escriba su contraseña"
-                                    prefix={<LockOutlined />}
-                                    size="large"
-                                    status={showError("password") ? "error" : ""}
-                                    aria-invalid={!!errors.password}
-                                />
-                                {showError("password") && (
-                                    <p role="alert" className={styles.error}>{errors.password?.message}</p>
-                                )}
-                            </>
-                        )}
-                    />
+                {/* Recordarme */}
+                <FormField
+                    control={control}
+                    name="remember"
+                    render={(p) => (
+                        <Checkbox
+                            checked={!!p.value}
+                            onChange={(e) => p.onChange(e.target.checked)}
+                            label="Recuérdame"
+                        />
+                    )}
+                />
 
-                    {/* Remember me checkbox */}
-                    <Controller
-                        name="remember"
-                        control={control}
-                        render={({ field }) => (
-                            <Checkbox
-                                className={styles.checkboxs}
-                                checked={field.value}
-                                onChange={(e) => field.onChange(e.target.checked)}
-                            >
-                                Recuérdame
-                            </Checkbox>
-                        )}
-                    />
+                {/* Error del servidor */}
+                {serverError && <AlertText variant="error">{serverError}</AlertText>}
 
-                    {/* Server error */}
-                    {serverError && <p role="alert" className={styles.error}>{serverError}</p>}
-
-                    {/* Button */}
-                    <Button
-                        type="primary"
-                        htmlType="submit"
-                        className={styles.buttons}
-                        loading={isSubmitting} > Iniciar Sesión
-                    </Button>
-
-                    {/* Links */}
-                    <div className={styles.linksRow}>
-                        <a href="#" className={styles.link}>¿Olvidó su contraseña?</a>
-                        <span className={styles.dotSep} aria-hidden>•</span>
-                        <Link to="/register" className={styles.link}>Registrarme</Link>
-                    </div>
-                </form>
-            </section>
-        </main>
+                {/* Botón */}
+                <Button type="primary" htmlType="submit" loading={isSubmitting} fullWidth>
+                    Iniciar Sesión
+                </Button>
+            </form>
+        </AuthCard>
     );
 }
