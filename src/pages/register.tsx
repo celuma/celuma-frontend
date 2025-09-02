@@ -3,17 +3,19 @@ import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input, Button } from "antd";
+import { useNavigate } from "react-router-dom";
+import styles from "../styles/register.module.css";
 
+// API base URL depending on environment
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
 
+// Simple fetch wrapper with JSON in/out and error handling
 interface ApiError { message?: string }
 
-async function postJSON<TReq extends object, TRes>(
-    path: string,
-    body: TReq
-): Promise<TRes> {
+// POST JSON and parse response or throw Error
+async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
     const res = await fetch(`${getApiBase()}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", accept: "application/json" },
@@ -21,7 +23,7 @@ async function postJSON<TReq extends object, TRes>(
     });
     const text = await res.text();
     let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* non-JSON */ }
+    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore non-JSON */ }
     if (!res.ok) {
         const msg = (parsed as ApiError | undefined)?.message ?? `${res.status} ${res.statusText}`;
         throw new Error(msg);
@@ -29,6 +31,7 @@ async function postJSON<TReq extends object, TRes>(
     return parsed as TRes;
 }
 
+// Tenants interface
 interface TenantCreateRequest {
     name: string;
     legal_name: string;
@@ -40,6 +43,7 @@ interface TenantCreateResponse {
     legal_name: string;
 }
 
+// Branches interface
 interface BranchCreateRequest {
     tenant_id: string;
     code: string;
@@ -59,6 +63,7 @@ interface BranchCreateResponse {
     tenant_id: string;
 }
 
+// Users interface
 interface RegisterRequest {
     email: string;
     username?: string;
@@ -75,26 +80,26 @@ interface RegisterResponse {
     role: string;
 }
 
+// Validations
 const tenantSchema = z.object({
-    name: z.string().nonempty("El nombre de la empresa es requerido."),
+    name: z.string().nonempty("El nombre es requerido."),
     legal_name: z.string().nonempty("La razón social es requerida."),
-    tax_id: z.string().nonempty("El RFC de la empresa es requerido."),
+    tax_id: z.string().nonempty("El RFC es requerido."),
 });
 const branchSchema = z.object({
-    code: z.string().nonempty("EL identificador de sucursal es requerido."),
-    name: z.string().nonempty("El nombre de la sucursal es requerido."),
+    code: z.string().nonempty("El identificador es requerido."),
+    name: z.string().nonempty("El nombre es requerido."),
     address_line1: z.string().nonempty("La dirección es requerida."),
     address_line2: z.string().optional(),
-    postal_code: z
-        .string()
+    postal_code: z.string()
         .nonempty("El código postal es requerido.")
-        .regex(/^\d+$/, "Solo se permiten números."),
+        .regex(/^\d+$/, "Debe contener solo números"),
     city: z.string().nonempty("La ciudad es requerida."),
     state: z.string().nonempty("El estado es requerido."),
-    country: z.string().nonempty("El país es requerido"),
+    country: z.string().nonempty("El país es requerido."),
 });
 const userSchema = z.object({
-    email: z.string().nonempty("El email es requerido.").email("Email invalido."),
+    email: z.string().nonempty("El email es requerido.").email("Email inválido."),
     username: z.string().optional(),
     password: z
         .string()
@@ -104,7 +109,7 @@ const userSchema = z.object({
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
             "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."
         ),
-    full_name: z.string().nonempty("El nombre completo del empleado es requerido."),
+    full_name: z.string().nonempty("El nombre completo es requerido."),
 });
 const formSchema = z.object({
     tenant: tenantSchema,
@@ -114,11 +119,13 @@ const formSchema = z.object({
 
 type RegistrationFormData = z.infer<typeof formSchema>;
 
+// Simple component to show field errors below inputs
 function FieldError({ error }: { error?: string }) {
     if (!error) return null;
-    return <p style={{ color: "#ef4444", fontSize: 12, marginTop: 6 }}>{error}</p>;
+    return <p className = {styles.error}> {error} </p>;
 }
 
+// Handlers to enforce numeric-only input
 function numericHandlers(field: { value: string; onChange: (v: string) => void }) {
     return {
         value: field.value,
@@ -151,36 +158,36 @@ function numericHandlers(field: { value: string; onChange: (v: string) => void }
     };
 }
 
+// Principal function
 export default function RegisterAllOneClick() {
+    const navigate = useNavigate();
+
+    // Detect timezone once
     const timezone = useMemo(
         () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? "America/Mexico_City",
         []
     );
 
+    // Global UI state
     const [loading, setLoading] = useState(false);
-    const [tenantRes, setTenantRes] = useState<TenantCreateResponse | null>(null);
-    const [branchRes, setBranchRes] = useState<BranchCreateResponse | null>(null);
-    const [userRes, setUserRes] = useState<RegisterResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
-
     const { control, handleSubmit, formState: { errors } } = useForm<RegistrationFormData>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             tenant: { name: "", legal_name: "", tax_id: "" },
             branch: { code: "", name: "", address_line1: "", address_line2: "", postal_code: "", city: "", state: "", country: "" },
-            user: { email: "", username: "", password: "", full_name: "" },
+            user: { email: "", username: "", password: "",  full_name: "" },
         },
         mode: "onTouched",
     });
 
+    // Single button flow
     const onSubmit = handleSubmit(async (data) => {
         setLoading(true);
         setError(null);
-        setTenantRes(null);
-        setBranchRes(null);
-        setUserRes(null);
 
         try {
+            // Create tenant
             const createdTenant = await postJSON<TenantCreateRequest, TenantCreateResponse>(
                 "/v1/tenants/",
                 {
@@ -189,9 +196,9 @@ export default function RegisterAllOneClick() {
                     tax_id: data.tenant.tax_id,
                 }
             );
-            setTenantRes(createdTenant);
 
-            const createdBranch = await postJSON<BranchCreateRequest, BranchCreateResponse>(
+            // Create branch using tenant.id
+            await postJSON<BranchCreateRequest, BranchCreateResponse>(
                 "/v1/branches/",
                 {
                     tenant_id: createdTenant.id,
@@ -206,9 +213,9 @@ export default function RegisterAllOneClick() {
                     country: data.branch.country,
                 }
             );
-            setBranchRes(createdBranch);
 
-            const createdUser = await postJSON<RegisterRequest, RegisterResponse>(
+            // Create admin user
+            await postJSON<RegisterRequest, RegisterResponse>(
                 "/v1/auth/register",
                 {
                     email: data.user.email,
@@ -219,157 +226,209 @@ export default function RegisterAllOneClick() {
                     tenant_id: createdTenant.id,
                 }
             );
-            setUserRes(createdUser);
+
+            navigate("/login", { replace: true });
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Unknown error");
+            setError(e instanceof Error ? e.message : "Error desconocido");
         } finally {
             setLoading(false);
         }
     });
 
     return (
-        <div style = {{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-            <h1 style = {{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}> ¡Registrate! </h1>
+        <div className = {styles.container}>
+            <div className = {styles.wrapper}>
+                {/* Header */}
+                <header className = {styles.header}>
+                    <h1 className = {styles.title}> ¡Regístrate! </h1>
+                    <p className = {styles.subtitle}> Completa los datos para crear una empresa, sucursal y usuario </p>
+                </header>
 
-            <form onSubmit = {onSubmit} style = {{ display: "grid", gap: 20 }}>
+                <div className = {styles.card}>
+                    <form onSubmit = {onSubmit} className = {styles.form}>
+                        {/* Tenant */}
+                        <section className = {styles.section}>
+                            <h2 className = {styles.sectionTitle}> Empresa </h2>
+                            <div className = {styles.grid}>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "tenant.name"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Nombre" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.tenant?.name?.message} />
+                                </div>
 
-                <section style = {{ border: "1px solid #23283a", borderRadius: 12, padding: 16 }}>
-                    <h2 style = {{ marginBottom: 12, fontSize: 16, fontWeight: 600 }}> Empresa </h2>
-                    <div style = {{ display: "grid", gap: 14 }}>
-                        <div>
-                            <Controller control={control} name="tenant.name" render={({ field }) => (
-                                <Input {...field} placeholder="Nombre" />
-                            )}/>
-                            <FieldError error={errors.tenant?.name?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="tenant.legal_name" render={({ field }) => (
-                                <Input {...field} placeholder="Razón social" />
-                            )}/>
-                            <FieldError error={errors.tenant?.legal_name?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="tenant.tax_id" render={({ field }) => (
-                                <Input {...field} placeholder="RFC" />
-                            )}/>
-                            <FieldError error={errors.tenant?.tax_id?.message} />
-                        </div>
-                    </div>
-                </section>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "tenant.legal_name"
+                                        render={({ field }) =>
+                                            <Input {...field} placeholder = "Razón social" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.tenant?.legal_name?.message} />
+                                </div>
 
-                <section style = {{ border: "1px solid #23283a", borderRadius: 12, padding: 16 }}>
-                    <h2 style = {{ marginBottom: 12, fontSize: 16, fontWeight: 600 }}> Sucursal </h2>
-                    <p style={{ marginTop: -6, marginBottom: 10, fontSize: 12, color: "#666" }}>
-                        Zona horaria detectada: <code>{timezone}</code>
-                    </p>
-                    <div style = {{ display: "grid", gap: 14 }}>
-                        <div>
-                            <Controller control={control} name="branch.code" render={({ field }) => (
-                                <Input {...field} placeholder="Identificador" />
-                            )}/>
-                            <FieldError error={errors.branch?.code?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.name" render={({ field }) => (
-                                <Input {...field} placeholder="Nombre" />
-                            )}/>
-                            <FieldError error={errors.branch?.name?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.address_line1" render={({ field }) => (
-                                <Input {...field} placeholder="Dirección" />
-                            )}/>
-                            <FieldError error={errors.branch?.address_line1?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.address_line2" render={({ field }) => (
-                                <Input {...field} placeholder="Dirección 2 (opcional)" />
-                            )}/>
-                            <FieldError error={errors.branch?.address_line2?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.postal_code" render={({ field }) => (
-                                <Input {...numericHandlers(field)} placeholder="Código postal" />
-                            )}/>
-                            <FieldError error={errors.branch?.postal_code?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.city" render={({ field }) => (
-                                <Input {...field} placeholder="Ciudad" />
-                            )}/>
-                            <FieldError error={errors.branch?.city?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.state" render={({ field }) => (
-                                <Input {...field} placeholder="Estado" />
-                            )}/>
-                            <FieldError error={errors.branch?.state?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="branch.country" render={({ field }) => (
-                                <Input {...field} placeholder="País" maxLength={2} />
-                            )}/>
-                            <FieldError error={errors.branch?.country?.message} />
-                        </div>
-                    </div>
-                </section>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "tenant.tax_id"
+                                        render={({ field }) =>
+                                            <Input {...field} placeholder = "RFC" className={styles.inputs}/>}
+                                    />
+                                    <FieldError error={errors.tenant?.tax_id?.message} />
+                                </div>
+                            </div>
+                        </section>
 
-                <section style = {{ border: "1px solid #23283a", borderRadius: 12, padding: 16 }}>
-                    <h2 style = {{ marginBottom: 12, fontSize: 16, fontWeight: 600 }}> Usuario </h2>
-                    <div style = {{ display: "grid", gap: 14 }}>
-                        <div>
-                            <Controller control={control} name="user.email" render={({ field }) => (
-                                <Input {...field} type="email" placeholder="Email" />
-                            )}/>
-                            <FieldError error={errors.user?.email?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="user.username" render={({ field }) => (
-                                <Input {...field} placeholder="Nombre de usuario" />
-                            )}/>
-                            <FieldError error={errors.user?.username?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="user.password" render={({ field }) => (
-                                <Input.Password {...field} placeholder="Contraseña" />
-                            )}/>
-                            <FieldError error={errors.user?.password?.message} />
-                        </div>
-                        <div>
-                            <Controller control={control} name="user.full_name" render={({ field }) => (
-                                <Input {...field} placeholder="Nombre completo" />
-                            )}/>
-                            <FieldError error={errors.user?.full_name?.message} />
-                        </div>
-                    </div>
-                </section>
+                        {/* Branch */}
+                        <section className = {styles.section}>
+                            <h2 className = {styles.sectionTitle}> Sucursal </h2>
+                            <p className = {styles.subtitle}> Zona horaria detectada: <code>{timezone}</code> </p>
+                            <div className = {styles.grid}>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.code"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Identificador" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.code?.message} />
+                                </div>
 
-                <Button htmlType = "submit" type = "primary" loading={loading}> Registrarse </Button>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.name"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Nombre" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.name?.message} />
+                                </div>
 
-                {tenantRes && (
-                    <div style = {{ marginTop: 10, padding: 10, border: "1px solid #16a34a", borderRadius: 8 }}>
-                        <strong> ✅ Empresa creada </strong>
-                        <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(tenantRes, null, 2)}</pre>
-                    </div>
-                )}
-                {branchRes && (
-                    <div style = {{ marginTop: 10, padding: 10, border: "1px solid #16a34a", borderRadius: 8 }}>
-                        <strong> ✅ Sucursal creada </strong>
-                        <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(branchRes, null, 2)}</pre>
-                    </div>
-                )}
-                {userRes && (
-                    <div style = {{ marginTop: 10, padding: 10, border: "1px solid #16a34a", borderRadius: 8 }}>
-                        <strong> ✅ Usuario creado </strong>
-                        <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(userRes, null, 2)}</pre>
-                    </div>
-                )}
-                {error && (
-                    <div style = {{ marginTop: 10, padding: 10, border: "1px solid #ef4444", borderRadius: 8 }}>
-                        ❌ {error}
-                    </div>
-                )}
-            </form>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.address_line1"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Dirección" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.address_line1?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.address_line2"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Dirección 2 (opcional)" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.address_line2?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.postal_code"
+                                        render = {({ field }) =>
+                                            <Input {...numericHandlers(field)} placeholder = "Código postal" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.postal_code?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.city"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Ciudad" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.city?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.state"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Estado" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.state?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "branch.country"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "País (ej. MX)" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.branch?.country?.message} />
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* User */}
+                        <section className = {styles.section}>
+                            <h2 className = {styles.sectionTitle}> Usuario </h2>
+                            <div className = {styles.grid}>
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "user.email"
+                                        render = {({ field }) =>
+                                            <Input {...field} type = "email" placeholder = "Email" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.user?.email?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "user.username"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Nombre de usuario (opcional)" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.user?.username?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "user.password"
+                                        render = {({ field }) =>
+                                            <Input.Password {...field} placeholder = "Contraseña" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.user?.password?.message} />
+                                </div>
+
+                                <div className = {styles.field}>
+                                    <Controller
+                                        control = {control}
+                                        name = "user.full_name"
+                                        render = {({ field }) =>
+                                            <Input {...field} placeholder = "Nombre completo" className={styles.inputs} />}
+                                    />
+                                    <FieldError error={errors.user?.full_name?.message} />
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Submit */}
+                        <div className = {styles.submitRow}>
+                            <div className = {styles.submitButton}>
+                                <Button htmlType = "submit" type = "primary" loading = {loading} className={styles.buttons}>
+                                    Registrarse
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+
+                    {/* Only show global error (no success blocks; we redirect on success) */}
+                    {error && <div className = {styles.alertDanger}>❌ {error}</div>}
+                </div>
+            </div>
         </div>
     );
 }
