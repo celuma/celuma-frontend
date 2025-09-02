@@ -1,3 +1,22 @@
+import { createRoot } from "react-dom/client";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import App from "./App";
+import Login from "./pages/login";
+import Register from "./pages/register";
+import HealthPage from "./endpoint-health";
+
+createRoot(document.getElementById("root")!).render(
+    <BrowserRouter>
+        <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/endpoint-health" element={<HealthPage />} />
+            <Route path="/register" element={<Register />} />
+        </Routes>
+    </BrowserRouter>
+);
+
+/*
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
@@ -9,7 +28,7 @@ const router = createBrowserRouter([
         path: '/',
         element: <App />,
         children: [
-            { index: true, element: <div className="health-container"><h2>Home</h2><p>Use the nav to open <code>/health</code>.</p></div> },
+            { index: true, element: <div className = "health-container"><h2> Home </h2><p> Use the nav to open <code> /health </code>.</p></div> },
             { path: '/health', element: <HealthPage /> },
         ],
     },
@@ -17,6 +36,7 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
-        <RouterProvider router={router} />
+        <RouterProvider router = {router} />
     </StrictMode>,
 )
+ */
