@@ -100,8 +100,7 @@ export default function Login() {
                 }
             }
 
-            // ✅ Navega al health endpoint
-            navigate("/endpoint-health", { replace: true });
+            navigate("/home", { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         }
