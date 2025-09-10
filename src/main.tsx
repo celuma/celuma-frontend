@@ -3,14 +3,14 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App";
 import Login from "./pages/login";
 import Register from "./pages/register";
-import HealthPage from "./endpoint-health";
+import Home from "./pages/home";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
         <Routes>
             <Route path="/" element={<App />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/endpoint-health" element={<HealthPage />} />
+            <Route path="/home" element={<Home />} />
             <Route path="/register" element={<Register />} />
         </Routes>
     </BrowserRouter>
