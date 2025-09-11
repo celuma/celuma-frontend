@@ -19,7 +19,7 @@ export interface ReportSections {
     edad: string | null;
     citologiaUrinariaHTML: string | null;
     inmunotincionesHTML: string | null;
-
+    inmunohistoquimicaHTML: string | null;
 }
 
 export interface ReportFlags {
@@ -34,6 +34,12 @@ export interface ReportFlags {
     incluirEdad: boolean;
     incluirCU: boolean;
     incluirInmunotinciones: boolean;
+    incluirIHQ: boolean;
+}
+
+export interface ReportImage {
+    url: string;
+    caption?: string;
 }
 
 export interface Report {
@@ -42,6 +48,7 @@ export interface Report {
     base: ReportBase;
     secciones: ReportSections;
     flags: ReportFlags;
+    images?: ReportImage[];
     createdAt?: string;
     updatedAt?: string;
 }
