@@ -1,7 +1,7 @@
 export interface ReportBase {
     paciente: string;
-    folio: string;
     examen: string;
+    folio: string;
     fechaRecepcion: string;
     especimen: string;
     diagnosticoEnvio: string | null;
@@ -11,18 +11,29 @@ export interface ReportSections {
     descripcionMacroscopia: string;
     descripcionMicroscopia: string;
     descripcionCitomorfologica: string | null;
-    interpretacion: string | null;
+    inmunofluorescenciaHTML: string | null;
     diagnostico: string;
     comentario: string;
-    inmunofluorescenciaHTML: string | null;
-    inmunohistoquimicaHTML: string | null;
     microscopioElectronicoHTML: string | null;
+    interpretacion: string | null;
+    edad: string | null;
+    citologiaUrinariaHTML: string | null;
+    inmunotincionesHTML: string | null;
+
 }
 
 export interface ReportFlags {
+    incluirMacroscopia: boolean;
+    incluirMicroscopia: boolean;
+    incluirCitomorfologia: boolean;
     incluirIF: boolean;
-    incluirIHQ: boolean;
+    incluirDiagnostico: boolean;
+    incluirComentario: boolean;
     incluirME: boolean;
+    incluirInterpretacion: boolean;
+    incluirEdad: boolean;
+    incluirCU: boolean;
+    incluirInmunotinciones: boolean;
 }
 
 export interface Report {
