@@ -1,13 +1,30 @@
+// src/components/report/report_editor.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { Row, Col, Input, DatePicker, Form, message, Select, Divider } from "antd";
 import ReactQuill from "react-quill-new";
 import dayjs, { Dayjs } from "dayjs";
 import "react-quill-new/dist/quill.snow.css";
+
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { uploadReportImage } from "../../services/report_service";
+
 import logo from "../../images/report_logo.png";
+import ReportImages, { type ReportImage } from "./report_images";
+
+// ====== SAMPLE ID ESTÁTICO ======
+const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197";
+
+// ===== Tipos/borrador =====
+type ReportType =
+    | "histopatologia"
+    | "histoquimica"
+    | "citologia_mamaria"
+    | "citologia_urinaria"
+    | "quirurgico"
+    | "revision_laminillas";
 
 interface ReportDraft {
+    reportImages?: ReportImage[];
     paciente: string;
     folio: string;
     examen: string;
@@ -30,15 +47,11 @@ interface ReportDraft {
     citologiaUrinariaHTML: string;
 }
 
-type ReportType =
-    | "histopatologia"
-    | "histoquimica"
-    | "citologia_mamaria"
-    | "citologia_urinaria"
-    | "quirurgico"
-    | "revision_laminillas";
-
-const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlags> = {
+// ===== Flags por tipo =====
+const FLAGS_BY_TYPE: Record<
+    ReportType,
+    import("../../models/report").ReportFlags
+> = {
     histopatologia: {
         incluirMacroscopia: true,
         incluirMicroscopia: true,
@@ -51,6 +64,7 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: false,
         incluirCU: false,
         incluirInmunotinciones: false,
+        incluirIHQ: false,
     },
     histoquimica: {
         incluirMacroscopia: true,
@@ -64,6 +78,7 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: false,
         incluirCU: false,
         incluirInmunotinciones: false,
+        incluirIHQ: false,
     },
     citologia_mamaria: {
         incluirMacroscopia: false,
@@ -77,6 +92,7 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: true,
         incluirCU: false,
         incluirInmunotinciones: false,
+        incluirIHQ: false,
     },
     citologia_urinaria: {
         incluirMacroscopia: true,
@@ -90,6 +106,7 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: false,
         incluirCU: true,
         incluirInmunotinciones: false,
+        incluirIHQ: false,
     },
     quirurgico: {
         incluirMacroscopia: true,
@@ -103,6 +120,7 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: false,
         incluirCU: false,
         incluirInmunotinciones: false,
+        incluirIHQ: false,
     },
     revision_laminillas: {
         incluirMacroscopia: true,
@@ -116,9 +134,11 @@ const FLAGS_BY_TYPE: Record<ReportType, import("../../models/report").ReportFlag
         incluirEdad: false,
         incluirCU: false,
         incluirInmunotinciones: true,
+        incluirIHQ: false,
     },
 };
 
+// ===== Estilos carta + membrete/pie =====
 const letterStyles = `
 .report-page {
   width: 8.5in;
@@ -136,7 +156,6 @@ const letterStyles = `
   overflow: hidden;
   font-family: "Arial", sans-serif;
 }
-
 .report-header {
   position: absolute;
   top: 24pt;
@@ -147,12 +166,8 @@ const letterStyles = `
   font-weight: 700;
   color: #002060;
 }
-.report-header__title {
-  font-size: 8pt;
-}
-.report-header__subtitle {
-  font-size: 8pt;
-}
+.report-header__title { font-size: 8pt; }
+.report-header__subtitle { font-size: 8pt; }
 
 .report-footer {
   position: absolute;
@@ -168,16 +183,12 @@ const letterStyles = `
   font-weight: 700;
   color: #002060;
 }
-
 .report-footer__logo {
   width: 200pt;
   height: 100pt;
   object-fit: contain;
 }
-
-.report-footer__subtitle {
-  font-size: 7.5pt;
-}
+.report-footer__subtitle { font-size: 7.5pt; }
 
 @media print {
   @page { size: Letter; margin: 0; }
@@ -186,9 +197,17 @@ const letterStyles = `
 }
 `;
 
-const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatología)
+const ReportEditor: React.FC = () => {
+    // ===== Estado base/encabezado
     const [tipo, setTipo] = useState<ReportType>("histopatologia");
+    const [paciente, setPaciente] = useState("");
+    const [folio, setFolio] = useState("");
+    const [examen, setExamen] = useState("");
+    const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
+    const [especimen, setEspecimen] = useState("");
+    const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
 
+    // ===== Secciones dinámicas
     const [descMacroscopia, setDescMacroscopia] = useState("<p><br/></p>");
     const [descMicroscopia, setDescMicroscopia] = useState("<p><br/></p>");
     const [descCitomorfologica, setDescCitomorfologica] = useState("<p><br/></p>");
@@ -201,41 +220,42 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
     const [citologiaUrinariaHTML, setCUHTML] = useState("<p><br/></p>");
     const [inmunotincionesHTML, setInmunotincionesHTML] = useState("<p><br/></p>");
 
-    const [paciente, setPaciente] = useState("");
-    const [folio, setFolio] = useState("");
-    const [examen, setExamen] = useState("");
-    const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
-    const [especimen, setEspecimen] = useState("");
-    const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
+    // ===== Imágenes asociadas
+    const [reportImages, setReportImages] = useState<ReportImage[]>([]);
+
+    // Quill ref
     const quillRef = useRef<ReactQuill>(null);
 
+    // ===== Cargar borrador
     useEffect(() => {
         const draft = loadAutoSave<ReportDraft>("reportDraft");
-        if (draft) {
-            setPaciente(draft.paciente || "");
-            setFolio(draft.folio || "");
-            setExamen(draft.examen || "");
-            setFechaRecepcion(draft.fechaRecepcion ? dayjs(draft.fechaRecepcion) : null);
-            setEspecimen(draft.especimen || "");
-            setDiagnosticoEnvio(draft.diagnosticoEnvio || "");
+        if (!draft) return;
 
-            setTipo(draft.tipo ?? "histopatologia");
+        setReportImages(draft.reportImages ?? []);
+        setPaciente(draft.paciente || "");
+        setFolio(draft.folio || "");
+        setExamen(draft.examen || "");
+        setFechaRecepcion(draft.fechaRecepcion ? dayjs(draft.fechaRecepcion) : null);
+        setEspecimen(draft.especimen || "");
+        setDiagnosticoEnvio(draft.diagnosticoEnvio || "");
+        setTipo(draft.tipo ?? "histopatologia");
 
-            setDescMacroscopia(draft.descMacroscopia ?? "<p><br/></p>");
-            setDescMicroscopia(draft.descMicroscopia ?? "<p><br/></p>");
-            setDescCitomorfologica(draft.descCitomorfologica ?? "<p><br/></p>");
-            setInterpretacionHTML(draft.interpretacion ?? "<p><br/></p>");
-            setDiagnosticoHTML(draft.diagnostico ?? "<p><br/></p>");
-            setComentarioHTML(draft.comentario ?? "<p><br/></p>");
-            setIFHTML(draft.inmunofluorescenciaHTML ?? "<p><br/></p>");
-            setInmunotincionesHTML(draft.inmunotincionesHTML ?? "<p><br/></p>");
-            setMEHTML(draft.microscopioElectronicoHTML ?? "<p><br/></p>");
-            setEdad(draft.edad ?? "");
-            setCUHTML(draft.citologiaUrinariaHTML ?? "<p><br/></p>");
-        }
+        setDescMacroscopia(draft.descMacroscopia ?? "<p><br/></p>");
+        setDescMicroscopia(draft.descMicroscopia ?? "<p><br/></p>");
+        setDescCitomorfologica(draft.descCitomorfologica ?? "<p><br/></p>");
+        setInterpretacionHTML(draft.interpretacion ?? "<p><br/></p>");
+        setDiagnosticoHTML(draft.diagnostico ?? "<p><br/></p>");
+        setComentarioHTML(draft.comentario ?? "<p><br/></p>");
+        setIFHTML(draft.inmunofluorescenciaHTML ?? "<p><br/></p>");
+        setInmunotincionesHTML(draft.inmunotincionesHTML ?? "<p><br/></p>");
+        setMEHTML(draft.microscopioElectronicoHTML ?? "<p><br/></p>");
+        setEdad(draft.edad ?? "");
+        setCUHTML(draft.citologiaUrinariaHTML ?? "<p><br/></p>");
     }, []);
 
+    // ===== Autosave
     useAutoSave("reportDraft", {
+        reportImages,
         paciente,
         folio,
         examen,
@@ -243,11 +263,12 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
         especimen,
         diagnosticoEnvio,
         tipo,
+        descMacroscopia,
         descMicroscopia,
         descCitomorfologica,
-        interpretacionHTML,
-        diagnosticoHTML,
-        comentarioHTML,
+        interpretacion: interpretacionHTML,
+        diagnostico: diagnosticoHTML,
+        comentario: comentarioHTML,
         inmunofluorescenciaHTML,
         inmunotincionesHTML,
         microscopioElectronicoHTML,
@@ -255,24 +276,30 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
         citologiaUrinariaHTML,
     });
 
+    // ===== Subir imagen desde Quill (usa SAMPLE_ID fijo)
     const handleImageUpload = async () => {
         const input = document.createElement("input");
         input.type = "file";
         input.accept = "image/*";
         input.click();
+
         input.onchange = async () => {
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
+
             try {
-                const result = await uploadReportImage("123", file);
-                if (result.url) {
+                const result = await uploadReportImage(SAMPLE_ID, file);
+                if (result?.url) {
                     const editor = quillRef.current?.getEditor();
                     const range = editor?.getSelection(true);
                     if (editor && range) {
                         editor.insertEmbed(range.index, "image", result.url);
                     }
+                } else {
+                    message.warning("La API no devolvió URL para la imagen.");
                 }
-            } catch {
+            } catch (err) {
+                console.error(err);
                 message.error("Error subiendo imagen");
             }
         };
@@ -285,12 +312,12 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                 <Col span={12}>
                     <h2>Llenado de Reporte</h2>
                     <Form.Item label="Tipo de reporte">
-                        <Select
+                        <Select<ReportType>
                             value={tipo}
-                            onChange={(v: ReportType) => setTipo(v)}
+                            onChange={(v) => setTipo(v)}
                             options={[
                                 { value: "histopatologia", label: "Histopatologíco" },
-                                { value: "histoquimica", label: "Histoquimico" },
+                                { value: "histoquimica", label: "Histoquímico" },
                                 { value: "citologia_mamaria", label: "Citología mamaria" },
                                 { value: "citologia_urinaria", label: "Citología urinaria" },
                                 { value: "quirurgico", label: "Quirúrgico" },
@@ -330,6 +357,16 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                             <Input value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} />
                         </Form.Item>
 
+                        {/* Imágenes: usa SAMPLE_ID fijo */}
+                        <Form.Item label="Imágenes del reporte">
+                            <ReportImages
+                                sampleId={SAMPLE_ID}
+                                value={reportImages}
+                                onChange={setReportImages}
+                            />
+                        </Form.Item>
+
+                        {/* Secciones dinámicas */}
                         {FLAGS_BY_TYPE[tipo].incluirMacroscopia && (
                             <Form.Item label="Descripción macroscópica">
                                 <ReactQuill
@@ -359,7 +396,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={descMicroscopia}
                                     onChange={setDescMicroscopia}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -370,7 +418,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={descCitomorfologica}
                                     onChange={setDescCitomorfologica}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -381,7 +440,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={interpretacionHTML}
                                     onChange={setInterpretacionHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -392,7 +462,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={diagnosticoHTML}
                                     onChange={setDiagnosticoHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -403,7 +484,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={comentarioHTML}
                                     onChange={setComentarioHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -414,7 +506,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={citologiaUrinariaHTML}
                                     onChange={setCUHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -425,7 +528,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={inmunofluorescenciaHTML}
                                     onChange={setIFHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -436,7 +550,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={inmunotincionesHTML}
                                     onChange={setInmunotincionesHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -447,7 +572,18 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     theme="snow"
                                     value={microscopioElectronicoHTML}
                                     onChange={setMEHTML}
-                                    modules={{ toolbar: { container: [[{ header: [1, 2, false] }],["bold","italic","underline"],[{ list: "ordered" }, { list: "bullet" }],["image","link"],["clean"]], handlers: { image: handleImageUpload }}}}
+                                    modules={{
+                                        toolbar: {
+                                            container: [
+                                                [{ header: [1, 2, false] }],
+                                                ["bold", "italic", "underline"],
+                                                [{ list: "ordered" }, { list: "bullet" }],
+                                                ["image", "link"],
+                                                ["clean"],
+                                            ],
+                                            handlers: { image: handleImageUpload },
+                                        },
+                                    }}
                                 />
                             </Form.Item>
                         )}
@@ -500,11 +636,48 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                 </>
                             )}
 
-
                             {FLAGS_BY_TYPE[tipo].incluirMicroscopia && (
                                 <>
                                     <h3>Descripción microscópica</h3>
                                     <div dangerouslySetInnerHTML={{ __html: descMicroscopia }} />
+                                </>
+                            )}
+
+                            {/* Imágenes como en los PDFs */}
+                            {reportImages.length > 0 && (
+                                <>
+                                    <hr className="report-hr" />
+                                    <h3>Imágenes</h3>
+                                    <div
+                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                            gap: 12,
+                                        }}
+                                    >
+                                        {reportImages.map((img, idx) => (
+                                            <div
+                                                key={img.url + idx}
+                                                style={{
+                                                    border: "1px solid #f0f0f0",
+                                                    borderRadius: 8,
+                                                    overflow: "hidden",
+                                                    background: "#fff",
+                                                }}
+                                            >
+                                                <img
+                                                    src={img.url}
+                                                    alt={img.caption || `Figura ${idx + 1}`}
+                                                    style={{ width: "100%", height: 220, objectFit: "contain", background: "#fafafa" }}
+                                                    referrerPolicy="no-referrer"
+                                                />
+                                                <div style={{ padding: "6px 8px", fontSize: 12 }}>
+                                                    <b>Figura {idx + 1}.</b>{" "}
+                                                    {img.caption && img.caption.trim().length > 0 ? img.caption : <em>Sin descripción</em>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </>
                             )}
 
@@ -563,7 +736,6 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
                                     <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML }} />
                                 </>
                             )}
-
                         </div>
 
                         <div className="report-footer">
@@ -579,4 +751,5 @@ const ReportEditor: React.FC = () => {// Tipo seleccionado (default histopatolog
         </>
     );
 };
+
 export default ReportEditor;
