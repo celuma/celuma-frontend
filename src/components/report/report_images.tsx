@@ -1,19 +1,14 @@
-// src/components/report/report_images.tsx
 import React, { useMemo, useState } from "react";
 import { Upload, Button, Input, Space, message, Popconfirm } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { uploadReportImage } from "../../services/report_service";
-
-export type ReportImage = {
-    url: string;
-    caption?: string;
-};
+import type { ReportImageItem } from "../../models/report";
 
 type Props = {
     sampleId: string;
-    value?: ReportImage[];
-    onChange?: (v: ReportImage[]) => void;
+    value?: ReportImageItem[];
+    onChange?: (v: ReportImageItem[]) => void;
     disabled?: boolean;
 };
 
@@ -54,7 +49,7 @@ const ReportImages: React.FC<Props> = ({ sampleId, value, onChange, disabled }) 
     const fileList: UploadFile[] = useMemo(
         () =>
             images.map((img, idx) => ({
-                uid: `${idx}`,
+                uid: `${img.id ?? idx}`,
                 name: img.caption || `imagen_${idx + 1}`,
                 status: "done",
                 url: img.url,
@@ -69,12 +64,11 @@ const ReportImages: React.FC<Props> = ({ sampleId, value, onChange, disabled }) 
         }
         setUploading(true);
         try {
-            const { url } = await uploadReportImage(sampleId, file);
-            onChange?.([...(value ?? []), { url, caption: "" }]);
+            const { url, id } = await uploadReportImage(sampleId, file);
+            onChange?.([...(value ?? []), { id, url, caption: "" }]);
             message.success("Imagen subida");
         } catch (e) {
-            console.error(e);
-            message.error("No se pudo subir la imagen");
+            message.error(e instanceof Error ? e.message : "No se pudo subir la imagen");
         } finally {
             setUploading(false);
         }
@@ -87,7 +81,7 @@ const ReportImages: React.FC<Props> = ({ sampleId, value, onChange, disabled }) 
         customRequest: async (options) => {
             const f = options.file as File;
             await handleAdd(f);
-            options.onSuccess?.({}, new XMLHttpRequest());
+            if (options.onSuccess) options.onSuccess({}, new XMLHttpRequest());
         },
         disabled: disabled || uploading,
         fileList,
@@ -117,7 +111,7 @@ const ReportImages: React.FC<Props> = ({ sampleId, value, onChange, disabled }) 
 
             <div className="report-images-grid">
                 {images.map((img, idx) => (
-                    <div className="report-image-card" key={img.url + idx}>
+                    <div className="report-image-card" key={`img-${idx}-${img?.url ?? "no-url"}`}>
                         <img src={img.url} alt={img.caption || `Figura ${idx + 1}`} />
                         <div className="meta">
                             <Space.Compact style={{ width: "100%" }}>
