@@ -1,53 +1,40 @@
-// src/services/report_service.ts
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+import type { ReportEnvelope } from "../models/report";
 
-export async function uploadReportImage(sampleId: string, file: File) {
-    const formData = new FormData();
-    // El backend espera el campo "file"
-    formData.append("file", file, file.name);
-
-    // Según tu Swagger: /api/v1/laboratory/samples/{sample_id}/images
-    const url = `${API_BASE}/laboratory/samples/${sampleId}/images`;
-
-    const res = await fetch(url, {
-        method: "POST",
-        body: formData,
-        headers: { accept: "application/json" }, // no seteamos Content-Type (boundary automático)
-    });
-
-    if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        console.error("Upload error:", res.status, text);
-        throw new Error(text || `Error al subir la imagen (${res.status})`);
-    }
-
-    const json = await res.json();
-
-    // Normalizamos posibles campos que devuelva la API
-    const urlFromApi =
-        json?.url ||
-        json?.jpeg_url ||
-        json?.processed?.url ||
-        json?.signed_url ||
-        json?.s3?.url ||
-        json?.thumbnail_url ||
-        json?.key;
-
-    return { url: urlFromApi, raw: json };
+function apiBase(): string {
+    return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
 
-export async function saveReport(report: unknown) {
-    const url = `${API_BASE}/reports`;
-    const res = await fetch(url, {
+export async function uploadReportImage(sampleId: string, file: File): Promise<{ id?: string; url: string }> {
+    if (!sampleId) throw new Error("Falta sampleId para subir imagen.");
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const res = await fetch(`${apiBase()}/v1/laboratory/samples/${sampleId}/images`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", accept: "application/json" },
-        body: JSON.stringify(report),
+        body: formData,
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Error al guardar el reporte (${res.status})`);
+        const hint = await safeText(res);
+        throw new Error(`Error al subir la imagen (${res.status}). ${hint}`);
     }
+    return res.json() as Promise<{ id?: string; url: string }>;
+}
 
+export async function saveReportEnvelope(envelope: ReportEnvelope) {
+    const res = await fetch(`${apiBase()}/v1/reports/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", accept: "application/json" },
+        body: JSON.stringify(envelope),
+    });
+
+    if (!res.ok) {
+        const hint = await safeText(res);
+        throw new Error(`Error al guardar el reporte (${res.status}). ${hint}`);
+    }
     return res.json();
+}
+
+async function safeText(r: Response) {
+    try { return await r.text(); } catch { return ""; }
 }

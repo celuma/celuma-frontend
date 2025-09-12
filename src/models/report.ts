@@ -1,3 +1,11 @@
+export type ReportType =
+    | "histopatologia"
+    | "histoquimica"
+    | "citologia_mamaria"
+    | "citologia_urinaria"
+    | "quirurgico"
+    | "revision_laminillas";
+
 export interface ReportBase {
     paciente: string;
     examen: string;
@@ -8,47 +16,53 @@ export interface ReportBase {
 }
 
 export interface ReportSections {
-    descripcionMacroscopia: string;
-    descripcionMicroscopia: string;
+    descripcionMacroscopia: string | null;
+    descripcionMicroscopia: string | null;
     descripcionCitomorfologica: string | null;
-    inmunofluorescenciaHTML: string | null;
-    diagnostico: string;
-    comentario: string;
-    microscopioElectronicoHTML: string | null;
     interpretacion: string | null;
-    edad: string | null;
-    citologiaUrinariaHTML: string | null;
+    diagnostico: string | null;
+    comentario: string | null;
+    inmunofluorescenciaHTML: string | null;
     inmunotincionesHTML: string | null;
-    inmunohistoquimicaHTML: string | null;
+    microscopioElectronicoHTML: string | null;
+    citologiaUrinariaHTML: string | null;
+    edad: string | null;
 }
 
 export interface ReportFlags {
     incluirMacroscopia: boolean;
     incluirMicroscopia: boolean;
     incluirCitomorfologia: boolean;
-    incluirIF: boolean;
+    incluirInterpretacion: boolean;
     incluirDiagnostico: boolean;
     incluirComentario: boolean;
+    incluirIF: boolean;
     incluirME: boolean;
-    incluirInterpretacion: boolean;
     incluirEdad: boolean;
     incluirCU: boolean;
     incluirInmunotinciones: boolean;
-    incluirIHQ: boolean;
 }
 
-export interface ReportImage {
+export interface ReportImageItem {
+    id?: string;
     url: string;
     caption?: string;
 }
 
-export interface Report {
-    id: string;
-    tipo: string;
-    base: ReportBase;
-    secciones: ReportSections;
-    flags: ReportFlags;
-    images?: ReportImage[];
-    createdAt?: string;
-    updatedAt?: string;
+export interface ReportEnvelope {
+    tenant_id: string;
+    branch_id: string;
+    order_id: string;
+    title: string;
+    diagnosis_text: string;
+    created_by: string;
+    published_at: string;
+
+    report: {
+        tipo: ReportType;
+        base: ReportBase;
+        secciones: ReportSections;
+        flags: ReportFlags;
+        images: ReportImageItem[];
+    };
 }
