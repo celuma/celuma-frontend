@@ -1,21 +1,22 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Row, Col, Input, DatePicker, Form, message, Select, Divider, Button } from "antd";
-import ReactQuill from "react-quill-new";
 import dayjs, { Dayjs } from "dayjs";
+import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
-import logo from "../../images/report_logo.png";
-import ReportImages from "./report_images";
+
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
+import { saveReport } from "../../services/report_service";
+import ReportImages, { type ReportImage } from "./report_images";
+import logo from "../../images/report_logo.png";
+
+// === Tipos del modelo ===
 import type {
     ReportType,
     ReportEnvelope,
     ReportFlags,
-    ReportSections,
-    ReportBase,
-    ReportImageItem,
 } from "../../models/report";
-import { saveReportEnvelope, uploadReportImage } from "../../services/report_service";
 
+// Mapea qué secciones se muestran según el tipo
 const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
     histopatologia: {
         incluirMacroscopia: true,
@@ -97,6 +98,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
     },
 };
 
+// === Estilos del formato carta con membrete ===
 const letterStyles = `
 .report-page {
   width: 8.5in;
@@ -106,8 +108,8 @@ const letterStyles = `
   color: #000;
   box-shadow: 0 0 8px rgba(0,0,0,.15);
   position: relative;
-  padding-top: 110pt;
-  padding-bottom: 90pt;
+  padding-top: 110pt;        /* espacio para encabezado */
+  padding-bottom: 90pt;      /* espacio para footer con logo */
   padding-left: 48pt;
   padding-right: 48pt;
   box-sizing: border-box;
@@ -150,201 +152,207 @@ const letterStyles = `
 
 @media print {
   @page { size: Letter; margin: 0; }
-  body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
   .report-page { box-shadow: none; margin: 0; }
 }
 `;
 
-type ReportDraft = {
-    reportImages?: ReportImageItem[];
+type Draft = {
+    // imágenes subidas
+    reportImages?: ReportImage[];
+
+    // base
     paciente: string;
-    folio: string;
     examen: string;
+    folio: string;
     fechaRecepcion: string | null;
     especimen: string;
     diagnosticoEnvio: string;
 
+    // tipo
     tipo: ReportType;
-    edad: string;
-    descMacroscopia: string;
-    descMicroscopia: string;
-    descCitomorfologica: string;
-    interpretacion: string;
-    diagnostico: string;
-    comentario: string;
-    inmunofluorescenciaHTML: string;
-    inmunotincionesHTML: string;
-    microscopioElectronicoHTML: string;
-    citologiaUrinariaHTML: string;
+
+    // secciones
+    descripcionMacroscopia: string | null;
+    descripcionMicroscopia: string | null;
+    descripcionCitomorfologica: string | null;
+    interpretacion: string | null;
+    diagnostico: string | null;
+    comentario: string | null;
+    inmunofluorescenciaHTML: string | null;
+    inmunotincionesHTML: string | null;
+    microscopioElectronicoHTML: string | null;
+    citologiaUrinariaHTML: string | null;
+    edad: string | null;
 };
 
-const SAMPLE_ID_FIXED = "dc225711-480a-4bd7-9531-c566d2a6f197";
+const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197"; // <- estático
 
 const ReportEditor: React.FC = () => {
-    const [reportImages, setReportImages] = useState<ReportImageItem[]>([]);
+    // Selección de tipo
     const [tipo, setTipo] = useState<ReportType>("histopatologia");
-    const [descMacroscopia, setDescMacroscopia] = useState("<p><br/></p>");
-    const [descMicroscopia, setDescMicroscopia] = useState("<p><br/></p>");
-    const [descCitomorfologica, setDescCitomorfologica] = useState("<p><br/></p>");
-    const [interpretacionHTML, setInterpretacionHTML] = useState("<p><br/></p>");
-    const [diagnosticoHTML, setDiagnosticoHTML] = useState("<p><br/></p>");
-    const [comentarioHTML, setComentarioHTML] = useState("<p><br/></p>");
-    const [inmunofluorescenciaHTML, setIFHTML] = useState("<p><br/></p>");
-    const [microscopioElectronicoHTML, setMEHTML] = useState("<p><br/></p>");
-    const [edad, setEdad] = useState<string>("");
-    const [citologiaUrinariaHTML, setCUHTML] = useState("<p><br/></p>");
-    const [inmunotincionesHTML, setInmunotincionesHTML] = useState("<p><br/></p>");
 
+    // Base
     const [paciente, setPaciente] = useState("");
-    const [folio, setFolio] = useState("");
     const [examen, setExamen] = useState("");
+    const [folio, setFolio] = useState("");
     const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
     const [especimen, setEspecimen] = useState("");
     const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
+
+    // Secciones
+    const [descripcionMacroscopia, setDescMacro] = useState<string | null>("<p><br/></p>");
+    const [descripcionMicroscopia, setDescMicro] = useState<string | null>("<p><br/></p>");
+    const [descripcionCitomorfologica, setDescCito] = useState<string | null>("<p><br/></p>");
+    const [interpretacion, setInterpretacion] = useState<string | null>("<p><br/></p>");
+    const [diagnostico, setDiagnostico] = useState<string | null>("<p><br/></p>");
+    const [comentario, setComentario] = useState<string | null>("<p><br/></p>");
+    const [inmunofluorescenciaHTML, setIF] = useState<string | null>("<p><br/></p>");
+    const [inmunotincionesHTML, setInmunotinciones] = useState<string | null>("<p><br/></p>");
+    const [microscopioElectronicoHTML, setME] = useState<string | null>("<p><br/></p>");
+    const [citologiaUrinariaHTML, setCU] = useState<string | null>("<p><br/></p>");
+    const [edad, setEdad] = useState<string>("");
+
+    // Imágenes
+    const [reportImages, setReportImages] = useState<ReportImage[]>([]);
+
+    // Para insertar imagen en Quill cuando use el botón de la toolbar
     const quillRef = useRef<ReactQuill>(null);
 
+    // Cargar autosave
     useEffect(() => {
-        const draft = loadAutoSave<ReportDraft>("reportDraft");
-        if (draft) {
-            if (draft.reportImages) setReportImages(draft.reportImages);
-            setPaciente(draft.paciente || "");
-            setFolio(draft.folio || "");
-            setExamen(draft.examen || "");
-            setFechaRecepcion(draft.fechaRecepcion ? dayjs(draft.fechaRecepcion) : null);
-            setEspecimen(draft.especimen || "");
-            setDiagnosticoEnvio(draft.diagnosticoEnvio || "");
+        const draft = loadAutoSave<Draft>("reportDraft");
+        if (!draft) return;
 
-            setTipo(draft.tipo ?? "histopatologia");
-            setDescMacroscopia(draft.descMacroscopia ?? "<p><br/></p>");
-            setDescMicroscopia(draft.descMicroscopia ?? "<p><br/></p>");
-            setDescCitomorfologica(draft.descCitomorfologica ?? "<p><br/></p>");
-            setInterpretacionHTML(draft.interpretacion ?? "<p><br/></p>");
-            setDiagnosticoHTML(draft.diagnostico ?? "<p><br/></p>");
-            setComentarioHTML(draft.comentario ?? "<p><br/></p>");
-            setIFHTML(draft.inmunofluorescenciaHTML ?? "<p><br/></p>");
-            setInmunotincionesHTML(draft.inmunotincionesHTML ?? "<p><br/></p>");
-            setMEHTML(draft.microscopioElectronicoHTML ?? "<p><br/></p>");
-            setEdad(draft.edad ?? "");
-            setCUHTML(draft.citologiaUrinariaHTML ?? "<p><br/></p>");
-        }
+        setReportImages(draft.reportImages ?? []);
+
+        setPaciente(draft.paciente ?? "");
+        setExamen(draft.examen ?? "");
+        setFolio(draft.folio ?? "");
+        setFechaRecepcion(draft.fechaRecepcion ? dayjs(draft.fechaRecepcion) : null);
+        setEspecimen(draft.especimen ?? "");
+        setDiagnosticoEnvio(draft.diagnosticoEnvio ?? "");
+
+        setTipo(draft.tipo ?? "histopatologia");
+
+        setDescMacro(draft.descripcionMacroscopia ?? "<p><br/></p>");
+        setDescMicro(draft.descripcionMicroscopia ?? "<p><br/></p>");
+        setDescCito(draft.descripcionCitomorfologica ?? "<p><br/></p>");
+        setInterpretacion(draft.interpretacion ?? "<p><br/></p>");
+        setDiagnostico(draft.diagnostico ?? "<p><br/></p>");
+        setComentario(draft.comentario ?? "<p><br/></p>");
+        setIF(draft.inmunofluorescenciaHTML ?? "<p><br/></p>");
+        setInmunotinciones(draft.inmunotincionesHTML ?? "<p><br/></p>");
+        setME(draft.microscopioElectronicoHTML ?? "<p><br/></p>");
+        setCU(draft.citologiaUrinariaHTML ?? "<p><br/></p>");
+        setEdad(draft.edad ?? "");
     }, []);
 
+    // Guardado automático (cada cambio)
     useAutoSave("reportDraft", {
         reportImages,
         paciente,
-        folio,
         examen,
+        folio,
         fechaRecepcion: fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : null,
         especimen,
         diagnosticoEnvio,
         tipo,
-        edad,
-        descMacroscopia,
-        descMicroscopia,
-        descCitomorfologica,
-        interpretacion: interpretacionHTML,
-        diagnostico: diagnosticoHTML,
-        comentario: comentarioHTML,
+        descripcionMacroscopia,
+        descripcionMicroscopia,
+        descripcionCitomorfologica,
+        interpretacion,
+        diagnostico,
+        comentario,
         inmunofluorescenciaHTML,
         inmunotincionesHTML,
         microscopioElectronicoHTML,
         citologiaUrinariaHTML,
+        edad,
     });
 
-    const handleImageUpload = async () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.click();
-        input.onchange = async () => {
-            if (!input.files || input.files.length === 0) return;
-            const file = input.files[0];
-            try {
-                const result = await uploadReportImage(SAMPLE_ID_FIXED, file);
-                if (result.url) {
-                    const editor = quillRef.current?.getEditor();
-                    const range = editor?.getSelection(true);
-                    if (editor && range) {
-                        editor.insertEmbed(range.index, "image", result.url);
-                    }
-                }
-            } catch {
-                message.error("Error subiendo imagen");
-            }
+    const quillModules = useMemo(
+        () => ({
+            toolbar: {
+                container: [
+                    [{ header: [1, 2, false] }],
+                    ["bold", "italic", "underline"],
+                    [{ list: "ordered" }, { list: "bullet" }],
+                    ["link"],
+                    ["clean"],
+                ],
+            },
+        }),
+        []
+    );
+
+    // Construye el sobre (envelope) para el POST /v1/reports
+    const buildEnvelope = (): ReportEnvelope => {
+        return {
+            tenant_id: "tenant-demo",
+            branch_id: "main",
+            order_id: folio || "sin-folio",
+            title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
+            diagnosis_text: (diagnostico || "").replace(/<[^>]+>/g, "").slice(0, 1000),
+            created_by: "webapp",
+            published_at: new Date().toISOString(),
+            report: {
+                tipo,
+                base: {
+                    paciente,
+                    examen,
+                    folio,
+                    fechaRecepcion: fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : "",
+                    especimen,
+                    diagnosticoEnvio: diagnosticoEnvio || null,
+                },
+                secciones: {
+                    descripcionMacroscopia,
+                    descripcionMicroscopia,
+                    descripcionCitomorfologica,
+                    interpretacion,
+                    diagnostico,
+                    comentario,
+                    inmunofluorescenciaHTML,
+                    inmunotincionesHTML,
+                    microscopioElectronicoHTML,
+                    citologiaUrinariaHTML,
+                    edad: edad || null,
+                },
+                flags: FLAGS_BY_TYPE[tipo],
+                images: reportImages.map((img) => ({
+                    id: img.id,
+                    url: img.url,
+                    caption: img.caption,
+                })),
+            },
         };
     };
 
-    const stripHtml = (html: string | null | undefined) => {
-        if (!html) return "";
-        const tmp = document.createElement("div");
-        tmp.innerHTML = html;
-        return (tmp.textContent || tmp.innerText || "").trim();
-    };
-
-    const handleSaveEnvelope = async () => {
+    const handleSave = async () => {
         try {
-            const base: ReportBase = {
-                paciente,
-                examen,
-                folio,
-                fechaRecepcion: fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : "",
-                especimen,
-                diagnosticoEnvio: diagnosticoEnvio || null,
-            };
-
-            const secciones: ReportSections = {
-                descripcionMacroscopia: descMacroscopia || null,
-                descripcionMicroscopia: descMicroscopia || null,
-                descripcionCitomorfologica: descCitomorfologica || null,
-                interpretacion: interpretacionHTML || null,
-                diagnostico: diagnosticoHTML || null,
-                comentario: comentarioHTML || null,
-                inmunofluorescenciaHTML: inmunofluorescenciaHTML || null,
-                inmunotincionesHTML: inmunotincionesHTML || null,
-                microscopioElectronicoHTML: microscopioElectronicoHTML || null,
-                citologiaUrinariaHTML: citologiaUrinariaHTML || null,
-                edad: edad || null,
-            };
-
-            const flags = FLAGS_BY_TYPE[tipo];
-
-            const envelope: ReportEnvelope = {
-                tenant_id: "2de8ffdf-025f-4f2a-839d-eac3473cfaa6",
-                branch_id: "8cd740ad-1be3-4dd0-bcea-93d5e84786d4",
-                order_id: "f4dca87f-ca63-4bb2-8f79-77f7f1d8def6",
-                title: `${examen || "Reporte"} - ${paciente || "Paciente"}`,
-                diagnosis_text:
-                    stripHtml(diagnosticoHTML) || stripHtml(interpretacionHTML) || "Sin diagnóstico",
-                created_by: "b388feca-84b5-48c6-a6da-963ba95352ee",
-                published_at: "",
-                report: {
-                    tipo,
-                    base,
-                    secciones,
-                    flags,
-                    images: reportImages,
-                },
-            };
-
-            await saveReportEnvelope(envelope);
-            message.success("Reporte guardado correctamente");
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Error desconocido";
-            message.error(msg);
+            const envelope = buildEnvelope();
+            await saveReport(envelope as never);
+            message.success("Reporte guardado");
+        } catch (e) {
+            console.error(e);
+            message.error("No se pudo guardar el reporte");
         }
     };
 
     return (
         <>
             <style>{letterStyles}</style>
+
             <Row gutter={24} style={{ padding: 16 }}>
+                {/* Columna izquierda: edición */}
                 <Col span={12}>
                     <h2>Llenado de Reporte</h2>
 
                     <Form.Item label="Tipo de reporte">
                         <Select<ReportType>
                             value={tipo}
-                            onChange={(v) => setTipo(v)}
+                            onChange={setTipo}
                             options={[
                                 { value: "histopatologia", label: "Histopatología / Biopsia" },
                                 { value: "histoquimica", label: "Histoquímica" },
@@ -362,35 +370,42 @@ const ReportEditor: React.FC = () => {
                         <Form.Item label="Paciente">
                             <Input value={paciente} onChange={(e) => setPaciente(e.target.value)} />
                         </Form.Item>
+
                         <Form.Item label="Folio">
                             <Input value={folio} onChange={(e) => setFolio(e.target.value)} />
                         </Form.Item>
+
                         <Form.Item label="Examen">
                             <Input value={examen} onChange={(e) => setExamen(e.target.value)} />
                         </Form.Item>
-                        <Form.Item label="Fecha de Recepción">
+
+                        <Form.Item label="Fecha de recepción">
                             <DatePicker
                                 value={fechaRecepcion}
-                                onChange={(d) => setFechaRecepcion(d)}
+                                onChange={setFechaRecepcion}
                                 format="YYYY-MM-DD"
                                 style={{ width: "100%" }}
                             />
                         </Form.Item>
+
                         {FLAGS_BY_TYPE[tipo].incluirEdad && (
                             <Form.Item label="Edad">
                                 <Input value={edad} onChange={(e) => setEdad(e.target.value)} />
                             </Form.Item>
                         )}
-                        <Form.Item label="Especimen">
+
+                        <Form.Item label="Espécimen recibido">
                             <Input value={especimen} onChange={(e) => setEspecimen(e.target.value)} />
                         </Form.Item>
-                        <Form.Item label="Diagnóstico de Envío">
+
+                        <Form.Item label="Diagnóstico de envío">
                             <Input value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} />
                         </Form.Item>
 
                         <Form.Item label="Imágenes del reporte">
+                            {/* Aquí se dispara la carga al endpoint apenas se elige el archivo */}
                             <ReportImages
-                                sampleId={SAMPLE_ID_FIXED}
+                                sampleId={SAMPLE_ID}
                                 value={reportImages}
                                 onChange={setReportImages}
                             />
@@ -401,20 +416,9 @@ const ReportEditor: React.FC = () => {
                                 <ReactQuill
                                     ref={quillRef}
                                     theme="snow"
-                                    value={descMacroscopia}
-                                    onChange={setDescMacroscopia}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={descripcionMacroscopia || ""}
+                                    onChange={(html) => setDescMacro(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -423,20 +427,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Descripción microscópica">
                                 <ReactQuill
                                     theme="snow"
-                                    value={descMicroscopia}
-                                    onChange={setDescMicroscopia}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={descripcionMicroscopia || ""}
+                                    onChange={(html) => setDescMicro(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -445,20 +438,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Descripción citomorfológica">
                                 <ReactQuill
                                     theme="snow"
-                                    value={descCitomorfologica}
-                                    onChange={setDescCitomorfologica}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={descripcionCitomorfologica || ""}
+                                    onChange={(html) => setDescCito(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -467,20 +449,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Interpretación / Conclusiones">
                                 <ReactQuill
                                     theme="snow"
-                                    value={interpretacionHTML}
-                                    onChange={setInterpretacionHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={interpretacion || ""}
+                                    onChange={(html) => setInterpretacion(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -489,20 +460,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Diagnóstico">
                                 <ReactQuill
                                     theme="snow"
-                                    value={diagnosticoHTML}
-                                    onChange={setDiagnosticoHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={diagnostico || ""}
+                                    onChange={(html) => setDiagnostico(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -511,20 +471,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Comentario / Notas">
                                 <ReactQuill
                                     theme="snow"
-                                    value={comentarioHTML}
-                                    onChange={setComentarioHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={comentario || ""}
+                                    onChange={(html) => setComentario(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -533,20 +482,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Citología urinaria">
                                 <ReactQuill
                                     theme="snow"
-                                    value={citologiaUrinariaHTML}
-                                    onChange={setCUHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={citologiaUrinariaHTML || ""}
+                                    onChange={(html) => setCU(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -555,20 +493,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Inmunofluorescencia (panel)">
                                 <ReactQuill
                                     theme="snow"
-                                    value={inmunofluorescenciaHTML}
-                                    onChange={setIFHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={inmunofluorescenciaHTML || ""}
+                                    onChange={(html) => setIF(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -577,20 +504,9 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Inmunotinciones">
                                 <ReactQuill
                                     theme="snow"
-                                    value={inmunotincionesHTML}
-                                    onChange={setInmunotincionesHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={inmunotincionesHTML || ""}
+                                    onChange={(html) => setInmunotinciones(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
@@ -599,48 +515,29 @@ const ReportEditor: React.FC = () => {
                             <Form.Item label="Microscopía electrónica (descripción)">
                                 <ReactQuill
                                     theme="snow"
-                                    value={microscopioElectronicoHTML}
-                                    onChange={setMEHTML}
-                                    modules={{
-                                        toolbar: {
-                                            container: [
-                                                [{ header: [1, 2, false] }],
-                                                ["bold", "italic", "underline"],
-                                                [{ list: "ordered" }, { list: "bullet" }],
-                                                ["image", "link"],
-                                                ["clean"],
-                                            ],
-                                            handlers: { image: handleImageUpload },
-                                        },
-                                    }}
+                                    value={microscopioElectronicoHTML || ""}
+                                    onChange={(html) => setME(html)}
+                                    modules={quillModules}
                                 />
                             </Form.Item>
                         )}
 
-                        <Form.Item>
-                            <Button type="primary" onClick={handleSaveEnvelope}>
-                                Guardar reporte
-                            </Button>
-                        </Form.Item>
+                        <Divider />
+                        <Button type="primary" onClick={handleSave}>
+                            Guardar reporte
+                        </Button>
                     </Form>
                 </Col>
 
+                {/* Columna derecha: vista previa */}
                 <Col span={12}>
                     <h2>Vista Previa del Reporte</h2>
                     <div className="report-page">
                         <div className="report-header">
-                            <div className="report-header__title">
-                                Dra. Arisbeth Villanueva Pérez.
-                            </div>
-                            <div className="report-header__subtitle">
-                                Anatomía Patológica, Nefropatología y Citología Exfoliativa
-                            </div>
-                            <div className="report-header__subtitle">
-                                Centro Médico Nacional de Occidente IMSS. INCMNSZ
-                            </div>
-                            <div className="report-header__subtitle">
-                                DGP3833349 | DGP. ESP 6133871
-                            </div>
+                            <div className="report-header__title">Dra. Arisbeth Villanueva Pérez.</div>
+                            <div className="report-header__subtitle">Anatomía Patológica, Nefropatología y Citología Exfoliativa</div>
+                            <div className="report-header__subtitle">Centro Médico Nacional de Occidente IMSS. INCMNSZ</div>
+                            <div className="report-header__subtitle">DGP3833349 | DGP. ESP 6133871</div>
                         </div>
 
                         <div id="reporte-content">
@@ -652,44 +549,43 @@ const ReportEditor: React.FC = () => {
                                 <b>Fecha de recepción de muestra:</b>{" "}
                                 {fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : <em>(Sin especificar)</em>}
                             </p>
-
                             {FLAGS_BY_TYPE[tipo].incluirEdad && (
                                 <p><b>Edad:</b> {edad || <em>(Sin especificar)</em>}</p>
                             )}
-
                             <p><b>Espécimen recibido:</b> {especimen || <em>(Sin especificar)</em>}</p>
-                            {diagnosticoEnvio ? (
-                                <p><b>Diagnóstico de envío:</b> {diagnosticoEnvio}</p>
-                            ) : null}
+                            {diagnosticoEnvio && <p><b>Diagnóstico de envío:</b> {diagnosticoEnvio}</p>}
 
                             <hr className="report-hr" />
 
                             {FLAGS_BY_TYPE[tipo].incluirMacroscopia && (
                                 <>
                                     <h3>Descripción macroscópica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descMacroscopia }} />
+                                    <div dangerouslySetInnerHTML={{ __html: descripcionMacroscopia || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirMicroscopia && (
                                 <>
                                     <h3>Descripción microscópica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descMicroscopia }} />
+                                    <div dangerouslySetInnerHTML={{ __html: descripcionMicroscopia || "" }} />
                                 </>
                             )}
 
+                            {/* Bloque de imágenes */}
                             {reportImages.length > 0 && (
                                 <>
                                     <hr className="report-hr" />
                                     <h3>Imágenes</h3>
-                                    <div style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                        gap: 12
-                                    }}>
+                                    <div
+                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                            gap: 12,
+                                        }}
+                                    >
                                         {reportImages.map((img, idx) => (
                                             <div
-                                                key={`img-${idx}-${img?.url ?? "no-url"}`}
+                                                key={img.id || idx}
                                                 style={{
                                                     border: "1px solid #f0f0f0",
                                                     borderRadius: 8,
@@ -715,56 +611,56 @@ const ReportEditor: React.FC = () => {
                             {FLAGS_BY_TYPE[tipo].incluirCitomorfologia && (
                                 <>
                                     <h3>Descripción citomorfológica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descCitomorfologica }} />
+                                    <div dangerouslySetInnerHTML={{ __html: descripcionCitomorfologica || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirInterpretacion && (
                                 <>
                                     <h3>Interpretación</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: interpretacionHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: interpretacion || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirDiagnostico && (
                                 <>
                                     <h3>Diagnóstico</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: diagnosticoHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: diagnostico || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirComentario && (
                                 <>
                                     <h3>Comentario</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: comentarioHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: comentario || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirCU && (
                                 <>
                                     <h3>Citología urinaria</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirIF && (
                                 <>
                                     <h3>Inmunofluorescencia</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirInmunotinciones && (
                                 <>
                                     <h3>Inmunotinciones</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML || "" }} />
                                 </>
                             )}
 
                             {FLAGS_BY_TYPE[tipo].incluirME && (
                                 <>
                                     <h3>Microscopía electrónica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML }} />
+                                    <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML || "" }} />
                                 </>
                             )}
                         </div>
@@ -784,4 +680,3 @@ const ReportEditor: React.FC = () => {
 };
 
 export default ReportEditor;
-
