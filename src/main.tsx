@@ -4,6 +4,7 @@ import App from "./App";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import Home from "./pages/home";
+import Reports from "./pages/reports";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -12,6 +13,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/login" element={<Login />} />
             <Route path="/home" element={<Home />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/report" element={<Reports />} />
         </Routes>
     </BrowserRouter>
 );
