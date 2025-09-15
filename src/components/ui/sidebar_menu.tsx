@@ -1,16 +1,17 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/start" | "/report" | "/logout";
+export type CelumaKey = "/start" | "/report" | "/patients/register" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/start", icon: <HomeOutlined />, label: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes" },
+    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
