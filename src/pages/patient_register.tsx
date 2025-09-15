@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout } from "antd";
+import DateField from "../components/ui/date_field";
+import SelectField from "../components/ui/select_field";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -187,11 +189,10 @@ export default function PatientRegister() {
                                         control={control}
                                         name="dob"
                                         render={(p) => (
-                                            <TextField
-                                                {...p}
-                                                value={String(p.value ?? "")}
-                                                placeholder="Fecha de nacimiento (YYYY-MM-DD)"
-                                                inputMode="numeric"
+                                            <DateField
+                                                value={typeof p.value === "string" ? p.value : ""}
+                                                onChange={(v) => p.onChange(v)}
+                                                placeholder="Fecha de nacimiento"
                                             />
                                         )}
                                     />
@@ -199,7 +200,15 @@ export default function PatientRegister() {
                                         control={control}
                                         name="sex"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Sexo (M/F)" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder="Sexo"
+                                                options={[
+                                                    { value: "M", label: "Masculino" },
+                                                    { value: "F", label: "Femenino" },
+                                                ]}
+                                            />
                                         )}
                                     />
                                     <FormField
