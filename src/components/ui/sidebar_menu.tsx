@@ -1,15 +1,15 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
-import { Layout, Menu } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined } from "@ant-design/icons";
+import { Layout, Menu, Button } from "antd";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/start" | "/report" | "/patients/register" | "/logout";
+export type CelumaKey = "/home" | "/report" | "/patients/register" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
-    { key: "/start", icon: <HomeOutlined />, label: "Inicio" },
+    { key: "/home", icon: <HomeOutlined />, label: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes" },
     { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente" },
 ];
@@ -30,8 +30,11 @@ export interface SidebarCelumaProps {
     title?: string;
 }
 
-const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", onNavigate, logoSrc, title = "Céluma" }) => {
-    const [collapsed, setCollapsed] = useState(false);
+const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onNavigate, logoSrc, title = "Céluma" }) => {
+    const [collapsed, setCollapsed] = useState(() => {
+        const saved = localStorage.getItem("sidebar_collapsed");
+        return saved ? JSON.parse(saved) : false;
+    });
     const navigate = useNavigate();
     const selectedTop =
         selectedKey === "/logout" ? [] : ([selectedKey] as string[]);
@@ -48,6 +51,16 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", on
         }
     };
 
+    const handleLogoClick = () => {
+        handleNavigate("/home");
+    };
+
+    const toggleCollapsed = () => {
+        const newCollapsed = !collapsed;
+        setCollapsed(newCollapsed);
+        localStorage.setItem("sidebar_collapsed", JSON.stringify(newCollapsed));
+    };
+
     return (
         <Sider
             width = {260}
@@ -58,20 +71,31 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", on
             breakpoint = "lg"
         >
             <div style = {styles.inner}>
-                <div
-                    style = {collapsed ? styles.headerCollapsed : styles.header}
-                    onClick = {() => setCollapsed(!collapsed)}
-                >
-                    {logoSrc ? (
-                        <img
-                            src = {logoSrc}
-                            alt = "logo"
-                            style = {collapsed ? styles.logoCollapsed : styles.logo}
-                        />
-                    ) : (
-                        <div style = {styles.logoDot} />
-                    )}
-                    {!collapsed && <span style = {styles.brand}>{title}</span>}
+                <div style = {collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
+                    <div
+                        style = {collapsed ? styles.headerCollapsed : styles.header}
+                        onClick = {handleLogoClick}
+                    >
+                        {logoSrc ? (
+                            <img
+                                src = {logoSrc}
+                                alt = "logo"
+                                style = {collapsed ? styles.logoCollapsed : styles.logo}
+                            />
+                        ) : (
+                            <div style = {styles.logoDot} />
+                        )}
+                        {!collapsed && <span style = {styles.brand}>{title}</span>}
+                    </div>
+                    <Button
+                        type="text"
+                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                        onClick={toggleCollapsed}
+                        style={{
+                            ...styles.collapseButton,
+                            ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
+                        }}
+                    />
                 </div>
 
                 <Menu
@@ -114,19 +138,45 @@ const styles: Record<string, React.CSSProperties> = {
         flexDirection: "column",
         fontFamily: "Nanito, sans-serif",
     },
+    headerContainer: {
+        display: "flex",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        padding: "20px 16px 8px 16px",
+    },
+    headerContainerCollapsed: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: "20px 16px 8px 16px",
+    },
     header: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "20px 16px 8px 16px",
         cursor: "pointer",
     },
     headerCollapsed: {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        padding: "20px 0 8px 0",
         cursor: "pointer",
+    },
+    collapseButton: {
+        color: "#fff",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+        borderRadius: 6,
+        height: 32,
+    },
+    collapseButtonExpanded: {
+        width: 32,
+        minWidth: 32,
+    },
+    collapseButtonCollapsed: {
+        width: "100%",
+        alignSelf: "center",
     },
     logo: { height: 44 },
     logoCollapsed: { height: 32 },

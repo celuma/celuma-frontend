@@ -122,7 +122,7 @@ export default function PatientRegister() {
     return (
         <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma
-                selectedKey={(pathname as CelumaKey) ?? "/start"}
+                selectedKey={(pathname as CelumaKey) ?? "/home"}
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
