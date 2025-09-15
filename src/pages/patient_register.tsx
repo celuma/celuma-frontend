@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -125,12 +125,20 @@ export default function PatientRegister() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+                <style>{`
+                  .pr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+                  .pr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
+                  .pr-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+                  @media (max-width: 768px) {
+                    .pr-grid-2, .pr-grid-3, .pr-grid-4 { grid-template-columns: 1fr; }
+                  }
+                `}</style>
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
                     <Card title="Registrar Paciente">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Contexto</h3>
-                                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
+                                <div className="pr-grid-2" style={{ alignItems: "start" }}>
                                     <FormField
                                         control={control}
                                         name="tenant_id"
@@ -150,7 +158,7 @@ export default function PatientRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Paciente</h3>
-                                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3, 1fr)" }}>
+                                <div className="pr-grid-3">
                                     <FormField
                                         control={control}
                                         name="patient_code"
@@ -174,7 +182,7 @@ export default function PatientRegister() {
                                     />
                                 </div>
 
-                                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, 1fr)" }}>
+                                <div className="pr-grid-4">
                                     <FormField
                                         control={control}
                                         name="dob"
