@@ -62,14 +62,20 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
     };
 
     return (
-        <Sider
-            width = {260}
-            collapsible
-            collapsed = {collapsed}
-            trigger = {null}
-            style = {styles.sider}
-            breakpoint = "lg"
-        >
+        <>
+            <style>{`
+                body, html { margin: 0; padding: 0; }
+                .ant-layout { margin: 0; padding: 0; }
+                .ant-layout-sider { margin: 0; padding: 0; }
+            `}</style>
+            <Sider
+                width = {260}
+                collapsible
+                collapsed = {collapsed}
+                trigger = {null}
+                style = {styles.sider}
+                breakpoint = "lg"
+            >
             <div style = {styles.inner}>
                 <div style = {collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
                     <div
@@ -108,7 +114,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                     onClick = {(e) => handleNavigate(e.key as CelumaKey)}
                 />
 
-                <div style = {styles.bottomWrapper}>
+                <div style = {collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
                     <Menu
                         items = {itemsBottom}
                         selectedKeys = {selectedBottom}
@@ -121,6 +127,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                 </div>
             </div>
         </Sider>
+        </>
     );
 };
 
@@ -131,6 +138,9 @@ const styles: Record<string, React.CSSProperties> = {
         background: "#49b6ad",
         color: "#fff",
         paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingTop: 0,
     },
     inner: {
         height: "100%",
@@ -199,7 +209,7 @@ const styles: Record<string, React.CSSProperties> = {
         background: "transparent",
         borderInlineEnd: "none",
         flex: 1,
-        padding: "8px 8px 0 8px",
+        padding: "8px 16px 0 16px",
         margin: 0,
         color: "#fff",
     },
@@ -208,11 +218,22 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
+        padding: "16px 16px 20px 16px",
+        borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+    },
+    bottomWrapperCollapsed: {
+        marginTop: "auto",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "flex-end",
+        alignItems: "center",
+        padding: "16px 8px 20px 8px",
+        borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {
         background: "transparent",
         borderInlineEnd: "none",
-        padding: "0 8px 0 8px",
+        padding: 0,
         margin: 0,
         color: "#fff",
     },
