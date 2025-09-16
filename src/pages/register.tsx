@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthCard from "../components/auth/auth_card";
 import BrandHeader from "../components/auth/brand_header";
 import FormField from "../components/ui/form_field";
@@ -35,19 +35,19 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
 
 
 interface TenantCreateRequest { name: string; legal_name: string; tax_id: string; }
-interface TenantCreateResponse { id: string; name: string; legal_name: string; }
 
-interface BranchCreateRequest {
-    tenant_id: string; code: string; name: string; timezone: string;
-    address_line1: string; address_line2?: string;
-    postal_code: string; city: string; state: string; country: string;
+interface UnifiedRegisterRequest {
+    tenant: TenantCreateRequest;
+    branch: {
+        code: string; name: string; timezone: string;
+        address_line1: string; address_line2?: string;
+        postal_code: string; city: string; state: string; country: string;
+    };
+    admin_user: {
+        email: string; username?: string; password: string; full_name: string;
+    };
 }
-interface BranchCreateResponse { id: string; name: string; code: string; tenant_id: string; }
-
-interface RegisterRequest {
-    email: string; username?: string; password: string; full_name: string; role: string; tenant_id: string;
-}
-interface RegisterResponse { id: string; email: string; username: string; full_name: string; role: string; }
+interface UnifiedRegisterResponse { tenant_id: string; branch_id: string; user_id: string; }
 
 
 const tenantSchema = z.object({
@@ -72,7 +72,12 @@ const userSchema = z.object({
         .nonempty("La contraseña es obligatoria.")
         .min(8, "Mínimo 8 caracteres.")
         .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/, "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."),
+    confirmPassword: z.string()
+        .nonempty("Confirmar contraseña es obligatorio."),
     full_name: z.string().nonempty("El nombre completo es requerido."),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden.",
+    path: ["confirmPassword"],
 });
 const formSchema = z.object({
     tenant: tenantSchema,
@@ -96,7 +101,7 @@ export default function RegisterAllOneClick() {
         defaultValues: {
             tenant: { name: "", legal_name: "", tax_id: "" },
             branch: { code: "", name: "", address_line1: "", address_line2: "", postal_code: "", city: "", state: "", country: "" },
-            user: { email: "", username: "", password: "", full_name: "" },
+            user: { email: "", username: "", password: "", confirmPassword: "", full_name: "" },
         },
         mode: "onTouched",
     });
@@ -106,33 +111,32 @@ export default function RegisterAllOneClick() {
         setError(null);
 
         try {
-            const createdTenant = await postJSON<TenantCreateRequest, TenantCreateResponse>("/v1/tenants/", {
-                name: data.tenant.name,
-                legal_name: data.tenant.legal_name,
-                tax_id: data.tenant.tax_id,
-            });
+            const payload: UnifiedRegisterRequest = {
+                tenant: {
+                    name: data.tenant.name,
+                    legal_name: data.tenant.legal_name,
+                    tax_id: data.tenant.tax_id,
+                },
+                branch: {
+                    code: data.branch.code,
+                    name: data.branch.name,
+                    timezone,
+                    address_line1: data.branch.address_line1,
+                    address_line2: data.branch.address_line2 || undefined,
+                    postal_code: data.branch.postal_code,
+                    city: data.branch.city,
+                    state: data.branch.state,
+                    country: data.branch.country,
+                },
+                admin_user: {
+                    email: data.user.email,
+                    username: data.user.username || undefined,
+                    password: data.user.password,
+                    full_name: data.user.full_name,
+                },
+            };
 
-            await postJSON<BranchCreateRequest, BranchCreateResponse>("/v1/branches/", {
-                tenant_id: createdTenant.id,
-                code: data.branch.code,
-                name: data.branch.name,
-                timezone,
-                address_line1: data.branch.address_line1,
-                address_line2: data.branch.address_line2 || undefined,
-                postal_code: data.branch.postal_code,
-                city: data.branch.city,
-                state: data.branch.state,
-                country: data.branch.country,
-            });
-
-            await postJSON<RegisterRequest, RegisterResponse>("/v1/auth/register", {
-                email: data.user.email,
-                username: data.user.username || undefined,
-                password: data.user.password,
-                full_name: data.user.full_name,
-                role: "admin",
-                tenant_id: createdTenant.id,
-            });
+            await postJSON<UnifiedRegisterRequest, UnifiedRegisterResponse>("/v1/auth/register/unified", payload);
 
             navigate("/login", { replace: true });
         } catch (e) {
@@ -145,7 +149,12 @@ export default function RegisterAllOneClick() {
     const onlyDigits = (s: string) => s.replace(/\D+/g, "");
 
     return (
-        <AuthCard header = {<BrandHeader title = "¡Regístrate!" />}>
+        <AuthCard header = {<BrandHeader title = "¡Regístrate!" />} footer={
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", fontSize: 14 }}>
+                <span>¿Ya tienes cuenta?</span>
+                <Link to="/login" style={{ color: "#0f8b8d" }}>Inicia sesión</Link>
+            </div>
+        }>
             <form onSubmit = {onSubmit} style = {{ display: "grid", gap: 16 }}>
                 {/* Company */}
                 <section style = {{ display: "grid", gap: 12 }}>
@@ -229,13 +238,18 @@ export default function RegisterAllOneClick() {
                     <h3 style = {{ margin: 0 }}> Usuario </h3>
                     <FormField
                         control = {control}
+                        name = "user.full_name"
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre completo" />}
+                    />
+                    <FormField
+                        control = {control}
                         name = "user.email"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Email" />}
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Correo electrónico" />}
                     />
                     <FormField
                         control = {control}
                         name = "user.username"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre de usuario" />}
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre de usuario (opcional)" />}
                     />
                     <FormField
                         control = {control}
@@ -244,8 +258,8 @@ export default function RegisterAllOneClick() {
                     />
                     <FormField
                         control = {control}
-                        name = "user.full_name"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre completo" />}
+                        name = "user.confirmPassword"
+                        render = {(p) => <PasswordField {...p} value={String(p.value ?? "")} placeholder="Repetir contraseña" />}
                     />
                 </section>
 

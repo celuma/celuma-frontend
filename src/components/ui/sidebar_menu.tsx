@@ -1,25 +1,33 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/home" | "/report" | "/patients/register" | "/logout";
+export type CelumaKey = "/home" | "/report" | "/patients/register" | "/profile" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
-    { key: "/home", icon: <HomeOutlined />, label: "Inicio" },
-    { key: "/report", icon: <FileTextOutlined />, label: "Reportes" },
-    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente" },
+    { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
+    { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
+    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
+    {
+        key: "/profile",
+        icon: <UserOutlined />,
+        label: "Mi Perfil",
+        style: { margin: 0 },
+        title: "Mi Perfil", // Tooltip when collapsed
+    },
     {
         key: "/logout",
         icon: <LogoutOutlined />,
         label: "Cerrar Sesión",
         style: { margin: 0 },
+        title: "Cerrar Sesión", // Tooltip when collapsed
     },
 ];
 
@@ -37,9 +45,9 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
     });
     const navigate = useNavigate();
     const selectedTop =
-        selectedKey === "/logout" ? [] : ([selectedKey] as string[]);
+        selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);
     const selectedBottom =
-        selectedKey === "/logout" ? ([selectedKey] as string[]) : [];
+        selectedKey === "/logout" || selectedKey === "/profile" ? ([selectedKey] as string[]) : [];
 
     const handleNavigate = (key: CelumaKey) => {
         if (key === "/logout") {
@@ -112,6 +120,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                     inlineCollapsed = {collapsed}
                     style = {styles.menu}
                     onClick = {(e) => handleNavigate(e.key as CelumaKey)}
+                    inlineIndent = {collapsed ? 0 : 24}
                 />
 
                 <div style = {collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
@@ -123,6 +132,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                         inlineCollapsed = {collapsed}
                         style = {styles.menuBottom}
                         onClick = {(e) => handleNavigate(e.key as CelumaKey)}
+                        inlineIndent = {collapsed ? 0 : 24}
                     />
                 </div>
             </div>
@@ -227,7 +237,7 @@ const styles: Record<string, React.CSSProperties> = {
         flexDirection: "column",
         justifyContent: "flex-end",
         alignItems: "center",
-        padding: "16px 8px 20px 8px",
+        padding: "16px 16px 20px 16px",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {
