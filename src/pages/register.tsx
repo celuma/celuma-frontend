@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthCard from "../components/auth/auth_card";
 import BrandHeader from "../components/auth/brand_header";
 import FormField from "../components/ui/form_field";
@@ -149,7 +149,12 @@ export default function RegisterAllOneClick() {
     const onlyDigits = (s: string) => s.replace(/\D+/g, "");
 
     return (
-        <AuthCard header = {<BrandHeader title = "¡Regístrate!" />}>
+        <AuthCard header = {<BrandHeader title = "¡Regístrate!" />} footer={
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", fontSize: 14 }}>
+                <span>¿Ya tienes cuenta?</span>
+                <Link to="/login" style={{ color: "#0f8b8d" }}>Inicia sesión</Link>
+            </div>
+        }>
             <form onSubmit = {onSubmit} style = {{ display: "grid", gap: 16 }}>
                 {/* Company */}
                 <section style = {{ display: "grid", gap: 12 }}>

@@ -15,7 +15,6 @@ import Checkbox from "../components/ui/checkbox";
 import Button from "../components/ui/button";
 import AlertText from "../components/ui/error_text";
 import CelumaModal from "../components/ui/celuma_modal";
-import { MailOutlined, CustomerServiceOutlined } from "@ant-design/icons";
 
 /* --------- Validación --------- */
 const schema = z.object({
