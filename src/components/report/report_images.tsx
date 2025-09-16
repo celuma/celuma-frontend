@@ -1,18 +1,46 @@
 // components/report_images.tsx
-import { useEffect, useMemo, useState } from "react";
-import { Upload, Modal, Typography, message, Button, Space, Input, Popconfirm } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+    Upload,
+    Modal,
+    Typography,
+    message,
+    Button,
+    Space,
+    Input,
+    Popconfirm,
+    Tooltip,
+} from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
-import { PlusOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+    PlusOutlined,
+    UploadOutlined,
+    DeleteOutlined,
+    EyeOutlined,
+    FileTextOutlined,
+} from "@ant-design/icons";
 import {
     uploadReportImage,
     deleteReportImage,
-    fetchReportImages, // <- si ya lo tienes en tu servicio
+    type UploadImageResponse,
 } from "../../services/report_service";
 
 export type ReportImage = {
     id?: string;
+    /** SIEMPRE la URL PROCESADA (no la original) */
     url: string;
+    /** Miniatura si el backend la provee; si no, cae en url */
+    thumbnailUrl?: string;
     caption?: string;
+};
+
+type UploadImageServerResp = UploadImageResponse & {
+    urls?: {
+        original?: string;
+        processed?: string;
+        thumbnail?: string;
+    };
+    sample_image_id?: string;
 };
 
 const ACCEPT_IMAGES =
@@ -20,33 +48,26 @@ const ACCEPT_IMAGES =
 
 type Props = {
     sampleId: string;
+
+    /** Controlado */
     value?: ReportImage[];
     onChange?: (images: ReportImage[]) => void;
+
     maxCount?: number;
     maxSizeMB?: number;
     disabled?: boolean;
+
     label?: string;
     helpText?: string;
-    listType?: "picture-card" | "picture" | "text";
+
+    /** Arrastrar y soltar para el uploader */
     dragAndDrop?: boolean;
+
+    /** Si true, al eliminar también lo intenta en backend si hay `id` */
     deleteInBackend?: boolean;
 };
 
 const DEFAULT_MAX_MB = 10;
-
-/** Convierte rutas relativas a absolutas para que <img> las pueda cargar. */
-function normalizeUrl(u: string): string {
-    if (!u) return u;
-    if (/^https?:\/\//i.test(u)) return u; // ya es absoluta
-    const base =
-        import.meta.env.DEV
-            ? "/api"
-            : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
-    const baseAbs = /^https?:\/\//i.test(base)
-        ? base
-        : `${window.location.origin}${base.startsWith("/") ? "" : "/"}${base}`;
-    return `${baseAbs.replace(/\/+$/, "")}/${u.replace(/^\/+/, "")}`;
-}
 
 export default function ReportImages({
                                          sampleId,
@@ -57,45 +78,36 @@ export default function ReportImages({
                                          disabled,
                                          label = "Imágenes",
                                          helpText = `Arrastra o haz clic. Máx ${DEFAULT_MAX_MB}MB por imagen.`,
-                                         listType = "picture-card",
                                          dragAndDrop = true,
                                          deleteInBackend = false,
                                      }: Props) {
     const [fileList, setFileList] = useState<UploadFile[]>([]);
-    const [preview, setPreview] = useState<{ open: boolean; title?: string; src?: string }>({ open: false });
-    const [loadingList, setLoadingList] = useState(false);
 
-    const emit = (next: ReportImage[]) => onChange?.(next.slice(0, maxCount));
+    // Modales separados
+    const [viewModal, setViewModal] = useState<{ open: boolean; index: number | null }>({
+        open: false,
+        index: null,
+    });
+    const [captionModal, setCaptionModal] = useState<{ open: boolean; index: number | null; draft: string }>(
+        { open: false, index: null, draft: "" }
+    );
 
-    // value -> fileList (uid + status tipado y URL normalizada)
+    const abortRef = useRef<AbortController | null>(null);
+    useEffect(() => () => abortRef.current?.abort(), []);
+
+    // value -> fileList (solo para el uploader; no se muestra su lista)
     useEffect(() => {
         const mapped: UploadFile[] =
-            (value ?? [])
-                .slice(0, maxCount)
-                .map((img, i): UploadFile => ({
-                    uid: img.id && img.id.trim() ? img.id : `img-${i}`,
-                    name: img.caption || `Figura ${i + 1}`,
-                    status: "done" as UploadFile["status"],
-                    url: normalizeUrl(img.url),
-                }));
+            (value ?? []).slice(0, maxCount).map((img, i): UploadFile => ({
+                uid: img.id ?? `img-${i}`,
+                name: img.caption || `Figura ${i + 1}`,
+                status: "done" as UploadFile["status"],
+                url: img.thumbnailUrl || img.url,
+            }));
         setFileList(mapped);
     }, [value, maxCount]);
 
-    // Carga desde backend (útil si subiste fuera o para consolidar URLs/IDs reales)
-    const loadFromServer = async () => {
-        if (!sampleId) return;
-        try {
-            setLoadingList(true);
-            const items = await fetchReportImages(sampleId); // [{id,url,caption?}]
-            emit(items.map(it => ({ ...it, url: normalizeUrl(it.url) })));
-        } catch (e) {
-            message.error(e instanceof Error ? e.message : "No se pudieron cargar las imágenes.");
-        } finally {
-            setLoadingList(false);
-        }
-    };
-
-    useEffect(() => { void loadFromServer(); }, [sampleId]); // al montar/cambiar sample
+    const emit = (next: ReportImage[]) => onChange?.(next.slice(0, maxCount));
 
     // Validaciones
     const validateFile = (file: File) => {
@@ -110,10 +122,11 @@ export default function ReportImages({
         }
         return true;
     };
+
     const beforeUpload: UploadProps["beforeUpload"] = (file) =>
         validateFile(file as File) ? true : Upload.LIST_IGNORE;
 
-    // Subida: escoger la URL correcta del response y refrescar
+    // Subida (solo procesada)
     const customRequest: UploadProps["customRequest"] = useMemo(() => {
         return async (options) => {
             const { file, onError, onProgress, onSuccess } = options;
@@ -121,50 +134,44 @@ export default function ReportImages({
                 if (!sampleId) throw new Error("Falta sampleId");
                 if (!(file instanceof File)) throw new Error("Archivo inválido");
 
-                onProgress?.({ percent: 25 });
+                onProgress?.({ percent: 20 });
+                abortRef.current = new AbortController();
 
-                const resp: any = await uploadReportImage(sampleId, file, "");
-                // <-- AQUI el FIX: tomar la mejor URL disponible
-                const displayUrl: string | undefined =
-                    resp?.url ??
-                    resp?.urls?.processed ??
-                    resp?.urls?.thumbnail ??
-                    resp?.urls?.original;
+                const resp = (await uploadReportImage(
+                    sampleId,
+                    file,
+                    ""
+                )) as UploadImageServerResp;
 
-                if (!displayUrl) {
-                    // Si no vino, recarga del backend para no quedar “en blanco”
-                    await loadFromServer();
-                    throw new Error("El servidor no devolvió una URL de imagen utilizable.");
-                }
+                onProgress?.({ percent: 90 });
 
-                const newImg: ReportImage = {
-                    id: resp?.id || resp?.sample_image_id || "",
-                    url: normalizeUrl(displayUrl),
-                    caption: resp?.caption ?? "",
+                // Procesada por defecto, miniatura si existe.
+                const processed = resp.urls?.processed ?? resp.url;
+                const thumb = resp.urls?.thumbnail ?? processed;
+
+                const newItem: ReportImage = {
+                    id: resp.id || resp.sample_image_id,
+                    url: processed,         // 👈 SIEMPRE procesada
+                    thumbnailUrl: thumb,
+                    caption: resp.caption ?? "",
                 };
 
-                // 1) Actualiza el padre (para que la vista previa derecha se pinte)
-                const next = [...(value ?? []), newImg].slice(0, maxCount);
+                const next = [...(value ?? []), newItem].slice(0, maxCount);
                 emit(next);
 
-                // 2) Actualiza miniatura de AntD al instante
+                // Reflejar en lista interna (aunque no se muestra)
                 setFileList((prev) => {
-                    const uid = newImg.id && String(newImg.id).trim() ? String(newImg.id) : `img-${prev.length}`;
+                    const uid = newItem.id ?? `img-${prev.length}`;
                     const fileItem: UploadFile = {
                         uid,
-                        name: newImg.caption || `Figura ${prev.length + 1}`,
+                        name: newItem.caption || `Figura ${prev.length + 1}`,
                         status: "done" as UploadFile["status"],
-                        url: newImg.url,
+                        url: newItem.thumbnailUrl || newItem.url,
                     };
                     return [...prev, fileItem].slice(0, maxCount);
                 });
 
-                onProgress?.({ percent: 90 });
-
-                // 3) Sincroniza contra backend para consolidar
-                await loadFromServer();
-
-                onSuccess?.({}, {} as any);
+                onSuccess?.({}, {} as never);
                 message.success("Imagen subida correctamente.");
             } catch (err) {
                 const msg = err instanceof Error ? err.message : "Error al subir imagen.";
@@ -174,11 +181,7 @@ export default function ReportImages({
         };
     }, [sampleId, value, maxCount]);
 
-    const handlePreview = (file: UploadFile) => {
-        setPreview({ open: true, title: file.name, src: file.url || file.thumbUrl });
-    };
-
-    // Eliminar (local) + opcional en backend
+    // Eliminar
     const removeAt = async (idx: number) => {
         const item = (value ?? [])[idx];
         if (!item) return;
@@ -187,7 +190,9 @@ export default function ReportImages({
             try {
                 await deleteReportImage(sampleId, item.id);
             } catch (e) {
-                message.error(e instanceof Error ? e.message : "No se pudo eliminar la imagen en el servidor.");
+                message.error(
+                    e instanceof Error ? e.message : "No se pudo eliminar la imagen en el servidor."
+                );
                 return;
             }
         }
@@ -197,65 +202,60 @@ export default function ReportImages({
         emit(next);
     };
 
-    const handleRemove: UploadProps["onRemove"] = async (file) => {
-        const idx = (value ?? []).findIndex(
-            (img, i) =>
-                (img.id ?? `img-${i}`) === file.uid ||
-                normalizeUrl(img.url) === file.url
-        );
-        if (idx >= 0) await removeAt(idx);
-        return false;
+    // Abrir modales
+    const openView = (idx: number) => setViewModal({ open: true, index: idx });
+    const openCaption = (idx: number) => {
+        const current = (value ?? [])[idx];
+        setCaptionModal({ open: true, index: idx, draft: current?.caption ?? "" });
     };
 
-    const changeCaption = (idx: number, caption: string) => {
+    // Guardar descripción desde modal
+    const saveCaption = () => {
+        if (captionModal.index == null) return;
         const next = (value ?? []).slice();
-        if (next[idx]) next[idx] = { ...next[idx], caption };
+        next[captionModal.index] = { ...next[captionModal.index], caption: captionModal.draft };
         emit(next);
+        setCaptionModal({ open: false, index: null, draft: "" });
     };
+
+    // Seleccionados
+    const currentView =
+        viewModal.index != null ? (value ?? [])[viewModal.index] ?? null : null;
 
     const UploadCore = dragAndDrop ? Upload.Dragger : Upload;
-    const addButton =
-        listType === "picture-card" ? (
-            <button type="button" style={{ border: 0, background: "none" }} disabled={disabled}>
-                <PlusOutlined />
-                <div style={{ marginTop: 8 }}>Subir</div>
-            </button>
-        ) : (
-            <Button icon={<UploadOutlined />} disabled={disabled}>
-                Seleccionar imágenes
-            </Button>
-        );
 
     return (
         <div>
-            <Space direction="vertical" style={{ width: "100%" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {label && <Typography.Text strong>{label}</Typography.Text>}
-                    <Button
-                        icon={<ReloadOutlined />}
-                        onClick={loadFromServer}
-                        loading={loadingList}
-                        size="small"
-                    >
-                        Sincronizar
-                    </Button>
-                </div>
+            <Space direction="vertical" style={{ width: "100%" }} size="small">
+                {label && (
+                    <Typography.Text strong style={{ display: "block" }}>
+                        {label}
+                    </Typography.Text>
+                )}
 
+                {/* Uploader sin lista visible */}
                 <UploadCore
                     name="file"
-                    listType={listType}
                     multiple
                     maxCount={maxCount}
                     fileList={fileList}
+                    showUploadList={false}
                     accept={ACCEPT_IMAGES}
                     disabled={disabled}
                     beforeUpload={beforeUpload}
                     customRequest={customRequest}
-                    onPreview={handlePreview}
-                    onRemove={handleRemove}
                     action={undefined}
                 >
-                    {fileList.length >= maxCount ? null : addButton}
+                    {dragAndDrop ? (
+                        <div>
+                            <PlusOutlined />
+                            <div style={{ marginTop: 8 }}>Subir</div>
+                        </div>
+                    ) : (
+                        <Button icon={<UploadOutlined />} disabled={disabled}>
+                            Seleccionar imágenes
+                        </Button>
+                    )}
                 </UploadCore>
 
                 {helpText && (
@@ -264,59 +264,120 @@ export default function ReportImages({
                     </Typography.Paragraph>
                 )}
 
+                {/* Miniaturas (chico) con acciones separadas */}
                 {(value?.length ?? 0) > 0 && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                            gap: 12,
+                        }}
+                    >
                         {(value ?? []).map((img, idx) => (
-                            <div key={img.id ?? idx} style={{ display: "grid", gap: 6 }}>
+                            <div
+                                key={img.id ?? idx}
+                                style={{
+                                    position: "relative",
+                                    width: "100%",
+                                    borderRadius: 6,
+                                    overflow: "hidden",
+                                    border: "1px solid #f0f0f0",
+                                    background: "#fafafa",
+                                }}
+                            >
+                                {/* Thumbnail */}
+                                <img
+                                    src={img.thumbnailUrl || img.url}
+                                    alt={img.caption || `Figura ${idx + 1}`}
+                                    style={{
+                                        width: "100%",
+                                        height: 80,
+                                        objectFit: "cover",
+                                        display: "block",
+                                    }}
+                                />
+
+                                {/* Acciones arriba a la derecha: ojo, descripción, borrar */}
                                 <div
                                     style={{
-                                        position: "relative",
-                                        border: "1px solid #f0f0f0",
-                                        borderRadius: 8,
-                                        overflow: "hidden",
-                                        background: "#fff",
+                                        position: "absolute",
+                                        top: 4,
+                                        right: 4,
+                                        display: "flex",
+                                        gap: 4,
                                     }}
                                 >
-                                    <img
-                                        src={normalizeUrl(img.url)}
-                                        alt={img.caption || `Figura ${idx + 1}`}
-                                        style={{ width: "100%", height: 140, objectFit: "contain", background: "#fafafa" }}
-                                    />
-                                    <div style={{ position: "absolute", top: 6, right: 6 }}>
-                                        <Popconfirm
-                                            title="Eliminar imagen"
-                                            description="¿Deseas eliminar esta imagen?"
-                                            okText="Sí"
-                                            cancelText="No"
-                                            disabled={disabled}
-                                            onConfirm={() => removeAt(idx)}
-                                        >
-                                            <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} />
-                                        </Popconfirm>
-                                    </div>
-                                </div>
+                                    <Tooltip title="Ver imagen">
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            icon={<EyeOutlined />}
+                                            onClick={() => openView(idx)}
+                                        />
+                                    </Tooltip>
 
-                                <Input
-                                    size="small"
-                                    placeholder={`Leyenda (Figura ${idx + 1})`}
-                                    value={img.caption ?? ""}
-                                    onChange={(e) => changeCaption(idx, e.target.value)}
-                                    disabled={disabled}
-                                />
+                                    <Tooltip title="Editar descripción">
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            icon={<FileTextOutlined />}
+                                            onClick={() => openCaption(idx)}
+                                        />
+                                    </Tooltip>
+
+                                    <Popconfirm
+                                        title="Eliminar imagen"
+                                        okText="Sí"
+                                        cancelText="No"
+                                        disabled={disabled}
+                                        onConfirm={() => removeAt(idx)}
+                                    >
+                                        <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} />
+                                    </Popconfirm>
+                                </div>
                             </div>
                         ))}
                     </div>
                 )}
             </Space>
 
+            {/* Modal: SOLO ver la imagen procesada */}
             <Modal
-                open={preview.open}
-                title={preview.title}
+                open={viewModal.open}
+                title="Imagen procesada"
                 footer={null}
-                onCancel={() => setPreview({ open: false })}
+                onCancel={() => setViewModal({ open: false, index: null })}
+                width={720}
                 centered
             >
-                <img style={{ width: "100%" }} src={preview.src} />
+                {currentView && (
+                    <img
+                        src={currentView.url}
+                        alt={currentView.caption || "imagen"}
+                        style={{ width: "100%", maxHeight: 520, objectFit: "contain" }}
+                    />
+                )}
+            </Modal>
+
+            {/* Modal: SOLO editar la descripción */}
+            <Modal
+                open={captionModal.open}
+                title="Descripción de la imagen"
+                okText="Guardar"
+                cancelText="Cancelar"
+                onOk={saveCaption}
+                onCancel={() => setCaptionModal({ open: false, index: null, draft: "" })}
+                centered
+            >
+                <Input.TextArea
+                    placeholder="Descripción / leyenda"
+                    autoSize={{ minRows: 3, maxRows: 6 }}
+                    value={captionModal.draft}
+                    onChange={(e) =>
+                        setCaptionModal((s) => ({ ...s, draft: e.target.value }))
+                    }
+                    disabled={disabled}
+                />
             </Modal>
         </div>
     );

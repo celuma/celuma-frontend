@@ -3,7 +3,6 @@ import { Row, Col, Input, DatePicker, Form, message, Select, Divider, Button } f
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
-
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { saveReport } from "../../services/report_service";
 import ReportImages, { type ReportImage } from "./report_images";
@@ -289,9 +288,9 @@ const ReportEditor: React.FC = () => {
     // Construye el sobre (envelope) para el POST /v1/reports
     const buildEnvelope = (): ReportEnvelope => {
         return {
-            tenant_id: "tenant-demo",
-            branch_id: "main",
-            order_id: folio || "sin-folio",
+            tenant_id: "2de8ffdf-025f-4f2a-839d-eac3473cfaa6",
+            branch_id: "8cd740ad-1be3-4dd0-bcea-93d5e84786d4",
+            order_id: "f4dca87f-ca63-4bb2-8f79-77f7f1d8def6",
             title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
             diagnosis_text: (diagnostico || "").replace(/<[^>]+>/g, "").slice(0, 1000),
             created_by: "webapp",
@@ -579,7 +578,7 @@ const ReportEditor: React.FC = () => {
                                     <div
                                         style={{
                                             display: "grid",
-                                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                                             gap: 12,
                                         }}
                                     >
@@ -600,7 +599,7 @@ const ReportEditor: React.FC = () => {
                                                 />
                                                 <div style={{ padding: "6px 8px", fontSize: 12 }}>
                                                     <b>Figura {idx + 1}.</b>{" "}
-                                                    {img.caption && img.caption.trim().length > 0 ? img.caption : <em>Sin descripción</em>}
+                                                    {img.caption && img.caption.trim().length > 0 ? img.caption : <em> </em>}
                                                 </div>
                                             </div>
                                         ))}
