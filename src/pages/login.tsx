@@ -90,14 +90,23 @@ export default function Login() {
             }
 
             const { access_token, token_type } = (json ?? {}) as LoginSuccess;
+            console.log("Login response:", json);
+            console.log("Access token:", access_token ? `${access_token.substring(0, 20)}...` : "None");
+            console.log("Token type:", token_type);
+            
             if (access_token && token_type) {
                 const bearer = `${token_type} ${access_token}`;
                 // Guarda el token según "Recuérdame"
                 if (data.remember) {
                     localStorage.setItem("auth_token", bearer);
+                    console.log("Token saved to localStorage");
                 } else {
                     sessionStorage.setItem("auth_token", bearer);
+                    console.log("Token saved to sessionStorage");
                 }
+                console.log("Token saved successfully");
+            } else {
+                console.error("No access token received in login response");
             }
 
             navigate("/home", { replace: true });

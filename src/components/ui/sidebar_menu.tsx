@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/home" | "/report" | "/patients/register" | "/logout";
+export type CelumaKey = "/home" | "/report" | "/patients/register" | "/profile" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio" },
@@ -15,6 +15,12 @@ const itemsTop: Required<MenuProps>["items"] = [
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
+    {
+        key: "/profile",
+        icon: <UserOutlined />,
+        label: "Mi Perfil",
+        style: { margin: 0 },
+    },
     {
         key: "/logout",
         icon: <LogoutOutlined />,
@@ -37,9 +43,9 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
     });
     const navigate = useNavigate();
     const selectedTop =
-        selectedKey === "/logout" ? [] : ([selectedKey] as string[]);
+        selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);
     const selectedBottom =
-        selectedKey === "/logout" ? ([selectedKey] as string[]) : [];
+        selectedKey === "/logout" || selectedKey === "/profile" ? ([selectedKey] as string[]) : [];
 
     const handleNavigate = (key: CelumaKey) => {
         if (key === "/logout") {

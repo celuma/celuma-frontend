@@ -5,6 +5,7 @@ import Login from "./pages/login";
 import Register from "./pages/register";
 import Home from "./pages/home";
 import PatientRegister from "./pages/patient_register";
+import Profile from "./pages/profile";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -14,6 +15,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/home" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/patients/register" element={<PatientRegister />} />
+            <Route path="/profile" element={<Profile />} />
         </Routes>
     </BrowserRouter>
 );
