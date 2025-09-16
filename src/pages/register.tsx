@@ -35,19 +35,19 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
 
 
 interface TenantCreateRequest { name: string; legal_name: string; tax_id: string; }
-interface TenantCreateResponse { id: string; name: string; legal_name: string; }
 
-interface BranchCreateRequest {
-    tenant_id: string; code: string; name: string; timezone: string;
-    address_line1: string; address_line2?: string;
-    postal_code: string; city: string; state: string; country: string;
+interface UnifiedRegisterRequest {
+    tenant: TenantCreateRequest;
+    branch: {
+        code: string; name: string; timezone: string;
+        address_line1: string; address_line2?: string;
+        postal_code: string; city: string; state: string; country: string;
+    };
+    admin_user: {
+        email: string; username?: string; password: string; full_name: string;
+    };
 }
-interface BranchCreateResponse { id: string; name: string; code: string; tenant_id: string; }
-
-interface RegisterRequest {
-    email: string; username?: string; password: string; full_name: string; role: string; tenant_id: string;
-}
-interface RegisterResponse { id: string; email: string; username: string; full_name: string; role: string; }
+interface UnifiedRegisterResponse { tenant_id: string; branch_id: string; user_id: string; }
 
 
 const tenantSchema = z.object({
@@ -111,33 +111,32 @@ export default function RegisterAllOneClick() {
         setError(null);
 
         try {
-            const createdTenant = await postJSON<TenantCreateRequest, TenantCreateResponse>("/v1/tenants/", {
-                name: data.tenant.name,
-                legal_name: data.tenant.legal_name,
-                tax_id: data.tenant.tax_id,
-            });
+            const payload: UnifiedRegisterRequest = {
+                tenant: {
+                    name: data.tenant.name,
+                    legal_name: data.tenant.legal_name,
+                    tax_id: data.tenant.tax_id,
+                },
+                branch: {
+                    code: data.branch.code,
+                    name: data.branch.name,
+                    timezone,
+                    address_line1: data.branch.address_line1,
+                    address_line2: data.branch.address_line2 || undefined,
+                    postal_code: data.branch.postal_code,
+                    city: data.branch.city,
+                    state: data.branch.state,
+                    country: data.branch.country,
+                },
+                admin_user: {
+                    email: data.user.email,
+                    username: data.user.username || undefined,
+                    password: data.user.password,
+                    full_name: data.user.full_name,
+                },
+            };
 
-            await postJSON<BranchCreateRequest, BranchCreateResponse>("/v1/branches/", {
-                tenant_id: createdTenant.id,
-                code: data.branch.code,
-                name: data.branch.name,
-                timezone,
-                address_line1: data.branch.address_line1,
-                address_line2: data.branch.address_line2 || undefined,
-                postal_code: data.branch.postal_code,
-                city: data.branch.city,
-                state: data.branch.state,
-                country: data.branch.country,
-            });
-
-            await postJSON<RegisterRequest, RegisterResponse>("/v1/auth/register", {
-                email: data.user.email,
-                username: data.user.username || undefined,
-                password: data.user.password,
-                full_name: data.user.full_name,
-                role: "admin",
-                tenant_id: createdTenant.id,
-            });
+            await postJSON<UnifiedRegisterRequest, UnifiedRegisterResponse>("/v1/auth/register/unified", payload);
 
             navigate("/login", { replace: true });
         } catch (e) {
