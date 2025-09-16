@@ -14,6 +14,8 @@ import PasswordField from "../components/ui/password_field";
 import Checkbox from "../components/ui/checkbox";
 import Button from "../components/ui/button";
 import AlertText from "../components/ui/error_text";
+import CelumaModal from "../components/ui/celuma_modal";
+import { MailOutlined, CustomerServiceOutlined } from "@ant-design/icons";
 
 /* --------- Validación --------- */
 const schema = z.object({
@@ -38,6 +40,7 @@ type LoginSuccess = {
 
 export default function Login() {
     const [serverError, setServerError] = useState<string | null>(null);
+    const [forgotOpen, setForgotOpen] = useState(false);
     const navigate = useNavigate();
 
     const {
@@ -109,13 +112,57 @@ export default function Login() {
             header={<BrandHeader title="Céluma"/>}
             footer={
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", fontSize: 14 }}>
-                    <a href="#">¿Olvidó su contraseña?</a>
+                    <button
+                        type="button"
+                        onClick={() => setForgotOpen(true)}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            margin: 0,
+                            color: "#0f8b8d",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            font: "inherit",
+                        }}
+                    >
+                        ¿Olvidó su contraseña?
+                    </button>
                     <span aria-hidden>•</span>
                     <Link to="/register">Registrarme</Link>
                 </div>
             }
             maxWidth={460}
         >
+            <CelumaModal
+                open={forgotOpen}
+                onCancel={() => setForgotOpen(false)}
+                footer={null}
+                title="Recuperación de acceso"
+            >
+                <div style={{ display: "grid", gap: 12 }}>
+                    <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>
+                        Por el momento la recuperación de contraseña no está automatizada.
+                        Por favor póngase en contacto con el equipo de desarrollo para brindarle soporte.
+                    </p>
+                    {/* <div style={{ display: "grid", gap: 8 }}>
+                        <a
+                            href="mailto:soporte@celuma.mx"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#0f8b8d", textDecoration: "underline" }}
+                        >
+                            <MailOutlined /> soporte@celuma.mx
+                        </a>
+                        <a
+                            href="https://celuma.mx/soporte"
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#0f8b8d", textDecoration: "underline" }}
+                        >
+                            <CustomerServiceOutlined /> Portal de soporte
+                        </a>
+                    </div> */}
+                </div>
+            </CelumaModal>
             <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                 {/* Usuario / email */}
                 <FormField
