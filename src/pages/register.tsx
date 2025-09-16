@@ -72,7 +72,12 @@ const userSchema = z.object({
         .nonempty("La contraseña es obligatoria.")
         .min(8, "Mínimo 8 caracteres.")
         .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/, "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."),
+    confirmPassword: z.string()
+        .nonempty("Confirmar contraseña es obligatorio."),
     full_name: z.string().nonempty("El nombre completo es requerido."),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden.",
+    path: ["confirmPassword"],
 });
 const formSchema = z.object({
     tenant: tenantSchema,
@@ -96,7 +101,7 @@ export default function RegisterAllOneClick() {
         defaultValues: {
             tenant: { name: "", legal_name: "", tax_id: "" },
             branch: { code: "", name: "", address_line1: "", address_line2: "", postal_code: "", city: "", state: "", country: "" },
-            user: { email: "", username: "", password: "", full_name: "" },
+            user: { email: "", username: "", password: "", confirmPassword: "", full_name: "" },
         },
         mode: "onTouched",
     });
@@ -229,13 +234,18 @@ export default function RegisterAllOneClick() {
                     <h3 style = {{ margin: 0 }}> Usuario </h3>
                     <FormField
                         control = {control}
+                        name = "user.full_name"
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre completo" />}
+                    />
+                    <FormField
+                        control = {control}
                         name = "user.email"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Email" />}
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Correo electrónico" />}
                     />
                     <FormField
                         control = {control}
                         name = "user.username"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre de usuario" />}
+                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre de usuario (opcional)" />}
                     />
                     <FormField
                         control = {control}
@@ -244,8 +254,8 @@ export default function RegisterAllOneClick() {
                     />
                     <FormField
                         control = {control}
-                        name = "user.full_name"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre completo" />}
+                        name = "user.confirmPassword"
+                        render = {(p) => <PasswordField {...p} value={String(p.value ?? "")} placeholder="Repetir contraseña" />}
                     />
                 </section>
 

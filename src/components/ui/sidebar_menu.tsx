@@ -9,9 +9,9 @@ const { Sider } = Layout;
 export type CelumaKey = "/home" | "/report" | "/patients/register" | "/profile" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
-    { key: "/home", icon: <HomeOutlined />, label: "Inicio" },
-    { key: "/report", icon: <FileTextOutlined />, label: "Reportes" },
-    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente" },
+    { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
+    { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
+    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
@@ -20,12 +20,14 @@ const itemsBottom: Required<MenuProps>["items"] = [
         icon: <UserOutlined />,
         label: "Mi Perfil",
         style: { margin: 0 },
+        title: "Mi Perfil", // Tooltip when collapsed
     },
     {
         key: "/logout",
         icon: <LogoutOutlined />,
         label: "Cerrar Sesión",
         style: { margin: 0 },
+        title: "Cerrar Sesión", // Tooltip when collapsed
     },
 ];
 
@@ -118,6 +120,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                     inlineCollapsed = {collapsed}
                     style = {styles.menu}
                     onClick = {(e) => handleNavigate(e.key as CelumaKey)}
+                    inlineIndent = {collapsed ? 0 : 24}
                 />
 
                 <div style = {collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
@@ -129,6 +132,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                         inlineCollapsed = {collapsed}
                         style = {styles.menuBottom}
                         onClick = {(e) => handleNavigate(e.key as CelumaKey)}
+                        inlineIndent = {collapsed ? 0 : 24}
                     />
                 </div>
             </div>
@@ -233,7 +237,7 @@ const styles: Record<string, React.CSSProperties> = {
         flexDirection: "column",
         justifyContent: "flex-end",
         alignItems: "center",
-        padding: "16px 8px 20px 8px",
+        padding: "16px 16px 20px 16px",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {

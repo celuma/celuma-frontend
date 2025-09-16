@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Layout, Card, notification, Avatar } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { UserOutlined, MailOutlined, KeyOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
@@ -21,17 +23,31 @@ interface UserProfile {
     tenant_id: string;
 }
 
-interface ProfileFormData {
-    full_name: string;
-    username: string;
-    email: string;
-}
+// Validation schemas
+const profileSchema = z.object({
+    full_name: z.string().trim().nonempty("El nombre completo es obligatorio."),
+    username: z.string(),
+    email: z.string().trim().nonempty("El correo electrónico es obligatorio.").email("Formato de email inválido."),
+});
 
-interface PasswordFormData {
-    current_password: string;
-    new_password: string;
-    confirm_password: string;
-}
+const passwordSchema = z.object({
+    current_password: z.string().nonempty("La contraseña actual es obligatoria."),
+    new_password: z.string()
+        .nonempty("La nueva contraseña es obligatoria.")
+        .min(8, "Mínimo 8 caracteres.")
+        .regex(
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
+            "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."
+        ),
+    confirm_password: z.string().nonempty("Confirmar contraseña es obligatorio."),
+}).refine((data) => data.new_password === data.confirm_password, {
+    message: "Las contraseñas no coinciden.",
+    path: ["confirm_password"],
+});
+
+// Type inference from schemas
+type ProfileFormData = z.infer<typeof profileSchema>;
+type PasswordFormData = z.infer<typeof passwordSchema>;
 
 const Profile: React.FC = () => {
     const nav = useNavigate();
@@ -40,25 +56,41 @@ const Profile: React.FC = () => {
     const [profileData, setProfileData] = useState<UserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
 
-    // Forms for profile and password update
-    const profileForm = useForm<ProfileFormData>();
-    const passwordForm = useForm<PasswordFormData>();
+    // Forms for profile and password update with validation
+    const profileForm = useForm<ProfileFormData>({
+        resolver: zodResolver(profileSchema),
+        mode: "onChange",
+    });
+    
+    const passwordForm = useForm<PasswordFormData>({
+        resolver: zodResolver(passwordSchema),
+        mode: "onChange",
+        defaultValues: {
+            current_password: "",
+            new_password: "",
+            confirm_password: "",
+        },
+    });
 
     // API Base URL - consistent with login.tsx approach
     const apiBase = () => {
         return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
     };
     
-    console.log("API_BASE configured as:", apiBase());
-    console.log("Available env vars:", import.meta.env);
-    console.log("DEV mode:", import.meta.env.DEV);
+    // API configuration logs (can be removed in production)
+    if (import.meta.env.DEV) {
+        console.log("API_BASE configured as:", apiBase());
+    }
 
-    // Get auth token from localStorage with debugging
+    // Get auth token from localStorage
     const getAuthToken = () => {
         const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-        console.log("Token found in localStorage:", localStorage.getItem("auth_token") ? "Yes" : "No");
-        console.log("Token found in sessionStorage:", sessionStorage.getItem("auth_token") ? "Yes" : "No");
-        console.log("Final token:", token ? `${token.substring(0, 20)}...` : "No token");
+        
+        // Debug logging (only in development)
+        if (import.meta.env.DEV && !token) {
+            console.warn("No authentication token found");
+        }
+        
         return token;
     };
 
@@ -68,16 +100,12 @@ const Profile: React.FC = () => {
             setProfileLoading(true);
             const token = getAuthToken();
             
-            console.log("Token found:", token ? "Yes" : "No");
-            
             if (!token) {
                 nav("/login");
                 return;
             }
 
             const url = `${apiBase()}/v1/auth/me`;
-            console.log("Fetching profile from:", url);
-
             const response = await fetch(url, {
                 headers: {
                     "Authorization": token, // token already includes "Bearer "
@@ -85,11 +113,8 @@ const Profile: React.FC = () => {
                 }
             });
 
-            console.log("Response status:", response.status);
-            console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-
             if (response.status === 401) {
-                console.log("Token expired or invalid, redirecting to login");
+                // Token expired or invalid
                 localStorage.removeItem("auth_token");
                 sessionStorage.removeItem("auth_token");
                 nav("/login");
@@ -97,13 +122,10 @@ const Profile: React.FC = () => {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error("Profile fetch failed:", response.status, errorText);
-                throw new Error(`Failed to fetch profile: ${response.status} ${errorText}`);
+                throw new Error("Failed to fetch profile");
             }
 
             const data: UserProfile = await response.json();
-            console.log("Profile data received:", data);
             setProfileData(data);
             
             // Set form values
@@ -147,8 +169,6 @@ const Profile: React.FC = () => {
             const payload = buildProfileUpdatePayload(data);
 
             const url = `${apiBase()}/v1/auth/me`;
-            console.log("Updating profile at:", url, "with payload:", payload);
-            
             const response = await fetch(url, {
                 method: "PUT",
                 headers: {
@@ -158,23 +178,12 @@ const Profile: React.FC = () => {
                 body: JSON.stringify(payload)
             });
 
-            console.log("Update response status:", response.status);
-
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error("Profile update failed:", response.status, errorText);
-                let errorMsg = "Failed to update profile";
-                try {
-                    const errorData = JSON.parse(errorText);
-                    errorMsg = errorData.detail || errorMsg;
-                } catch {
-                    errorMsg = errorText || errorMsg;
-                }
-                throw new Error(errorMsg);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Failed to update profile");
             }
 
             const updatedProfile: UserProfile = await response.json();
-            console.log("Profile updated successfully:", updatedProfile);
             setProfileData(updatedProfile);
             
             // Reset form with updated data
@@ -200,16 +209,8 @@ const Profile: React.FC = () => {
         }
     };
 
-    // Update password
+    // Update password (validation handled by zod schema)
     const handlePasswordUpdate = async (data: PasswordFormData) => {
-        if (data.new_password !== data.confirm_password) {
-            notification.error({
-                message: "Error",
-                description: "Las contraseñas no coinciden."
-            });
-            return;
-        }
-
         try {
             setLoading(true);
             const token = getAuthToken();
@@ -218,8 +219,6 @@ const Profile: React.FC = () => {
             }
 
             const url = `${apiBase()}/v1/auth/me`;
-            console.log("Updating password at:", url);
-            
             const response = await fetch(url, {
                 method: "PUT",
                 headers: {
@@ -232,19 +231,9 @@ const Profile: React.FC = () => {
                 })
             });
 
-            console.log("Password update response status:", response.status);
-
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error("Password update failed:", response.status, errorText);
-                let errorMsg = "Failed to update password";
-                try {
-                    const errorData = JSON.parse(errorText);
-                    errorMsg = errorData.detail || errorMsg;
-                } catch {
-                    errorMsg = errorText || errorMsg;
-                }
-                throw new Error(errorMsg);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Failed to update password");
             }
 
             // Reset password form
@@ -312,12 +301,41 @@ const Profile: React.FC = () => {
                         <>
                             {/* Grid responsive estilo GitHub */}
                             <style>{`
-                                .profile-grid { display: grid; gap: 24px; }
-                                @media (min-width: 1024px) { .profile-grid { grid-template-columns: 320px 1fr; } }
+                                .profile-grid { 
+                                    display: grid; 
+                                    gap: 24px; 
+                                    grid-template-columns: 1fr;
+                                }
+                                @media (min-width: 768px) { 
+                                    .profile-grid { 
+                                        grid-template-columns: 300px 1fr; 
+                                    } 
+                                }
+                                @media (min-width: 1024px) { 
+                                    .profile-grid { 
+                                        grid-template-columns: 320px 1fr; 
+                                    } 
+                                }
+                                
+                                .profile-summary-card {
+                                    order: 1;
+                                }
+                                .profile-forms-section {
+                                    order: 2;
+                                }
+                                
+                                @media (min-width: 768px) {
+                                    .profile-summary-card {
+                                        order: 0;
+                                    }
+                                    .profile-forms-section {
+                                        order: 0;
+                                    }
+                                }
                             `}</style>
                             <div className="profile-grid">
                                 {/* Columna izquierda: resumen */}
-                                <div>
+                                <div className="profile-summary-card">
                                     <Card style={{ marginBottom: 24 }}>
                                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                                             <Avatar size={64} style={{ background: "#0f8b8d", fontWeight: 800 }}>
@@ -338,7 +356,7 @@ const Profile: React.FC = () => {
                                 </div>
 
                                 {/* Columna derecha: formularios */}
-                                <div>
+                                <div className="profile-forms-section">
                                     {/* Información del perfil */}
                                     <Card 
                                         title="Información del Perfil" 
