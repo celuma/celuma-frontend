@@ -107,8 +107,8 @@ const letterStyles = `
   color: #000;
   box-shadow: 0 0 8px rgba(0,0,0,.15);
   position: relative;
-  padding-top: 110pt;        /* espacio para encabezado */
-  padding-bottom: 90pt;      /* espacio para footer con logo */
+  padding-top: 110pt;        
+  padding-bottom: 90pt;    
   padding-left: 48pt;
   padding-right: 48pt;
   box-sizing: border-box;
@@ -292,9 +292,9 @@ const ReportEditor: React.FC = () => {
             branch_id: "8cd740ad-1be3-4dd0-bcea-93d5e84786d4",
             order_id: "f4dca87f-ca63-4bb2-8f79-77f7f1d8def6",
             title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
-            diagnosis_text: (diagnostico || "").replace(/<[^>]+>/g, "").slice(0, 1000),
-            created_by: "webapp",
-            published_at: new Date().toISOString(),
+            diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
+            created_by: "b388feca-84b5-48c6-a6da-963ba95352ee",
+            published_at: "",
             report: {
                 tipo,
                 base: {
@@ -306,16 +306,16 @@ const ReportEditor: React.FC = () => {
                     diagnosticoEnvio: diagnosticoEnvio || null,
                 },
                 secciones: {
-                    descripcionMacroscopia,
-                    descripcionMicroscopia,
-                    descripcionCitomorfologica,
-                    interpretacion,
-                    diagnostico,
-                    comentario,
-                    inmunofluorescenciaHTML,
-                    inmunotincionesHTML,
-                    microscopioElectronicoHTML,
-                    citologiaUrinariaHTML,
+                    descripcionMacroscopia: descripcionMacroscopia || null,
+                    descripcionMicroscopia: descripcionMicroscopia || null,
+                    descripcionCitomorfologica: descripcionCitomorfologica || null,
+                    interpretacion: interpretacion || null,
+                    diagnostico: diagnostico || null,
+                    comentario: comentario || null,
+                    inmunofluorescenciaHTML: inmunofluorescenciaHTML || null,
+                    inmunotincionesHTML: inmunotincionesHTML,
+                    microscopioElectronicoHTML: microscopioElectronicoHTML || null,
+                    citologiaUrinariaHTML: citologiaUrinariaHTML || null,
                     edad: edad || null,
                 },
                 flags: FLAGS_BY_TYPE[tipo],
