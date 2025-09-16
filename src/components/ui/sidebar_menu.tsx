@@ -1,16 +1,17 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
-import { Layout, Menu } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined } from "@ant-design/icons";
+import { Layout, Menu, Button } from "antd";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/start" | "/report" | "/logout";
+export type CelumaKey = "/home" | "/report" | "/patients/register" | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
-    { key: "/start", icon: <HomeOutlined />, label: "Inicio" },
+    { key: "/home", icon: <HomeOutlined />, label: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes" },
+    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
@@ -29,8 +30,11 @@ export interface SidebarCelumaProps {
     title?: string;
 }
 
-const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", onNavigate, logoSrc, title = "Céluma" }) => {
-    const [collapsed, setCollapsed] = useState(false);
+const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onNavigate, logoSrc, title = "Céluma" }) => {
+    const [collapsed, setCollapsed] = useState(() => {
+        const saved = localStorage.getItem("sidebar_collapsed");
+        return saved ? JSON.parse(saved) : false;
+    });
     const navigate = useNavigate();
     const selectedTop =
         selectedKey === "/logout" ? [] : ([selectedKey] as string[]);
@@ -47,30 +51,57 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", on
         }
     };
 
+    const handleLogoClick = () => {
+        handleNavigate("/home");
+    };
+
+    const toggleCollapsed = () => {
+        const newCollapsed = !collapsed;
+        setCollapsed(newCollapsed);
+        localStorage.setItem("sidebar_collapsed", JSON.stringify(newCollapsed));
+    };
+
     return (
-        <Sider
-            width = {260}
-            collapsible
-            collapsed = {collapsed}
-            trigger = {null}
-            style = {styles.sider}
-            breakpoint = "lg"
-        >
+        <>
+            <style>{`
+                body, html { margin: 0; padding: 0; }
+                .ant-layout { margin: 0; padding: 0; }
+                .ant-layout-sider { margin: 0; padding: 0; }
+            `}</style>
+            <Sider
+                width = {260}
+                collapsible
+                collapsed = {collapsed}
+                trigger = {null}
+                style = {styles.sider}
+                breakpoint = "lg"
+            >
             <div style = {styles.inner}>
-                <div
-                    style = {collapsed ? styles.headerCollapsed : styles.header}
-                    onClick = {() => setCollapsed(!collapsed)}
-                >
-                    {logoSrc ? (
-                        <img
-                            src = {logoSrc}
-                            alt = "logo"
-                            style = {collapsed ? styles.logoCollapsed : styles.logo}
-                        />
-                    ) : (
-                        <div style = {styles.logoDot} />
-                    )}
-                    {!collapsed && <span style = {styles.brand}>{title}</span>}
+                <div style = {collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
+                    <div
+                        style = {collapsed ? styles.headerCollapsed : styles.header}
+                        onClick = {handleLogoClick}
+                    >
+                        {logoSrc ? (
+                            <img
+                                src = {logoSrc}
+                                alt = "logo"
+                                style = {collapsed ? styles.logoCollapsed : styles.logo}
+                            />
+                        ) : (
+                            <div style = {styles.logoDot} />
+                        )}
+                        {!collapsed && <span style = {styles.brand}>{title}</span>}
+                    </div>
+                    <Button
+                        type="text"
+                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                        onClick={toggleCollapsed}
+                        style={{
+                            ...styles.collapseButton,
+                            ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
+                        }}
+                    />
                 </div>
 
                 <Menu
@@ -83,7 +114,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", on
                     onClick = {(e) => handleNavigate(e.key as CelumaKey)}
                 />
 
-                <div style = {styles.bottomWrapper}>
+                <div style = {collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
                     <Menu
                         items = {itemsBottom}
                         selectedKeys = {selectedBottom}
@@ -96,6 +127,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/start", on
                 </div>
             </div>
         </Sider>
+        </>
     );
 };
 
@@ -106,6 +138,9 @@ const styles: Record<string, React.CSSProperties> = {
         background: "#49b6ad",
         color: "#fff",
         paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingTop: 0,
     },
     inner: {
         height: "100%",
@@ -113,19 +148,45 @@ const styles: Record<string, React.CSSProperties> = {
         flexDirection: "column",
         fontFamily: "Nanito, sans-serif",
     },
+    headerContainer: {
+        display: "flex",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        padding: "20px 16px 8px 16px",
+    },
+    headerContainerCollapsed: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: "20px 16px 8px 16px",
+    },
     header: {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "20px 16px 8px 16px",
         cursor: "pointer",
     },
     headerCollapsed: {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        padding: "20px 0 8px 0",
         cursor: "pointer",
+    },
+    collapseButton: {
+        color: "#fff",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+        borderRadius: 6,
+        height: 32,
+    },
+    collapseButtonExpanded: {
+        width: 32,
+        minWidth: 32,
+    },
+    collapseButtonCollapsed: {
+        width: "100%",
+        alignSelf: "center",
     },
     logo: { height: 44 },
     logoCollapsed: { height: 32 },
@@ -148,7 +209,7 @@ const styles: Record<string, React.CSSProperties> = {
         background: "transparent",
         borderInlineEnd: "none",
         flex: 1,
-        padding: "8px 8px 0 8px",
+        padding: "8px 16px 0 16px",
         margin: 0,
         color: "#fff",
     },
@@ -157,11 +218,22 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
+        padding: "16px 16px 20px 16px",
+        borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+    },
+    bottomWrapperCollapsed: {
+        marginTop: "auto",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "flex-end",
+        alignItems: "center",
+        padding: "16px 8px 20px 8px",
+        borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {
         background: "transparent",
         borderInlineEnd: "none",
-        padding: "0 8px 0 8px",
+        padding: 0,
         margin: 0,
         color: "#fff",
     },
