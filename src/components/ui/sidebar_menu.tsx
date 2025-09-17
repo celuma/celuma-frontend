@@ -1,17 +1,26 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, FormOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
 
-export type CelumaKey = "/home" | "/report" | "/patients/register" | "/profile" | "/logout";
+export type CelumaKey = 
+    | "/home" 
+    | "/report" 
+    | "/patients/register" 
+    | "/orders/register"
+    | "/samples/register"
+    | "/profile" 
+    | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
+    { key: "/orders/register", icon: <FormOutlined />, label: "Registrar Orden", title: "Registrar Orden" },
+    { key: "/samples/register", icon: <ExperimentOutlined />, label: "Registrar Muestra", title: "Registrar Muestra" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
