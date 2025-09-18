@@ -78,7 +78,7 @@ export default function Login() {
 
             const text = await resp.text();
             let json: unknown = undefined;
-            try { json = text ? JSON.parse(text) : undefined; } catch { /* respuesta no-JSON */ }
+            try { json = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
 
             if (!resp.ok) {
                 const msg = (json as { message?: string } | undefined)?.message ?? `${resp.status} ${resp.statusText}`;

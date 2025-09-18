@@ -40,7 +40,7 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
     });
     const text = await res.text();
     let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore non-JSON */ }
+    try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
         const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
         throw new Error(message);
@@ -61,7 +61,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     });
     const text = await res.text();
     let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore non-JSON */ }
+    try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
         const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
         throw new Error(message);

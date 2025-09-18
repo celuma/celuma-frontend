@@ -55,7 +55,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
     const text = await res.text();
     let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch {}
+    try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
         const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
         throw new Error(message);
