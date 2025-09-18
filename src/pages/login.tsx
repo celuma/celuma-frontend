@@ -15,6 +15,7 @@ import Checkbox from "../components/ui/checkbox";
 import Button from "../components/ui/button";
 import AlertText from "../components/ui/error_text";
 import CelumaModal from "../components/ui/celuma_modal";
+// import SelectField from "../components/ui/select_field";
 
 /* --------- Validación --------- */
 const schema = z.object({
@@ -40,6 +41,7 @@ type LoginSuccess = {
 export default function Login() {
     const [serverError, setServerError] = useState<string | null>(null);
     const [forgotOpen, setForgotOpen] = useState(false);
+    // Branch selection moved to forms
     const navigate = useNavigate();
 
     const {
@@ -57,11 +59,10 @@ export default function Login() {
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
 
-        // Payload requerido por el backend (tenant_id vacío, no visible al usuario)
         const payload = {
             username_or_email: data.identifier.trim(),
             password: data.password,
-            tenant_id: "", // ← por ahora vacío
+            tenant_id: "",
         };
 
         try {
@@ -80,26 +81,44 @@ export default function Login() {
             try { json = text ? JSON.parse(text) : undefined; } catch { /* respuesta no-JSON */ }
 
             if (!resp.ok) {
-                const msg =
-                    (json as { message?: string } | undefined)?.message ??
-                    `${resp.status} ${resp.statusText}`;
+                const msg = (json as { message?: string } | undefined)?.message ?? `${resp.status} ${resp.statusText}`;
                 throw new Error(msg);
             }
 
-            const { access_token, token_type } = (json ?? {}) as LoginSuccess;
-            
+            // Two possible shapes: LoginResponse or Tenant selection
+            if ((json as any)?.need_tenant_selection) {
+                setServerError("Este usuario pertenece a múltiples tenants. Por ahora, inicie con tenant específico.");
+                return;
+            }
+
+            const { access_token, token_type, tenant_id } = (json ?? {}) as LoginSuccess & { tenant_id?: string };
+
             if (access_token && token_type) {
                 const bearer = `${token_type} ${access_token}`;
-                // Guarda el token según "Recuérdame"
                 if (data.remember) {
                     localStorage.setItem("auth_token", bearer);
+                    sessionStorage.removeItem("auth_token");
                 } else {
                     sessionStorage.setItem("auth_token", bearer);
+                    localStorage.removeItem("auth_token");
                 }
             } else {
                 throw new Error("No access token received from server");
             }
 
+            if (!tenant_id) {
+                throw new Error("El servidor no devolvió tenant_id. Actualice el backend.");
+            }
+
+            if (data.remember) {
+                localStorage.setItem("tenant_id", tenant_id);
+                sessionStorage.removeItem("tenant_id");
+            } else {
+                sessionStorage.setItem("tenant_id", tenant_id);
+                localStorage.removeItem("tenant_id");
+            }
+
+            // Do not fetch/save branch here; branch will be selected in forms as needed
             navigate("/home", { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
@@ -162,6 +181,7 @@ export default function Login() {
                     </div> */}
                 </div>
             </CelumaModal>
+            {/* Branch selection removed from login; selection happens in forms */}
             <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                 {/* Usuario / email */}
                 <FormField

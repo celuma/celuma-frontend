@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +16,13 @@ import ErrorText from "../components/ui/error_text";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
+}
+
+function getSessionContext() {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
+    const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
+    return { token, tenantId, branchId };
 }
 
 async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
@@ -41,9 +48,24 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
     return parsed as TRes;
 }
 
+async function getJSON<TRes>(path: string): Promise<TRes> {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const headers: Record<string, string> = { accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try { parsed = text ? JSON.parse(text) : undefined; } catch {}
+    if (!res.ok) {
+        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        throw new Error(message);
+    }
+    return parsed as TRes;
+}
+
 const schema = z.object({
-    tenant_id: z.string().trim().nonempty("El tenant es requerido."),
-    branch_id: z.string().trim().nonempty("La sucursal es requerida."),
+    tenant_id: z.string().trim().optional(),
+    branch_id: z.string().trim().optional(),
     patient_code: z.string().trim().nonempty("El código del paciente es requerido."),
     first_name: z.string().trim().nonempty("El nombre es requerido."),
     last_name: z.string().trim().nonempty("El apellido es requerido."),
@@ -77,11 +99,14 @@ export default function PatientRegister() {
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
+    const session = useMemo(() => getSessionContext(), []);
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [loadingBranches, setLoadingBranches] = useState(false);
 
     const { control, handleSubmit, reset } = useForm<PatientFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
-            tenant_id: "",
+            tenant_id: session.tenantId,
             branch_id: "",
             patient_code: "",
             first_name: "",
@@ -94,13 +119,33 @@ export default function PatientRegister() {
         mode: "onTouched",
     });
 
+    useEffect(() => {
+        (async () => {
+            if (!session.tenantId) return;
+            try {
+                setLoadingBranches(true);
+                const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
+                setBranches(data || []);
+            } catch (e) {
+                // silent, error will surface on submit if needed
+            } finally {
+                setLoadingBranches(false);
+            }
+        })();
+    }, [session.tenantId]);
+
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
         setLoading(true);
         try {
+            const finalTenant = session.tenantId || data.tenant_id || "";
+            const finalBranch = data.branch_id || "";
+            if (!finalTenant || !finalBranch) {
+                throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
+            }
             const payload = {
-                tenant_id: data.tenant_id,
-                branch_id: data.branch_id,
+                tenant_id: finalTenant,
+                branch_id: finalBranch,
                 patient_code: data.patient_code,
                 first_name: data.first_name,
                 last_name: data.last_name,
@@ -138,21 +183,35 @@ export default function PatientRegister() {
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
                     <Card title="Registrar Paciente">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
+                            {!session.tenantId ? (
+                                <section style={{ display: "grid", gap: 10 }}>
+                                    <h3 style={{ margin: 0 }}>Contexto</h3>
+                                    <div className="pr-grid-2" style={{ alignItems: "start" }}>
+                                        <FormField
+                                            control={control}
+                                            name="tenant_id"
+                                            render={(p) => (
+                                                <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
+                                            )}
+                                        />
+                                    </div>
+                                </section>
+                            ) : null}
+
                             <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Contexto</h3>
-                                <div className="pr-grid-2" style={{ alignItems: "start" }}>
-                                    <FormField
-                                        control={control}
-                                        name="tenant_id"
-                                        render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
-                                        )}
-                                    />
+                                <h3 style={{ margin: 0 }}>Sucursal</h3>
+                                <div className="pr-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Branch ID" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder="Seleccione la sucursal"
+                                                options={branches.map(b => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
+                                                showSearch
+                                            />
                                         )}
                                     />
                                 </div>
