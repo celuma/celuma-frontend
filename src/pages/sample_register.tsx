@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +18,13 @@ function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
 
+function getSessionContext() {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
+    const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
+    return { token, tenantId, branchId };
+}
+
 async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
     const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
     const headers: Record<string, string> = {
@@ -29,6 +36,27 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        credentials: "include",
+    });
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore non-JSON */ }
+    if (!res.ok) {
+        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        throw new Error(message);
+    }
+    return parsed as TRes;
+}
+
+async function getJSON<TRes>(path: string): Promise<TRes> {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const headers: Record<string, string> = {
+        accept: "application/json",
+    };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${getApiBase()}${path}`, {
+        method: "GET",
+        headers,
         credentials: "include",
     });
     const text = await res.text();
@@ -77,11 +105,16 @@ export default function SampleRegister() {
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
+    const session = useMemo(() => getSessionContext(), []);
+    const [orders, setOrders] = useState<Array<{ id: string; label: string }>>([]);
+    const [loadingOrders, setLoadingOrders] = useState(false);
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [loadingBranches, setLoadingBranches] = useState(false);
 
     const { control, handleSubmit, reset } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
-            tenant_id: "",
+            tenant_id: session.tenantId,
             branch_id: "",
             order_id: "",
             sample_code: "",
@@ -93,13 +126,48 @@ export default function SampleRegister() {
         mode: "onTouched",
     });
 
+    useEffect(() => {
+        (async () => {
+            try {
+                setLoadingOrders(true);
+                const data = await getJSON<Array<{ id: string; order_code: string; status: string }>>("/v1/laboratory/orders/");
+                const mapped = (data || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
+                setOrders(mapped);
+            } catch (e) {
+                // keep silent but show submit-time errors
+            } finally {
+                setLoadingOrders(false);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        (async () => {
+            if (!session.tenantId) return;
+            try {
+                setLoadingBranches(true);
+                const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
+                setBranches(data || []);
+            } catch (e) {
+                // ignore
+            } finally {
+                setLoadingBranches(false);
+            }
+        })();
+    }, [session.tenantId]);
+
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
         setLoading(true);
         try {
+            const finalTenant = session.tenantId || data.tenant_id || "";
+            const finalBranch = data.branch_id || "";
+            if (!finalTenant || !finalBranch) {
+                throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
+            }
             const payload = {
-                tenant_id: data.tenant_id,
-                branch_id: data.branch_id,
+                tenant_id: finalTenant,
+                branch_id: finalBranch,
                 order_id: data.order_id,
                 sample_code: data.sample_code,
                 type: data.type,
@@ -136,28 +204,54 @@ export default function SampleRegister() {
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
                     <Card title="Registrar Muestra" description="Complete los datos para registrar una muestra.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
+                            {!session.tenantId ? (
+                                <section style={{ display: "grid", gap: 10 }}>
+                                    <h3 style={{ margin: 0 }}>Contexto</h3>
+                                    <div className="sr-grid-2" style={{ alignItems: "start" }}>
+                                        <FormField
+                                            control={control}
+                                            name="tenant_id"
+                                            render={(p) => (
+                                                <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
+                                            )}
+                                        />
+                                    </div>
+                                </section>
+                            ) : null}
+
                             <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Contexto</h3>
-                                <div className="sr-grid-3" style={{ alignItems: "start" }}>
-                                    <FormField
-                                        control={control}
-                                        name="tenant_id"
-                                        render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
-                                        )}
-                                    />
+                                <h3 style={{ margin: 0 }}>Sucursal</h3>
+                                <div className="sr-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Branch ID" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder={loadingBranches ? "Cargando sucursales..." : "Seleccione la sucursal"}
+                                                options={branches.map(b => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
+                                                showSearch
+                                            />
                                         )}
                                     />
+                                </div>
+                            </section>
+
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Orden</h3>
+                                <div className="sr-grid-2">
                                     <FormField
                                         control={control}
                                         name="order_id"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Order ID" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder={loadingOrders ? "Cargando órdenes..." : "Seleccione una orden"}
+                                                options={orders.map((o) => ({ value: o.id, label: o.label }))}
+                                                showSearch
+                                            />
                                         )}
                                     />
                                 </div>

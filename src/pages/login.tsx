@@ -118,7 +118,32 @@ export default function Login() {
                 localStorage.removeItem("tenant_id");
             }
 
-            // Do not fetch/save branch here; branch will be selected in forms as needed
+            // Obtener y persistir user_id del perfil
+            try {
+                const meRes = await fetch(`${apiBase()}/v1/auth/me`, {
+                    method: "GET",
+                    headers: {
+                        accept: "application/json",
+                        Authorization: (localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token") || ""),
+                    },
+                    credentials: "include",
+                });
+                const meText = await meRes.text();
+                const me = meText ? JSON.parse(meText) as { id?: string } : {};
+                if (me?.id) {
+                    if (data.remember) {
+                        localStorage.setItem("user_id", me.id);
+                        sessionStorage.removeItem("user_id");
+                    } else {
+                        sessionStorage.setItem("user_id", me.id);
+                        localStorage.removeItem("user_id");
+                    }
+                }
+            } catch {
+                // Silencioso; el flujo puede continuar
+            }
+
+            // No seleccionar sucursal aquí; será seleccionada en los formularios
             navigate("/home", { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");

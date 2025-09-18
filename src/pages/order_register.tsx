@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,11 +9,19 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
+import SelectField from "../components/ui/select_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
+}
+
+function getSessionContext() {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
+    const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
+    return { token, tenantId, branchId };
 }
 
 async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
@@ -27,6 +35,27 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        credentials: "include",
+    });
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore non-JSON */ }
+    if (!res.ok) {
+        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        throw new Error(message);
+    }
+    return parsed as TRes;
+}
+
+async function getJSON<TRes>(path: string): Promise<TRes> {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const headers: Record<string, string> = {
+        accept: "application/json",
+    };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${getApiBase()}${path}`, {
+        method: "GET",
+        headers,
         credentials: "include",
     });
     const text = await res.text();
@@ -73,33 +102,78 @@ export default function OrderRegister() {
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
+    const session = useMemo(() => getSessionContext(), []);
+    const [patients, setPatients] = useState<Array<{ id: string; label: string }>>([]);
+    const [loadingPatients, setLoadingPatients] = useState(false);
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [loadingBranches, setLoadingBranches] = useState(false);
+    const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
     const { control, handleSubmit, reset } = useForm<OrderFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
-            tenant_id: "",
+            tenant_id: session.tenantId,
             branch_id: "",
             patient_id: "",
             order_code: "",
             requested_by: "",
             notes: "",
-            created_by: "",
         },
         mode: "onTouched",
     });
+
+    useEffect(() => {
+        (async () => {
+            try {
+                setLoadingPatients(true);
+                const data = await getJSON<Array<{ id: string; patient_code: string; first_name?: string; last_name?: string }>>("/v1/patients/");
+                const mapped = (data || []).map((p) => ({
+                    id: p.id,
+                    label: `${p.patient_code}${p.first_name ? ` - ${p.first_name} ${p.last_name ?? ""}` : ""}`.trim(),
+                }));
+                setPatients(mapped);
+            } catch (e) {
+                // keep silent but show submit-time errors
+            } finally {
+                setLoadingPatients(false);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        (async () => {
+            if (!session.tenantId) return;
+            try {
+                setLoadingBranches(true);
+                const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
+                setBranches(data || []);
+            } catch (e) {
+                // ignore, error will surface on submit
+            } finally {
+                setLoadingBranches(false);
+            }
+        })();
+    }, [session.tenantId]);
+
+    // currentUserId ahora proviene del contexto de sesión (establecido en login)
 
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
         setLoading(true);
         try {
+            const finalTenant = session.tenantId || data.tenant_id || "";
+            const finalBranch = data.branch_id || "";
+            if (!finalTenant || !finalBranch) {
+                throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
+            }
             const payload = {
-                tenant_id: data.tenant_id,
-                branch_id: data.branch_id,
+                tenant_id: finalTenant,
+                branch_id: finalBranch,
                 patient_id: data.patient_id,
                 order_code: data.order_code,
                 requested_by: data.requested_by || undefined,
                 notes: data.notes || undefined,
-                created_by: data.created_by || undefined,
+                created_by: (currentUserId || data.created_by || undefined),
             };
             await postJSON<OrderFormData, CreateOrderResponse>("/v1/laboratory/orders/", payload);
             reset();
@@ -130,28 +204,54 @@ export default function OrderRegister() {
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
                     <Card title="Registrar Orden" description="Complete los datos para registrar una orden de laboratorio.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
+                            {!session.tenantId ? (
+                                <section style={{ display: "grid", gap: 10 }}>
+                                    <h3 style={{ margin: 0 }}>Contexto</h3>
+                                    <div className="or-grid-2" style={{ alignItems: "start" }}>
+                                        <FormField
+                                            control={control}
+                                            name="tenant_id"
+                                            render={(p) => (
+                                                <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
+                                            )}
+                                        />
+                                    </div>
+                                </section>
+                            ) : null}
+
                             <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Contexto</h3>
-                                <div className="or-grid-3" style={{ alignItems: "start" }}>
-                                    <FormField
-                                        control={control}
-                                        name="tenant_id"
-                                        render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
-                                        )}
-                                    />
+                                <h3 style={{ margin: 0 }}>Sucursal</h3>
+                                <div className="or-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Branch ID" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder={loadingBranches ? "Cargando sucursales..." : "Seleccione la sucursal"}
+                                                options={branches.map(b => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
+                                                showSearch
+                                            />
                                         )}
                                     />
+                                </div>
+                            </section>
+
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Paciente</h3>
+                                <div className="or-grid-2">
                                     <FormField
                                         control={control}
                                         name="patient_id"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Patient ID" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder={loadingPatients ? "Cargando pacientes..." : "Seleccione un paciente"}
+                                                options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
+                                                showSearch
+                                            />
                                         )}
                                     />
                                 </div>
@@ -171,7 +271,7 @@ export default function OrderRegister() {
                                         control={control}
                                         name="requested_by"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Solicitado por (opcional)" />
+                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Solicitante (opcional)" />
                                         )}
                                     />
                                 </div>
@@ -182,13 +282,6 @@ export default function OrderRegister() {
                                         name="notes"
                                         render={(p) => (
                                             <TextField {...p} value={String(p.value ?? "")} placeholder="Notas (opcional)" />
-                                        )}
-                                    />
-                                    <FormField
-                                        control={control}
-                                        name="created_by"
-                                        render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Usuario que crea (UUID opcional)" />
                                         )}
                                     />
                                 </div>
