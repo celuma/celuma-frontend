@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Row, Col, Input, DatePicker, Form, message, Select, Divider, Button } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
@@ -7,6 +7,7 @@ import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { saveReport, saveReportVersion } from "../../services/report_service";
 import ReportImages, { type ReportImage } from "./report_images";
 import logo from "../../images/report_logo.png";
+import html2pdf from "html2pdf.js";
 // Types of the models
 import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
 
@@ -94,6 +95,12 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
 
 // Styles for the report, mimicking a letter-sized paper
 const letterStyles = `
+.for-pdf {
+  width: 8.5in;              
+  margin: 0 auto;
+  padding: 0;
+}
+
 .report-page {
   width: 8.5in;
   min-height: 11in;
@@ -102,17 +109,28 @@ const letterStyles = `
   color: #000;
   box-shadow: 0 0 8px rgba(0,0,0,.15);
   position: relative;
-  padding-top: 110pt;        
-  padding-bottom: 90pt;    
+
+  /* Header */
+  --header-top: 24pt;
+  --header-bottom-space: 86pt; 
+
+  /* Footer */
+  --footer-height: 72pt;      
+  --footer-side-pad: 24pt;
+
+  padding-top: calc(var(--header-top) + var(--header-bottom-space));
+  padding-bottom: calc(var(--footer-height) + 12pt); /* deja respiro */
+
   padding-left: 48pt;
   padding-right: 48pt;
   box-sizing: border-box;
   overflow: hidden;
   font-family: "Arial", sans-serif;
 }
+
 .report-header {
   position: absolute;
-  top: 24pt;
+  top: var(--header-top);
   left: 24pt;
   right: 48pt;
   text-align: left;
@@ -120,34 +138,54 @@ const letterStyles = `
   font-weight: 700;
   color: #002060;
 }
-.report-header__title { font-size: 8pt; }
-.report-header__subtitle { font-size: 8pt; }
 
 .report-footer {
   position: absolute;
+  left: var(--footer-side-pad);
+  right: var(--footer-side-pad);
   bottom: 0pt;
-  left: 24pt;
-  right: 24pt;
+  height: var(--footer-height);  
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  align-items: center;
+  align-items: center;           
   text-align: right;
   font-size: 7pt;
   font-weight: 700;
   color: #002060;
+  overflow: hidden;              
 }
+
 .report-footer__logo {
-  width: 200pt;
-  height: 100pt;
-  object-fit: contain;
+  display: block;
+  height: calc(var(--footer-height) - 8pt);
+  width: auto;                  
+  max-width: 40%;                
+  object-fit: contain;            
+  aspect-ratio: auto;             
 }
-.report-footer__subtitle { font-size: 7.5pt; }
+
+.report-footer__subtitle {
+  font-size: 7.5pt;
+  line-height: 1.2;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.for-pdf * { box-shadow: none !important; }
+.for-pdf .fixed,
+.for-pdf header,
+.for-pdf footer { position: static !important; }
+
+.for-pdf .page:last-child {
+  margin-bottom: 0 !important;
+  padding-bottom: calc(var(--footer-height) + 12pt) !important;
+}
 
 @media print {
-  @page { size: Letter; margin: 0; }
-  body { background: #fff; }
-  .report-page { box-shadow: none; margin: 0; }
+  .page { break-after: page; }
+  .page:last-child { break-after: auto; }
 }
 `;
 
@@ -183,6 +221,28 @@ const ReportEditor: React.FC = () => {
     const [isLoaded, setIsLoaded] = useState(false);
     // Insert image in Quill when using the toolbar button
     const quillRef = useRef<ReactQuill>(null);
+
+    // Reference to the report content for PDF generation
+    const reportRef = useRef<HTMLDivElement>(null);
+    // Function to export the report as PDF
+    const handleExportPDF = () => {
+        const el = reportRef.current;
+        if (!el) return;
+        el.classList.add("for-pdf");
+
+        const opts = {
+            margin: [0, 0, 0, 0],
+            filename: "reporte.pdf",
+            image: { type: "jpeg", quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+            pagebreak: { mode: ["css", "avoid-all"] }
+        };
+
+        html2pdf().set(opts).from(el).save().finally(() => {
+            el.classList.remove("for-pdf");
+        });
+    };
 
     // Upload draft on mount
     useEffect(() => {
@@ -480,13 +540,14 @@ const ReportEditor: React.FC = () => {
                         <Button type="primary" onClick={handleSave}>
                             Guardar reporte
                         </Button>
+                        <Button onClick={handleExportPDF}>Exportar a PDF</Button>
                     </Form>
                 </Col>
 
                 {/* Columna derecha: vista previa */}
                 <Col span={12}>
                     <h2>Vista Previa del Reporte</h2>
-                    <div className="report-page">
+                    <div ref={reportRef} className="report-page">
                         <div className="report-header">
                             <div className="report-header__title">Dra. Arisbeth Villanueva Pérez.</div>
                             <div className="report-header__subtitle">Anatomía Patológica, Nefropatología y Citología Exfoliativa</div>
