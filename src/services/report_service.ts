@@ -1,14 +1,10 @@
-// services/report_service.ts
 import type { ReportEnvelope } from "../models/report";
 
-// ==== Config base ====
-const base =
-    import.meta.env.DEV
-        ? "/api"
-        : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
+// Config base URL API
+const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
-// ==== Guardar reporte ====
-export async function saveReport(report: ReportEnvelope): Promise<void> {
+// Save report
+export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
     const res = await fetch(`${base}/v1/reports`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -19,19 +15,32 @@ export async function saveReport(report: ReportEnvelope): Promise<void> {
         const errText = await res.text();
         throw new Error(`Error al guardar reporte: ${res.status} - ${errText}`);
     }
+    return await res.json();
 }
 
-// ==== Subir imagen asociada a un reporte ====
+// Save new version of report
+export async function saveReportVersion(report: ReportEnvelope): Promise<void> {
+    const report_id = report.id;
+    const res = await fetch(`${base}/v1/reports/${report_id}/new_version`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al guardar nueva versión del reporte: ${res.status} - ${errText}`);
+    }
+}
+
+// Upload image to report
 export interface UploadImageResponse {
     id: string;
     url: string;
     caption?: string;
 }
 
-/**
- * Sube una imagen vinculada a un `sampleId`.
- * El backend debe aceptar multipart/form-data en: POST /v1/laboratory/samples/{sampleId}/images
- */
+// Upload image with sampleId
 export async function uploadReportImage(
     sampleId: string,
     file: File,
@@ -54,9 +63,7 @@ export async function uploadReportImage(
     return (await res.json()) as UploadImageResponse;
 }
 
-/**
- * Elimina una imagen ya subida.
- */
+// Delete image by sampleId and imageId
 export async function deleteReportImage(
     sampleId: string,
     imageId: string
@@ -74,10 +81,7 @@ export async function deleteReportImage(
     }
 }
 
-/**
- * Obtiene las imágenes asociadas a un sampleId
- * GET /v1/laboratory/samples/{sampleId}/images
- */
+// Fetch images by sampleId
 export async function fetchReportImages(
     sampleId: string
 ): Promise<{ id: string; url: string; caption?: string }[]> {

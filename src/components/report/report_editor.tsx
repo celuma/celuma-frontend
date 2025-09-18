@@ -4,20 +4,15 @@ import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
-import { saveReport } from "../../services/report_service";
+import { saveReport, saveReportVersion } from "../../services/report_service";
 import ReportImages, { type ReportImage } from "./report_images";
 import logo from "../../images/report_logo.png";
+// Types of the models
+import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
 
-// === Tipos del modelo ===
-import type {
-    ReportType,
-    ReportEnvelope,
-    ReportFlags,
-} from "../../models/report";
-
-// Mapea qué secciones se muestran según el tipo
+// Map of flags by report type
 const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
-    histopatologia: {
+    Histopatologia: {
         incluirMacroscopia: true,
         incluirMicroscopia: true,
         incluirCitomorfologia: true,
@@ -30,7 +25,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
         incluirCU: false,
         incluirInmunotinciones: false,
     },
-    histoquimica: {
+    Histoquimica: {
         incluirMacroscopia: true,
         incluirMicroscopia: true,
         incluirCitomorfologia: false,
@@ -43,7 +38,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
         incluirCU: false,
         incluirInmunotinciones: false,
     },
-    citologia_mamaria: {
+    Citologia_mamaria: {
         incluirMacroscopia: false,
         incluirMicroscopia: false,
         incluirCitomorfologia: true,
@@ -56,7 +51,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
         incluirCU: false,
         incluirInmunotinciones: false,
     },
-    citologia_urinaria: {
+    Citologia_urinaria: {
         incluirMacroscopia: true,
         incluirMicroscopia: false,
         incluirCitomorfologia: true,
@@ -69,7 +64,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
         incluirCU: true,
         incluirInmunotinciones: false,
     },
-    quirurgico: {
+    Quirurgico: {
         incluirMacroscopia: true,
         incluirMicroscopia: true,
         incluirCitomorfologia: false,
@@ -82,7 +77,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
         incluirCU: false,
         incluirInmunotinciones: false,
     },
-    revision_laminillas: {
+    Revision_laminillas: {
         incluirMacroscopia: true,
         incluirMicroscopia: false,
         incluirCitomorfologia: false,
@@ -97,7 +92,7 @@ const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
     },
 };
 
-// === Estilos del formato carta con membrete ===
+// Styles for the report, mimicking a letter-sized paper
 const letterStyles = `
 .report-page {
   width: 8.5in;
@@ -156,41 +151,11 @@ const letterStyles = `
 }
 `;
 
-type Draft = {
-    // imágenes subidas
-    reportImages?: ReportImage[];
-
-    // base
-    paciente: string;
-    examen: string;
-    folio: string;
-    fechaRecepcion: string | null;
-    especimen: string;
-    diagnosticoEnvio: string;
-
-    // tipo
-    tipo: ReportType;
-
-    // secciones
-    descripcionMacroscopia: string | null;
-    descripcionMicroscopia: string | null;
-    descripcionCitomorfologica: string | null;
-    interpretacion: string | null;
-    diagnostico: string | null;
-    comentario: string | null;
-    inmunofluorescenciaHTML: string | null;
-    inmunotincionesHTML: string | null;
-    microscopioElectronicoHTML: string | null;
-    citologiaUrinariaHTML: string | null;
-    edad: string | null;
-};
-
-const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197"; // <- estático
+const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197";
 
 const ReportEditor: React.FC = () => {
-    // Selección de tipo
-    const [tipo, setTipo] = useState<ReportType>("histopatologia");
-
+    // Selected type of report
+    const [tipo, setTipo] = useState<ReportType>("Histopatologia");
     // Base
     const [paciente, setPaciente] = useState("");
     const [examen, setExamen] = useState("");
@@ -198,8 +163,7 @@ const ReportEditor: React.FC = () => {
     const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
     const [especimen, setEspecimen] = useState("");
     const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
-
-    // Secciones
+    // Sections
     const [descripcionMacroscopia, setDescMacro] = useState<string | null>("<p><br/></p>");
     const [descripcionMicroscopia, setDescMicro] = useState<string | null>("<p><br/></p>");
     const [descripcionCitomorfologica, setDescCito] = useState<string | null>("<p><br/></p>");
@@ -211,65 +175,44 @@ const ReportEditor: React.FC = () => {
     const [microscopioElectronicoHTML, setME] = useState<string | null>("<p><br/></p>");
     const [citologiaUrinariaHTML, setCU] = useState<string | null>("<p><br/></p>");
     const [edad, setEdad] = useState<string>("");
-
-    // Imágenes
+    // Images
     const [reportImages, setReportImages] = useState<ReportImage[]>([]);
-
-    // Para insertar imagen en Quill cuando use el botón de la toolbar
+    // Existing envelope (for editing existing reports)
+    const [envelopeExistente, setEnvelopeExistente ] = useState<Partial<ReportEnvelope> | undefined>(undefined);
+    // Loading state for auto-save
+    const [isLoaded, setIsLoaded] = useState(false);
+    // Insert image in Quill when using the toolbar button
     const quillRef = useRef<ReactQuill>(null);
 
-    // Cargar autosave
+    // Upload draft on mount
     useEffect(() => {
-        const draft = loadAutoSave<Draft>("reportDraft");
-        if (!draft) return;
-
-        setReportImages(draft.reportImages ?? []);
-
-        setPaciente(draft.paciente ?? "");
-        setExamen(draft.examen ?? "");
-        setFolio(draft.folio ?? "");
-        setFechaRecepcion(draft.fechaRecepcion ? dayjs(draft.fechaRecepcion) : null);
-        setEspecimen(draft.especimen ?? "");
-        setDiagnosticoEnvio(draft.diagnosticoEnvio ?? "");
-
-        setTipo(draft.tipo ?? "histopatologia");
-
-        setDescMacro(draft.descripcionMacroscopia ?? "<p><br/></p>");
-        setDescMicro(draft.descripcionMicroscopia ?? "<p><br/></p>");
-        setDescCito(draft.descripcionCitomorfologica ?? "<p><br/></p>");
-        setInterpretacion(draft.interpretacion ?? "<p><br/></p>");
-        setDiagnostico(draft.diagnostico ?? "<p><br/></p>");
-        setComentario(draft.comentario ?? "<p><br/></p>");
-        setIF(draft.inmunofluorescenciaHTML ?? "<p><br/></p>");
-        setInmunotinciones(draft.inmunotincionesHTML ?? "<p><br/></p>");
-        setME(draft.microscopioElectronicoHTML ?? "<p><br/></p>");
-        setCU(draft.citologiaUrinariaHTML ?? "<p><br/></p>");
-        setEdad(draft.edad ?? "");
+        const envelope = loadAutoSave<ReportEnvelope>("reportEnvelopeDraft");
+        if (envelope) {
+            setEnvelopeExistente(envelope);
+            setTipo(envelope.report.tipo);
+            setPaciente(envelope.report.base.paciente);
+            setExamen(envelope.report.base.examen);
+            setFolio(envelope.report.base.folio);
+            setFechaRecepcion(envelope.report.base.fechaRecepcion ? dayjs(envelope.report.base.fechaRecepcion) : null);
+            setEspecimen(envelope.report.base.especimen);
+            setDiagnosticoEnvio(envelope.report.base.diagnosticoEnvio ?? "");
+            setDescMacro(envelope.report.secciones.descripcionMacroscopia ?? "<p><br/></p>");
+            setDescMicro(envelope.report.secciones.descripcionMicroscopia ?? "<p><br/></p>");
+            setDescCito(envelope.report.secciones.descripcionCitomorfologica ?? "<p><br/></p>");
+            setInterpretacion(envelope.report.secciones.interpretacion ?? "<p><br/></p>");
+            setDiagnostico(envelope.report.secciones.diagnostico ?? "<p><br/></p>");
+            setComentario(envelope.report.secciones.comentario ?? "<p><br/></p>");
+            setIF(envelope.report.secciones.inmunofluorescenciaHTML ?? "<p><br/></p>");
+            setInmunotinciones(envelope.report.secciones.inmunotincionesHTML ?? "<p><br/></p>");
+            setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
+            setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
+            setEdad(envelope.report.secciones.edad ?? "");
+            setReportImages(envelope.report.images ?? []);
+        }
+        setIsLoaded(true);
     }, []);
 
-    // Guardado automático (cada cambio)
-    useAutoSave("reportDraft", {
-        reportImages,
-        paciente,
-        examen,
-        folio,
-        fechaRecepcion: fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : null,
-        especimen,
-        diagnosticoEnvio,
-        tipo,
-        descripcionMacroscopia,
-        descripcionMicroscopia,
-        descripcionCitomorfologica,
-        interpretacion,
-        diagnostico,
-        comentario,
-        inmunofluorescenciaHTML,
-        inmunotincionesHTML,
-        microscopioElectronicoHTML,
-        citologiaUrinariaHTML,
-        edad,
-    });
-
+    // Quill modules (toolbar configuration)
     const quillModules = useMemo(
         () => ({
             toolbar: {
@@ -285,16 +228,19 @@ const ReportEditor: React.FC = () => {
         []
     );
 
-    // Construye el sobre (envelope) para el POST /v1/reports
-    const buildEnvelope = (): ReportEnvelope => {
+    // Build the report envelope from the current state
+    const buildEnvelope = (existing?: Partial<ReportEnvelope>): ReportEnvelope => {
         return {
+            id: existing?.id ?? "",
             tenant_id: "2de8ffdf-025f-4f2a-839d-eac3473cfaa6",
             branch_id: "8cd740ad-1be3-4dd0-bcea-93d5e84786d4",
             order_id: "f4dca87f-ca63-4bb2-8f79-77f7f1d8def6",
+            version_no: existing?.version_no ?? 1,
+            status: existing?.status ?? "DRAFT",
             title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
             diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
             created_by: "b388feca-84b5-48c6-a6da-963ba95352ee",
-            published_at: "",
+            published_at: null,
             report: {
                 tipo,
                 base: {
@@ -328,10 +274,19 @@ const ReportEditor: React.FC = () => {
         };
     };
 
+    // Auto-save draft on change
+    useAutoSave("reportEnvelopeDraft", isLoaded ? buildEnvelope(envelopeExistente) : undefined);
+
+    // Save the report (new or new version)
     const handleSave = async () => {
         try {
-            const envelope = buildEnvelope();
-            await saveReport(envelope as never);
+            const envelope = buildEnvelope(envelopeExistente);
+            if (!envelope.id) {
+                const savedEnvelope = await saveReport(envelope);
+                setEnvelopeExistente(savedEnvelope);
+            } else {
+                await saveReportVersion(envelope);
+            }
             message.success("Reporte guardado");
         } catch (e) {
             console.error(e);
@@ -353,12 +308,12 @@ const ReportEditor: React.FC = () => {
                             value={tipo}
                             onChange={setTipo}
                             options={[
-                                { value: "histopatologia", label: "Histopatología / Biopsia" },
-                                { value: "histoquimica", label: "Histoquímica" },
-                                { value: "citologia_mamaria", label: "Citología mamaria" },
-                                { value: "citologia_urinaria", label: "Citología urinaria" },
-                                { value: "quirurgico", label: "Quirúrgico" },
-                                { value: "revision_laminillas", label: "Revisión de laminillas/bloques" },
+                                { value: "Histopatologia", label: "Histopatología / Biopsia" },
+                                { value: "Histoquimica", label: "Histoquímica" },
+                                { value: "Citologia_mamaria", label: "Citología mamaria" },
+                                { value: "Citologia_urinaria", label: "Citología urinaria" },
+                                { value: "Quirurgico", label: "Quirúrgico" },
+                                { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
                             ]}
                         />
                     </Form.Item>
@@ -387,7 +342,7 @@ const ReportEditor: React.FC = () => {
                             />
                         </Form.Item>
 
-                        {FLAGS_BY_TYPE[tipo].incluirEdad && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
                             <Form.Item label="Edad">
                                 <Input value={edad} onChange={(e) => setEdad(e.target.value)} />
                             </Form.Item>
@@ -410,7 +365,7 @@ const ReportEditor: React.FC = () => {
                             />
                         </Form.Item>
 
-                        {FLAGS_BY_TYPE[tipo].incluirMacroscopia && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
                             <Form.Item label="Descripción macroscópica">
                                 <ReactQuill
                                     ref={quillRef}
@@ -422,7 +377,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirMicroscopia && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
                             <Form.Item label="Descripción microscópica">
                                 <ReactQuill
                                     theme="snow"
@@ -433,7 +388,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirCitomorfologia && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
                             <Form.Item label="Descripción citomorfológica">
                                 <ReactQuill
                                     theme="snow"
@@ -444,7 +399,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirInterpretacion && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
                             <Form.Item label="Interpretación / Conclusiones">
                                 <ReactQuill
                                     theme="snow"
@@ -455,7 +410,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirDiagnostico && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
                             <Form.Item label="Diagnóstico">
                                 <ReactQuill
                                     theme="snow"
@@ -466,7 +421,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirComentario && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
                             <Form.Item label="Comentario / Notas">
                                 <ReactQuill
                                     theme="snow"
@@ -477,7 +432,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirCU && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirCU && (
                             <Form.Item label="Citología urinaria">
                                 <ReactQuill
                                     theme="snow"
@@ -488,7 +443,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirIF && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirIF && (
                             <Form.Item label="Inmunofluorescencia (panel)">
                                 <ReactQuill
                                     theme="snow"
@@ -499,7 +454,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirInmunotinciones && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
                             <Form.Item label="Inmunotinciones">
                                 <ReactQuill
                                     theme="snow"
@@ -510,7 +465,7 @@ const ReportEditor: React.FC = () => {
                             </Form.Item>
                         )}
 
-                        {FLAGS_BY_TYPE[tipo].incluirME && (
+                        {FLAGS_BY_TYPE[tipo]?.incluirME && (
                             <Form.Item label="Microscopía electrónica (descripción)">
                                 <ReactQuill
                                     theme="snow"
@@ -548,7 +503,7 @@ const ReportEditor: React.FC = () => {
                                 <b>Fecha de recepción de muestra:</b>{" "}
                                 {fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : <em>(Sin especificar)</em>}
                             </p>
-                            {FLAGS_BY_TYPE[tipo].incluirEdad && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
                                 <p><b>Edad:</b> {edad || <em>(Sin especificar)</em>}</p>
                             )}
                             <p><b>Espécimen recibido:</b> {especimen || <em>(Sin especificar)</em>}</p>
@@ -556,14 +511,14 @@ const ReportEditor: React.FC = () => {
 
                             <hr className="report-hr" />
 
-                            {FLAGS_BY_TYPE[tipo].incluirMacroscopia && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
                                 <>
                                     <h3>Descripción macroscópica</h3>
                                     <div dangerouslySetInnerHTML={{ __html: descripcionMacroscopia || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirMicroscopia && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
                                 <>
                                     <h3>Descripción microscópica</h3>
                                     <div dangerouslySetInnerHTML={{ __html: descripcionMicroscopia || "" }} />
@@ -607,56 +562,56 @@ const ReportEditor: React.FC = () => {
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirCitomorfologia && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
                                 <>
                                     <h3>Descripción citomorfológica</h3>
                                     <div dangerouslySetInnerHTML={{ __html: descripcionCitomorfologica || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirInterpretacion && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
                                 <>
                                     <h3>Interpretación</h3>
                                     <div dangerouslySetInnerHTML={{ __html: interpretacion || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirDiagnostico && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
                                 <>
                                     <h3>Diagnóstico</h3>
                                     <div dangerouslySetInnerHTML={{ __html: diagnostico || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirComentario && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
                                 <>
                                     <h3>Comentario</h3>
                                     <div dangerouslySetInnerHTML={{ __html: comentario || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirCU && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirCU && (
                                 <>
                                     <h3>Citología urinaria</h3>
                                     <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirIF && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirIF && (
                                 <>
                                     <h3>Inmunofluorescencia</h3>
                                     <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirInmunotinciones && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
                                 <>
                                     <h3>Inmunotinciones</h3>
                                     <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML || "" }} />
                                 </>
                             )}
 
-                            {FLAGS_BY_TYPE[tipo].incluirME && (
+                            {FLAGS_BY_TYPE[tipo]?.incluirME && (
                                 <>
                                     <h3>Microscopía electrónica</h3>
                                     <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML || "" }} />

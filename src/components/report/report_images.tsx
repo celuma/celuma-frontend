@@ -1,35 +1,12 @@
-// components/report_images.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-    Upload,
-    Modal,
-    Typography,
-    message,
-    Button,
-    Space,
-    Input,
-    Popconfirm,
-    Tooltip,
-} from "antd";
+import { Upload, Modal, Typography, message, Button, Space, Input, Popconfirm, Tooltip } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
-import {
-    PlusOutlined,
-    UploadOutlined,
-    DeleteOutlined,
-    EyeOutlined,
-    FileTextOutlined,
-} from "@ant-design/icons";
-import {
-    uploadReportImage,
-    deleteReportImage,
-    type UploadImageResponse,
-} from "../../services/report_service";
+import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined } from "@ant-design/icons";
+import { uploadReportImage, deleteReportImage, type UploadImageResponse } from "../../services/report_service";
 
 export type ReportImage = {
     id?: string;
-    /** SIEMPRE la URL PROCESADA (no la original) */
-    url: string;
-    /** Miniatura si el backend la provee; si no, cae en url */
+    url: string; // Allways the PROCESSED URL
     thumbnailUrl?: string;
     caption?: string;
 };
@@ -43,47 +20,47 @@ type UploadImageServerResp = UploadImageResponse & {
     sample_image_id?: string;
 };
 
-const ACCEPT_IMAGES =
-    "image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml";
+// Formats and limits for upload
+const RAW_EXT = [".cr2", ".cr3", ".nef", ".nrw", ".arw", ".sr2", ".raf", ".rw2", ".orf", ".pef", ".dng"];
+const NONRAW_EXT = [".jpg", ".jpeg", ".png"];
+const MAX_MB_RAW = 500;
+const MAX_MB_NONRAW = 50;
 
+// Validation in the <input type="file" />
+const ACCEPT_EXTENSIONS = [...RAW_EXT, ...NONRAW_EXT].join(",");
+
+// Props is controlled component for images in a report
 type Props = {
     sampleId: string;
-
-    /** Controlado */
+    // Control
     value?: ReportImage[];
     onChange?: (images: ReportImage[]) => void;
-
     maxCount?: number;
-    maxSizeMB?: number;
     disabled?: boolean;
-
     label?: string;
     helpText?: string;
-
-    /** Arrastrar y soltar para el uploader */
+    // Drag and drop
     dragAndDrop?: boolean;
-
-    /** Si true, al eliminar también lo intenta en backend si hay `id` */
+    // If true, when deleting also tries to delete in backend if there's `id`
     deleteInBackend?: boolean;
 };
 
-const DEFAULT_MAX_MB = 10;
+function getExt(name: string): string {
+    const dot = name.lastIndexOf(".");
+    return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+}
 
-export default function ReportImages({
-                                         sampleId,
-                                         value,
-                                         onChange,
-                                         maxCount = 8,
-                                         maxSizeMB = DEFAULT_MAX_MB,
-                                         disabled,
-                                         label = "Imágenes",
-                                         helpText = `Arrastra o haz clic. Máx ${DEFAULT_MAX_MB}MB por imagen.`,
-                                         dragAndDrop = true,
-                                         deleteInBackend = false,
-                                     }: Props) {
+function isRawExt(ext: string): boolean {
+    return RAW_EXT.includes(ext);
+}
+
+function isNonRawExt(ext: string): boolean {
+    return NONRAW_EXT.includes(ext);
+}
+
+export default function ReportImages({ sampleId, value, onChange, maxCount = 8, disabled, label = "Imágenes", helpText = `Arrastra o haz clic. RAW hasta ${MAX_MB_RAW}MB • JPG/PNG hasta ${MAX_MB_NONRAW}MB`, dragAndDrop = true, deleteInBackend = false }: Props) {
     const [fileList, setFileList] = useState<UploadFile[]>([]);
-
-    // Modales separados
+    // Models for viewing image and editing caption
     const [viewModal, setViewModal] = useState<{ open: boolean; index: number | null }>({
         open: false,
         index: null,
@@ -92,10 +69,11 @@ export default function ReportImages({
         { open: false, index: null, draft: "" }
     );
 
+    // Abort controller for upload
     const abortRef = useRef<AbortController | null>(null);
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    // value -> fileList (solo para el uploader; no se muestra su lista)
+    // Sync internal fileList with value
     useEffect(() => {
         const mapped: UploadFile[] =
             (value ?? []).slice(0, maxCount).map((img, i): UploadFile => ({
@@ -109,57 +87,63 @@ export default function ReportImages({
 
     const emit = (next: ReportImage[]) => onChange?.(next.slice(0, maxCount));
 
-    // Validaciones
+    // Validations
     const validateFile = (file: File) => {
-        if (!file.type.startsWith("image/")) {
-            message.error("Solo se permiten imágenes.");
-            return false;
+        const ext = getExt(file.name);
+        const sizeMB = file.size / 1024 / 1024;
+
+        if (isRawExt(ext)) {
+            if (sizeMB > MAX_MB_RAW) {
+                message.error(`El archivo RAW excede el límite de ${MAX_MB_RAW} MB.`);
+                return false;
+            }
+            return true;
         }
-        const ok = file.size / 1024 / 1024 < maxSizeMB;
-        if (!ok) {
-            message.error(`La imagen debe pesar menos de ${maxSizeMB} MB.`);
-            return false;
+
+        if (isNonRawExt(ext)) {
+            if (sizeMB > MAX_MB_NONRAW) {
+                message.error(`La imagen excede el límite de ${MAX_MB_NONRAW} MB.`);
+                return false;
+            }
+            return true;
         }
-        return true;
+
+        message.error(
+            "Formato no compatible. Formatos permitidos:\n" +
+            `RAW: ${RAW_EXT.join(", ")}\n` +
+            `NO-RAW: ${NONRAW_EXT.join(", ")}`
+        );
+        return false;
     };
 
-    const beforeUpload: UploadProps["beforeUpload"] = (file) =>
-        validateFile(file as File) ? true : Upload.LIST_IGNORE;
+    const beforeUpload: UploadProps["beforeUpload"] = (file) => validateFile(file as File) ? true : Upload.LIST_IGNORE;
 
-    // Subida (solo procesada)
+    // Upload only processed image is stored
     const customRequest: UploadProps["customRequest"] = useMemo(() => {
         return async (options) => {
             const { file, onError, onProgress, onSuccess } = options;
             try {
                 if (!sampleId) throw new Error("Falta sampleId");
                 if (!(file instanceof File)) throw new Error("Archivo inválido");
-
                 onProgress?.({ percent: 20 });
                 abortRef.current = new AbortController();
-
-                const resp = (await uploadReportImage(
-                    sampleId,
-                    file,
-                    ""
-                )) as UploadImageServerResp;
-
+                const resp = (await uploadReportImage(sampleId, file, "")) as UploadImageServerResp;
                 onProgress?.({ percent: 90 });
 
-                // Procesada por defecto, miniatura si existe.
+                // Proccesed URL is mandatory, thumbnail optional
                 const processed = resp.urls?.processed ?? resp.url;
                 const thumb = resp.urls?.thumbnail ?? processed;
 
                 const newItem: ReportImage = {
                     id: resp.id || resp.sample_image_id,
-                    url: processed,         // 👈 SIEMPRE procesada
+                    url: processed,         // Always the processed
                     thumbnailUrl: thumb,
                     caption: resp.caption ?? "",
                 };
-
                 const next = [...(value ?? []), newItem].slice(0, maxCount);
                 emit(next);
 
-                // Reflejar en lista interna (aunque no se muestra)
+                // View in internal list (even if not shown)
                 setFileList((prev) => {
                     const uid = newItem.id ?? `img-${prev.length}`;
                     const fileItem: UploadFile = {
@@ -181,7 +165,7 @@ export default function ReportImages({
         };
     }, [sampleId, value, maxCount]);
 
-    // Eliminar
+    // Delete
     const removeAt = async (idx: number) => {
         const item = (value ?? [])[idx];
         if (!item) return;
@@ -202,14 +186,14 @@ export default function ReportImages({
         emit(next);
     };
 
-    // Abrir modales
+    // Open modals
     const openView = (idx: number) => setViewModal({ open: true, index: idx });
     const openCaption = (idx: number) => {
         const current = (value ?? [])[idx];
         setCaptionModal({ open: true, index: idx, draft: current?.caption ?? "" });
     };
 
-    // Guardar descripción desde modal
+    // Save caption from modal
     const saveCaption = () => {
         if (captionModal.index == null) return;
         const next = (value ?? []).slice();
@@ -218,10 +202,8 @@ export default function ReportImages({
         setCaptionModal({ open: false, index: null, draft: "" });
     };
 
-    // Seleccionados
-    const currentView =
-        viewModal.index != null ? (value ?? [])[viewModal.index] ?? null : null;
-
+    // Selected image in view modal
+    const currentView = viewModal.index != null ? (value ?? [])[viewModal.index] ?? null : null;
     const UploadCore = dragAndDrop ? Upload.Dragger : Upload;
 
     return (
@@ -233,14 +215,13 @@ export default function ReportImages({
                     </Typography.Text>
                 )}
 
-                {/* Uploader sin lista visible */}
                 <UploadCore
                     name="file"
                     multiple
                     maxCount={maxCount}
                     fileList={fileList}
                     showUploadList={false}
-                    accept={ACCEPT_IMAGES}
+                    accept={ACCEPT_EXTENSIONS}
                     disabled={disabled}
                     beforeUpload={beforeUpload}
                     customRequest={customRequest}
@@ -264,7 +245,6 @@ export default function ReportImages({
                     </Typography.Paragraph>
                 )}
 
-                {/* Miniaturas (chico) con acciones separadas */}
                 {(value?.length ?? 0) > 0 && (
                     <div
                         style={{
@@ -297,7 +277,6 @@ export default function ReportImages({
                                     }}
                                 />
 
-                                {/* Acciones arriba a la derecha: ojo, descripción, borrar */}
                                 <div
                                     style={{
                                         position: "absolute",
@@ -341,7 +320,6 @@ export default function ReportImages({
                 )}
             </Space>
 
-            {/* Modal: SOLO ver la imagen procesada */}
             <Modal
                 open={viewModal.open}
                 title="Imagen procesada"
@@ -359,7 +337,6 @@ export default function ReportImages({
                 )}
             </Modal>
 
-            {/* Modal: SOLO editar la descripción */}
             <Modal
                 open={captionModal.open}
                 title="Descripción de la imagen"

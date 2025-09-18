@@ -1,10 +1,6 @@
-export type ReportType =
-    | "histopatologia"
-    | "histoquimica"
-    | "citologia_mamaria"
-    | "citologia_urinaria"
-    | "quirurgico"
-    | "revision_laminillas";
+export type ReportType = "Histopatologia" | "Histoquimica" | "Citologia_mamaria" | "Citologia_urinaria" | "Quirurgico" | "Revision_laminillas";
+
+export type ReportStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" | "RETRACTED";
 
 export interface ReportBase {
     paciente: string;
@@ -50,13 +46,16 @@ export interface ReportImageItem {
 }
 
 export interface ReportEnvelope {
+    id: string;
     tenant_id: string;
     branch_id: string;
     order_id: string;
+    version_no: number;
+    status: ReportStatus;
     title: string;
     diagnosis_text: string;
     created_by: string;
-    published_at: string;
+    published_at: string | null;
 
     report: {
         tipo: ReportType;

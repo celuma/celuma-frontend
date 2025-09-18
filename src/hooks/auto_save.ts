@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
 
+// Options for the auto-save hook
 export type AutoSaveOptions = {
     debounceMs?: number;
     storage?: Storage;
     onSaveError?: (err: unknown) => void;
 };
 
+// Load the saved data from localStorage
 export function loadAutoSave<T = unknown>(
     key: string,
     storage: Storage = typeof window !== "undefined" ? window.localStorage : ({} as Storage)
@@ -19,6 +21,7 @@ export function loadAutoSave<T = unknown>(
     }
 }
 
+// Clear the saved data from localStorage
 export function clearAutoSave(
     key: string,
     storage: Storage = typeof window !== "undefined" ? window.localStorage : ({} as Storage)
@@ -30,6 +33,7 @@ export function clearAutoSave(
     }
 }
 
+// Hook to auto-save data to localStorage with debounce
 export function useAutoSave<T>(
     key: string,
     data: T,
@@ -39,6 +43,7 @@ export function useAutoSave<T>(
     const lastJsonRef = useRef<string | null>(null);
     const timerRef = useRef<number | undefined>(undefined);
 
+    // Function to save data immediately
     const saveNow = () => {
         try {
             const json = JSON.stringify(data);
@@ -50,6 +55,7 @@ export function useAutoSave<T>(
         }
     };
 
+    // Effect to save data with debounce when data changes
     useEffect(() => {
         if (timerRef.current) window.clearTimeout(timerRef.current);
 
@@ -61,6 +67,7 @@ export function useAutoSave<T>(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key, debounceMs, storage, onSaveError, data]);
 
+    // Effect to save data when the page is unloaded or hidden
     useEffect(() => {
         const handleBeforeUnload = () => {
             saveNow();
