@@ -132,8 +132,6 @@ export default function OrderRegister() {
                     label: `${p.patient_code}${p.first_name ? ` - ${p.first_name} ${p.last_name ?? ""}` : ""}`.trim(),
                 }));
                 setPatients(mapped);
-            } catch (e) {
-                // keep silent but show submit-time errors
             } finally {
                 setLoadingPatients(false);
             }
@@ -147,8 +145,6 @@ export default function OrderRegister() {
                 setLoadingBranches(true);
                 const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
                 setBranches(data || []);
-            } catch (e) {
-                // ignore, error will surface on submit
             } finally {
                 setLoadingBranches(false);
             }

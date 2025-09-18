@@ -101,7 +101,7 @@ export default function PatientRegister() {
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
-    const [loadingBranches, setLoadingBranches] = useState(false);
+    const [, setLoadingBranches] = useState(false);
 
     const { control, handleSubmit, reset } = useForm<PatientFormData>({
         resolver: zodResolver(schema),
@@ -126,8 +126,6 @@ export default function PatientRegister() {
                 setLoadingBranches(true);
                 const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
                 setBranches(data || []);
-            } catch (e) {
-                // silent, error will surface on submit if needed
             } finally {
                 setLoadingBranches(false);
             }

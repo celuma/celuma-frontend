@@ -85,8 +85,10 @@ export default function Login() {
                 throw new Error(msg);
             }
 
-            // Two possible shapes: LoginResponse or Tenant selection
-            if ((json as any)?.need_tenant_selection) {
+            // Two possible shapes: LoginResponse or tenant selection
+            const isTenantSelection = (v: unknown): v is { need_tenant_selection: boolean } =>
+                typeof v === "object" && v !== null && "need_tenant_selection" in (v as Record<string, unknown>);
+            if (isTenantSelection(json) && json.need_tenant_selection) {
                 setServerError("Este usuario pertenece a múltiples tenants. Por ahora, inicie con tenant específico.");
                 return;
             }

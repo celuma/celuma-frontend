@@ -133,8 +133,6 @@ export default function SampleRegister() {
                 const data = await getJSON<Array<{ id: string; order_code: string; status: string }>>("/v1/laboratory/orders/");
                 const mapped = (data || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
                 setOrders(mapped);
-            } catch (e) {
-                // keep silent but show submit-time errors
             } finally {
                 setLoadingOrders(false);
             }
@@ -148,8 +146,6 @@ export default function SampleRegister() {
                 setLoadingBranches(true);
                 const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
                 setBranches(data || []);
-            } catch (e) {
-                // ignore
             } finally {
                 setLoadingBranches(false);
             }
