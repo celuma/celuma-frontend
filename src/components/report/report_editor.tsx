@@ -7,124 +7,41 @@ import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { saveReport, saveReportVersion } from "../../services/report_service";
 import ReportImages, { type ReportImage } from "./report_images";
 import logo from "../../images/report_logo.png";
-import html2pdf from "html2pdf.js";
-// Types of the models
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
 
-// Map of flags by report type
+/* Flags by report type */
 const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
-    Histopatologia: {
-        incluirMacroscopia: true,
-        incluirMicroscopia: true,
-        incluirCitomorfologia: true,
-        incluirInterpretacion: true,
-        incluirDiagnostico: true,
-        incluirComentario: true,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: false,
-        incluirCU: false,
-        incluirInmunotinciones: false,
-    },
-    Histoquimica: {
-        incluirMacroscopia: true,
-        incluirMicroscopia: true,
-        incluirCitomorfologia: false,
-        incluirInterpretacion: false,
-        incluirDiagnostico: true,
-        incluirComentario: true,
-        incluirIF: true,
-        incluirME: true,
-        incluirEdad: false,
-        incluirCU: false,
-        incluirInmunotinciones: false,
-    },
-    Citologia_mamaria: {
-        incluirMacroscopia: false,
-        incluirMicroscopia: false,
-        incluirCitomorfologia: true,
-        incluirInterpretacion: true,
-        incluirDiagnostico: false,
-        incluirComentario: false,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: true,
-        incluirCU: false,
-        incluirInmunotinciones: false,
-    },
-    Citologia_urinaria: {
-        incluirMacroscopia: true,
-        incluirMicroscopia: false,
-        incluirCitomorfologia: true,
-        incluirInterpretacion: false,
-        incluirDiagnostico: false,
-        incluirComentario: true,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: false,
-        incluirCU: true,
-        incluirInmunotinciones: false,
-    },
-    Quirurgico: {
-        incluirMacroscopia: true,
-        incluirMicroscopia: true,
-        incluirCitomorfologia: false,
-        incluirInterpretacion: false,
-        incluirDiagnostico: true,
-        incluirComentario: false,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: false,
-        incluirCU: false,
-        incluirInmunotinciones: false,
-    },
-    Revision_laminillas: {
-        incluirMacroscopia: true,
-        incluirMicroscopia: false,
-        incluirCitomorfologia: false,
-        incluirInterpretacion: false,
-        incluirDiagnostico: false,
-        incluirComentario: true,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: false,
-        incluirCU: false,
-        incluirInmunotinciones: true,
-    },
+    Histopatologia: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: true, incluirInterpretacion: true, incluirDiagnostico: true, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
+    Histoquimica: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: true, incluirComentario: true, incluirIF: true, incluirME: true, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
+    Citologia_mamaria: { incluirMacroscopia: false, incluirMicroscopia: false, incluirCitomorfologia: true, incluirInterpretacion: true, incluirDiagnostico: false, incluirComentario: false, incluirIF: false, incluirME: false, incluirEdad: true, incluirCU: false, incluirInmunotinciones: false },
+    Citologia_urinaria: { incluirMacroscopia: true, incluirMicroscopia: false, incluirCitomorfologia: true, incluirInterpretacion: false, incluirDiagnostico: false, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: true, incluirInmunotinciones: false },
+    Quirurgico: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: true, incluirComentario: false, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
+    Revision_laminillas: { incluirMacroscopia: true, incluirMicroscopia: false, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: false, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: true },
 };
 
-// Styles for the report, mimicking a letter-sized paper
+/* Styles (Letter) */
 const letterStyles = `
-.for-pdf {
-  width: 8.5in;              
-  margin: 0 auto;
-  padding: 0;
-}
-
 .report-page {
   width: 8.5in;
   min-height: 11in;
   margin: 16px auto;
   background: #ffffff;
   color: #000;
-  box-shadow: 0 0 8px rgba(0,0,0,.15);
   position: relative;
 
-  /* Header */
+  /* Header/Footer spacing */
   --header-top: 24pt;
-  --header-bottom-space: 86pt; 
-
-  /* Footer */
-  --footer-height: 72pt;      
+  --header-bottom-space: 86pt;
+  --footer-height: 72pt;
   --footer-side-pad: 24pt;
 
   padding-top: calc(var(--header-top) + var(--header-bottom-space));
-  padding-bottom: calc(var(--footer-height) + 12pt); /* deja respiro */
-
+  padding-bottom: calc(var(--footer-height) + 12pt);
   padding-left: 48pt;
   padding-right: 48pt;
   box-sizing: border-box;
-  overflow: hidden;
   font-family: "Arial", sans-serif;
 }
 
@@ -133,7 +50,6 @@ const letterStyles = `
   top: var(--header-top);
   left: 24pt;
   right: 48pt;
-  text-align: left;
   font-size: 8pt;
   font-weight: 700;
   color: #002060;
@@ -143,65 +59,51 @@ const letterStyles = `
   position: absolute;
   left: var(--footer-side-pad);
   right: var(--footer-side-pad);
-  bottom: 0pt;
-  height: var(--footer-height);  
+  bottom: 0;
+  height: var(--footer-height);
   display: flex;
-  flex-direction: row;
   justify-content: space-between;
-  align-items: center;           
-  text-align: right;
+  align-items: center;
   font-size: 7pt;
   font-weight: 700;
   color: #002060;
-  overflow: hidden;              
 }
 
 .report-footer__logo {
-  display: block;
   height: calc(var(--footer-height) - 8pt);
-  width: auto;                  
-  max-width: 40%;                
-  object-fit: contain;            
-  aspect-ratio: auto;             
+  max-width: 40%;
+  object-fit: contain;
 }
 
 .report-footer__subtitle {
   font-size: 7.5pt;
   line-height: 1.2;
   max-width: 55%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.for-pdf * { box-shadow: none !important; }
-.for-pdf .fixed,
-.for-pdf header,
-.for-pdf footer { position: static !important; }
-
-.for-pdf .page:last-child {
-  margin-bottom: 0 !important;
-  padding-bottom: calc(var(--footer-height) + 12pt) !important;
-}
-
-@media print {
-  .page { break-after: page; }
-  .page:last-child { break-after: auto; }
 }
 `;
+
+/* PDF constants and helpers */
+const PX_TO_MM = 0.264583;
+const PAGE_W_MM = 215.9;
+const PAGE_H_MM = 279.4;
+const MARGIN_L_MM = 18;
+const MARGIN_R_MM = 18;
+const HEADER_H_MM = 28;
+const FOOTER_H_MM = 20;
 
 const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197";
 
 const ReportEditor: React.FC = () => {
-    // Selected type of report
+    // Selected report type
     const [tipo, setTipo] = useState<ReportType>("Histopatologia");
-    // Base
+    // Base fields
     const [paciente, setPaciente] = useState("");
     const [examen, setExamen] = useState("");
     const [folio, setFolio] = useState("");
     const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
     const [especimen, setEspecimen] = useState("");
     const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
-    // Sections
+    // Sections (HTML strings for Quill)
     const [descripcionMacroscopia, setDescMacro] = useState<string | null>("<p><br/></p>");
     const [descripcionMicroscopia, setDescMicro] = useState<string | null>("<p><br/></p>");
     const [descripcionCitomorfologica, setDescCito] = useState<string | null>("<p><br/></p>");
@@ -215,36 +117,98 @@ const ReportEditor: React.FC = () => {
     const [edad, setEdad] = useState<string>("");
     // Images
     const [reportImages, setReportImages] = useState<ReportImage[]>([]);
-    // Existing envelope (for editing existing reports)
-    const [envelopeExistente, setEnvelopeExistente ] = useState<Partial<ReportEnvelope> | undefined>(undefined);
-    // Loading state for auto-save
+    // Existing envelope (editing mode)
+    const [envelopeExistente, setEnvelopeExistente] = useState<Partial<ReportEnvelope> | undefined>(undefined);
+    // Autosave loading state
     const [isLoaded, setIsLoaded] = useState(false);
-    // Insert image in Quill when using the toolbar button
+    // Quill ref (if needed later)
     const quillRef = useRef<ReactQuill>(null);
 
-    // Reference to the report content for PDF generation
-    const reportRef = useRef<HTMLDivElement>(null);
-    // Function to export the report as PDF
-    const handleExportPDF = () => {
-        const el = reportRef.current;
-        if (!el) return;
-        el.classList.add("for-pdf");
+    // Visible: paginated pages; Hidden: source content used to paginate and export PDF
+    const previewHostRef = useRef<HTMLDivElement>(null);
+    const hiddenSourceRef = useRef<HTMLDivElement>(null);
+    const sourceContentRef = useRef<HTMLDivElement>(null);
 
-        const opts = {
-            margin: [0, 0, 0, 0],
-            filename: "reporte.pdf",
-            image: { type: "jpeg", quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-            pagebreak: { mode: ["css", "avoid-all"] }
+    // Export to PDF (uses hidden source + same styles + vector header/footer)
+    const handleExportPDF = async () => {
+        const host = previewHostRef.current;
+        if (!host) return;
+
+        // Make sure web fonts are loaded before rasterizing
+        if ("fonts" in document) {
+            await document.fonts.ready;
+        }
+
+        // Helper: wait for all images on a page to load
+        const waitForImages = (root: HTMLElement) => {
+            const imgs = Array.from(root.querySelectorAll("img"));
+            return Promise.all(
+                imgs.map(
+                    (img) =>
+                        new Promise<void>((resolve) => {
+                            if (img.complete && img.naturalWidth > 0) return resolve();
+                            const onDone = () => {
+                                img.removeEventListener("load", onDone);
+                                img.removeEventListener("error", onDone);
+                                resolve();
+                            };
+                            img.addEventListener("load", onDone);
+                            img.addEventListener("error", onDone);
+                        })
+                )
+            );
         };
 
-        html2pdf().set(opts).from(el).save().finally(() => {
-            el.classList.remove("for-pdf");
+        // Get the "pages" visible in the preview
+        const pages = Array.from(host.children).filter(
+            (el) => el instanceof HTMLElement
+        ) as HTMLElement[];
+
+        if (pages.length === 0) return;
+
+        // Wait for pictures just in case
+        for (const page of pages) {
+            await waitForImages(page);
+        }
+
+        // Create the PDF in Letter size
+        const doc = new jsPDF({
+            unit: "mm",
+            format: "letter",
+            orientation: "portrait",
+            compress: true,
         });
+
+        // mm of the letter page
+        const PAGE_W_MM = 215.9;
+        const PAGE_H_MM = 279.4;
+
+        for (let i = 0; i < pages.length; i++) {
+            const page = pages[i];
+
+            // Rasterize the FULL PAGE as seen in preview
+            const canvas = await html2canvas(page, {
+                scale: window.devicePixelRatio || 2,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                // These two options help html2canvas calculate layout as on screen
+                windowWidth: page.offsetWidth,
+                windowHeight: page.offsetHeight,
+            });
+
+            const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+            // On the 2nd+ page add new page
+            if (i > 0) doc.addPage("letter", "portrait");
+
+            // Paste the image occupying the ENTIRE page (0 margins)
+            doc.addImage(imgData, "JPEG", 0, 0, PAGE_W_MM, PAGE_H_MM);
+        }
+
+        doc.save("reporte.pdf");
     };
 
-    // Upload draft on mount
+    // Load autosaved draft on mount
     useEffect(() => {
         const envelope = loadAutoSave<ReportEnvelope>("reportEnvelopeDraft");
         if (envelope) {
@@ -272,7 +236,7 @@ const ReportEditor: React.FC = () => {
         setIsLoaded(true);
     }, []);
 
-    // Quill modules (toolbar configuration)
+    // Quill toolbar config
     const quillModules = useMemo(
         () => ({
             toolbar: {
@@ -288,7 +252,7 @@ const ReportEditor: React.FC = () => {
         []
     );
 
-    // Build the report envelope from the current state
+    // Build a ReportEnvelope from current state
     const buildEnvelope = (existing?: Partial<ReportEnvelope>): ReportEnvelope => {
         return {
             id: existing?.id ?? "",
@@ -334,10 +298,10 @@ const ReportEditor: React.FC = () => {
         };
     };
 
-    // Auto-save draft on change
+    // Autosave whenever state is ready/changes
     useAutoSave("reportEnvelopeDraft", isLoaded ? buildEnvelope(envelopeExistente) : undefined);
 
-    // Save the report (new or new version)
+    // Save new or new version
     const handleSave = async () => {
         try {
             const envelope = buildEnvelope(envelopeExistente);
@@ -354,14 +318,172 @@ const ReportEditor: React.FC = () => {
         }
     };
 
+    /* Paginated preview (this is the ONLY visible view) */
+    useEffect(() => {
+        const host = previewHostRef.current;
+        const sourceInDOM = hiddenSourceRef.current?.querySelector("#reporte-content") as HTMLElement | null;
+        if (!host || !sourceInDOM) return;
+
+        // Clear current pages
+        host.innerHTML = "";
+
+        // Useful area (mm → px)
+        const contentWpx = Math.round((PAGE_W_MM - MARGIN_L_MM - MARGIN_R_MM) / PX_TO_MM);
+        const contentHpx = Math.round((PAGE_H_MM - HEADER_H_MM - FOOTER_H_MM) / PX_TO_MM);
+
+        // Creates a visual "Letter" page with header/body/footer
+        const makePage = () => {
+            const page = document.createElement("div");
+            page.style.width = "8.5in";
+            page.style.height = "11in";
+            page.style.background = "#fff";
+            page.style.boxShadow = "0 0 6px rgba(0,0,0,.2)";
+            page.style.margin = "16px auto";
+            page.style.position = "relative";
+            page.style.overflow = "hidden";
+
+            // Header
+            const header = document.createElement("div");
+            header.style.position = "absolute";
+            header.style.top = "0";
+            header.style.left = `${MARGIN_L_MM}mm`;
+            header.style.right = `${MARGIN_R_MM}mm`;
+            header.style.height = `${HEADER_H_MM}mm`;
+            header.style.display = "flex";
+            header.style.alignItems = "flex-end";
+            header.style.paddingBottom = "4mm";
+            header.style.color = "#002060";
+            header.style.fontWeight = "bold";
+            header.style.fontSize = "8pt";
+            header.style.fontFamily = "Arial, sans-serif";
+            header.innerHTML = `
+                <div>
+                  <div>Dra. Arisbeth Villanueva Pérez.</div>
+                  <div>Anatomía Patológica, Nefropatología y Citología Exfoliativa</div>
+                  <div>Centro Médico Nacional de Occidente IMSS. INCMNSZ</div>
+                  <div>DGP3833349 | DGP. ESP 6133871</div>
+                </div>
+            `;
+
+            // Body (the content area)
+            const body = document.createElement("div");
+            body.style.position = "absolute";
+            body.style.top = `${HEADER_H_MM}mm`;
+            body.style.bottom = `${FOOTER_H_MM}mm`;
+            body.style.left = `${MARGIN_L_MM}mm`;
+            body.style.right = `${MARGIN_R_MM}mm`;
+            body.style.overflow = "hidden";
+            body.style.width = `${contentWpx}px`;
+            body.style.height = `${contentHpx}px`;
+
+            // Footer
+            const footer = document.createElement("div");
+            footer.style.position = "absolute";
+            footer.style.bottom = "0";
+            footer.style.left = `${MARGIN_L_MM}mm`;
+            footer.style.right = `${MARGIN_R_MM}mm`;
+            footer.style.height = `${FOOTER_H_MM}mm`;
+            footer.style.display = "flex";
+            footer.style.alignItems = "center";
+            footer.style.justifyContent = "space-between";
+            footer.style.color = "#002060";
+            footer.style.fontSize = "7pt";
+            footer.style.fontFamily = "Arial, sans-serif";
+            footer.style.fontWeight = "bold";
+            footer.innerHTML = `
+                <img
+                    src="${logo}"
+                    alt="Logo"
+                    style="
+                      display:block;
+                      height: calc(${FOOTER_H_MM}mm - 4mm);
+                      width: auto;
+                      max-width: 35%;
+                      object-fit: contain;
+                    "
+                />
+                <div style="max-width:65%">
+                  Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600<br/>
+                  Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com
+                </div>
+            `;
+
+            page.appendChild(header);
+            page.appendChild(body);
+            page.appendChild(footer);
+            host.appendChild(page);
+            return { page, body };
+        };
+
+        // Clone source content and flow it across pages
+        const work = sourceInDOM.cloneNode(true) as HTMLElement;
+        const nodes = Array.from(work.childNodes);
+
+        // Try to place an element; return whether it fits in the current page body
+        const fits = (container: HTMLElement, el: HTMLElement) => {
+            container.appendChild(el);
+            const ok = container.scrollHeight <= container.clientHeight;
+            if (!ok) container.removeChild(el);
+            return ok;
+        };
+
+        let { body } = makePage();
+
+        // Distribute nodes across pages, splitting blocks if needed
+        nodes.forEach((node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const span = document.createElement("span");
+                span.textContent = node.textContent || "";
+                if (!fits(body, span)) {
+                    ({ body } = makePage());
+                    body.appendChild(span);
+                }
+                return;
+            }
+
+            const elem = node as HTMLElement;
+            if (!(elem instanceof HTMLElement)) return;
+
+            // Try whole block
+            const block = elem.cloneNode(true) as HTMLElement;
+            if (fits(body, block)) return;
+
+            // New page, try as a unit
+            ({ body } = makePage());
+            if (block.scrollHeight <= body.clientHeight) {
+                body.appendChild(block);
+                return;
+            }
+
+            // Still too big: split by children
+            const shell = block.cloneNode(false) as HTMLElement;
+            body.appendChild(shell);
+            Array.from(block.childNodes).forEach((child) => {
+                const c = (child.cloneNode(true) as HTMLElement) || document.createElement("span");
+                if (!fits(body, c)) {
+                    ({ body } = makePage());
+                    body.appendChild(c);
+                } else {
+                    shell.appendChild(c);
+                }
+            });
+        });
+    }, [
+        paciente, examen, folio, fechaRecepcion?.valueOf(), especimen, diagnosticoEnvio,
+        descripcionMacroscopia, descripcionMicroscopia, descripcionCitomorfologica,
+        interpretacion, diagnostico, comentario, citologiaUrinariaHTML,
+        inmunofluorescenciaHTML, inmunotincionesHTML, microscopioElectronicoHTML,
+        edad, reportImages, tipo
+    ]);
+
     return (
         <>
-            <style>{letterStyles}</style>
+            <style> {letterStyles} </style>
 
             <Row gutter={24} style={{ padding: 16 }}>
-                {/* Columna izquierda: edición */}
+                {/* Left column: editor */}
                 <Col span={12}>
-                    <h2>Llenado de Reporte</h2>
+                    <h2>Información del reporte</h2>
 
                     <Form.Item label="Tipo de reporte">
                         <Select<ReportType>
@@ -377,8 +499,6 @@ const ReportEditor: React.FC = () => {
                             ]}
                         />
                     </Form.Item>
-
-                    <Divider />
 
                     <Form layout="vertical">
                         <Form.Item label="Paciente">
@@ -417,12 +537,7 @@ const ReportEditor: React.FC = () => {
                         </Form.Item>
 
                         <Form.Item label="Imágenes del reporte">
-                            {/* Aquí se dispara la carga al endpoint apenas se elige el archivo */}
-                            <ReportImages
-                                sampleId={SAMPLE_ID}
-                                value={reportImages}
-                                onChange={setReportImages}
-                            />
+                            <ReportImages sampleId={SAMPLE_ID} value={reportImages} onChange={setReportImages} />
                         </Form.Item>
 
                         {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
@@ -537,159 +652,151 @@ const ReportEditor: React.FC = () => {
                         )}
 
                         <Divider />
-                        <Button type="primary" onClick={handleSave}>
-                            Guardar reporte
-                        </Button>
+                        <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
                         <Button onClick={handleExportPDF}>Exportar a PDF</Button>
                     </Form>
                 </Col>
 
-                {/* Columna derecha: vista previa */}
+                {/* Right column: ONLY paginated preview */}
                 <Col span={12}>
-                    <h2>Vista Previa del Reporte</h2>
-                    <div ref={reportRef} className="report-page">
-                        <div className="report-header">
-                            <div className="report-header__title">Dra. Arisbeth Villanueva Pérez.</div>
-                            <div className="report-header__subtitle">Anatomía Patológica, Nefropatología y Citología Exfoliativa</div>
-                            <div className="report-header__subtitle">Centro Médico Nacional de Occidente IMSS. INCMNSZ</div>
-                            <div className="report-header__subtitle">DGP3833349 | DGP. ESP 6133871</div>
-                        </div>
-
-                        <div id="reporte-content">
-                            <p><b>Dr(a).</b> Presente.</p>
-                            <p><b>Paciente:</b> {paciente || <em>(Sin especificar)</em>}</p>
-                            <p><b>Examen:</b> {examen || <em>(Sin especificar)</em>}</p>
-                            <p><b>No.:</b> {folio || <em>(Sin especificar)</em>}</p>
-                            <p>
-                                <b>Fecha de recepción de muestra:</b>{" "}
-                                {fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : <em>(Sin especificar)</em>}
-                            </p>
-                            {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
-                                <p><b>Edad:</b> {edad || <em>(Sin especificar)</em>}</p>
-                            )}
-                            <p><b>Espécimen recibido:</b> {especimen || <em>(Sin especificar)</em>}</p>
-                            {diagnosticoEnvio && <p><b>Diagnóstico de envío:</b> {diagnosticoEnvio}</p>}
-
-                            <hr className="report-hr" />
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
-                                <>
-                                    <h3>Descripción macroscópica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descripcionMacroscopia || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
-                                <>
-                                    <h3>Descripción microscópica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descripcionMicroscopia || "" }} />
-                                </>
-                            )}
-
-                            {/* Bloque de imágenes */}
-                            {reportImages.length > 0 && (
-                                <>
-                                    <hr className="report-hr" />
-                                    <h3>Imágenes</h3>
-                                    <div
-                                        style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                            gap: 12,
-                                        }}
-                                    >
-                                        {reportImages.map((img, idx) => (
-                                            <div
-                                                key={img.id || idx}
-                                                style={{
-                                                    border: "1px solid #f0f0f0",
-                                                    borderRadius: 8,
-                                                    overflow: "hidden",
-                                                    background: "#fff",
-                                                }}
-                                            >
-                                                <img
-                                                    src={img.url}
-                                                    alt={img.caption || `Figura ${idx + 1}`}
-                                                    style={{ width: "100%", height: 220, objectFit: "contain", background: "#fafafa" }}
-                                                />
-                                                <div style={{ padding: "6px 8px", fontSize: 12 }}>
-                                                    <b>Figura {idx + 1}.</b>{" "}
-                                                    {img.caption && img.caption.trim().length > 0 ? img.caption : <em> </em>}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
-                                <>
-                                    <h3>Descripción citomorfológica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: descripcionCitomorfologica || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
-                                <>
-                                    <h3>Interpretación</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: interpretacion || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
-                                <>
-                                    <h3>Diagnóstico</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: diagnostico || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
-                                <>
-                                    <h3>Comentario</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: comentario || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirCU && (
-                                <>
-                                    <h3>Citología urinaria</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirIF && (
-                                <>
-                                    <h3>Inmunofluorescencia</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
-                                <>
-                                    <h3>Inmunotinciones</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML || "" }} />
-                                </>
-                            )}
-
-                            {FLAGS_BY_TYPE[tipo]?.incluirME && (
-                                <>
-                                    <h3>Microscopía electrónica</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML || "" }} />
-                                </>
-                            )}
-                        </div>
-
-                        <div className="report-footer">
-                            <img className="report-footer__logo" src={logo} alt="Logo" />
-                            <div className="report-footer__subtitle">
-                                Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600
-                                Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com
-                            </div>
-                        </div>
-                    </div>
+                    <h2>Vista previa del reporte</h2>
+                    <div ref={previewHostRef} />
                 </Col>
             </Row>
+
+            {/* Hidden source content: used to paginate and to export the PDF */}
+            <div
+                ref={hiddenSourceRef}
+                style={{ position: "fixed", left: "-10000px", top: 0, width: 0, height: 0, overflow: "hidden" }}
+                aria-hidden
+            >
+                <div id="reporte-content" ref={sourceContentRef}>
+                    <p><b>Dr(a).</b> Presente.</p>
+                    <p><b>Paciente:</b> {paciente || <em>(Sin especificar)</em>}</p>
+                    <p><b>Examen:</b> {examen || <em>(Sin especificar)</em>}</p>
+                    <p><b>No.:</b> {folio || <em>(Sin especificar)</em>}</p>
+
+                    <p>
+                        <b>Fecha de recepción de muestra:</b>{" "}
+                        {fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : <em>(Sin especificar)</em>}
+                    </p>
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
+                        <p><b>Edad:</b> {edad || <em>(Sin especificar)</em>}</p>
+                    )}
+
+                    <p><b>Espécimen recibido:</b> {especimen || <em>(Sin especificar)</em>}</p>
+                    {diagnosticoEnvio && <p><b>Diagnóstico de envío:</b> {diagnosticoEnvio}</p>}
+
+                    <hr className="report-hr" />
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
+                        <>
+                            <h3>Descripción macroscópica</h3>
+                            <div dangerouslySetInnerHTML={{ __html: descripcionMacroscopia || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
+                        <>
+                            <h3>Descripción microscópica</h3>
+                            <div dangerouslySetInnerHTML={{ __html: descripcionMicroscopia || "" }} />
+                        </>
+                    )}
+
+                    {reportImages.length > 0 && (
+                        <>
+                            <hr className="report-hr" />
+                            <h3>Imágenes</h3>
+                            <div
+                                style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                    gap: 12,
+                                }}
+                            >
+                                {reportImages.map((img, idx) => (
+                                    <div
+                                        key={img.id || idx}
+                                        style={{
+                                            border: "1px solid #f0f0f0",
+                                            borderRadius: 8,
+                                            overflow: "hidden",
+                                            background: "#fff",
+                                        }}
+                                    >
+                                        <img
+                                            src={img.url}
+                                            alt={img.caption || `Figura ${idx + 1}`}
+                                            style={{ width: "100%", height: 220, objectFit: "contain", background: "#fafafa" }}
+                                        />
+                                        <div style={{ padding: "6px 8px", fontSize: 12 }}>
+                                            <b>Figura {idx + 1}.</b>{" "}
+                                            {img.caption && img.caption.trim().length > 0 ? img.caption : <em> </em>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
+                        <>
+                            <h3>Descripción citomorfológica</h3>
+                            <div dangerouslySetInnerHTML={{ __html: descripcionCitomorfologica || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
+                        <>
+                            <h3>Interpretación</h3>
+                            <div dangerouslySetInnerHTML={{ __html: interpretacion || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
+                        <>
+                            <h3>Diagnóstico</h3>
+                            <div dangerouslySetInnerHTML={{ __html: diagnostico || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
+                        <>
+                            <h3>Comentario</h3>
+                            <div dangerouslySetInnerHTML={{ __html: comentario || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirCU && (
+                        <>
+                            <h3>Citología urinaria</h3>
+                            <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirIF && (
+                        <>
+                            <h3>Inmunofluorescencia</h3>
+                            <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
+                        <>
+                            <h3>Inmunotinciones</h3>
+                            <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML || "" }} />
+                        </>
+                    )}
+
+                    {FLAGS_BY_TYPE[tipo]?.incluirME && (
+                        <>
+                            <h3>Microscopía electrónica</h3>
+                            <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML || "" }} />
+                        </>
+                    )}
+                </div>
+            </div>
         </>
     );
 };
