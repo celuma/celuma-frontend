@@ -12,6 +12,7 @@ export type CelumaKey =
     | "/patients/register" 
     | "/orders/register"
     | "/samples/register"
+    | "/cases/register"
     | "/profile" 
     | "/logout";
 
@@ -21,6 +22,7 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
     { key: "/orders/register", icon: <FormOutlined />, label: "Registrar Orden", title: "Registrar Orden" },
     { key: "/samples/register", icon: <ExperimentOutlined />, label: "Registrar Muestra", title: "Registrar Muestra" },
+    { key: "/cases/register", icon: <FormOutlined />, label: "Registrar Caso", title: "Registrar Caso" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
