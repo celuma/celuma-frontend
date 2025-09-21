@@ -91,10 +91,15 @@ type CreateOrderResponse = {
 };
 
 const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 24 }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
-        {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
-        <div style={{ display: "grid", gap: 12 }}>{children}</div>
+    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+        <div style={{ padding: 24 }}>
+            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
+        </div>
+        <div style={{ height: 1, background: "#e5e7eb" }} />
+        <div style={{ padding: 24, display: "grid", gap: 12 }}>
+            {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
+            {children}
+        </div>
     </div>
 );
 

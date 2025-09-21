@@ -292,7 +292,6 @@ const Profile: React.FC = () => {
                     }
                 `}</style>
                 <div style={{ maxWidth: 1040, margin: "0 auto" }}>
-                    <h1 style={{ marginBottom: 24, color: "#0d1b2a", fontFamily: tokens.titleFont, fontWeight: 800, fontSize: 24 }}>Mi Perfil</h1>
 
                     {profileLoading ? (
                         <Card loading style={{ marginBottom: 24 }}>
@@ -337,7 +336,10 @@ const Profile: React.FC = () => {
                             <div className="profile-grid">
                                 {/* Columna izquierda: resumen */}
                                 <div className="profile-summary-card">
-                                    <Card style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
+                                    <Card
+                                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Mi Perfil</span>}
+                                        style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                                    >
                                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                                             <Avatar size={64} style={{ background: "#0f8b8d", fontWeight: 800 }}>
                                                 {profileData?.full_name?.[0]?.toUpperCase() || "U"}

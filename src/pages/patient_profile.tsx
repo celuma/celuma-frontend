@@ -103,8 +103,8 @@ export default function PatientProfile() {
             />
             <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                  .pp-grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
-                  @media (min-width: 960px) { .pp-grid { grid-template-columns: 320px 1fr; } }
+                  .pp-grid { display: grid; gap: ${tokens.gap}px; grid-template-columns: 1fr; }
+                  .pp-card-table .ant-table { border-radius: 10px; overflow: hidden; }
                 `}</style>
 
                 <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
@@ -116,11 +116,11 @@ export default function PatientProfile() {
                         >
                             {!loading && patient && (
                                 <Descriptions bordered column={2} size="middle">
-                                    <Descriptions.Item label="Nombre" span={2}>{fullName || "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Nombre">{fullName || "—"}</Descriptions.Item>
                                     <Descriptions.Item label="Código">{patient.patient_code ?? "—"}</Descriptions.Item>
                                     <Descriptions.Item label="Sexo">{patient.sex ?? "—"}</Descriptions.Item>
                                     <Descriptions.Item label="DOB">{patient.dob ?? "—"}</Descriptions.Item>
-                                    <Descriptions.Item label="Contacto">{patient.phone ?? patient.email ?? "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Contacto" span={2}>{patient.phone ?? patient.email ?? "—"}</Descriptions.Item>
                                 </Descriptions>
                             )}
                         </Card>
@@ -134,6 +134,7 @@ export default function PatientProfile() {
                                     Registrar Caso
                                 </AntButton>
                             ) : null}
+                            className="pp-card-table"
                         >
                             {!loading && (
                                 <Table
