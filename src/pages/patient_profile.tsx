@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Avatar, Table, Tag, Empty } from "antd";
+import { Layout, Card, Avatar, Table, Tag, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -108,7 +108,13 @@ export default function PatientProfile() {
 
                 <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
                     <div className="pp-grid">
-                        <Card loading={loading} style={{ borderRadius: 12 }}>
+                        <Card loading={loading} style={{ borderRadius: 12 }}
+                              extra={!loading && patient ? (
+                                  <AntButton type="primary" onClick={() => navigate(`/cases/register?patientId=${patient.id}`)}>
+                                      Registrar Caso
+                                  </AntButton>
+                              ) : null}
+                        >
                             {!loading && (
                                 <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                                     <Avatar size={72} style={{ background: "#0f8b8d", fontWeight: 800 }}>

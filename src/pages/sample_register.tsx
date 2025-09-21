@@ -110,7 +110,7 @@ const Card: React.FC<{ title: string; description?: string; children: React.Reac
 
 export default function SampleRegister() {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -119,12 +119,17 @@ export default function SampleRegister() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
 
+    const prefilledOrderId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("orderId") || "";
+    }, [search]);
+
     const { control, handleSubmit, reset } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
-            order_id: "",
+            order_id: prefilledOrderId,
             sample_code: "",
             type: undefined as unknown as SampleFormData["type"],
             notes: "",
@@ -255,6 +260,7 @@ export default function SampleRegister() {
                                                 placeholder={loadingOrders ? "Cargando órdenes..." : "Seleccione una orden"}
                                                 options={orders.map((o) => ({ value: o.id, label: o.label }))}
                                                 showSearch
+                                                disabled={Boolean(prefilledOrderId)}
                                             />
                                         )}
                                     />

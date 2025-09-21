@@ -105,7 +105,7 @@ const Card: React.FC<{ title: string; description?: string; children: React.Reac
 
 export default function CaseRegister() {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -115,12 +115,17 @@ export default function CaseRegister() {
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
+    const prefilledPatientId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("patientId") || "";
+    }, [search]);
+
     const { control, handleSubmit, reset } = useForm<CaseFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
-            patient_id: "",
+            patient_id: prefilledPatientId,
             order_code: "",
             requested_by: "",
             notes: "",
@@ -264,6 +269,7 @@ export default function CaseRegister() {
                                                 placeholder={loadingPatients ? "Cargando pacientes..." : "Seleccione un paciente"}
                                                 options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
                                                 showSearch
+                                                disabled={Boolean(prefilledPatientId)}
                                             />
                                         )}
                                     />

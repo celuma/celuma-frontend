@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Descriptions, Tag, List, Avatar, Empty } from "antd";
+import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -114,12 +114,23 @@ export default function OrderDetail() {
             />
             <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
                 <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
-                    <Card title="Detalle de Orden" loading={loading} style={{ borderRadius: 12 }}>
+                    <Card
+                        title="Detalle de Orden"
+                        loading={loading}
+                        style={{ borderRadius: 12 }}
+                        extra={data ? (
+                            <AntButton type="primary" onClick={() => navigate(`/samples/register?orderId=${data.order.id}`)}>
+                                Registrar Muestra
+                            </AntButton>
+                        ) : null}
+                    >
                         {data && (
                             <Descriptions bordered column={1} size="middle">
                                 <Descriptions.Item label="Orden">{data.order.order_code}</Descriptions.Item>
                                 <Descriptions.Item label="Estado"><Tag color="#49b6ad">{data.order.status}</Tag></Descriptions.Item>
-                                <Descriptions.Item label="Paciente">{fullName || data.patient.patient_code}</Descriptions.Item>
+                                <Descriptions.Item label="Paciente">
+                                    <a onClick={() => navigate(`/patients/${data.patient.id}`)}>{fullName || data.patient.patient_code}</a>
+                                </Descriptions.Item>
                                 <Descriptions.Item label="Solicitante">{data.order.requested_by || "—"}</Descriptions.Item>
                                 <Descriptions.Item label="Notas">{data.order.notes || "—"}</Descriptions.Item>
                             </Descriptions>
