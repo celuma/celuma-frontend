@@ -157,7 +157,8 @@ export default function SampleDetailPage() {
                                             <Image
                                                 width="100%"
                                                 src={img.urls.thumbnail || img.urls.processed}
-                                                fallback={img.urls.processed}
+                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
+                                                fallback={img.urls.processed || img.urls.thumbnail}
                                             />
                                             <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <span style={{ color: "#64748b" }}>{new Date(img.created_at).toLocaleString()}</span>
