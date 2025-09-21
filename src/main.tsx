@@ -13,6 +13,8 @@ import PatientsList from "./pages/patients_list";
 import PatientProfile from "./pages/patient_profile";
 import OrderDetail from "./pages/order_detail";
 import SampleDetailPage from "./pages/sample_detail";
+import CasesList from "./pages/cases_list";
+import SamplesList from "./pages/samples_list";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -25,6 +27,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/patients" element={<PatientsList />} />
             <Route path="/patients/:patientId" element={<PatientProfile />} />
             <Route path="/orders/register" element={<OrderRegister />} />
+            <Route path="/cases" element={<CasesList />} />
+            <Route path="/samples" element={<SamplesList />} />
             <Route path="/orders/:orderId" element={<OrderDetail />} />
             <Route path="/samples/:sampleId" element={<SampleDetailPage />} />
             <Route path="/samples/register" element={<SampleRegister />} />
