@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, FormOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
@@ -9,18 +9,21 @@ const { Sider } = Layout;
 export type CelumaKey = 
     | "/home" 
     | "/report" 
-    | "/patients/register" 
+    | "/patients"
+    | "/cases"
+    | "/samples"
     | "/orders/register"
     | "/samples/register"
+    | "/cases/register"
     | "/profile" 
     | "/logout";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
-    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
-    { key: "/orders/register", icon: <FormOutlined />, label: "Registrar Orden", title: "Registrar Orden" },
-    { key: "/samples/register", icon: <ExperimentOutlined />, label: "Registrar Muestra", title: "Registrar Muestra" },
+    { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
+    { key: "/cases", icon: <FileTextOutlined />, label: "Casos", title: "Casos" },
+    { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
@@ -160,12 +163,17 @@ const styles: Record<string, React.CSSProperties> = {
         paddingLeft: 0,
         paddingRight: 0,
         paddingTop: 0,
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        overflow: "hidden",
     },
     inner: {
         height: "100%",
         display: "flex",
         flexDirection: "column",
         fontFamily: "Nanito, sans-serif",
+        overflow: "hidden",
     },
     headerContainer: {
         display: "flex",
@@ -231,6 +239,8 @@ const styles: Record<string, React.CSSProperties> = {
         padding: "8px 16px 0 16px",
         margin: 0,
         color: "#fff",
+        overflowY: "auto",
+        minHeight: 0,
     },
     bottomWrapper: {
         marginTop: "auto",

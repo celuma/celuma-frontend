@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout } from "antd";
@@ -10,6 +10,7 @@ import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
 import SelectField from "../components/ui/select_field";
+import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens } from "../components/design/tokens";
@@ -69,6 +70,14 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
+const sampleSchema = z.object({
+    sample_code: z.string().trim().nonempty("El código de muestra es requerido."),
+    type: z.enum(["SANGRE", "BIOPSIA", "LAMINILLA", "TEJIDO", "OTRO"]),
+    notes: z.string().trim().optional(),
+    collected_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
+    received_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
+});
+
 const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
     branch_id: z.string().trim().nonempty("La sucursal es requerida."),
@@ -77,17 +86,14 @@ const schema = z.object({
     requested_by: z.string().trim().optional(),
     notes: z.string().trim().optional(),
     created_by: z.string().trim().optional(),
+    samples: z.array(sampleSchema).min(1, "Agregue al menos una muestra."),
 });
 
-type OrderFormData = z.infer<typeof schema>;
+type CaseFormData = z.infer<typeof schema>;
 
-type CreateOrderResponse = {
-    id: string;
-    order_code: string;
-    status: string;
-    patient_id: string;
-    tenant_id: string;
-    branch_id: string;
+type UnifiedResponse = {
+    order: { id: string; order_code: string; status: string; patient_id: string; tenant_id: string; branch_id: string };
+    samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
 const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
@@ -103,9 +109,9 @@ const Card: React.FC<{ title: string; description?: string; children: React.Reac
     </div>
 );
 
-export default function OrderRegister() {
+export default function CaseRegister() {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -115,18 +121,28 @@ export default function OrderRegister() {
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
-    const { control, handleSubmit, reset } = useForm<OrderFormData>({
+    const prefilledPatientId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("patientId") || "";
+    }, [search]);
+
+    const { control, handleSubmit, reset } = useForm<CaseFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
-            patient_id: "",
+            patient_id: prefilledPatientId,
             order_code: "",
             requested_by: "",
             notes: "",
+            samples: [
+                { sample_code: "", type: undefined as unknown as CaseFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" },
+            ],
         },
         mode: "onTouched",
     });
+
+    const { fields, append, remove } = useFieldArray({ control, name: "samples" });
 
     useEffect(() => {
         (async () => {
@@ -157,8 +173,6 @@ export default function OrderRegister() {
         })();
     }, [session.tenantId]);
 
-    // currentUserId ahora proviene del contexto de sesión (establecido en login)
-
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
         setLoading(true);
@@ -176,10 +190,17 @@ export default function OrderRegister() {
                 requested_by: data.requested_by || undefined,
                 notes: data.notes || undefined,
                 created_by: (currentUserId || data.created_by || undefined),
+                samples: data.samples.map((s) => ({
+                    sample_code: s.sample_code,
+                    type: s.type,
+                    notes: s.notes || undefined,
+                    collected_at: s.collected_date ? `${s.collected_date}T00:00:00Z` : undefined,
+                    received_at: s.received_date ? `${s.received_date}T00:00:00Z` : undefined,
+                })),
             };
-            const created = await postJSON<OrderFormData, CreateOrderResponse>("/v1/laboratory/orders/", payload);
+            const created = await postJSON<CaseFormData, UnifiedResponse>("/v1/laboratory/orders/unified", payload as unknown as CaseFormData);
             reset();
-            navigate(`/orders/${created.id}`, { replace: true });
+            navigate(`/orders/${created.order.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -196,20 +217,21 @@ export default function OrderRegister() {
             />
             <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                  .or-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-                  .or-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-                  .or-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+                  .cr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+                  .cr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
+                  .cr-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
                   @media (max-width: 768px) {
-                    .or-grid-2, .or-grid-3, .or-grid-4 { grid-template-columns: 1fr; }
+                    .cr-grid-2, .cr-grid-3, .cr-grid-4 { grid-template-columns: 1fr; }
                   }
+                  .sample-card { border: 1px dashed #c8e6e5; border-radius: 10px; padding: 12px; background: #fbffff; }
                 `}</style>
-                <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <Card title="Registrar Orden" description="Complete los datos para registrar una orden de laboratorio.">
+                <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <Card title="Registrar Caso" description="Cree una orden y una o más muestras en una sola operación.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (
                                 <section style={{ display: "grid", gap: 10 }}>
                                     <h3 style={{ margin: 0 }}>Contexto</h3>
-                                    <div className="or-grid-2" style={{ alignItems: "start" }}>
+                                    <div className="cr-grid-2" style={{ alignItems: "start" }}>
                                         <FormField
                                             control={control}
                                             name="tenant_id"
@@ -223,7 +245,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Sucursal</h3>
-                                <div className="or-grid-2">
+                                <div className="cr-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
@@ -242,7 +264,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Paciente</h3>
-                                <div className="or-grid-2">
+                                <div className="cr-grid-2">
                                     <FormField
                                         control={control}
                                         name="patient_id"
@@ -253,6 +275,7 @@ export default function OrderRegister() {
                                                 placeholder={loadingPatients ? "Cargando pacientes..." : "Seleccione un paciente"}
                                                 options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
                                                 showSearch
+                                                disabled={Boolean(prefilledPatientId)}
                                             />
                                         )}
                                     />
@@ -261,7 +284,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Orden</h3>
-                                <div className="or-grid-2">
+                                <div className="cr-grid-2">
                                     <FormField
                                         control={control}
                                         name="order_code"
@@ -278,7 +301,7 @@ export default function OrderRegister() {
                                     />
                                 </div>
 
-                                <div className="or-grid-2">
+                                <div className="cr-grid-2">
                                     <FormField
                                         control={control}
                                         name="notes"
@@ -289,8 +312,94 @@ export default function OrderRegister() {
                                 </div>
                             </section>
 
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Muestras</h3>
+                                <div style={{ display: "grid", gap: 12 }}>
+                                    {fields.map((field, index) => (
+                                        <div key={field.id} className="sample-card">
+                                            <div className="cr-grid-3">
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.sample_code`}
+                                                    render={(p) => (
+                                                        <TextField {...p} value={String(p.value ?? "")} placeholder="Código de Muestra" />
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.type`}
+                                                    render={(p) => (
+                                                        <SelectField
+                                                            value={typeof p.value === "string" ? p.value : undefined}
+                                                            onChange={(val) => p.onChange(val)}
+                                                            placeholder="Tipo de muestra"
+                                                            options={[
+                                                                { value: "SANGRE", label: "Sangre" },
+                                                                { value: "BIOPSIA", label: "Biopsia" },
+                                                                { value: "LAMINILLA", label: "Laminilla" },
+                                                                { value: "TEJIDO", label: "Tejido" },
+                                                                { value: "OTRO", label: "Otro" },
+                                                            ]}
+                                                        />
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.notes`}
+                                                    render={(p) => (
+                                                        <TextField {...p} value={String(p.value ?? "")} placeholder="Notas (opcional)" />
+                                                    )}
+                                                />
+                                            </div>
+
+                                            <div className="cr-grid-2" style={{ marginTop: 8 }}>
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.collected_date`}
+                                                    render={(p) => (
+                                                        <DateField
+                                                            value={typeof p.value === "string" ? p.value : ""}
+                                                            onChange={(v) => p.onChange(v)}
+                                                            placeholder="Fecha de recolección (AAAA-MM-DD)"
+                                                        />
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.received_date`}
+                                                    render={(p) => (
+                                                        <DateField
+                                                            value={typeof p.value === "string" ? p.value : ""}
+                                                            onChange={(v) => p.onChange(v)}
+                                                            placeholder="Fecha de recepción (AAAA-MM-DD)"
+                                                        />
+                                                    )}
+                                                />
+                                            </div>
+
+                                            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                                                <Button type="default" onClick={() => remove(index)}>
+                                                    Eliminar muestra
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                                        <Button
+                                            type="default"
+                                            onClick={() =>
+                                                append({ sample_code: "", type: undefined as unknown as CaseFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" })
+                                            }
+                                        >
+                                            Agregar otra muestra
+                                        </Button>
+                                    </div>
+                                </div>
+                            </section>
+
                             <Button htmlType="submit" type="primary" fullWidth loading={loading}>
-                                Registrar
+                                Registrar Caso
                             </Button>
                         </form>
 

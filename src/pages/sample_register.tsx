@@ -13,6 +13,7 @@ import SelectField from "../components/ui/select_field";
 import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -92,17 +93,30 @@ type CreateSampleResponse = {
     branch_id: string;
 };
 
+type OrdersListResponse = {
+    orders: Array<{
+        id: string;
+        order_code: string;
+        status: string;
+    }>;
+};
+
 const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)", padding: 24 }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>{title}</h2>
-        {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
-        <div style={{ display: "grid", gap: 12 }}>{children}</div>
+    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+        <div style={{ padding: 24 }}>
+            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
+        </div>
+        <div style={{ height: 1, background: "#e5e7eb" }} />
+        <div style={{ padding: 24, display: "grid", gap: 12 }}>
+            {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
+            {children}
+        </div>
     </div>
 );
 
 export default function SampleRegister() {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -111,12 +125,17 @@ export default function SampleRegister() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
 
+    const prefilledOrderId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("orderId") || "";
+    }, [search]);
+
     const { control, handleSubmit, reset } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
-            order_id: "",
+            order_id: prefilledOrderId,
             sample_code: "",
             type: undefined as unknown as SampleFormData["type"],
             notes: "",
@@ -130,8 +149,8 @@ export default function SampleRegister() {
         (async () => {
             try {
                 setLoadingOrders(true);
-                const data = await getJSON<Array<{ id: string; order_code: string; status: string }>>("/v1/laboratory/orders/");
-                const mapped = (data || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
+                const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
+                const mapped = (data.orders || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
                 setOrders(mapped);
             } finally {
                 setLoadingOrders(false);
@@ -171,9 +190,9 @@ export default function SampleRegister() {
                 collected_at: data.collected_date ? `${data.collected_date}T00:00:00Z` : undefined,
                 received_at: data.received_date ? `${data.received_date}T00:00:00Z` : undefined,
             };
-            await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload);
+            const created = await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload);
             reset();
-            navigate("/home", { replace: true });
+            navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -188,7 +207,7 @@ export default function SampleRegister() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .sr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
                   .sr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
@@ -197,7 +216,7 @@ export default function SampleRegister() {
                     .sr-grid-2, .sr-grid-3, .sr-grid-4 { grid-template-columns: 1fr; }
                   }
                 `}</style>
-                <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
+                <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card title="Registrar Muestra" description="Complete los datos para registrar una muestra.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (
@@ -247,6 +266,7 @@ export default function SampleRegister() {
                                                 placeholder={loadingOrders ? "Cargando órdenes..." : "Seleccione una orden"}
                                                 options={orders.map((o) => ({ value: o.id, label: o.label }))}
                                                 showSearch
+                                                disabled={Boolean(prefilledOrderId)}
                                             />
                                         )}
                                     />
