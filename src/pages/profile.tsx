@@ -259,6 +259,7 @@ const Profile: React.FC = () => {
     // Load profile on component mount
     useEffect(() => {
         fetchProfile();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Detect profile changes to enable update button

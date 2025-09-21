@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Layout, Card, Descriptions, Tag, Upload, Button as AntButton, List, Image, Empty, message } from "antd";
+import type { UploadProps } from "antd";
+import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import { UploadOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -62,7 +64,7 @@ export default function SampleDetailPage() {
     const [images, setImages] = useState<SampleImages | null>(null);
     const [uploading, setUploading] = useState(false);
 
-    async function refresh() {
+    const refresh = useCallback(async () => {
         if (!sampleId) return;
         setLoading(true);
         setError(null);
@@ -78,18 +80,18 @@ export default function SampleDetailPage() {
         } finally {
             setLoading(false);
         }
-    }
+    }, [sampleId]);
 
-    useEffect(() => { refresh(); }, [sampleId]);
+    useEffect(() => { refresh(); }, [refresh]);
 
-    const uploadProps = {
+    const uploadProps: UploadProps = {
         name: "file",
         multiple: false,
-        customRequest: async (options: any) => {
+        customRequest: async (options: RcCustomRequestOptions) => {
             if (!sampleId) return;
             const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
             const formData = new FormData();
-            formData.append("file", options.file as File);
+            formData.append("file", options.file as Blob);
             setUploading(true);
             try {
                 const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/images`, {
@@ -100,16 +102,19 @@ export default function SampleDetailPage() {
                 });
                 if (!res.ok) {
                     const text = await res.text();
-                    let parsed: any = undefined;
+                    let parsed: unknown = undefined;
                     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                    throw new Error(parsed?.message ?? `${res.status} ${res.statusText}`);
+                    const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                    throw new Error(msg);
                 }
                 message.success("Imagen subida correctamente");
-                options.onSuccess?.({}, options.file);
+                options.onSuccess?.({}, undefined as unknown as XMLHttpRequest);
                 await refresh();
-            } catch (e: any) {
-                message.error(e?.message || "Error al subir la imagen");
-                options.onError?.(e);
+            } catch (e) {
+                const errMsg = e instanceof Error ? e.message : "Error al subir la imagen";
+                message.error(errMsg);
+                // Best-effort error propagation with compatible type
+                options.onError?.(new ProgressEvent("error"));
             } finally {
                 setUploading(false);
             }
