@@ -12,6 +12,7 @@ import CaseRegister from "./pages/case_register";
 import PatientsList from "./pages/patients_list";
 import PatientProfile from "./pages/patient_profile";
 import OrderDetail from "./pages/order_detail";
+import SampleDetailPage from "./pages/sample_detail";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -25,6 +26,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/patients/:patientId" element={<PatientProfile />} />
             <Route path="/orders/register" element={<OrderRegister />} />
             <Route path="/orders/:orderId" element={<OrderDetail />} />
+            <Route path="/samples/:sampleId" element={<SampleDetailPage />} />
             <Route path="/samples/register" element={<SampleRegister />} />
             <Route path="/cases/register" element={<CaseRegister />} />
             <Route path="/profile" element={<Profile />} />
