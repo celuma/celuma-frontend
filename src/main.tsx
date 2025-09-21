@@ -9,6 +9,7 @@ import Profile from "./pages/profile";
 import OrderRegister from "./pages/order_register";
 import SampleRegister from "./pages/sample_register";
 import CaseRegister from "./pages/case_register";
+import PatientsList from "./pages/patients_list";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -18,6 +19,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/home" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/patients/register" element={<PatientRegister />} />
+            <Route path="/patients" element={<PatientsList />} />
             <Route path="/orders/register" element={<OrderRegister />} />
             <Route path="/samples/register" element={<SampleRegister />} />
             <Route path="/cases/register" element={<CaseRegister />} />
