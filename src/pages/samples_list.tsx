@@ -37,12 +37,28 @@ type SamplesListResponse = {
     }>;
 };
 
+type OrdersListResponse = {
+    orders: Array<{
+        id: string;
+        order_code: string;
+        status: string;
+        branch: { id: string; name?: string; code?: string | null };
+        patient: { id: string; full_name: string; patient_code: string };
+        requested_by?: string | null;
+        notes?: string | null;
+        created_at?: string | null;
+        sample_count: number;
+        has_report: boolean;
+    }>;
+};
+
 export default function SamplesList() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [rows, setRows] = useState<SamplesListResponse["samples"]>([]);
+    type Row = SamplesListResponse["samples"][number] & { patient_name?: string; requested_by?: string | null };
+    const [rows, setRows] = useState<Row[]>([]);
     const [search, setSearch] = useState("");
 
     useEffect(() => {
@@ -50,8 +66,23 @@ export default function SamplesList() {
             setLoading(true);
             setError(null);
             try {
-                const data = await getJSON<SamplesListResponse>("/v1/laboratory/samples/");
-                setRows(data.samples || []);
+                const [samplesRes, ordersRes] = await Promise.all([
+                    getJSON<SamplesListResponse>("/v1/laboratory/samples/"),
+                    getJSON<OrdersListResponse>("/v1/laboratory/orders/"),
+                ]);
+                const orderMap = new Map<string, { patient_name?: string; requested_by?: string | null }>();
+                for (const o of ordersRes.orders || []) {
+                    orderMap.set(o.id, {
+                        patient_name: o.patient?.full_name || o.patient?.patient_code,
+                        requested_by: o.requested_by ?? null,
+                    });
+                }
+                const enriched = (samplesRes.samples || []).map((s) => ({
+                    ...s,
+                    patient_name: orderMap.get(s.order.id)?.patient_name,
+                    requested_by: orderMap.get(s.order.id)?.requested_by ?? null,
+                }));
+                setRows(enriched);
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             } finally {
@@ -64,7 +95,7 @@ export default function SamplesList() {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
         return rows.filter((r) =>
-            [r.sample_code, r.type, r.state, r.order.order_code, r.branch.name, r.branch.code]
+            [r.sample_code, r.type, r.state, r.order.order_code, r.branch.name, r.branch.code, r.patient_name, r.requested_by]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q))
         );
@@ -109,8 +140,10 @@ export default function SamplesList() {
                                 { title: "Código", dataIndex: "sample_code", key: "sample_code", width: 140 },
                                 { title: "Tipo", dataIndex: "type", key: "type", width: 140 },
                                 { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => <Tag color="#49b6ad">{v}</Tag> },
-                                { title: "Orden", key: "order", render: (_, r) => r.order.order_code, width: 140 },
-                                { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
+                                { title: "Orden", key: "order", render: (_, r: Row) => r.order.order_code, width: 140 },
+                                { title: "Paciente", key: "patient", render: (_, r: Row) => r.patient_name || "—" },
+                                { title: "Solicitante", key: "requested_by", render: (_, r: Row) => r.requested_by || "—" },
+                                { title: "Sucursal", key: "branch", render: (_, r: Row) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
                             ]}
                             onRow={(record) => ({
                                 onClick: () => navigate(`/samples/${record.id}`),
