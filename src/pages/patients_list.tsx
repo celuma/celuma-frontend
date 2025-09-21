@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -8,13 +8,6 @@ import ErrorText from "../components/ui/error_text";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
-}
-
-function getSessionContext() {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
-    const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
-    return { token, tenantId, branchId };
 }
 
 async function getJSON<TRes>(path: string): Promise<TRes> {
@@ -52,7 +45,6 @@ type PatientRow = {
 export default function PatientsList() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
-    const session = useMemo(() => getSessionContext(), []);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<PatientRow[]>([]);
@@ -103,14 +95,17 @@ export default function PatientsList() {
                     <div className="pl-card">
                         <div className="pl-toolbar">
                             <h2 className="pl-title">Pacientes</h2>
-                            <Input.Search
-                                className="pl-search"
-                                allowClear
-                                placeholder="Buscar por código, nombre, email o teléfono"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                            />
+                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <Input.Search
+                                    className="pl-search"
+                                    allowClear
+                                    placeholder="Buscar por código, nombre, email o teléfono"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    onSearch={(v) => setSearch(v)}
+                                />
+                                <AntButton type="primary" onClick={() => navigate("/patients/register")}>Registrar Paciente</AntButton>
+                            </div>
                         </div>
 
                         <Table

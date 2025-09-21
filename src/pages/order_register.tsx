@@ -171,9 +171,9 @@ export default function OrderRegister() {
                 notes: data.notes || undefined,
                 created_by: (currentUserId || data.created_by || undefined),
             };
-            await postJSON<OrderFormData, CreateOrderResponse>("/v1/laboratory/orders/", payload);
+            const created = await postJSON<OrderFormData, CreateOrderResponse>("/v1/laboratory/orders/", payload);
             reset();
-            navigate("/home", { replace: true });
+            navigate(`/orders/${created.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {

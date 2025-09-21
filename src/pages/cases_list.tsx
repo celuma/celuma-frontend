@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -93,14 +93,17 @@ export default function CasesList() {
                     <div className="cl-card">
                         <div className="cl-toolbar">
                             <h2 className="cl-title">Casos</h2>
-                            <Input.Search
-                                className="cl-search"
-                                allowClear
-                                placeholder="Buscar por orden, paciente, sucursal" 
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                            />
+                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <Input.Search
+                                    className="cl-search"
+                                    allowClear
+                                    placeholder="Buscar por orden, paciente, sucursal" 
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    onSearch={(v) => setSearch(v)}
+                                />
+                                <AntButton type="primary" onClick={() => navigate("/cases/register")}>Registrar Caso</AntButton>
+                            </div>
                         </div>
 
                         <Table

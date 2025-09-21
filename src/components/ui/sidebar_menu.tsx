@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserAddOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, FormOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
@@ -9,7 +9,6 @@ const { Sider } = Layout;
 export type CelumaKey = 
     | "/home" 
     | "/report" 
-    | "/patients/register" 
     | "/patients"
     | "/cases"
     | "/samples"
@@ -23,12 +22,8 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
     { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
-    { key: "/patients/register", icon: <UserAddOutlined />, label: "Registrar Paciente", title: "Registrar Paciente" },
     { key: "/cases", icon: <FileTextOutlined />, label: "Casos", title: "Casos" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
-    { key: "/orders/register", icon: <FormOutlined />, label: "Registrar Orden", title: "Registrar Orden" },
-    { key: "/samples/register", icon: <ExperimentOutlined />, label: "Registrar Muestra", title: "Registrar Muestra" },
-    { key: "/cases/register", icon: <FormOutlined />, label: "Registrar Caso", title: "Registrar Caso" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [

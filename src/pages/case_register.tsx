@@ -115,7 +115,7 @@ export default function CaseRegister() {
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
-    const { control, handleSubmit, reset, watch } = useForm<CaseFormData>({
+    const { control, handleSubmit, reset } = useForm<CaseFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -187,9 +187,9 @@ export default function CaseRegister() {
                     received_at: s.received_date ? `${s.received_date}T00:00:00Z` : undefined,
                 })),
             };
-            await postJSON<CaseFormData, UnifiedResponse>("/v1/laboratory/orders/unified", payload as unknown as CaseFormData);
+            const created = await postJSON<CaseFormData, UnifiedResponse>("/v1/laboratory/orders/unified", payload as unknown as CaseFormData);
             reset();
-            navigate("/home", { replace: true });
+            navigate(`/orders/${created.order.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -308,7 +308,6 @@ export default function CaseRegister() {
                                             <div className="cr-grid-3">
                                                 <FormField
                                                     control={control}
-                                                    // @ts-expect-error react-hook-form path typing for arrays
                                                     name={`samples.${index}.sample_code`}
                                                     render={(p) => (
                                                         <TextField {...p} value={String(p.value ?? "")} placeholder="Código de Muestra" />
@@ -316,7 +315,6 @@ export default function CaseRegister() {
                                                 />
                                                 <FormField
                                                     control={control}
-                                                    // @ts-expect-error react-hook-form path typing for arrays
                                                     name={`samples.${index}.type`}
                                                     render={(p) => (
                                                         <SelectField
@@ -335,7 +333,6 @@ export default function CaseRegister() {
                                                 />
                                                 <FormField
                                                     control={control}
-                                                    // @ts-expect-error react-hook-form path typing for arrays
                                                     name={`samples.${index}.notes`}
                                                     render={(p) => (
                                                         <TextField {...p} value={String(p.value ?? "")} placeholder="Notas (opcional)" />
@@ -346,7 +343,6 @@ export default function CaseRegister() {
                                             <div className="cr-grid-2" style={{ marginTop: 8 }}>
                                                 <FormField
                                                     control={control}
-                                                    // @ts-expect-error react-hook-form path typing for arrays
                                                     name={`samples.${index}.collected_date`}
                                                     render={(p) => (
                                                         <DateField
@@ -358,7 +354,6 @@ export default function CaseRegister() {
                                                 />
                                                 <FormField
                                                     control={control}
-                                                    // @ts-expect-error react-hook-form path typing for arrays
                                                     name={`samples.${index}.received_date`}
                                                     render={(p) => (
                                                         <DateField

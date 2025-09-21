@@ -92,6 +92,14 @@ type CreateSampleResponse = {
     branch_id: string;
 };
 
+type OrdersListResponse = {
+    orders: Array<{
+        id: string;
+        order_code: string;
+        status: string;
+    }>;
+};
+
 const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
     <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)", padding: 24 }}>
         <h2 style={{ marginTop: 0, marginBottom: 8 }}>{title}</h2>
@@ -130,8 +138,8 @@ export default function SampleRegister() {
         (async () => {
             try {
                 setLoadingOrders(true);
-                const data = await getJSON<Array<{ id: string; order_code: string; status: string }>>("/v1/laboratory/orders/");
-                const mapped = (data || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
+                const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
+                const mapped = (data.orders || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}` }));
                 setOrders(mapped);
             } finally {
                 setLoadingOrders(false);
@@ -171,9 +179,9 @@ export default function SampleRegister() {
                 collected_at: data.collected_date ? `${data.collected_date}T00:00:00Z` : undefined,
                 received_at: data.received_date ? `${data.received_date}T00:00:00Z` : undefined,
             };
-            await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload);
+            const created = await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload);
             reset();
-            navigate("/home", { replace: true });
+            navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {

@@ -152,9 +152,9 @@ export default function PatientRegister() {
                 phone: data.phone || undefined,
                 email: data.email || undefined,
             };
-            await postJSON<PatientFormData, CreatePatientResponse>("/v1/patients/", payload);
+            const created = await postJSON<PatientFormData, CreatePatientResponse>("/v1/patients/", payload);
             reset();
-            navigate("/home", { replace: true });
+            navigate(`/patients/${created.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -120,14 +120,17 @@ export default function SamplesList() {
                     <div className="sl-card">
                         <div className="sl-toolbar">
                             <h2 className="sl-title">Muestras</h2>
-                            <Input.Search
-                                className="sl-search"
-                                allowClear
-                                placeholder="Buscar por código, tipo, orden o sucursal" 
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                            />
+                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <Input.Search
+                                    className="sl-search"
+                                    allowClear
+                                    placeholder="Buscar por código, tipo, orden o sucursal" 
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    onSearch={(v) => setSearch(v)}
+                                />
+                                <AntButton type="primary" onClick={() => navigate("/samples/register")}>Registrar Muestra</AntButton>
+                            </div>
                         </div>
 
                         <Table
