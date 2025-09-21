@@ -5,6 +5,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -112,17 +113,12 @@ export default function OrderDetail() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
-                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card
-                        title="Detalle de Orden"
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Detalle de Orden</span>}
                         loading={loading}
-                        style={{ borderRadius: 12 }}
-                        extra={data ? (
-                            <AntButton type="primary" onClick={() => navigate(`/samples/register?orderId=${data.order.id}`)}>
-                                Registrar Muestra
-                            </AntButton>
-                        ) : null}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                     >
                         {data && (
                             <Descriptions bordered column={1} size="middle">
@@ -138,7 +134,16 @@ export default function OrderDetail() {
                         <ErrorText>{error}</ErrorText>
                     </Card>
 
-                    <Card title="Muestras" loading={loading} style={{ borderRadius: 12 }}>
+                    <Card
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Muestras</span>}
+                        loading={loading}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                        extra={data ? (
+                            <AntButton type="primary" onClick={() => navigate(`/samples/register?orderId=${data.order.id}`)}>
+                                Registrar Muestra
+                            </AntButton>
+                        ) : null}
+                    >
                         {data && data.samples.length > 0 ? (
                             <List
                                 itemLayout="horizontal"
@@ -158,7 +163,11 @@ export default function OrderDetail() {
                         )}
                     </Card>
 
-                    <Card title="Reporte" loading={loading} style={{ borderRadius: 12 }}>
+                    <Card
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Reporte</span>}
+                        loading={loading}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                    >
                         {reportId ? (
                             <List
                                 dataSource={[{ id: reportId }]}

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Avatar, Table, Tag, Empty, Button as AntButton } from "antd";
+import { Layout, Card, Descriptions, Table, Tag, Empty, Button as AntButton } from "antd";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -100,38 +101,40 @@ export default function PatientProfile() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .pp-grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
                   @media (min-width: 960px) { .pp-grid { grid-template-columns: 320px 1fr; } }
                 `}</style>
 
-                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
+                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <div className="pp-grid">
-                        <Card loading={loading} style={{ borderRadius: 12 }}
-                              extra={!loading && patient ? (
-                                  <AntButton type="primary" onClick={() => navigate(`/cases/register?patientId=${patient.id}`)}>
-                                      Registrar Caso
-                                  </AntButton>
-                              ) : null}
+                        <Card
+                            title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Perfil del Paciente</span>}
+                            loading={loading}
+                            style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                         >
-                            {!loading && (
-                                <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                                    <Avatar size={72} style={{ background: "#0f8b8d", fontWeight: 800 }}>
-                                        {(fullName || patient?.patient_code || "P").slice(0,1).toUpperCase()}
-                                    </Avatar>
-                                    <div>
-                                        <div style={{ fontSize: 20, fontWeight: 900, color: "#0d1b2a" }}>{fullName || "Paciente"}</div>
-                                        <div style={{ color: "#64748b" }}>Código: <strong style={{ color: "#0d1b2a" }}>{patient?.patient_code ?? "—"}</strong></div>
-                                        <div style={{ color: "#64748b", marginTop: 2 }}>Sexo: <strong style={{ color: "#0d1b2a" }}>{patient?.sex ?? "—"}</strong></div>
-                                        <div style={{ color: "#64748b", marginTop: 2 }}>DOB: <strong style={{ color: "#0d1b2a" }}>{patient?.dob ?? "—"}</strong></div>
-                                        <div style={{ color: "#64748b", marginTop: 2 }}>Contacto: <strong style={{ color: "#0d1b2a" }}>{patient?.phone ?? patient?.email ?? "—"}</strong></div>
-                                    </div>
-                                </div>
+                            {!loading && patient && (
+                                <Descriptions bordered column={2} size="middle">
+                                    <Descriptions.Item label="Nombre" span={2}>{fullName || "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Código">{patient.patient_code ?? "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Sexo">{patient.sex ?? "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="DOB">{patient.dob ?? "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Contacto">{patient.phone ?? patient.email ?? "—"}</Descriptions.Item>
+                                </Descriptions>
                             )}
                         </Card>
 
-                        <Card title="Órdenes del paciente" loading={loading} style={{ borderRadius: 12 }}>
+                        <Card
+                            title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Órdenes del paciente</span>}
+                            loading={loading}
+                            style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                            extra={!loading && patient ? (
+                                <AntButton type="primary" onClick={() => navigate(`/cases/register?patientId=${patient.id}`)}>
+                                    Registrar Caso
+                                </AntButton>
+                            ) : null}
+                        >
                             {!loading && (
                                 <Table
                                     dataSource={ordersResp?.orders ?? []}

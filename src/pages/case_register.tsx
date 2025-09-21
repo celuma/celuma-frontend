@@ -13,6 +13,7 @@ import SelectField from "../components/ui/select_field";
 import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -96,8 +97,8 @@ type UnifiedResponse = {
 };
 
 const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)", padding: 24 }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>{title}</h2>
+    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 24 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
         {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
         <div style={{ display: "grid", gap: 12 }}>{children}</div>
     </div>
@@ -209,7 +210,7 @@ export default function CaseRegister() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .cr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
                   .cr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
@@ -219,7 +220,7 @@ export default function CaseRegister() {
                   }
                   .sample-card { border: 1px dashed #c8e6e5; border-radius: 10px; padding: 12px; background: #fbffff; }
                 `}</style>
-                <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gap: 16 }}>
+                <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card title="Registrar Caso" description="Cree una orden y una o más muestras en una sola operación.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (

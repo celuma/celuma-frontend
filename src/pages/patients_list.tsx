@@ -5,6 +5,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -82,7 +83,7 @@ export default function PatientsList() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .pl-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.06); padding: 16px; }
                   .pl-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -91,10 +92,10 @@ export default function PatientsList() {
                   .ant-table-wrapper .ant-table { border-radius: 10px; overflow: hidden; }
                 `}</style>
 
-                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
-                    <div className="pl-card">
+                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <div className="pl-card" style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
                         <div className="pl-toolbar">
-                            <h2 className="pl-title">Pacientes</h2>
+                            <h2 className="pl-title" style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Pacientes</h2>
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                 <Input.Search
                                     className="pl-search"

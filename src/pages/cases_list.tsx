@@ -5,6 +5,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -81,7 +82,7 @@ export default function CasesList() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .cl-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.06); padding: 16px; }
                   .cl-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -89,10 +90,10 @@ export default function CasesList() {
                   .cl-search { max-width: 360px; }
                 `}</style>
 
-                <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 16 }}>
-                    <div className="cl-card">
+                <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <div className="cl-card" style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
                         <div className="cl-toolbar">
-                            <h2 className="cl-title">Casos</h2>
+                            <h2 className="cl-title" style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Casos</h2>
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                 <Input.Search
                                     className="cl-search"

@@ -6,6 +6,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -123,9 +124,13 @@ export default function SampleDetailPage() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
-                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
-                    <Card title="Perfil de Muestra" loading={loading} style={{ borderRadius: 12 }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <Card
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Detalle de Muestra</span>}
+                        loading={loading}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                    >
                         {detail && (
                             <Descriptions bordered column={2} size="middle">
                                 <Descriptions.Item label="Código">{detail.sample_code}</Descriptions.Item>
@@ -146,7 +151,11 @@ export default function SampleDetailPage() {
                         <ErrorText>{error}</ErrorText>
                     </Card>
 
-                    <Card title="Imágenes" extra={<Upload {...uploadProps}><AntButton loading={uploading} icon={<UploadOutlined />}>Subir imagen</AntButton></Upload>} style={{ borderRadius: 12 }}>
+                    <Card
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Imágenes</span>}
+                        extra={<Upload {...uploadProps}><AntButton loading={uploading} icon={<UploadOutlined />}>Subir imagen</AntButton></Upload>}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                    >
                         {images && images.images.length > 0 ? (
                             <List
                                 grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4 }}

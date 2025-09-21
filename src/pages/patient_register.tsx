@@ -13,6 +13,7 @@ import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
+import { tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -87,8 +88,8 @@ type CreatePatientResponse = {
 };
 
 const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)", padding: 24 }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>{title}</h2>
+    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 24 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
         <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>Complete los datos para registrar un paciente.</div>
         <div style={{ display: "grid", gap: 12 }}>{children}</div>
     </div>
@@ -169,7 +170,7 @@ export default function PatientRegister() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .pr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
                   .pr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
@@ -178,7 +179,7 @@ export default function PatientRegister() {
                     .pr-grid-2, .pr-grid-3, .pr-grid-4 { grid-template-columns: 1fr; }
                   }
                 `}</style>
-                <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
+                <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card title="Registrar Paciente">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (

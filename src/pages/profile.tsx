@@ -12,6 +12,7 @@ import PasswordField from "../components/ui/password_field";
 import Button from "../components/ui/button";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
+import { tokens } from "../components/design/tokens";
 
 // Types for the API responses and form data
 interface UserProfile {
@@ -280,7 +281,7 @@ const Profile: React.FC = () => {
                 logoSrc={logo}
             />
 
-            <Layout.Content style={{ padding: 24, background: "#f6f8fa" }}>
+            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                     input:-webkit-autofill,
                     input:-webkit-autofill:hover,
@@ -291,7 +292,7 @@ const Profile: React.FC = () => {
                     }
                 `}</style>
                 <div style={{ maxWidth: 1040, margin: "0 auto" }}>
-                    <h1 style={{ marginBottom: 24, color: "#0d1b2a" }}>Mi Perfil</h1>
+                    <h1 style={{ marginBottom: 24, color: "#0d1b2a", fontFamily: tokens.titleFont, fontWeight: 800, fontSize: 24 }}>Mi Perfil</h1>
 
                     {profileLoading ? (
                         <Card loading style={{ marginBottom: 24 }}>
@@ -336,7 +337,7 @@ const Profile: React.FC = () => {
                             <div className="profile-grid">
                                 {/* Columna izquierda: resumen */}
                                 <div className="profile-summary-card">
-                                    <Card style={{ marginBottom: 24 }}>
+                                    <Card style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
                                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                                             <Avatar size={64} style={{ background: "#0f8b8d", fontWeight: 800 }}>
                                                 {profileData?.full_name?.[0]?.toUpperCase() || "U"}
@@ -359,8 +360,8 @@ const Profile: React.FC = () => {
                                 <div className="profile-forms-section">
                                     {/* Información del perfil */}
                                     <Card 
-                                        title="Información del Perfil" 
-                                        style={{ marginBottom: 24 }}
+                                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Información del Perfil</span>} 
+                                        style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                                         extra={
                                             profileData && (
                                                 <span style={{ color: "#6b7280", fontSize: 14 }}>
@@ -446,7 +447,7 @@ const Profile: React.FC = () => {
                                     </Card>
 
                                     {/* Cambiar contraseña */}
-                                    <Card title="Cambiar Contraseña">
+                                    <Card title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Cambiar Contraseña</span>} style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
                                         <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
                                             <div style={{ display: "grid", gap: 16 }}>
                                                 <div>
