@@ -168,12 +168,17 @@ const styles: Record<string, React.CSSProperties> = {
         paddingLeft: 0,
         paddingRight: 0,
         paddingTop: 0,
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        overflow: "hidden",
     },
     inner: {
         height: "100%",
         display: "flex",
         flexDirection: "column",
         fontFamily: "Nanito, sans-serif",
+        overflow: "hidden",
     },
     headerContainer: {
         display: "flex",
@@ -239,6 +244,8 @@ const styles: Record<string, React.CSSProperties> = {
         padding: "8px 16px 0 16px",
         margin: 0,
         color: "#fff",
+        overflowY: "auto",
+        minHeight: 0,
     },
     bottomWrapper: {
         marginTop: "auto",
