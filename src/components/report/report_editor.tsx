@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Row, Col, Input, DatePicker, Form, message, Select, Divider, Button } from "antd";
+import { Form, message, Divider, Button } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
@@ -10,6 +10,12 @@ import logo from "../../images/report_logo.png";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
+import SelectField from "../ui/select_field";
+import TextField from "../ui/text_field";
+import DateField from "../ui/date_field";
+import { tokens } from "../design/tokens";
+import { useLocation, useParams } from "react-router-dom";
+import { getReport } from "../../services/report_service";
 
 /* Flags by report type */
 const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
@@ -91,9 +97,82 @@ const MARGIN_R_MM = 18;
 const HEADER_H_MM = 28;
 const FOOTER_H_MM = 20;
 
-const SAMPLE_ID = "dc225711-480a-4bd7-9531-c566d2a6f197";
+// API helpers and session
+function getApiBase(): string {
+    return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
+}
+
+function getSessionContext() {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
+    const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
+    const userId = localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "";
+    return { token, tenantId, branchId, userId };
+}
+
+async function getJSON<TRes>(path: string): Promise<TRes> {
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    const headers: Record<string, string> = { accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+    if (!res.ok) {
+        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        throw new Error(message);
+    }
+    return parsed as TRes;
+}
+
+type OrdersListResponse = {
+    orders: Array<{
+        id: string;
+        order_code: string;
+        status: string;
+        branch?: { id: string; name?: string; code?: string | null };
+    }>;
+};
+
+type OrderFullResponse = {
+    order: {
+        id: string;
+        order_code: string;
+        status: string;
+        patient_id: string;
+        tenant_id: string;
+        branch_id: string;
+        requested_by?: string | null;
+        notes?: string | null;
+    };
+    patient: {
+        id: string;
+        patient_code: string;
+        first_name?: string;
+        last_name?: string;
+        dob?: string | null;
+        sex?: string | null;
+    };
+    samples: Array<{
+        id: string;
+        sample_code: string;
+        type: string;
+        state: string;
+        order_id: string;
+        tenant_id: string;
+        branch_id: string;
+    }>;
+};
 
 const ReportEditor: React.FC = () => {
+    // Routing params
+    const { reportId } = useParams();
+    const { search } = useLocation();
+    const prefilledOrderId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("orderId") || "";
+    }, [search]);
+
     // Selected report type
     const [tipo, setTipo] = useState<ReportType>("Histopatologia");
     // Base fields
@@ -103,6 +182,14 @@ const ReportEditor: React.FC = () => {
     const [fechaRecepcion, setFechaRecepcion] = useState<Dayjs | null>(null);
     const [especimen, setEspecimen] = useState("");
     const [diagnosticoEnvio, setDiagnosticoEnvio] = useState("");
+    // Context and selections
+    const session = useMemo(() => getSessionContext(), []);
+    const [selectedBranchId, setSelectedBranchId] = useState<string>(session.branchId || "");
+    const [selectedOrderId, setSelectedOrderId] = useState<string>("");
+    const [selectedSampleId, setSelectedSampleId] = useState<string>("");
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [orders, setOrders] = useState<Array<{ id: string; label: string; branch_id?: string }>>([]);
+    const [orderFull, setOrderFull] = useState<OrderFullResponse | null>(null);
     // Sections (HTML strings for Quill)
     const [descripcionMacroscopia, setDescMacro] = useState<string | null>("<p><br/></p>");
     const [descripcionMicroscopia, setDescMicro] = useState<string | null>("<p><br/></p>");
@@ -208,33 +295,127 @@ const ReportEditor: React.FC = () => {
         doc.save("reporte.pdf");
     };
 
-    // Load autosaved draft on mount
+    // Load report by id or autosaved draft
     useEffect(() => {
-        const envelope = loadAutoSave<ReportEnvelope>("reportEnvelopeDraft");
-        if (envelope) {
-            setEnvelopeExistente(envelope);
-            setTipo(envelope.report.tipo);
-            setPaciente(envelope.report.base.paciente);
-            setExamen(envelope.report.base.examen);
-            setFolio(envelope.report.base.folio);
-            setFechaRecepcion(envelope.report.base.fechaRecepcion ? dayjs(envelope.report.base.fechaRecepcion) : null);
-            setEspecimen(envelope.report.base.especimen);
-            setDiagnosticoEnvio(envelope.report.base.diagnosticoEnvio ?? "");
-            setDescMacro(envelope.report.secciones.descripcionMacroscopia ?? "<p><br/></p>");
-            setDescMicro(envelope.report.secciones.descripcionMicroscopia ?? "<p><br/></p>");
-            setDescCito(envelope.report.secciones.descripcionCitomorfologica ?? "<p><br/></p>");
-            setInterpretacion(envelope.report.secciones.interpretacion ?? "<p><br/></p>");
-            setDiagnostico(envelope.report.secciones.diagnostico ?? "<p><br/></p>");
-            setComentario(envelope.report.secciones.comentario ?? "<p><br/></p>");
-            setIF(envelope.report.secciones.inmunofluorescenciaHTML ?? "<p><br/></p>");
-            setInmunotinciones(envelope.report.secciones.inmunotincionesHTML ?? "<p><br/></p>");
-            setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
-            setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
-            setEdad(envelope.report.secciones.edad ?? "");
-            setReportImages(envelope.report.images ?? []);
-        }
-        setIsLoaded(true);
+        (async () => {
+            // Report by param takes precedence
+            if (reportId) {
+                try {
+                    const envelope = await getReport(reportId);
+                    setEnvelopeExistente(envelope);
+                    setTipo(envelope.report.tipo);
+                    setPaciente(envelope.report.base.paciente);
+                    setExamen(envelope.report.base.examen);
+                    setFolio(envelope.report.base.folio);
+                    setFechaRecepcion(envelope.report.base.fechaRecepcion ? dayjs(envelope.report.base.fechaRecepcion) : null);
+                    setEspecimen(envelope.report.base.especimen);
+                    setDiagnosticoEnvio(envelope.report.base.diagnosticoEnvio ?? "");
+                    setSelectedBranchId(envelope.branch_id || session.branchId || "");
+                    setSelectedOrderId(envelope.order_id || "");
+                    setDescMacro(envelope.report.secciones.descripcionMacroscopia ?? "<p><br/></p>");
+                    setDescMicro(envelope.report.secciones.descripcionMicroscopia ?? "<p><br/></p>");
+                    setDescCito(envelope.report.secciones.descripcionCitomorfologica ?? "<p><br/></p>");
+                    setInterpretacion(envelope.report.secciones.interpretacion ?? "<p><br/></p>");
+                    setDiagnostico(envelope.report.secciones.diagnostico ?? "<p><br/></p>");
+                    setComentario(envelope.report.secciones.comentario ?? "<p><br/></p>");
+                    setIF(envelope.report.secciones.inmunofluorescenciaHTML ?? "<p><br/></p>");
+                    setInmunotinciones(envelope.report.secciones.inmunotincionesHTML ?? "<p><br/></p>");
+                    setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
+                    setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
+                    setEdad(envelope.report.secciones.edad ?? "");
+                    setReportImages((envelope.report.images ?? []).map((img) => ({ id: img.id, url: img.url, caption: img.caption })));
+                } catch (e) {
+                    message.error(e instanceof Error ? e.message : "No se pudo cargar el reporte");
+                } finally {
+                    setIsLoaded(true);
+                }
+                return;
+            }
+
+            // No report id: use autosave and prefilled order if present
+            const envelope = loadAutoSave<ReportEnvelope>("reportEnvelopeDraft");
+            if (envelope) {
+                setEnvelopeExistente(envelope);
+                setTipo(envelope.report.tipo);
+                setPaciente(envelope.report.base.paciente);
+                setExamen(envelope.report.base.examen);
+                setFolio(envelope.report.base.folio);
+                setFechaRecepcion(envelope.report.base.fechaRecepcion ? dayjs(envelope.report.base.fechaRecepcion) : null);
+                setEspecimen(envelope.report.base.especimen);
+                setDiagnosticoEnvio(envelope.report.base.diagnosticoEnvio ?? "");
+                setSelectedBranchId(envelope.branch_id || session.branchId || "");
+                setSelectedOrderId(envelope.order_id || prefilledOrderId || "");
+                setDescMacro(envelope.report.secciones.descripcionMacroscopia ?? "<p><br/></p>");
+                setDescMicro(envelope.report.secciones.descripcionMicroscopia ?? "<p><br/></p>");
+                setDescCito(envelope.report.secciones.descripcionCitomorfologica ?? "<p><br/></p>");
+                setInterpretacion(envelope.report.secciones.interpretacion ?? "<p><br/></p>");
+                setDiagnostico(envelope.report.secciones.diagnostico ?? "<p><br/></p>");
+                setComentario(envelope.report.secciones.comentario ?? "<p><br/></p>");
+                setIF(envelope.report.secciones.inmunofluorescenciaHTML ?? "<p><br/></p>");
+                setInmunotinciones(envelope.report.secciones.inmunotincionesHTML ?? "<p><br/></p>");
+                setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
+                setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
+                setEdad(envelope.report.secciones.edad ?? "");
+                setReportImages(envelope.report.images ?? []);
+            } else if (prefilledOrderId) {
+                setSelectedOrderId(prefilledOrderId);
+            }
+            setIsLoaded(true);
+        })();
+    }, [reportId, prefilledOrderId, session.branchId]);
+
+    // Load branches by tenant
+    useEffect(() => {
+        (async () => {
+            if (!session.tenantId) return;
+            try {
+                const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
+                setBranches(data || []);
+            } catch (e) {
+                // ignore softly
+            }
+        })();
+    }, [session.tenantId]);
+
+    // Load orders
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
+                const mapped = (data.orders || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}`, branch_id: o.branch?.id }));
+                setOrders(mapped);
+            } catch (e) {
+                // ignore softly
+            }
+        })();
     }, []);
+
+    // When order selected, fetch full and populate
+    useEffect(() => {
+        (async () => {
+            if (!selectedOrderId) {
+                setOrderFull(null);
+                setSelectedSampleId("");
+                return;
+            }
+            try {
+                const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${selectedOrderId}/full`);
+                setOrderFull(full);
+                const fullName = `${full.patient.first_name ?? ""} ${full.patient.last_name ?? ""}`.trim();
+                setPaciente(fullName || full.patient.patient_code);
+                setFolio(full.order.order_code || "");
+                if (!selectedBranchId) setSelectedBranchId(full.order.branch_id);
+                // Default to first sample if any
+                if (full.samples?.length > 0) {
+                    setSelectedSampleId(full.samples[0].id);
+                } else {
+                    setSelectedSampleId("");
+                }
+            } catch (e) {
+                message.error(e instanceof Error ? e.message : "No se pudo cargar la orden seleccionada");
+            }
+        })();
+    }, [selectedOrderId]);
 
     // Quill toolbar config
     const quillModules = useMemo(
@@ -256,14 +437,14 @@ const ReportEditor: React.FC = () => {
     const buildEnvelope = (existing?: Partial<ReportEnvelope>): ReportEnvelope => {
         return {
             id: existing?.id ?? "",
-            tenant_id: "2de8ffdf-025f-4f2a-839d-eac3473cfaa6",
-            branch_id: "8cd740ad-1be3-4dd0-bcea-93d5e84786d4",
-            order_id: "f4dca87f-ca63-4bb2-8f79-77f7f1d8def6",
+            tenant_id: orderFull?.order.tenant_id || session.tenantId || "",
+            branch_id: selectedBranchId || orderFull?.order.branch_id || "",
+            order_id: selectedOrderId || existing?.order_id || "",
             version_no: existing?.version_no ?? 1,
             status: existing?.status ?? "DRAFT",
             title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
             diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
-            created_by: "b388feca-84b5-48c6-a6da-963ba95352ee",
+            created_by: session.userId || "",
             published_at: null,
             report: {
                 tipo,
@@ -480,189 +661,182 @@ const ReportEditor: React.FC = () => {
         <>
             <style> {letterStyles} </style>
 
-            <Row gutter={24} style={{ padding: 16 }}>
-                {/* Left column: editor */}
-                <Col span={12}>
-                    <h2>Información del reporte</h2>
+            <style>{`
+              .re-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+              .re-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
+              .re-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+              @media (max-width: 1024px) { .re-grid-2, .re-grid-3, .re-grid-4 { grid-template-columns: 1fr; } }
+            `}</style>
 
-                    <Form.Item label="Tipo de reporte">
-                        <Select<ReportType>
-                            value={tipo}
-                            onChange={setTipo}
-                            options={[
-                                { value: "Histopatologia", label: "Histopatología / Biopsia" },
-                                { value: "Histoquimica", label: "Histoquímica" },
-                                { value: "Citologia_mamaria", label: "Citología mamaria" },
-                                { value: "Citologia_urinaria", label: "Citología urinaria" },
-                                { value: "Quirurgico", label: "Quirúrgico" },
-                                { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
-                            ]}
-                        />
-                    </Form.Item>
-
-                    <Form layout="vertical">
-                        <Form.Item label="Paciente">
-                            <Input value={paciente} onChange={(e) => setPaciente(e.target.value)} />
-                        </Form.Item>
-
-                        <Form.Item label="Folio">
-                            <Input value={folio} onChange={(e) => setFolio(e.target.value)} />
-                        </Form.Item>
-
-                        <Form.Item label="Examen">
-                            <Input value={examen} onChange={(e) => setExamen(e.target.value)} />
-                        </Form.Item>
-
-                        <Form.Item label="Fecha de recepción">
-                            <DatePicker
-                                value={fechaRecepcion}
-                                onChange={setFechaRecepcion}
-                                format="YYYY-MM-DD"
-                                style={{ width: "100%" }}
-                            />
-                        </Form.Item>
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
-                            <Form.Item label="Edad">
-                                <Input value={edad} onChange={(e) => setEdad(e.target.value)} />
+            <div style={{ display: "grid", gap: tokens.gap }}>
+                <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+                    <div style={{ padding: 24 }}>
+                        <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Configuración del reporte</h2>
+                    </div>
+                    <div style={{ height: 1, background: "#e5e7eb" }} />
+                    <div style={{ padding: 24, display: "grid", gap: 12 }}>
+                        <div className="re-grid-3">
+                            <Form.Item label="Sucursal">
+                                <SelectField
+                                    value={selectedBranchId || undefined}
+                                    onChange={(v) => setSelectedBranchId(v || "")}
+                                    options={branches.map((b) => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
+                                    placeholder="Seleccione la sucursal"
+                                    showSearch
+                                />
                             </Form.Item>
-                        )}
-
-                        <Form.Item label="Espécimen recibido">
-                            <Input value={especimen} onChange={(e) => setEspecimen(e.target.value)} />
-                        </Form.Item>
-
-                        <Form.Item label="Diagnóstico de envío">
-                            <Input value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} />
-                        </Form.Item>
-
+                            <Form.Item label="Orden">
+                                <SelectField
+                                    value={selectedOrderId || undefined}
+                                    onChange={(v) => setSelectedOrderId(v || "")}
+                                    options={orders.map((o) => ({ value: o.id, label: o.label }))}
+                                    placeholder="Seleccione una orden"
+                                    showSearch
+                                />
+                            </Form.Item>
+                            <Form.Item label="Muestra">
+                                <SelectField
+                                    value={selectedSampleId || undefined}
+                                    onChange={(v) => setSelectedSampleId(v || "")}
+                                    options={(orderFull?.samples || []).map((s) => ({ value: s.id, label: `${s.sample_code} · ${s.type}` }))}
+                                    placeholder={selectedOrderId ? "Seleccione una muestra" : "Seleccione una orden primero"}
+                                    disabled={!selectedOrderId}
+                                    showSearch
+                                />
+                            </Form.Item>
+                        </div>
+                        <div className="re-grid-3">
+                            <Form.Item label="Tipo de reporte">
+                                <SelectField
+                                    value={tipo}
+                                    onChange={(v) => setTipo((v as ReportType) || "Histopatologia")}
+                                    options={[
+                                        { value: "Histopatologia", label: "Histopatología / Biopsia" },
+                                        { value: "Histoquimica", label: "Histoquímica" },
+                                        { value: "Citologia_mamaria", label: "Citología mamaria" },
+                                        { value: "Citologia_urinaria", label: "Citología urinaria" },
+                                        { value: "Quirurgico", label: "Quirúrgico" },
+                                        { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
+                                    ]}
+                                />
+                            </Form.Item>
+                            <Form.Item label="Paciente">
+                                <TextField value={paciente} onChange={(e) => setPaciente(e.target.value)} placeholder="Nombre del paciente" />
+                            </Form.Item>
+                            <Form.Item label="Folio">
+                                <TextField value={folio} onChange={(e) => setFolio(e.target.value)} placeholder="Folio / código" />
+                            </Form.Item>
+                        </div>
+                        <div className="re-grid-3">
+                            <Form.Item label="Examen">
+                                <TextField value={examen} onChange={(e) => setExamen(e.target.value)} placeholder="Nombre del examen" />
+                            </Form.Item>
+                            <Form.Item label="Fecha de recepción">
+                                <DateField
+                                    value={fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : ""}
+                                    onChange={(v) => setFechaRecepcion(v ? dayjs(v) : null)}
+                                    placeholder="Fecha (AAAA-MM-DD)"
+                                />
+                            </Form.Item>
+                            {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
+                                <Form.Item label="Edad">
+                                    <TextField value={edad} onChange={(e) => setEdad(e.target.value)} placeholder="Edad" />
+                                </Form.Item>
+                            )}
+                        </div>
+                        <div className="re-grid-2">
+                            <Form.Item label="Espécimen recibido">
+                                <TextField value={especimen} onChange={(e) => setEspecimen(e.target.value)} placeholder="Descripción del espécimen" />
+                            </Form.Item>
+                            <Form.Item label="Diagnóstico de envío">
+                                <TextField value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} placeholder="Diagnóstico de envío" />
+                            </Form.Item>
+                        </div>
                         <Form.Item label="Imágenes del reporte">
-                            <ReportImages sampleId={SAMPLE_ID} value={reportImages} onChange={setReportImages} />
+                            <ReportImages sampleId={selectedSampleId} value={reportImages} onChange={setReportImages} disabled={!selectedSampleId} />
                         </Form.Item>
+                    </div>
+                </div>
 
-                        {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
-                            <Form.Item label="Descripción macroscópica">
-                                <ReactQuill
-                                    ref={quillRef}
-                                    theme="snow"
-                                    value={descripcionMacroscopia || ""}
-                                    onChange={(html) => setDescMacro(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: tokens.gap }}>
+                    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+                        <div style={{ padding: 24 }}>
+                            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
+                        </div>
+                        <div style={{ height: 1, background: "#e5e7eb" }} />
+                        <div style={{ padding: 24 }}>
+                            <Form layout="vertical">
+                                {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
+                                    <Form.Item label="Descripción macroscópica">
+                                        <ReactQuill ref={quillRef} theme="snow" value={descripcionMacroscopia || ""} onChange={(html) => setDescMacro(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
+                                    <Form.Item label="Descripción microscópica">
+                                        <ReactQuill theme="snow" value={descripcionMicroscopia || ""} onChange={(html) => setDescMicro(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
+                                    <Form.Item label="Descripción citomorfológica">
+                                        <ReactQuill theme="snow" value={descripcionCitomorfologica || ""} onChange={(html) => setDescCito(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
+                                    <Form.Item label="Interpretación / Conclusiones">
+                                        <ReactQuill theme="snow" value={interpretacion || ""} onChange={(html) => setInterpretacion(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
+                                    <Form.Item label="Diagnóstico">
+                                        <ReactQuill theme="snow" value={diagnostico || ""} onChange={(html) => setDiagnostico(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
+                                    <Form.Item label="Comentario / Notas">
+                                        <ReactQuill theme="snow" value={comentario || ""} onChange={(html) => setComentario(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirCU && (
+                                    <Form.Item label="Citología urinaria">
+                                        <ReactQuill theme="snow" value={citologiaUrinariaHTML || ""} onChange={(html) => setCU(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirIF && (
+                                    <Form.Item label="Inmunofluorescencia (panel)">
+                                        <ReactQuill theme="snow" value={inmunofluorescenciaHTML || ""} onChange={(html) => setIF(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
+                                    <Form.Item label="Inmunotinciones">
+                                        <ReactQuill theme="snow" value={inmunotincionesHTML || ""} onChange={(html) => setInmunotinciones(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
+                                {FLAGS_BY_TYPE[tipo]?.incluirME && (
+                                    <Form.Item label="Microscopía electrónica (descripción)">
+                                        <ReactQuill theme="snow" value={microscopioElectronicoHTML || ""} onChange={(html) => setME(html)} modules={quillModules} />
+                                    </Form.Item>
+                                )}
 
-                        {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
-                            <Form.Item label="Descripción microscópica">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={descripcionMicroscopia || ""}
-                                    onChange={(html) => setDescMicro(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
+                                <Divider />
+                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                                    <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
+                                    <Button onClick={handleExportPDF}>Exportar a PDF</Button>
+                                </div>
+                            </Form>
+                        </div>
+                    </div>
 
-                        {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
-                            <Form.Item label="Descripción citomorfológica">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={descripcionCitomorfologica || ""}
-                                    onChange={(html) => setDescCito(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
-                            <Form.Item label="Interpretación / Conclusiones">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={interpretacion || ""}
-                                    onChange={(html) => setInterpretacion(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
-                            <Form.Item label="Diagnóstico">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={diagnostico || ""}
-                                    onChange={(html) => setDiagnostico(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
-                            <Form.Item label="Comentario / Notas">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={comentario || ""}
-                                    onChange={(html) => setComentario(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirCU && (
-                            <Form.Item label="Citología urinaria">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={citologiaUrinariaHTML || ""}
-                                    onChange={(html) => setCU(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirIF && (
-                            <Form.Item label="Inmunofluorescencia (panel)">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={inmunofluorescenciaHTML || ""}
-                                    onChange={(html) => setIF(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
-                            <Form.Item label="Inmunotinciones">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={inmunotincionesHTML || ""}
-                                    onChange={(html) => setInmunotinciones(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        {FLAGS_BY_TYPE[tipo]?.incluirME && (
-                            <Form.Item label="Microscopía electrónica (descripción)">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={microscopioElectronicoHTML || ""}
-                                    onChange={(html) => setME(html)}
-                                    modules={quillModules}
-                                />
-                            </Form.Item>
-                        )}
-
-                        <Divider />
-                        <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
-                        <Button onClick={handleExportPDF}>Exportar a PDF</Button>
-                    </Form>
-                </Col>
-
-                {/* Right column: ONLY paginated preview */}
-                <Col span={12}>
-                    <h2>Vista previa del reporte</h2>
-                    <div ref={previewHostRef} />
-                </Col>
-            </Row>
+                    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+                        <div style={{ padding: 24 }}>
+                            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Vista previa</h2>
+                        </div>
+                        <div style={{ height: 1, background: "#e5e7eb" }} />
+                        <div style={{ padding: 24 }}>
+                            <div ref={previewHostRef} />
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Hidden source content: used to paginate and to export the PDF */}
             <div

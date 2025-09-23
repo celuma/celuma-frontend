@@ -33,6 +33,19 @@ export async function saveReportVersion(report: ReportEnvelope): Promise<void> {
     }
 }
 
+// Get report by id
+export async function getReport(reportId: string): Promise<ReportEnvelope> {
+    const res = await fetch(`${base}/v1/reports/${reportId}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener reporte: ${res.status} - ${errText}`);
+    }
+    return (await res.json()) as ReportEnvelope;
+}
+
 // Upload image to report
 export interface UploadImageResponse {
     id: string;

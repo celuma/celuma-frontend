@@ -36,6 +36,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/cases/register" element={<CaseRegister />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/report" element={<Reports />} />
+            <Route path="/reports/:reportId" element={<Reports />} />
         </Routes>
     </BrowserRouter>
 );
