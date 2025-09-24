@@ -38,8 +38,6 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
     const [viewModal, setViewModal] = useState<{ open: boolean; image: SampleImageItem | null }>({ open: false, image: null });
     const abortRef = useRef<AbortController | null>(null);
 
-    const UploadCore = dragAndDrop ? Upload.Dragger : Upload;
-
     const selectedIdsSet = useMemo(() => new Set((selectedIds || []).filter((v): v is string => typeof v === "string" && v.length > 0)), [selectedIds]);
 
     const load = useMemo(() => async () => {
@@ -125,31 +123,22 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
 
     const isSelected = (id: string) => selectedIdsSet.has(id);
 
+    const uploadCommonProps: UploadProps = {
+        name: "file",
+        multiple: true,
+        fileList,
+        showUploadList: false,
+        accept: ACCEPT_EXTENSIONS,
+        beforeUpload,
+        customRequest,
+        action: undefined,
+        disabled: !sampleId || loading,
+    };
+
     return (
         <div>
             <Space direction="vertical" style={{ width: "100%" }} size="small">
                 <Typography.Text strong>Galería de la muestra</Typography.Text>
-
-                <UploadCore
-                    name="file"
-                    multiple
-                    fileList={fileList}
-                    showUploadList={false}
-                    accept={ACCEPT_EXTENSIONS}
-                    beforeUpload={beforeUpload}
-                    customRequest={customRequest}
-                    action={undefined}
-                    disabled={!sampleId || loading}
-                >
-                    {dragAndDrop ? (
-                        <div>
-                            <PlusOutlined />
-                            <div style={{ marginTop: 8 }}>Subir</div>
-                        </div>
-                    ) : (
-                        <Button icon={<UploadOutlined />} disabled={!sampleId || loading}>Seleccionar imágenes</Button>
-                    )}
-                </UploadCore>
 
                 <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
                     Marca las imágenes que deseas anexar al reporte. Subir aquí guarda en la muestra.
@@ -162,6 +151,49 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
                         gap: 12,
                     }}
                 >
+                    {dragAndDrop ? (
+                        <Upload.Dragger
+                            {...uploadCommonProps}
+                            style={{
+                                borderRadius: 6,
+                                border: "1px dashed #d9d9d9",
+                                background: "#fafafa",
+                                padding: 12,
+                                height: 190,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexDirection: "column",
+                                color: "#8c8c8c",
+                            }}
+                        >
+                            <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                            <Typography.Text strong>Agregar imágenes</Typography.Text>
+                            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center" }}>
+                                Haz clic o arrastra archivos para subirlos
+                            </Typography.Paragraph>
+                        </Upload.Dragger>
+                    ) : (
+                        <div
+                            style={{
+                                borderRadius: 6,
+                                border: "1px dashed #d9d9d9",
+                                background: "#fafafa",
+                                padding: 12,
+                                height: 190,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                        >
+                            <Upload {...uploadCommonProps}>
+                                <Button icon={<UploadOutlined />} disabled={!sampleId || loading}>
+                                    Seleccionar imágenes
+                                </Button>
+                            </Upload>
+                        </div>
+                    )}
+
                     {images.map((img, idx) => (
                         <div
                             key={img.id ?? idx}
