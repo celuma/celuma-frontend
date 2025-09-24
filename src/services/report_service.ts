@@ -111,22 +111,62 @@ export async function fetchReportImages(
         throw new Error(`Error al obtener imágenes: ${res.status} - ${errText}`);
     }
 
-    const payload = await res.json();
-    const images = Array.isArray(payload?.images) ? payload.images : Array.isArray(payload) ? payload : [];
+    const payload = (await res.json()) as unknown;
 
-    return images
-        .map((item: any) => {
-            const urls = item?.urls ?? {};
-            const processed = urls.processed ?? item?.url ?? urls.thumbnail ?? "";
-            const thumbnail = urls.thumbnail ?? urls.processed ?? processed;
-            const id = String(item?.id ?? item?.sample_image_id ?? "");
-            if (!id || !processed) return null;
-            return {
-                id,
-                url: processed,
-                thumbnailUrl: thumbnail,
-                caption: item?.label ?? item?.caption ?? "",
-            };
-        })
-        .filter((img: any): img is { id: string; url: string; thumbnailUrl?: string; caption?: string } => Boolean(img));
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+        typeof value === "object" && value !== null;
+
+    const readString = (value: unknown): string | undefined => {
+        if (typeof value === "string") return value;
+        if (typeof value === "number" || typeof value === "bigint") return String(value);
+        return undefined;
+    };
+
+    const extractRawList = (value: unknown): Record<string, unknown>[] => {
+        if (Array.isArray(value)) {
+            return value.filter(isRecord);
+        }
+        if (isRecord(value) && Array.isArray(value.images)) {
+            return value.images.filter(isRecord);
+        }
+        return [];
+    };
+
+    const normalize = (record: Record<string, unknown>) => {
+        const urlsCandidate = record["urls"];
+        const urlsRecord = isRecord(urlsCandidate) ? urlsCandidate : undefined;
+
+        const processed =
+            (urlsRecord && readString(urlsRecord["processed"])) ??
+            readString(record["url"]) ??
+            (urlsRecord && readString(urlsRecord["thumbnail"])) ??
+            undefined;
+        if (!processed) return null;
+
+        const id =
+            readString(record["id"]) ??
+            readString(record["sample_image_id"]);
+        if (!id) return null;
+
+        const thumbnail =
+            (urlsRecord && readString(urlsRecord["thumbnail"])) ??
+            (urlsRecord && readString(urlsRecord["processed"])) ??
+            processed;
+
+        const caption =
+            readString(record["label"]) ??
+            readString(record["caption"]) ??
+            "";
+
+        return {
+            id,
+            url: processed,
+            thumbnailUrl: thumbnail,
+            caption,
+        };
+    };
+
+    return extractRawList(payload)
+        .map(normalize)
+        .filter((img): img is { id: string; url: string; thumbnailUrl?: string; caption?: string } => Boolean(img));
 }

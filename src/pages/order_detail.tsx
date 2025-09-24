@@ -7,6 +7,7 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens } from "../components/design/tokens";
 import { saveReport } from "../services/report_service";
+import type { ReportEnvelope, ReportFlags } from "../models/report";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -81,7 +82,7 @@ export default function OrderDetail() {
     const [reportId, setReportId] = useState<string | null>(null);
 
     // Default flags for initial report when creating
-    const DEFAULT_FLAGS = {
+    const DEFAULT_FLAGS: ReportFlags = {
         incluirMacroscopia: true,
         incluirMicroscopia: true,
         incluirCitomorfologia: true,
@@ -93,7 +94,7 @@ export default function OrderDetail() {
         incluirEdad: false,
         incluirCU: false,
         incluirInmunotinciones: false,
-    } as const;
+    };
 
     useEffect(() => {
         if (!orderId) return;
@@ -126,7 +127,7 @@ export default function OrderDetail() {
         if (!data) return;
         try {
             const userId = localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "";
-            const envelope = {
+            const envelope: ReportEnvelope = {
                 id: "",
                 tenant_id: data.order.tenant_id,
                 branch_id: data.order.branch_id,
@@ -163,14 +164,14 @@ export default function OrderDetail() {
                     flags: { ...DEFAULT_FLAGS },
                     images: [],
                 },
-            } as const;
-            const created = await saveReport(envelope as any);
+            };
+            const created = await saveReport(envelope);
             message.success("Reporte creado");
             setReportId(created.id);
             // Navigate to the report
             navigate(`/reports/${created.id}`);
-        } catch (e) {
-            message.error(e instanceof Error ? e.message : "No se pudo crear el reporte");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "No se pudo crear el reporte");
         }
     };
 
@@ -259,5 +260,3 @@ export default function OrderDetail() {
         </Layout>
     );
 }
-
-

@@ -333,8 +333,8 @@ const ReportEditor: React.FC = () => {
                             caption: img.caption,
                         }))
                     );
-                } catch (e) {
-                    message.error(e instanceof Error ? e.message : "No se pudo cargar el reporte");
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : "No se pudo cargar el reporte");
                 } finally {
                     setIsLoaded(true);
                 }
@@ -387,7 +387,7 @@ const ReportEditor: React.FC = () => {
             try {
                 const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
                 setBranches(data || []);
-            } catch (e) {
+            } catch {
                 // ignore softly
             }
         })();
@@ -400,7 +400,7 @@ const ReportEditor: React.FC = () => {
                 const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
                 const mapped = (data.orders || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}`, branch_id: o.branch?.id }));
                 setOrders(mapped);
-            } catch (e) {
+            } catch {
                 // ignore softly
             }
         })();
@@ -419,9 +419,9 @@ const ReportEditor: React.FC = () => {
                 const fullName = `${full.patient.first_name ?? ""} ${full.patient.last_name ?? ""}`.trim();
                 setPaciente(fullName || full.patient.patient_code);
                 setFolio(full.order.order_code || "");
-                if (!selectedBranchId) setSelectedBranchId(full.order.branch_id);
-            } catch (e) {
-                message.error(e instanceof Error ? e.message : "No se pudo cargar la orden seleccionada");
+                setSelectedBranchId((current) => current || full.order.branch_id);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : "No se pudo cargar la orden seleccionada");
             }
         })();
     }, [selectedOrderId]);
@@ -502,8 +502,8 @@ const ReportEditor: React.FC = () => {
                 await saveReportVersion(envelope);
             }
             message.success("Reporte guardado");
-        } catch (e) {
-            console.error(e);
+        } catch (error) {
+            console.error(error);
             message.error("No se pudo guardar el reporte");
         }
     };
@@ -513,6 +513,8 @@ const ReportEditor: React.FC = () => {
             prev.map((img, idx) => (idx === index ? { ...img, caption } : img))
         );
     };
+
+    const fechaRecepcionMs = fechaRecepcion?.valueOf();
 
     /* Paginated preview (this is the ONLY visible view) */
     useEffect(() => {
@@ -665,7 +667,7 @@ const ReportEditor: React.FC = () => {
             });
         });
     }, [
-        paciente, examen, folio, fechaRecepcion?.valueOf(), especimen, diagnosticoEnvio,
+        paciente, examen, folio, fechaRecepcionMs, especimen, diagnosticoEnvio,
         descripcionMacroscopia, descripcionMicroscopia, descripcionCitomorfologica,
         interpretacion, diagnostico, comentario, citologiaUrinariaHTML,
         inmunofluorescenciaHTML, inmunotincionesHTML, microscopioElectronicoHTML,

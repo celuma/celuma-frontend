@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Modal, Typography, message, Button, Space, Input, Popconfirm, Tooltip } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
 import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
@@ -82,7 +82,10 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
         setFileList(mapped);
     }, [value, maxCount]);
 
-    const emit = (next: ReportImage[]) => onChange?.(next.slice(0, maxCount));
+    const emit = useCallback(
+        (next: ReportImage[]) => onChange?.(next.slice(0, maxCount)),
+        [onChange, maxCount]
+    );
 
     // Validations
     const validateFile = (file: File) => {
@@ -154,13 +157,13 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
 
                 onSuccess?.({}, {} as never);
                 message.success("Imagen subida correctamente.");
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : "Error al subir imagen.";
-                onError?.(err as Error);
+            } catch (error) {
+                const msg = error instanceof Error ? error.message : "Error al subir imagen.";
+                onError?.(error as Error);
                 message.error(msg);
             }
         };
-    }, [sampleId, value, maxCount]);
+    }, [sampleId, value, maxCount, emit]);
 
     // Delete
     const removeAt = async (idx: number) => {
@@ -170,9 +173,9 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
         if (deleteInBackend && item.id) {
             try {
                 await deleteReportImage(sampleId, item.id);
-            } catch (e) {
+            } catch (error) {
                 message.error(
-                    e instanceof Error ? e.message : "No se pudo eliminar la imagen en el servidor."
+                    error instanceof Error ? error.message : "No se pudo eliminar la imagen en el servidor."
                 );
                 return;
             }
