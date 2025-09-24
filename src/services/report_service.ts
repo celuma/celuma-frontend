@@ -132,7 +132,9 @@ export async function fetchReportImages(
         return [];
     };
 
-    const normalize = (record: Record<string, unknown>) => {
+    type NormalizedImage = { id: string; url: string; thumbnailUrl?: string; caption?: string };
+
+    const normalize = (record: Record<string, unknown>): NormalizedImage | null => {
         const urlsCandidate = record["urls"];
         const urlsRecord = isRecord(urlsCandidate) ? urlsCandidate : undefined;
 
@@ -158,15 +160,17 @@ export async function fetchReportImages(
             readString(record["caption"]) ??
             "";
 
-        return {
+        const normalized = {
             id,
             url: processed,
             thumbnailUrl: thumbnail,
             caption,
-        };
+        } satisfies NormalizedImage;
+
+        return normalized;
     };
 
     return extractRawList(payload)
         .map(normalize)
-        .filter((img): img is { id: string; url: string; thumbnailUrl?: string; caption?: string } => Boolean(img));
+        .filter((img): img is NormalizedImage => img !== null);
 }
