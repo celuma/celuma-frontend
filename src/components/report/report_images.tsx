@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Modal, Typography, message, Button, Space, Input, Popconfirm, Tooltip } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
-import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined } from "@ant-design/icons";
+import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import { uploadReportImage, deleteReportImage, type UploadImageResponse } from "../../services/report_service";
 
 export type ReportImage = {
@@ -65,9 +65,6 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
         open: false,
         index: null,
     });
-    const [captionModal, setCaptionModal] = useState<{ open: boolean; index: number | null; draft: string }>(
-        { open: false, index: null, draft: "" }
-    );
 
     // Abort controller for upload
     const abortRef = useRef<AbortController | null>(null);
@@ -188,18 +185,13 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
 
     // Open modals
     const openView = (idx: number) => setViewModal({ open: true, index: idx });
-    const openCaption = (idx: number) => {
-        const current = (value ?? [])[idx];
-        setCaptionModal({ open: true, index: idx, draft: current?.caption ?? "" });
-    };
 
-    // Save caption from modal
-    const saveCaption = () => {
-        if (captionModal.index == null) return;
+    // Update caption inline
+    const updateCaption = (idx: number, caption: string) => {
         const next = (value ?? []).slice();
-        next[captionModal.index] = { ...next[captionModal.index], caption: captionModal.draft };
+        if (!next[idx]) return;
+        next[idx] = { ...next[idx], caption };
         emit(next);
-        setCaptionModal({ open: false, index: null, draft: "" });
     };
 
     // Selected image in view modal
@@ -295,15 +287,6 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                                         />
                                     </Tooltip>
 
-                                    <Tooltip title="Editar descripción">
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            icon={<FileTextOutlined />}
-                                            onClick={() => openCaption(idx)}
-                                        />
-                                    </Tooltip>
-
                                     <Popconfirm
                                         title="Eliminar imagen"
                                         okText="Sí"
@@ -313,6 +296,16 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                                     >
                                         <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} />
                                     </Popconfirm>
+                                </div>
+
+                                <div style={{ padding: "8px 8px 12px" }}>
+                                    <Input.TextArea
+                                        placeholder="Escribe una nota para esta imagen"
+                                        autoSize={{ minRows: 2, maxRows: 3 }}
+                                        value={img.caption || ""}
+                                        onChange={(e) => updateCaption(idx, e.target.value)}
+                                        disabled={disabled}
+                                    />
                                 </div>
                             </div>
                         ))}
@@ -337,25 +330,6 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                 )}
             </Modal>
 
-            <Modal
-                open={captionModal.open}
-                title="Descripción de la imagen"
-                okText="Guardar"
-                cancelText="Cancelar"
-                onOk={saveCaption}
-                onCancel={() => setCaptionModal({ open: false, index: null, draft: "" })}
-                centered
-            >
-                <Input.TextArea
-                    placeholder="Descripción / leyenda"
-                    autoSize={{ minRows: 3, maxRows: 6 }}
-                    value={captionModal.draft}
-                    onChange={(e) =>
-                        setCaptionModal((s) => ({ ...s, draft: e.target.value }))
-                    }
-                    disabled={disabled}
-                />
-            </Modal>
         </div>
     );
 }

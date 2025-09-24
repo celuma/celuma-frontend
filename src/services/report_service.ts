@@ -97,10 +97,13 @@ export async function deleteReportImage(
 // Fetch images by sampleId
 export async function fetchReportImages(
     sampleId: string
-): Promise<{ id: string; url: string; caption?: string }[]> {
+): Promise<{ id: string; url: string; thumbnailUrl?: string; caption?: string }[]> {
     const res = await fetch(
         `${base}/v1/laboratory/samples/${sampleId}/images`,
-        { method: "GET", headers: { Accept: "application/json" } }
+        {
+            method: "GET",
+            headers: { Accept: "application/json" },
+        }
     );
 
     if (!res.ok) {
@@ -108,5 +111,22 @@ export async function fetchReportImages(
         throw new Error(`Error al obtener imágenes: ${res.status} - ${errText}`);
     }
 
-    return (await res.json()) as { id: string; url: string; caption?: string }[];
+    const payload = await res.json();
+    const images = Array.isArray(payload?.images) ? payload.images : Array.isArray(payload) ? payload : [];
+
+    return images
+        .map((item: any) => {
+            const urls = item?.urls ?? {};
+            const processed = urls.processed ?? item?.url ?? urls.thumbnail ?? "";
+            const thumbnail = urls.thumbnail ?? urls.processed ?? processed;
+            const id = String(item?.id ?? item?.sample_image_id ?? "");
+            if (!id || !processed) return null;
+            return {
+                id,
+                url: processed,
+                thumbnailUrl: thumbnail,
+                caption: item?.label ?? item?.caption ?? "",
+            };
+        })
+        .filter((img: any): img is { id: string; url: string; thumbnailUrl?: string; caption?: string } => Boolean(img));
 }

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Form, message, Divider, Button } from "antd";
+import { Form, message, Divider, Button, Tabs, Tag, Typography, Modal, Input, Tooltip, Popconfirm } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { saveReport, saveReportVersion } from "../../services/report_service";
-import ReportImages, { type ReportImage } from "./report_images";
+import type { ReportImage } from "./report_images";
+import SampleImagesPicker from "./sample_images_picker";
+import { EyeOutlined, DeleteOutlined } from "@ant-design/icons";
 import logo from "../../images/report_logo.png";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -186,7 +188,6 @@ const ReportEditor: React.FC = () => {
     const session = useMemo(() => getSessionContext(), []);
     const [selectedBranchId, setSelectedBranchId] = useState<string>(session.branchId || "");
     const [selectedOrderId, setSelectedOrderId] = useState<string>("");
-    const [selectedSampleId, setSelectedSampleId] = useState<string>("");
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [orders, setOrders] = useState<Array<{ id: string; label: string; branch_id?: string }>>([]);
     const [orderFull, setOrderFull] = useState<OrderFullResponse | null>(null);
@@ -204,6 +205,7 @@ const ReportEditor: React.FC = () => {
     const [edad, setEdad] = useState<string>("");
     // Images
     const [reportImages, setReportImages] = useState<ReportImage[]>([]);
+    const [reportGalleryModal, setReportGalleryModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
     // Existing envelope (editing mode)
     const [envelopeExistente, setEnvelopeExistente] = useState<Partial<ReportEnvelope> | undefined>(undefined);
     // Autosave loading state
@@ -323,7 +325,14 @@ const ReportEditor: React.FC = () => {
                     setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
                     setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
                     setEdad(envelope.report.secciones.edad ?? "");
-                    setReportImages((envelope.report.images ?? []).map((img) => ({ id: img.id, url: img.url, caption: img.caption })));
+                    setReportImages(
+                        (envelope.report.images ?? []).map((img) => ({
+                            id: img.id,
+                            url: img.url,
+                            thumbnailUrl: (img as ReportImage).thumbnailUrl || img.url,
+                            caption: img.caption,
+                        }))
+                    );
                 } catch (e) {
                     message.error(e instanceof Error ? e.message : "No se pudo cargar el reporte");
                 } finally {
@@ -356,7 +365,14 @@ const ReportEditor: React.FC = () => {
                 setME(envelope.report.secciones.microscopioElectronicoHTML ?? "<p><br/></p>");
                 setCU(envelope.report.secciones.citologiaUrinariaHTML ?? "<p><br/></p>");
                 setEdad(envelope.report.secciones.edad ?? "");
-                setReportImages(envelope.report.images ?? []);
+                setReportImages(
+                    (envelope.report.images ?? []).map((img) => ({
+                        id: img.id,
+                        url: img.url,
+                        thumbnailUrl: (img as ReportImage).thumbnailUrl || img.url,
+                        caption: img.caption,
+                    }))
+                );
             } else if (prefilledOrderId) {
                 setSelectedOrderId(prefilledOrderId);
             }
@@ -395,7 +411,6 @@ const ReportEditor: React.FC = () => {
         (async () => {
             if (!selectedOrderId) {
                 setOrderFull(null);
-                setSelectedSampleId("");
                 return;
             }
             try {
@@ -405,12 +420,6 @@ const ReportEditor: React.FC = () => {
                 setPaciente(fullName || full.patient.patient_code);
                 setFolio(full.order.order_code || "");
                 if (!selectedBranchId) setSelectedBranchId(full.order.branch_id);
-                // Default to first sample if any
-                if (full.samples?.length > 0) {
-                    setSelectedSampleId(full.samples[0].id);
-                } else {
-                    setSelectedSampleId("");
-                }
             } catch (e) {
                 message.error(e instanceof Error ? e.message : "No se pudo cargar la orden seleccionada");
             }
@@ -497,6 +506,12 @@ const ReportEditor: React.FC = () => {
             console.error(e);
             message.error("No se pudo guardar el reporte");
         }
+    };
+
+    const updateReportImageCaption = (index: number, caption: string) => {
+        setReportImages((prev) =>
+            prev.map((img, idx) => (idx === index ? { ...img, caption } : img))
+        );
     };
 
     /* Paginated preview (this is the ONLY visible view) */
@@ -694,16 +709,7 @@ const ReportEditor: React.FC = () => {
                                     showSearch
                                 />
                             </Form.Item>
-                            <Form.Item label="Muestra">
-                                <SelectField
-                                    value={selectedSampleId || undefined}
-                                    onChange={(v) => setSelectedSampleId(v || "")}
-                                    options={(orderFull?.samples || []).map((s) => ({ value: s.id, label: `${s.sample_code} · ${s.type}` }))}
-                                    placeholder={selectedOrderId ? "Seleccione una muestra" : "Seleccione una orden primero"}
-                                    disabled={!selectedOrderId}
-                                    showSearch
-                                />
-                            </Form.Item>
+                            <div />
                         </div>
                         <div className="re-grid-3">
                             <Form.Item label="Tipo de reporte">
@@ -752,20 +758,68 @@ const ReportEditor: React.FC = () => {
                                 <TextField value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} placeholder="Diagnóstico de envío" />
                             </Form.Item>
                         </div>
-                        <Form.Item label="Imágenes del reporte">
-                            <ReportImages sampleId={selectedSampleId} value={reportImages} onChange={setReportImages} disabled={!selectedSampleId} />
-                        </Form.Item>
+
+                        {/* Muestras en tabs: galería por muestra con selección para el reporte */}
+                        {selectedOrderId && (
+                            <div style={{ display: "grid", gap: 8 }}>
+                                <Typography.Text strong>Muestras</Typography.Text>
+                                {(orderFull?.samples?.length ?? 0) > 0 ? (
+                                    <Tabs
+                                        destroyInactiveTabPane
+                                        items={(orderFull?.samples || []).map((s, idx) => ({
+                                            key: s.id,
+                                            label: `Muestra ${idx + 1} · ${s.sample_code}`,
+                                            children: (
+                                                <div style={{ display: "grid", gap: 12 }}>
+                                                    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                                                        <span><b>Código:</b> {s.sample_code}</span>
+                                                        <span><b>Tipo:</b> {s.type}</span>
+                                                        <span><b>Estado:</b> <Tag color="#94a3b8">{s.state}</Tag></span>
+                                                    </div>
+                                                    <SampleImagesPicker
+                                                        sampleId={s.id}
+                                                        selectedIds={(reportImages.filter((i) => !!i.id).map((i) => i.id) as string[])}
+                                                        allowDelete={false}
+                                                        onToggleSelect={(img, selected) => {
+                                                            setReportImages((prev) => {
+                                                                const exists = img.id && prev.some((p) => p.id === img.id);
+                                                                if (selected) {
+                                                                    if (exists) return prev;
+                                                                    const toAdd: ReportImage = {
+                                                                        id: img.id,
+                                                                        url: img.url,
+                                                                        thumbnailUrl: img.thumbnailUrl,
+                                                                        caption: img.caption,
+                                                                    };
+                                                                    return [...prev, toAdd];
+                                                                }
+                                                                // deselect
+                                                                return prev.filter((p) => p.id !== img.id);
+                                                            });
+                                                        }}
+                                                    />
+                                                </div>
+                                            ),
+                                        }))}
+                                    />
+                                ) : (
+                                    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Sin muestras para esta orden.</Typography.Paragraph>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: tokens.gap }}>
-                    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-                        <div style={{ padding: 24 }}>
-                            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
-                        </div>
-                        <div style={{ height: 1, background: "#e5e7eb" }} />
-                        <div style={{ padding: 24 }}>
-                            <Form layout="vertical">
+                {/* Dos columnas: izquierda editor + galería reporte, derecha vista previa */}
+                <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: tokens.gap, alignItems: "start" }}>
+                    <div style={{ display: "grid", gap: tokens.gap }}>
+                        <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+                            <div style={{ padding: 24 }}>
+                                <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
+                            </div>
+                            <div style={{ height: 1, background: "#e5e7eb" }} />
+                            <div style={{ padding: 24 }}>
+                                <Form layout="vertical">
                                 {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
                                     <Form.Item label="Descripción macroscópica">
                                         <ReactQuill ref={quillRef} theme="snow" value={descripcionMacroscopia || ""} onChange={(html) => setDescMacro(html)} modules={quillModules} />
@@ -817,12 +871,102 @@ const ReportEditor: React.FC = () => {
                                     </Form.Item>
                                 )}
 
-                                <Divider />
-                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                                    <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
-                                    <Button onClick={handleExportPDF}>Exportar a PDF</Button>
-                                </div>
-                            </Form>
+                                    <Divider />
+                                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                                        <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
+                                        <Button onClick={handleExportPDF}>Exportar a PDF</Button>
+                                    </div>
+                                </Form>
+                            </div>
+                        </div>
+
+                        <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
+                            <div style={{ padding: 24 }}>
+                                <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Galería del reporte</h2>
+                            </div>
+                            <div style={{ height: 1, background: "#e5e7eb" }} />
+                            <div style={{ padding: 24 }}>
+                                <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>Las imágenes aquí mostradas provienen de la selección en las muestras. Eliminar solo desasocia del reporte.</Typography.Paragraph>
+                                {(reportImages.length > 0) ? (
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+                                        {reportImages.map((img, idx) => (
+                                            <div
+                                                key={img.id ?? idx}
+                                                style={{
+                                                    position: "relative",
+                                                    border: "1px solid #f0f0f0",
+                                                    borderRadius: 6,
+                                                    overflow: "hidden",
+                                                    background: "#fafafa",
+                                                }}
+                                            >
+                                                <img
+                                                    src={img.thumbnailUrl || img.url}
+                                                    alt={img.caption || `Figura ${idx + 1}`}
+                                                    style={{ width: "100%", height: 100, objectFit: "cover" }}
+                                                />
+
+                                                <div
+                                                    style={{
+                                                        position: "absolute",
+                                                        top: 4,
+                                                        right: 4,
+                                                        display: "flex",
+                                                        gap: 4,
+                                                    }}
+                                                >
+                                                    <Tooltip title="Ver imagen">
+                                                        <Button
+                                                            size="small"
+                                                            type="text"
+                                                            icon={<EyeOutlined />}
+                                                            onClick={() => setReportGalleryModal({ open: true, index: idx })}
+                                                        />
+                                                    </Tooltip>
+                                                    <Popconfirm
+                                                        title="Quitar imagen del reporte"
+                                                        okText="Sí"
+                                                        cancelText="No"
+                                                        onConfirm={() =>
+                                                            setReportImages((prev) => prev.filter((_, i) => i !== idx))
+                                                        }
+                                                    >
+                                                        <Button size="small" type="text" icon={<DeleteOutlined />} />
+                                                    </Popconfirm>
+                                                </div>
+
+                                                <div style={{ padding: "8px 8px 12px" }}>
+                                                    <Input.TextArea
+                                                        placeholder="Añade una nota para esta imagen"
+                                                        autoSize={{ minRows: 2, maxRows: 3 }}
+                                                        value={img.caption || ""}
+                                                        onChange={(e) => updateReportImageCaption(idx, e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>No hay imágenes seleccionadas.</Typography.Paragraph>
+                                )}
+                                {/* Modal de vista de imagen seleccionada de la galería del reporte */}
+                                <Modal
+                                    open={reportGalleryModal.open}
+                                    title="Imagen del reporte"
+                                    footer={null}
+                                    onCancel={() => setReportGalleryModal({ open: false, index: null })}
+                                    width={720}
+                                    centered
+                                >
+                                    {reportGalleryModal.index != null && reportImages[reportGalleryModal.index] && (
+                                        <img
+                                            src={reportImages[reportGalleryModal.index].url}
+                                            alt={reportImages[reportGalleryModal.index].caption || "imagen"}
+                                            style={{ width: "100%", maxHeight: 520, objectFit: "contain" }}
+                                        />
+                                    )}
+                                </Modal>
+                            </div>
                         </div>
                     </div>
 
