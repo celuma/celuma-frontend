@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, message, Divider, Button, Tabs, Tag, Typography, Modal, Input, Tooltip, Popconfirm } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
@@ -178,7 +178,44 @@ const ReportEditor: React.FC = () => {
     }, [search]);
 
     // Selected report type
-    const [tipo, setTipo] = useState<ReportType>("Histopatologia");
+    const REPORT_TYPE_OPTIONS: Array<{ value: ReportType; label: string }> = useMemo(
+        () => ([
+            { value: "Histopatologia", label: "Histopatología / Biopsia" },
+            { value: "Histoquimica", label: "Histoquímica" },
+            { value: "Citologia_mamaria", label: "Citología mamaria" },
+            { value: "Citologia_urinaria", label: "Citología urinaria" },
+            { value: "Quirurgico", label: "Quirúrgico" },
+            { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
+        ]),
+        []
+    );
+    const resolveReportType = useCallback(
+        (raw?: string | null): ReportType | undefined => {
+            if (!raw) return undefined;
+            if (raw in FLAGS_BY_TYPE) return raw as ReportType;
+            const exactLabel = REPORT_TYPE_OPTIONS.find((opt) => opt.label.toLowerCase() === raw.toLowerCase());
+            if (exactLabel) return exactLabel.value;
+            const normalizedRaw = raw
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\s+/g, "_")
+                .replace(/[^A-Za-z_]/g, "")
+                .toLowerCase();
+            const normalizedValue = REPORT_TYPE_OPTIONS.find(
+                (opt) =>
+                    opt.value.toLowerCase() === normalizedRaw ||
+                    opt.label
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .replace(/\s+/g, "_")
+                        .replace(/[^A-Za-z_]/g, "")
+                        .toLowerCase() === normalizedRaw
+            );
+            return normalizedValue?.value;
+        },
+        [REPORT_TYPE_OPTIONS]
+    );
+    const [tipo, setTipo] = useState<ReportType | undefined>(undefined);
     // Base fields
     const [paciente, setPaciente] = useState("");
     const [examen, setExamen] = useState("");
@@ -226,6 +263,7 @@ const ReportEditor: React.FC = () => {
         () => orders.filter((order) => !order.has_report).length === 0,
         [orders]
     );
+    const tipoActivo = useMemo<ReportType>(() => (tipo && tipo in FLAGS_BY_TYPE ? (tipo as ReportType) : "Histopatologia"), [tipo]);
     // Autosave loading state
     const [isLoaded, setIsLoaded] = useState(false);
     // Quill ref (if needed later)
@@ -323,7 +361,7 @@ const ReportEditor: React.FC = () => {
                 try {
                     const envelope = await getReport(reportId);
                     setEnvelopeExistente(envelope);
-                    setTipo(envelope.report.tipo);
+                    setTipo(resolveReportType(envelope.report.tipo));
                     setPaciente(envelope.report.base.paciente);
                     setExamen(envelope.report.base.examen);
                     setFolio(envelope.report.base.folio);
@@ -363,7 +401,7 @@ const ReportEditor: React.FC = () => {
             const envelope = loadAutoSave<ReportEnvelope>("reportEnvelopeDraft");
             if (envelope) {
                 setEnvelopeExistente(envelope);
-                setTipo(envelope.report.tipo);
+                setTipo(resolveReportType(envelope.report.tipo));
                 setPaciente(envelope.report.base.paciente);
                 setExamen(envelope.report.base.examen);
                 setFolio(envelope.report.base.folio);
@@ -396,7 +434,7 @@ const ReportEditor: React.FC = () => {
             }
             setIsLoaded(true);
         })();
-    }, [reportId, prefilledOrderId, session.branchId]);
+    }, [reportId, prefilledOrderId, session.branchId, resolveReportType]);
 
     // Load orders
     useEffect(() => {
@@ -463,12 +501,12 @@ const ReportEditor: React.FC = () => {
             order_id: selectedOrderId || existing?.order_id || "",
             version_no: existing?.version_no ?? 1,
             status: existing?.status ?? "DRAFT",
-            title: `Reporte ${tipo} - ${paciente || "Sin paciente"}`,
+            title: `Reporte ${tipoActivo} - ${paciente || "Sin paciente"}`,
             diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
             created_by: session.userId || "",
             published_at: null,
             report: {
-                tipo,
+                tipo: tipoActivo,
                 base: {
                     paciente,
                     examen,
@@ -490,7 +528,7 @@ const ReportEditor: React.FC = () => {
                     citologiaUrinariaHTML: citologiaUrinariaHTML || null,
                     edad: edad || null,
                 },
-                flags: FLAGS_BY_TYPE[tipo],
+                flags: FLAGS_BY_TYPE[tipoActivo],
                 images: reportImages.map((img) => ({
                     id: img.id,
                     url: img.url,
@@ -683,7 +721,7 @@ const ReportEditor: React.FC = () => {
         descripcionMacroscopia, descripcionMicroscopia, descripcionCitomorfologica,
         interpretacion, diagnostico, comentario, citologiaUrinariaHTML,
         inmunofluorescenciaHTML, inmunotincionesHTML, microscopioElectronicoHTML,
-        edad, reportImages, tipo
+        edad, reportImages, tipoActivo
     ]);
 
     return (
@@ -722,15 +760,9 @@ const ReportEditor: React.FC = () => {
                                     />
                                     <SelectField
                                         value={tipo}
-                                        onChange={(v) => setTipo((v as ReportType) || "Histopatologia")}
-                                        options={[
-                                            { value: "Histopatologia", label: "Histopatología / Biopsia" },
-                                            { value: "Histoquimica", label: "Histoquímica" },
-                                            { value: "Citologia_mamaria", label: "Citología mamaria" },
-                                            { value: "Citologia_urinaria", label: "Citología urinaria" },
-                                            { value: "Quirurgico", label: "Quirúrgico" },
-                                            { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
-                                        ]}
+                                        onChange={(v) => setTipo((v ?? undefined) as ReportType | undefined)}
+                                        options={REPORT_TYPE_OPTIONS}
+                                        placeholder="Seleccione el tipo de reporte"
                                     />
                                 </div>
                                 {!isOrderSelectionLocked && noOrdersAvailable ? (
@@ -762,7 +794,7 @@ const ReportEditor: React.FC = () => {
                                         onChange={(v) => setFechaRecepcion(v ? dayjs(v) : null)}
                                         placeholder="Fecha de recepción (AAAA-MM-DD)"
                                     />
-                                    {FLAGS_BY_TYPE[tipo]?.incluirEdad ? (
+                                    {FLAGS_BY_TYPE[tipoActivo]?.incluirEdad ? (
                                         <TextField
                                             value={edad}
                                             onChange={(e) => setEdad(e.target.value)}
@@ -845,52 +877,52 @@ const ReportEditor: React.FC = () => {
                             <div style={{ height: 1, background: "#e5e7eb" }} />
                             <div style={{ padding: 24 }}>
                                 <Form layout="vertical">
-                                {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirMacroscopia && (
                                     <Form.Item label="Descripción macroscópica">
                                         <ReactQuill ref={quillRef} theme="snow" value={descripcionMacroscopia || ""} onChange={(html) => setDescMacro(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirMicroscopia && (
                                     <Form.Item label="Descripción microscópica">
                                         <ReactQuill theme="snow" value={descripcionMicroscopia || ""} onChange={(html) => setDescMicro(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirCitomorfologia && (
                                     <Form.Item label="Descripción citomorfológica">
                                         <ReactQuill theme="snow" value={descripcionCitomorfologica || ""} onChange={(html) => setDescCito(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirInterpretacion && (
                                     <Form.Item label="Interpretación / Conclusiones">
                                         <ReactQuill theme="snow" value={interpretacion || ""} onChange={(html) => setInterpretacion(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirDiagnostico && (
                                     <Form.Item label="Diagnóstico">
                                         <ReactQuill theme="snow" value={diagnostico || ""} onChange={(html) => setDiagnostico(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirComentario && (
                                     <Form.Item label="Comentario / Notas">
                                         <ReactQuill theme="snow" value={comentario || ""} onChange={(html) => setComentario(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirCU && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirCU && (
                                     <Form.Item label="Citología urinaria">
                                         <ReactQuill theme="snow" value={citologiaUrinariaHTML || ""} onChange={(html) => setCU(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirIF && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirIF && (
                                     <Form.Item label="Inmunofluorescencia (panel)">
                                         <ReactQuill theme="snow" value={inmunofluorescenciaHTML || ""} onChange={(html) => setIF(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirInmunotinciones && (
                                     <Form.Item label="Inmunotinciones">
                                         <ReactQuill theme="snow" value={inmunotincionesHTML || ""} onChange={(html) => setInmunotinciones(html)} modules={quillModules} />
                                     </Form.Item>
                                 )}
-                                {FLAGS_BY_TYPE[tipo]?.incluirME && (
+                                {FLAGS_BY_TYPE[tipoActivo]?.incluirME && (
                                     <Form.Item label="Microscopía electrónica (descripción)">
                                         <ReactQuill theme="snow" value={microscopioElectronicoHTML || ""} onChange={(html) => setME(html)} modules={quillModules} />
                                     </Form.Item>
@@ -1024,7 +1056,7 @@ const ReportEditor: React.FC = () => {
                         {fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : <em>(Sin especificar)</em>}
                     </p>
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirEdad && (
                         <p><b>Edad:</b> {edad || <em>(Sin especificar)</em>}</p>
                     )}
 
@@ -1033,14 +1065,14 @@ const ReportEditor: React.FC = () => {
 
                     <hr className="report-hr" />
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirMacroscopia && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirMacroscopia && (
                         <>
                             <h3>Descripción macroscópica</h3>
                             <div dangerouslySetInnerHTML={{ __html: descripcionMacroscopia || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirMicroscopia && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirMicroscopia && (
                         <>
                             <h3>Descripción microscópica</h3>
                             <div dangerouslySetInnerHTML={{ __html: descripcionMicroscopia || "" }} />
@@ -1083,56 +1115,56 @@ const ReportEditor: React.FC = () => {
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirCitomorfologia && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirCitomorfologia && (
                         <>
                             <h3>Descripción citomorfológica</h3>
                             <div dangerouslySetInnerHTML={{ __html: descripcionCitomorfologica || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirInterpretacion && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirInterpretacion && (
                         <>
                             <h3>Interpretación</h3>
                             <div dangerouslySetInnerHTML={{ __html: interpretacion || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirDiagnostico && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirDiagnostico && (
                         <>
                             <h3>Diagnóstico</h3>
                             <div dangerouslySetInnerHTML={{ __html: diagnostico || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirComentario && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirComentario && (
                         <>
                             <h3>Comentario</h3>
                             <div dangerouslySetInnerHTML={{ __html: comentario || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirCU && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirCU && (
                         <>
                             <h3>Citología urinaria</h3>
                             <div dangerouslySetInnerHTML={{ __html: citologiaUrinariaHTML || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirIF && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirIF && (
                         <>
                             <h3>Inmunofluorescencia</h3>
                             <div dangerouslySetInnerHTML={{ __html: inmunofluorescenciaHTML || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirInmunotinciones && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirInmunotinciones && (
                         <>
                             <h3>Inmunotinciones</h3>
                             <div dangerouslySetInnerHTML={{ __html: inmunotincionesHTML || "" }} />
                         </>
                     )}
 
-                    {FLAGS_BY_TYPE[tipo]?.incluirME && (
+                    {FLAGS_BY_TYPE[tipoActivo]?.incluirME && (
                         <>
                             <h3>Microscopía electrónica</h3>
                             <div dangerouslySetInnerHTML={{ __html: microscopioElectronicoHTML || "" }} />
