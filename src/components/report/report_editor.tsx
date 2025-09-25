@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Form, message, Divider, Button, Tabs, Tag, Typography, Modal, Input, Tooltip, Popconfirm } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { Form, message, Divider, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
@@ -7,7 +7,7 @@ import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
 import { saveReport, saveReportVersion } from "../../services/report_service";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
-import { EyeOutlined, DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined } from "@ant-design/icons";
 import logo from "../../images/report_logo.png";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -98,6 +98,22 @@ const MARGIN_L_MM = 18;
 const MARGIN_R_MM = 18;
 const HEADER_H_MM = 28;
 const FOOTER_H_MM = 20;
+
+const NOTE_MAX_LENGTH = 25;
+const NOTE_CONTROL_KEYS = new Set([
+    "Backspace",
+    "Delete",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Tab",
+    "Escape",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+]);
 
 // API helpers and session
 function getApiBase(): string {
@@ -243,7 +259,7 @@ const ReportEditor: React.FC = () => {
     const [edad, setEdad] = useState<string>("");
     // Images
     const [reportImages, setReportImages] = useState<ReportImage[]>([]);
-    const [reportGalleryModal, setReportGalleryModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
+    const [reportPreview, setReportPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
     // Existing envelope (editing mode)
     const [envelopeExistente, setEnvelopeExistente] = useState<Partial<ReportEnvelope> | undefined>(undefined);
     const orderLockSourceId = envelopeExistente?.order_id;
@@ -564,6 +580,31 @@ const ReportEditor: React.FC = () => {
         );
     };
 
+    useEffect(() => {
+        setReportPreview((prev) => {
+            if (reportImages.length === 0) {
+                if (!prev.visible && prev.index === 0) {
+                    return prev;
+                }
+                return { visible: false, index: 0 };
+            }
+            if (prev.index >= reportImages.length) {
+                return { ...prev, index: reportImages.length - 1 };
+            }
+            return prev;
+        });
+    }, [reportImages.length]);
+
+
+    const handleReportPreviewOpen = (index: number) => {
+        if (index < 0 || index >= reportImages.length) return;
+        setReportPreview({ visible: true, index });
+    };
+
+    const handleRemoveReportImage = (index: number) => {
+        setReportImages((prev) => prev.filter((_, i) => i !== index));
+    };
+
     const fechaRecepcionMs = fechaRecepcion?.valueOf();
 
     /* Paginated preview (this is the ONLY visible view) */
@@ -868,7 +909,7 @@ const ReportEditor: React.FC = () => {
                 </div>
 
                 {/* Dos columnas: izquierda editor + galería reporte, derecha vista previa */}
-                <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: tokens.gap, alignItems: "start" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: tokens.gap, alignItems: "start" }}>
                     <div style={{ display: "grid", gap: tokens.gap }}>
                         <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
                             <div style={{ padding: 24 }}>
@@ -944,85 +985,223 @@ const ReportEditor: React.FC = () => {
                             <div style={{ height: 1, background: "#e5e7eb" }} />
                             <div style={{ padding: 24 }}>
                                 <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>Las imágenes aquí mostradas provienen de la selección en las muestras. Eliminar solo desasocia del reporte.</Typography.Paragraph>
-                                {(reportImages.length > 0) ? (
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-                                        {reportImages.map((img, idx) => (
+                                {reportImages.length > 0 ? (
+                                    <div
+                                        style={{
+                                            display: "grid",
+                                            gap: 14,
+                                            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                                        }}
+                                    >
+                                        <Image.PreviewGroup
+                                            preview={{
+                                                visible: reportPreview.visible,
+                                                current: reportPreview.index,
+                                                onVisibleChange: (visible) => {
+                                                    setReportPreview((prev) => ({ ...prev, visible }));
+                                                },
+                                                onChange: (current: number) => {
+                                                    setReportPreview((prev) => ({ ...prev, index: current }));
+                                                },
+                                                toolbarRender: (_originalNode, info) => {
+                                                    const currentIndex =
+                                                        typeof info.current === "number" ? info.current : reportPreview.index;
+                                                    const currentImage = reportImages[currentIndex];
+
+                                                    return (
+                                                        <div
+                                                            className="ant-image-preview-operations"
+                                                            style={{ display: "flex", alignItems: "center", gap: 16 }}
+                                                        >
+                                                            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                                                {info.icons.zoomOutIcon}
+                                                                {info.icons.zoomInIcon}
+                                                            </div>
+                                                            {currentImage && (
+                                                                <Popconfirm
+                                                                    title="Quitar imagen del reporte"
+                                                                    okText="Sí"
+                                                                    cancelText="No"
+                                                                    onConfirm={() => handleRemoveReportImage(currentIndex)}
+                                                                >
+                                                                    <Button
+                                                                        size="small"
+                                                                        type="text"
+                                                                        icon={<DeleteOutlined />}
+                                                                        onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                                                                            event.preventDefault();
+                                                                            event.stopPropagation();
+                                                                        }}
+                                                                    >
+                                                                        Eliminar
+                                                                    </Button>
+                                                                </Popconfirm>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                },
+                                            }}
+                                        >
+                                            {reportImages.map((img, idx) => {
+                                                const noteValue = img.caption ?? "";
+                                                const counterId = `figure-${img.id ?? idx}-note-counter`;
+
+                                                return (
+                                                    <Card
+                                                        key={img.id ?? idx}
+                                                        size="small"
+                                                        hoverable
+                                                        style={{
+                                                            width: "100%",
+                                                            borderRadius: 12,
+                                                            overflow: "hidden",
+                                                            border: "1px solid #e2e8f0",
+                                                            background: "#ffffff",
+                                                            boxShadow: "0 12px 20px -20px rgba(15, 23, 42, 0.35)",
+                                                        }}
+                                                        bodyStyle={{ padding: 0 }}
+                                                    >
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                gap: 12,
+                                                padding: 12,
+                                                alignItems: "center",
+                                            }}
+                                        >
                                             <div
-                                                key={img.id ?? idx}
                                                 style={{
-                                                    position: "relative",
-                                                    border: "1px solid #f0f0f0",
-                                                    borderRadius: 6,
-                                                    overflow: "hidden",
-                                                    background: "#fafafa",
+                                                    flex: "0 0 25%",
+                                                    display: "flex",
+                                                    justifyContent: "center",
                                                 }}
                                             >
-                                                <img
-                                                    src={img.thumbnailUrl || img.url}
-                                                    alt={img.caption || `Figura ${idx + 1}`}
-                                                    style={{ width: "100%", height: 100, objectFit: "cover" }}
-                                                />
-
                                                 <div
                                                     style={{
-                                                        position: "absolute",
-                                                        top: 4,
-                                                        right: 4,
+                                                        position: "relative",
+                                                        width: "100%",
+                                                        aspectRatio: "1 / 1",
+                                                        borderRadius: 10,
+                                                        overflow: "hidden",
+                                                        background: "#0f172a",
                                                         display: "flex",
-                                                        gap: 4,
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
                                                     }}
                                                 >
-                                                    <Tooltip title="Ver imagen">
-                                                        <Button
-                                                            size="small"
-                                                            type="text"
-                                                            icon={<EyeOutlined />}
-                                                            onClick={() => setReportGalleryModal({ open: true, index: idx })}
-                                                        />
-                                                    </Tooltip>
+                                                    <Image
+                                                        src={img.thumbnailUrl || img.url}
+                                                        alt={img.caption || `Figura ${idx + 1}`}
+                                                        style={{
+                                                            width: "100%",
+                                                            height: "100%",
+                                                            objectFit: "cover",
+                                                            objectPosition: "center",
+                                                            background: "#0f172a",
+                                                            display: "block",
+                                                        }}
+                                                        fallback={img.url}
+                                                        preview={{ src: img.url }}
+                                                        onClick={() => handleReportPreviewOpen(idx)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div
+                                                style={{
+                                                    flex: "1 1 0",
+                                                    minWidth: 0,
+                                                    background: "#f8fafc",
+                                                    borderRadius: 10,
+                                                    padding: 10,
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 6,
+                                                    border: "1px solid #e2e8f0",
+                                                    height: "100%",
+                                                }}
+                                            >
+                                                <Typography.Text strong>{`Figura ${idx + 1}`}</Typography.Text>
+                                                <Input.TextArea
+                                                    placeholder="Añade una nota para esta imagen"
+                                                    autoSize={{ minRows: 1, maxRows: 2 }}
+                                                    maxLength={NOTE_MAX_LENGTH}
+                                                    showCount={false}
+                                                    aria-describedby={counterId}
+                                                    value={noteValue}
+                                                    onChange={(event) => {
+                                                        const nextValue = event.target.value.slice(0, NOTE_MAX_LENGTH);
+                                                        if (nextValue !== noteValue) {
+                                                            updateReportImageCaption(idx, nextValue);
+                                                        }
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        if (event.metaKey || event.ctrlKey || event.altKey) return;
+                                                        if (noteValue.length < NOTE_MAX_LENGTH) return;
+                                                        if (NOTE_CONTROL_KEYS.has(event.key)) return;
+                                                        event.preventDefault();
+                                                    }}
+                                                    onPaste={(event) => {
+                                                        event.preventDefault();
+                                                        const target = event.target as HTMLTextAreaElement;
+                                                        const selectionStart = target.selectionStart ?? noteValue.length;
+                                                        const selectionEnd = target.selectionEnd ?? noteValue.length;
+                                                        const pasted = event.clipboardData?.getData("text") ?? "";
+                                                        const before = noteValue.slice(0, selectionStart);
+                                                        const after = noteValue.slice(selectionEnd);
+                                                        const candidate = `${before}${pasted}${after}`.slice(0, NOTE_MAX_LENGTH);
+                                                        updateReportImageCaption(idx, candidate);
+                                                    }}
+                                                    style={{ background: "#ffffff", fontSize: "13px" }}
+                                                />
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        justifyContent: "space-between",
+                                                        alignItems: "center",
+                                                        marginTop: "auto",
+                                                    }}
+                                                >
+                                                    <div
+                                                        id={counterId}
+                                                        aria-live="polite"
+                                                        style={{
+                                                            fontSize: 12,
+                                                            color: "#475569",
+                                                        }}
+                                                    >
+                                                        {`${noteValue.length}/${NOTE_MAX_LENGTH}`}
+                                                    </div>
                                                     <Popconfirm
                                                         title="Quitar imagen del reporte"
                                                         okText="Sí"
                                                         cancelText="No"
-                                                        onConfirm={() =>
-                                                            setReportImages((prev) => prev.filter((_, i) => i !== idx))
-                                                        }
+                                                        onConfirm={() => handleRemoveReportImage(idx)}
                                                     >
-                                                        <Button size="small" type="text" icon={<DeleteOutlined />} />
+                                                        <Button
+                                                            danger
+                                                            type="text"
+                                                            icon={<DeleteOutlined />}
+                                                            onClick={(event) => {
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                            }}
+                                                        >
+                                                            Eliminar
+                                                        </Button>
                                                     </Popconfirm>
                                                 </div>
-
-                                                <div style={{ padding: "8px 8px 12px" }}>
-                                                    <Input.TextArea
-                                                        placeholder="Notas de imágen"
-                                                        autoSize={{ minRows: 2, maxRows: 3 }}
-                                                        value={img.caption || ""}
-                                                        onChange={(e) => updateReportImageCaption(idx, e.target.value)}
-                                                    />
-                                                </div>
                                             </div>
-                                        ))}
+                                        </div>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </Image.PreviewGroup>
                                     </div>
                                 ) : (
-                                    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>No hay imágenes seleccionadas.</Typography.Paragraph>
+                                    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+                                        No hay imágenes seleccionadas.
+                                    </Typography.Paragraph>
                                 )}
-                                {/* Modal de vista de imagen seleccionada de la galería del reporte */}
-                                <Modal
-                                    open={reportGalleryModal.open}
-                                    title="Imagen del reporte"
-                                    footer={null}
-                                    onCancel={() => setReportGalleryModal({ open: false, index: null })}
-                                    width={720}
-                                    centered
-                                >
-                                    {reportGalleryModal.index != null && reportImages[reportGalleryModal.index] && (
-                                        <img
-                                            src={reportImages[reportGalleryModal.index].url}
-                                            alt={reportImages[reportGalleryModal.index].caption || "imagen"}
-                                            style={{ width: "100%", maxHeight: 520, objectFit: "contain" }}
-                                        />
-                                    )}
-                                </Modal>
                             </div>
                         </div>
                     </div>
