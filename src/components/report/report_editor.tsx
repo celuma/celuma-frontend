@@ -133,6 +133,8 @@ type OrdersListResponse = {
         order_code: string;
         status: string;
         branch?: { id: string; name?: string; code?: string | null };
+        patient?: { id: string; full_name?: string | null; patient_code?: string | null };
+        has_report?: boolean;
     }>;
 };
 
@@ -188,8 +190,7 @@ const ReportEditor: React.FC = () => {
     const session = useMemo(() => getSessionContext(), []);
     const [selectedBranchId, setSelectedBranchId] = useState<string>(session.branchId || "");
     const [selectedOrderId, setSelectedOrderId] = useState<string>("");
-    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
-    const [orders, setOrders] = useState<Array<{ id: string; label: string; branch_id?: string }>>([]);
+    const [orders, setOrders] = useState<Array<{ id: string; order_code: string; patient_name: string; has_report: boolean; branch_id?: string }>>([]);
     const [orderFull, setOrderFull] = useState<OrderFullResponse | null>(null);
     // Sections (HTML strings for Quill)
     const [descripcionMacroscopia, setDescMacro] = useState<string | null>("<p><br/></p>");
@@ -208,6 +209,23 @@ const ReportEditor: React.FC = () => {
     const [reportGalleryModal, setReportGalleryModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
     // Existing envelope (editing mode)
     const [envelopeExistente, setEnvelopeExistente] = useState<Partial<ReportEnvelope> | undefined>(undefined);
+    const orderLockSourceId = envelopeExistente?.order_id;
+    const isOrderSelectionLocked = useMemo(() => Boolean(reportId || prefilledOrderId || orderLockSourceId), [reportId, prefilledOrderId, orderLockSourceId]);
+    const isAutofilledFieldsLocked = Boolean(selectedOrderId);
+    const orderOptions = useMemo(
+        () =>
+            orders
+                .filter((order) => !order.has_report || order.id === selectedOrderId)
+                .map((order) => ({
+                    value: order.id,
+                    label: `${order.order_code} - ${order.patient_name}`,
+                })),
+        [orders, selectedOrderId]
+    );
+    const noOrdersAvailable = useMemo(
+        () => orders.filter((order) => !order.has_report).length === 0,
+        [orders]
+    );
     // Autosave loading state
     const [isLoaded, setIsLoaded] = useState(false);
     // Quill ref (if needed later)
@@ -380,25 +398,18 @@ const ReportEditor: React.FC = () => {
         })();
     }, [reportId, prefilledOrderId, session.branchId]);
 
-    // Load branches by tenant
-    useEffect(() => {
-        (async () => {
-            if (!session.tenantId) return;
-            try {
-                const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
-                setBranches(data || []);
-            } catch {
-                // ignore softly
-            }
-        })();
-    }, [session.tenantId]);
-
     // Load orders
     useEffect(() => {
         (async () => {
             try {
                 const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
-                const mapped = (data.orders || []).map((o) => ({ id: o.id, label: `${o.order_code} - ${o.status}`, branch_id: o.branch?.id }));
+                const mapped = (data.orders || []).map((o) => ({
+                    id: o.id,
+                    order_code: o.order_code,
+                    patient_name: o.patient?.full_name || o.patient?.patient_code || "Paciente sin nombre",
+                    has_report: Boolean(o.has_report),
+                    branch_id: o.branch?.id,
+                }));
                 setOrders(mapped);
             } catch {
                 // ignore softly
@@ -411,6 +422,7 @@ const ReportEditor: React.FC = () => {
         (async () => {
             if (!selectedOrderId) {
                 setOrderFull(null);
+                setSelectedBranchId(session.branchId || "");
                 return;
             }
             try {
@@ -419,12 +431,12 @@ const ReportEditor: React.FC = () => {
                 const fullName = `${full.patient.first_name ?? ""} ${full.patient.last_name ?? ""}`.trim();
                 setPaciente(fullName || full.patient.patient_code);
                 setFolio(full.order.order_code || "");
-                setSelectedBranchId((current) => current || full.order.branch_id);
+                setSelectedBranchId(full.order.branch_id || "");
             } catch (error) {
                 message.error(error instanceof Error ? error.message : "No se pudo cargar la orden seleccionada");
             }
         })();
-    }, [selectedOrderId]);
+    }, [selectedOrderId, session.branchId]);
 
     // Quill toolbar config
     const quillModules = useMemo(
@@ -679,10 +691,14 @@ const ReportEditor: React.FC = () => {
             <style> {letterStyles} </style>
 
             <style>{`
-              .re-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-              .re-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-              .re-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
-              @media (max-width: 1024px) { .re-grid-2, .re-grid-3, .re-grid-4 { grid-template-columns: 1fr; } }
+              .re-grid-2 { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+              .re-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+              .re-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+              .re-span-2 { grid-column: 1 / -1; }
+              @media (max-width: 768px) {
+                .re-grid-2, .re-grid-3, .re-grid-4 { grid-template-columns: 1fr; }
+                .re-span-2 { grid-column: 1 / -1; }
+              }
             `}</style>
 
             <div style={{ display: "grid", gap: tokens.gap }}>
@@ -691,74 +707,81 @@ const ReportEditor: React.FC = () => {
                         <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Configuración del reporte</h2>
                     </div>
                     <div style={{ height: 1, background: "#e5e7eb" }} />
-                    <div style={{ padding: 24, display: "grid", gap: 12 }}>
-                        <div className="re-grid-3">
-                            <Form.Item label="Sucursal">
-                                <SelectField
-                                    value={selectedBranchId || undefined}
-                                    onChange={(v) => setSelectedBranchId(v || "")}
-                                    options={branches.map((b) => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
-                                    placeholder="Seleccione la sucursal"
-                                    showSearch
-                                />
-                            </Form.Item>
-                            <Form.Item label="Orden">
-                                <SelectField
-                                    value={selectedOrderId || undefined}
-                                    onChange={(v) => setSelectedOrderId(v || "")}
-                                    options={orders.map((o) => ({ value: o.id, label: o.label }))}
-                                    placeholder="Seleccione una orden"
-                                    showSearch
-                                />
-                            </Form.Item>
-                            <div />
-                        </div>
-                        <div className="re-grid-3">
-                            <Form.Item label="Tipo de reporte">
-                                <SelectField
-                                    value={tipo}
-                                    onChange={(v) => setTipo((v as ReportType) || "Histopatologia")}
-                                    options={[
-                                        { value: "Histopatologia", label: "Histopatología / Biopsia" },
-                                        { value: "Histoquimica", label: "Histoquímica" },
-                                        { value: "Citologia_mamaria", label: "Citología mamaria" },
-                                        { value: "Citologia_urinaria", label: "Citología urinaria" },
-                                        { value: "Quirurgico", label: "Quirúrgico" },
-                                        { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
-                                    ]}
-                                />
-                            </Form.Item>
-                            <Form.Item label="Paciente">
-                                <TextField value={paciente} onChange={(e) => setPaciente(e.target.value)} placeholder="Nombre del paciente" />
-                            </Form.Item>
-                            <Form.Item label="Folio">
-                                <TextField value={folio} onChange={(e) => setFolio(e.target.value)} placeholder="Folio / código" />
-                            </Form.Item>
-                        </div>
-                        <div className="re-grid-3">
-                            <Form.Item label="Examen">
-                                <TextField value={examen} onChange={(e) => setExamen(e.target.value)} placeholder="Nombre del examen" />
-                            </Form.Item>
-                            <Form.Item label="Fecha de recepción">
-                                <DateField
-                                    value={fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : ""}
-                                    onChange={(v) => setFechaRecepcion(v ? dayjs(v) : null)}
-                                    placeholder="Fecha (AAAA-MM-DD)"
-                                />
-                            </Form.Item>
-                            {FLAGS_BY_TYPE[tipo]?.incluirEdad && (
-                                <Form.Item label="Edad">
-                                    <TextField value={edad} onChange={(e) => setEdad(e.target.value)} placeholder="Edad" />
-                                </Form.Item>
-                            )}
-                        </div>
-                        <div className="re-grid-2">
-                            <Form.Item label="Espécimen recibido">
-                                <TextField value={especimen} onChange={(e) => setEspecimen(e.target.value)} placeholder="Descripción del espécimen" />
-                            </Form.Item>
-                            <Form.Item label="Diagnóstico de envío">
-                                <TextField value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} placeholder="Diagnóstico de envío" />
-                            </Form.Item>
+                    <div style={{ padding: 24, display: "grid", gap: 24 }}>
+                        <div style={{ display: "grid", gap: 20 }}>
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Orden</h3>
+                                <div className="re-grid-2">
+                                    <SelectField
+                                        value={selectedOrderId || undefined}
+                                        onChange={(v) => setSelectedOrderId(v || "")}
+                                        options={orderOptions}
+                                        placeholder="Seleccione una orden"
+                                        showSearch
+                                        disabled={isOrderSelectionLocked}
+                                    />
+                                    <SelectField
+                                        value={tipo}
+                                        onChange={(v) => setTipo((v as ReportType) || "Histopatologia")}
+                                        options={[
+                                            { value: "Histopatologia", label: "Histopatología / Biopsia" },
+                                            { value: "Histoquimica", label: "Histoquímica" },
+                                            { value: "Citologia_mamaria", label: "Citología mamaria" },
+                                            { value: "Citologia_urinaria", label: "Citología urinaria" },
+                                            { value: "Quirurgico", label: "Quirúrgico" },
+                                            { value: "Revision_laminillas", label: "Revisión de laminillas/bloques" },
+                                        ]}
+                                    />
+                                </div>
+                                {!isOrderSelectionLocked && noOrdersAvailable ? (
+                                    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+                                        No hay órdenes disponibles sin reporte.
+                                    </Typography.Paragraph>
+                                ) : null}
+                            </section>
+
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Paciente</h3>
+                                <div className="re-grid-2">
+                                    <TextField
+                                        value={paciente}
+                                        onChange={(e) => setPaciente(e.target.value)}
+                                        placeholder="Nombre del paciente"
+                                        disabled={isAutofilledFieldsLocked}
+                                    />
+                                    <TextField
+                                        value={folio}
+                                        onChange={(e) => setFolio(e.target.value)}
+                                        placeholder="Folio / código"
+                                        disabled={isAutofilledFieldsLocked}
+                                    />
+                                </div>
+                                <div className="re-grid-2">
+                                    <DateField
+                                        value={fechaRecepcion ? fechaRecepcion.format("YYYY-MM-DD") : ""}
+                                        onChange={(v) => setFechaRecepcion(v ? dayjs(v) : null)}
+                                        placeholder="Fecha de recepción (AAAA-MM-DD)"
+                                    />
+                                    {FLAGS_BY_TYPE[tipo]?.incluirEdad ? (
+                                        <TextField
+                                            value={edad}
+                                            onChange={(e) => setEdad(e.target.value)}
+                                            placeholder="Edad"
+                                        />
+                                    ) : null}
+                                </div>
+                            </section>
+
+                            <section style={{ display: "grid", gap: 10 }}>
+                                <h3 style={{ margin: 0 }}>Detalles del estudio</h3>
+                                <div className="re-grid-2">
+                                    <div className="re-span-2">
+                                        <TextField value={examen} onChange={(e) => setExamen(e.target.value)} placeholder="Nombre del examen" />
+                                    </div>
+                                    <TextField value={especimen} onChange={(e) => setEspecimen(e.target.value)} placeholder="Espécimen recibido" />
+                                    <TextField value={diagnosticoEnvio} onChange={(e) => setDiagnosticoEnvio(e.target.value)} placeholder="Diagnóstico de envío" />
+                                </div>
+                            </section>
                         </div>
 
                         {/* Muestras en tabs: galería por muestra con selección para el reporte */}
