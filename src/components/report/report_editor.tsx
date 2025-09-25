@@ -994,7 +994,7 @@ const ReportEditor: React.FC = () => {
 
                                                 <div style={{ padding: "8px 8px 12px" }}>
                                                     <Input.TextArea
-                                                        placeholder="Añade una nota para esta imagen"
+                                                        placeholder="Notas de imágen"
                                                         autoSize={{ minRows: 2, maxRows: 3 }}
                                                         value={img.caption || ""}
                                                         onChange={(e) => updateReportImageCaption(idx, e.target.value)}

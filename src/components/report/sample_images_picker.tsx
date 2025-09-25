@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Modal, Typography, message, Button, Space, Checkbox, Popconfirm, Tooltip } from "antd";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { Upload, Typography, message, Button, Space, Checkbox, Popconfirm, Card, Image } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
-import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
+import { PlusOutlined, UploadOutlined, DeleteOutlined, CloseOutlined } from "@ant-design/icons";
 import { deleteReportImage, fetchReportImages, uploadReportImage } from "../../services/report_service";
 
 export type SampleImageItem = {
@@ -35,7 +35,8 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
     const [images, setImages] = useState<SampleImageItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [fileList, setFileList] = useState<UploadFile[]>([]);
-    const [viewModal, setViewModal] = useState<{ open: boolean; image: SampleImageItem | null }>({ open: false, image: null });
+    const [preview, setPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
+    const [hoverAction, setHoverAction] = useState<"attach" | "detach" | null>(null);
     const abortRef = useRef<AbortController | null>(null);
 
     const selectedIdsSet = useMemo(() => new Set((selectedIds || []).filter((v): v is string => typeof v === "string" && v.length > 0)), [selectedIds]);
@@ -65,6 +66,26 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
         load();
         return () => abortRef.current?.abort();
     }, [load]);
+
+    useEffect(() => {
+        setPreview((prev) => {
+            if (images.length === 0) {
+                if (!prev.visible && prev.index === 0) {
+                    return prev;
+                }
+                return { visible: false, index: 0 };
+            }
+            if (prev.index >= images.length) {
+                return { ...prev, index: images.length - 1 };
+            }
+            return prev;
+        });
+    }, [images.length]);
+
+    const handlePreviewOpen = (index: number) => {
+        if (index < 0 || index >= images.length) return;
+        setPreview({ visible: true, index });
+    };
 
     const validateFile = (file: File) => {
         const ext = getExt(file.name);
@@ -194,61 +215,124 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
                         </div>
                     )}
 
-                    {images.map((img, idx) => (
-                        <div
-                            key={img.id ?? idx}
-                            style={{
-                                position: "relative",
-                                width: "100%",
-                                borderRadius: 6,
-                                overflow: "hidden",
-                                border: "1px solid #f0f0f0",
-                                background: "#fafafa",
-                                paddingBottom: 8,
-                            }}
-                        >
-                            <img
-                                src={img.thumbnailUrl || img.url}
-                                alt={img.caption || `Figura ${idx + 1}`}
-                                style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }}
-                            />
+                    <Image.PreviewGroup
+                        preview={{
+                            visible: preview.visible,
+                            current: preview.index,
+                            onVisibleChange: (visible) => {
+                                setPreview((prev) => ({ ...prev, visible }));
+                                if (!visible) {
+                                    setHoverAction(null);
+                                }
+                            },
+                            onChange: (current: number) => {
+                                setPreview((prev) => ({ ...prev, index: current }));
+                            },
+                            toolbarRender: (_originalNode, info) => {
+                                const currentIndex = typeof info.current === "number" ? info.current : preview.index;
+                                const currentImage = images[currentIndex];
+                                const selected = currentImage ? isSelected(currentImage.id) : false;
 
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", gap: 6 }}>
-                                <Checkbox
-                                    checked={isSelected(img.id)}
-                                    onChange={(e) => onToggleSelect(img, e.target.checked)}
-                                >
-                                    Anexar al reporte
-                                </Checkbox>
+                                const handleToggleFromPreview = (event: MouseEvent<HTMLDivElement>) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    if (!currentImage) return;
+                                    onToggleSelect(currentImage, !selected);
+                                };
 
-                                <div style={{ display: "flex", gap: 4 }}>
-                                    <Tooltip title="Ver imagen">
-                                        <Button size="small" type="text" icon={<EyeOutlined />} onClick={() => setViewModal({ open: true, image: img })} />
-                                    </Tooltip>
+                                const isHovering = hoverAction === (selected ? "detach" : "attach");
+                                const actionColor = selected
+                                    ? isHovering
+                                        ? "#ff4d4f"
+                                        : "#d32029"
+                                    : isHovering
+                                        ? "#1677ff"
+                                        : undefined;
+
+                                return (
+                                    <div className="ant-image-preview-operations" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                            {info.icons.zoomOutIcon}
+                                            {info.icons.zoomInIcon}
+                                        </div>
+                                        {currentImage && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                <div
+                                                    className="ant-image-preview-operations-operation"
+                                                    onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                    }}
+                                                    onMouseEnter={() => setHoverAction(selected ? "detach" : "attach")}
+                                                    onMouseLeave={() => setHoverAction((value) => (value === (selected ? "detach" : "attach") ? null : value))}
+                                                    onClick={handleToggleFromPreview}
+                                                    title={selected ? "Quitar del reporte" : "Anexar al reporte"}
+                                                    style={{
+                                                        display: "inline-flex",
+                                                        alignItems: "center",
+                                                        gap: 6,
+                                                        color: actionColor,
+                                                    }}
+                                                >
+                                                    {selected ? (
+                                                        <CloseOutlined style={{ color: actionColor }} />
+                                                    ) : (
+                                                        <PlusOutlined style={{ color: actionColor }} />
+                                                    )}
+                                                    <span style={{ color: actionColor }}>{selected ? "Quitar" : "Anexar"}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            },
+                        }}
+                    >
+                        {images.map((img, idx) => (
+                            <Card
+                                key={img.id ?? idx}
+                                size="small"
+                                hoverable
+                                style={{
+                                    width: "100%",
+                                    borderRadius: 6,
+                                    overflow: "hidden",
+                                    border: "1px solid #f0f0f0",
+                                    background: "#ffffff",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    height: "100%",
+                                }}
+                                bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
+                            >
+                                <Image
+                                    src={img.thumbnailUrl || img.url}
+                                    alt={img.caption || `Figura ${idx + 1}`}
+                                    style={{ width: "100%", height: 110, objectFit: "cover" }}
+                                    fallback={img.url}
+                                    preview={{ src: img.url }}
+                                    onClick={() => handlePreviewOpen(idx)}
+                                />
+
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", gap: 6 }}>
+                                    <Checkbox
+                                        checked={isSelected(img.id)}
+                                        onChange={(e) => onToggleSelect(img, e.target.checked)}
+                                    >
+                                        Anexar al reporte
+                                    </Checkbox>
+
                                     {allowDelete && (
                                         <Popconfirm title="Eliminar imagen" okText="Sí" cancelText="No" onConfirm={() => handleDelete(img)}>
                                             <Button size="small" type="text" icon={<DeleteOutlined />} />
                                         </Popconfirm>
                                     )}
                                 </div>
-                            </div>
-                        </div>
-                    ))}
+                            </Card>
+                        ))}
+                    </Image.PreviewGroup>
                 </div>
             </Space>
-
-            <Modal
-                open={viewModal.open}
-                title="Imagen"
-                footer={null}
-                onCancel={() => setViewModal({ open: false, image: null })}
-                width={720}
-                centered
-            >
-                {viewModal.image && (
-                    <img src={viewModal.image.url} alt={viewModal.image.caption || "imagen"} style={{ width: "100%", maxHeight: 520, objectFit: "contain" }} />
-                )}
-            </Modal>
         </div>
     );
 }
