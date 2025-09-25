@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
 import { Form, message, Divider, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
@@ -289,6 +289,92 @@ const ReportEditor: React.FC = () => {
     const previewHostRef = useRef<HTMLDivElement>(null);
     const hiddenSourceRef = useRef<HTMLDivElement>(null);
     const sourceContentRef = useRef<HTMLDivElement>(null);
+    const leftColumnRef = useRef<HTMLDivElement>(null);
+    const previewColumnRef = useRef<HTMLDivElement>(null);
+    const [previewBounds, setPreviewBounds] = useState<{ minHeight: number; maxHeight: number }>({ minHeight: 0, maxHeight: 0 });
+
+    const updatePreviewDimensions = useCallback(() => {
+        const columnEl = previewColumnRef.current;
+        if (!columnEl) return;
+
+        const width = columnEl.getBoundingClientRect().width;
+        const desiredMinHeight = width > 0 ? width * 1.4142 : 0;
+        const leftHeight = leftColumnRef.current?.getBoundingClientRect().height ?? 0;
+
+        let desiredMaxHeight = leftHeight > 0 ? leftHeight : desiredMinHeight;
+        if (desiredMaxHeight < desiredMinHeight) {
+            desiredMaxHeight = desiredMinHeight;
+        }
+
+        setPreviewBounds((prev) => {
+            if (
+                Math.abs(prev.minHeight - desiredMinHeight) < 0.5 &&
+                Math.abs(prev.maxHeight - desiredMaxHeight) < 0.5
+            ) {
+                return prev;
+            }
+            return { minHeight: desiredMinHeight, maxHeight: desiredMaxHeight };
+        });
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        let frame = 0;
+        const scheduleUpdate = () => {
+            if (frame) window.cancelAnimationFrame(frame);
+            frame = window.requestAnimationFrame(updatePreviewDimensions);
+        };
+
+        scheduleUpdate();
+        window.addEventListener("resize", scheduleUpdate);
+
+        let leftObserver: ResizeObserver | undefined;
+        let previewObserver: ResizeObserver | undefined;
+
+        if (typeof ResizeObserver !== "undefined") {
+            if (leftColumnRef.current) {
+                leftObserver = new ResizeObserver(scheduleUpdate);
+                leftObserver.observe(leftColumnRef.current);
+            }
+            if (previewColumnRef.current) {
+                previewObserver = new ResizeObserver(scheduleUpdate);
+                previewObserver.observe(previewColumnRef.current);
+            }
+        }
+
+        return () => {
+            window.removeEventListener("resize", scheduleUpdate);
+            if (frame) window.cancelAnimationFrame(frame);
+            leftObserver?.disconnect();
+            previewObserver?.disconnect();
+        };
+    }, [updatePreviewDimensions]);
+
+    useEffect(() => {
+        updatePreviewDimensions();
+    }, [
+        updatePreviewDimensions,
+        descripcionMacroscopia,
+        descripcionMicroscopia,
+        descripcionCitomorfologica,
+        interpretacion,
+        diagnostico,
+        comentario,
+        citologiaUrinariaHTML,
+        inmunofluorescenciaHTML,
+        inmunotincionesHTML,
+        microscopioElectronicoHTML,
+        edad,
+        reportImages,
+        paciente,
+        examen,
+        folio,
+        fechaRecepcion,
+        especimen,
+        diagnosticoEnvio,
+        tipoActivo,
+    ]);
 
     // Export to PDF (uses hidden source + same styles + vector header/footer)
     const handleExportPDF = async () => {
@@ -765,6 +851,35 @@ const ReportEditor: React.FC = () => {
         edad, reportImages, tipoActivo
     ]);
 
+    const columnGapValue = useMemo(() => {
+        if (typeof tokens.gap === "number") return `${tokens.gap}px`;
+        return tokens.gap || "16px";
+    }, [tokens.gap]);
+
+    const previewColumnStyle = useMemo<CSSProperties>(() => {
+        const style: CSSProperties = {
+            display: "flex",
+            flexDirection: "column",
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
+        };
+        if (previewBounds.minHeight > 0) style.minHeight = previewBounds.minHeight;
+        if (previewBounds.maxHeight > 0) style.maxHeight = previewBounds.maxHeight;
+        return style;
+    }, [previewBounds]);
+
+    const previewScrollStyle = useMemo<CSSProperties>(() => {
+        const style: CSSProperties = {
+            padding: 24,
+            overflowY: "auto",
+            flex: 1,
+        };
+        if (previewBounds.minHeight > 0) style.minHeight = previewBounds.minHeight;
+        if (previewBounds.maxHeight > 0) style.maxHeight = previewBounds.maxHeight;
+        return style;
+    }, [previewBounds]);
+
     return (
         <>
             <style> {letterStyles} </style>
@@ -774,6 +889,10 @@ const ReportEditor: React.FC = () => {
               .re-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
               .re-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
               .re-span-2 { grid-column: 1 / -1; }
+              .re-two-column { display: grid; gap: ${columnGapValue}; grid-template-columns: minmax(0, 1fr); align-items: start; }
+              @media (min-width: 1280px) {
+                .re-two-column { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+              }
               @media (max-width: 768px) {
                 .re-grid-2, .re-grid-3, .re-grid-4 { grid-template-columns: 1fr; }
                 .re-span-2 { grid-column: 1 / -1; }
@@ -909,8 +1028,15 @@ const ReportEditor: React.FC = () => {
                 </div>
 
                 {/* Dos columnas: izquierda editor + galería reporte, derecha vista previa */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: tokens.gap, alignItems: "start" }}>
-                    <div style={{ display: "grid", gap: tokens.gap }}>
+                <div className="re-two-column">
+                    <div
+                        ref={leftColumnRef}
+                        style={{
+                            display: "grid",
+                            gap: tokens.gap,
+                            minWidth: 0,
+                        }}
+                    >
                         <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
                             <div style={{ padding: 24 }}>
                                 <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
@@ -1206,13 +1332,26 @@ const ReportEditor: React.FC = () => {
                         </div>
                     </div>
 
-                    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-                        <div style={{ padding: 24 }}>
-                            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Vista previa</h2>
-                        </div>
-                        <div style={{ height: 1, background: "#e5e7eb" }} />
-                        <div style={{ padding: 24 }}>
-                            <div ref={previewHostRef} />
+                    <div ref={previewColumnRef} style={previewColumnStyle}>
+                        <div
+                            style={{
+                                background: tokens.cardBg,
+                                borderRadius: tokens.radius,
+                                boxShadow: tokens.shadow,
+                                padding: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                flex: 1,
+                                overflow: "hidden",
+                            }}
+                        >
+                            <div style={{ padding: 24 }}>
+                                <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Vista previa</h2>
+                            </div>
+                            <div style={{ height: 1, background: "#e5e7eb" }} />
+                            <div style={previewScrollStyle}>
+                                <div ref={previewHostRef} />
+                            </div>
                         </div>
                     </div>
                 </div>
