@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton } from "antd";
+import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton, message } from "antd";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens } from "../components/design/tokens";
+import { saveReport } from "../services/report_service";
+import type { ReportEnvelope, ReportFlags } from "../models/report";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -79,6 +81,21 @@ export default function OrderDetail() {
     const [data, setData] = useState<OrderFullResponse | null>(null);
     const [reportId, setReportId] = useState<string | null>(null);
 
+    // Default flags for initial report when creating
+    const DEFAULT_FLAGS: ReportFlags = {
+        incluirMacroscopia: true,
+        incluirMicroscopia: true,
+        incluirCitomorfologia: true,
+        incluirInterpretacion: true,
+        incluirDiagnostico: true,
+        incluirComentario: true,
+        incluirIF: false,
+        incluirME: false,
+        incluirEdad: false,
+        incluirCU: false,
+        incluirInmunotinciones: false,
+    };
+
     useEffect(() => {
         if (!orderId) return;
         (async () => {
@@ -105,6 +122,58 @@ export default function OrderDetail() {
     const fullName = useMemo(() => {
         return `${data?.patient.first_name ?? ""} ${data?.patient.last_name ?? ""}`.trim();
     }, [data]);
+
+    const handleCreateReport = async () => {
+        if (!data) return;
+        try {
+            const userId = localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "";
+            const envelope: ReportEnvelope = {
+                id: "",
+                tenant_id: data.order.tenant_id,
+                branch_id: data.order.branch_id,
+                order_id: data.order.id,
+                version_no: 1,
+                status: "DRAFT",
+                title: `Reporte Histopatologia - ${fullName || data.patient.patient_code}`,
+                diagnosis_text: "",
+                created_by: userId,
+                published_at: null,
+                report: {
+                    tipo: "Histopatologia",
+                    base: {
+                        paciente: fullName || data.patient.patient_code,
+                        examen: "",
+                        folio: data.order.order_code || "",
+                        fechaRecepcion: "",
+                        especimen: "",
+                        diagnosticoEnvio: null,
+                    },
+                    secciones: {
+                        descripcionMacroscopia: null,
+                        descripcionMicroscopia: null,
+                        descripcionCitomorfologica: null,
+                        interpretacion: null,
+                        diagnostico: null,
+                        comentario: null,
+                        inmunofluorescenciaHTML: null,
+                        inmunotincionesHTML: null,
+                        microscopioElectronicoHTML: null,
+                        citologiaUrinariaHTML: null,
+                        edad: null,
+                    },
+                    flags: { ...DEFAULT_FLAGS },
+                    images: [],
+                },
+            };
+            const created = await saveReport(envelope);
+            message.success("Reporte creado");
+            setReportId(created.id);
+            // Navigate to the report
+            navigate(`/reports/${created.id}`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "No se pudo crear el reporte");
+        }
+    };
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
@@ -178,7 +247,12 @@ export default function OrderDetail() {
                                 )}
                             />
                         ) : (
-                            <Empty description="Sin reporte" />
+                            <div style={{ display: "grid", gap: 12 }}>
+                                <Empty description="Sin reporte" />
+                                <div>
+                                    <AntButton type="primary" onClick={handleCreateReport}>Registrar Reporte</AntButton>
+                                </div>
+                            </div>
                         )}
                     </Card>
                 </div>
@@ -186,5 +260,3 @@ export default function OrderDetail() {
         </Layout>
     );
 }
-
-

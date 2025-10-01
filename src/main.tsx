@@ -15,6 +15,7 @@ import OrderDetail from "./pages/order_detail";
 import SampleDetailPage from "./pages/sample_detail";
 import CasesList from "./pages/cases_list";
 import SamplesList from "./pages/samples_list";
+import Reports from "./pages/reports";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -34,6 +35,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/samples/register" element={<SampleRegister />} />
             <Route path="/cases/register" element={<CaseRegister />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/report" element={<Reports />} />
+            <Route path="/reports/:reportId" element={<Reports />} />
         </Routes>
     </BrowserRouter>
 );
