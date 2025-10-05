@@ -3,11 +3,20 @@ import type { ReportEnvelope } from "../models/report";
 // Config base URL API
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
+// Helper function to get auth token
+function getAuthToken(): string | null {
+    return localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+}
+
 // Save report
 export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(`${base}/v1/reports`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(report),
     });
 
@@ -21,9 +30,13 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
 // Save new version of report
 export async function saveReportVersion(report: ReportEnvelope): Promise<void> {
     const report_id = report.id;
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(`${base}/v1/reports/${report_id}/new_version`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(report),
     });
 
@@ -35,9 +48,13 @@ export async function saveReportVersion(report: ReportEnvelope): Promise<void> {
 
 // Get report by id
 export async function getReport(reportId: string): Promise<ReportEnvelope> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(`${base}/v1/reports/${reportId}`, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers,
     });
     if (!res.ok) {
         const errText = await res.text();
@@ -63,8 +80,13 @@ export async function uploadReportImage(
     form.append("file", file);
     if (caption) form.append("caption", caption);
 
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(`${base}/v1/laboratory/samples/${sampleId}/images`, {
         method: "POST",
+        headers,
         body: form,
     });
 
@@ -81,10 +103,15 @@ export async function deleteReportImage(
     sampleId: string,
     imageId: string
 ): Promise<void> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(
         `${base}/v1/laboratory/samples/${sampleId}/images/${imageId}`,
         {
             method: "DELETE",
+            headers,
         }
     );
 
@@ -98,11 +125,15 @@ export async function deleteReportImage(
 export async function fetchReportImages(
     sampleId: string
 ): Promise<{ id: string; url: string; thumbnailUrl?: string; caption?: string }[]> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
     const res = await fetch(
         `${base}/v1/laboratory/samples/${sampleId}/images`,
         {
             method: "GET",
-            headers: { Accept: "application/json" },
+            headers,
         }
     );
 
