@@ -8,7 +8,7 @@ const { Sider } = Layout;
 
 export type CelumaKey = 
     | "/home" 
-    | "/report" 
+    | "/reports" 
     | "/patients"
     | "/cases"
     | "/samples"
@@ -20,7 +20,7 @@ export type CelumaKey =
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
-    { key: "/report", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
+    { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
     { key: "/cases", icon: <FileTextOutlined />, label: "Casos", title: "Casos" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
