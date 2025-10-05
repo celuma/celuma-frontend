@@ -16,7 +16,7 @@ import SelectField from "../ui/select_field";
 import TextField from "../ui/text_field";
 import DateField from "../ui/date_field";
 import { tokens } from "../design/tokens";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { getReport } from "../../services/report_service";
 
 /* Flags by report type */
@@ -188,6 +188,7 @@ const ReportEditor: React.FC = () => {
     // Routing params
     const { reportId } = useParams();
     const { search } = useLocation();
+    const navigate = useNavigate();
     const prefilledOrderId = useMemo(() => {
         const qs = new URLSearchParams(search);
         return qs.get("orderId") || "";
@@ -438,6 +439,8 @@ const ReportEditor: React.FC = () => {
                 scale: window.devicePixelRatio || 2,
                 useCORS: true,
                 backgroundColor: "#ffffff",
+                allowTaint: true,
+                logging: false,
                 // These two options help html2canvas calculate layout as on screen
                 windowWidth: page.offsetWidth,
                 windowHeight: page.offsetHeight,
@@ -650,10 +653,19 @@ const ReportEditor: React.FC = () => {
             if (!envelope.id) {
                 const savedEnvelope = await saveReport(envelope);
                 setEnvelopeExistente(savedEnvelope);
+                message.success("Reporte guardado");
+                // Redirect to order detail after successful save
+                if (savedEnvelope.order_id) {
+                    navigate(`/orders/${savedEnvelope.order_id}`);
+                }
             } else {
                 await saveReportVersion(envelope);
+                message.success("Reporte guardado");
+                // Redirect to order detail after successful save
+                if (envelope.order_id) {
+                    navigate(`/orders/${envelope.order_id}`);
+                }
             }
-            message.success("Reporte guardado");
         } catch (error) {
             console.error(error);
             message.error("No se pudo guardar el reporte");
@@ -711,7 +723,8 @@ const ReportEditor: React.FC = () => {
             const page = document.createElement("div");
             page.style.width = "8.5in";
             page.style.height = "11in";
-            page.style.background = "#fff";
+            page.style.background = "#ffffff";
+            page.style.backgroundColor = "#ffffff";
             page.style.boxShadow = "0 0 6px rgba(0,0,0,.2)";
             page.style.margin = "16px auto";
             page.style.position = "relative";
@@ -750,6 +763,8 @@ const ReportEditor: React.FC = () => {
             body.style.overflow = "hidden";
             body.style.width = `${contentWpx}px`;
             body.style.height = `${contentHpx}px`;
+            body.style.background = "#ffffff";
+            body.style.backgroundColor = "#ffffff";
 
             // Footer
             const footer = document.createElement("div");
