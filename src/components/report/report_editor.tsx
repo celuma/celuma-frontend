@@ -629,7 +629,7 @@ const ReportEditor: React.FC = () => {
     const columnGapValue = useMemo(() => {
         if (typeof tokens.gap === "number") return `${tokens.gap}px`;
         return tokens.gap || "16px";
-    }, [tokens.gap]);
+    }, []);
 
     const previewColumnStyle = useMemo<CSSProperties>(() => {
         const style: CSSProperties = {

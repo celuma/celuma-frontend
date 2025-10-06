@@ -203,7 +203,6 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     const reportData = report.report;
     const baseData = reportData.base;
     const secciones = reportData.secciones;
-    const flags = reportData.flags;
     const tipoActivo = reportData.tipo;
 
     return (
