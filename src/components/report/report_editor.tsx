@@ -650,21 +650,26 @@ const ReportEditor: React.FC = () => {
     const handleSave = async () => {
         try {
             const envelope = buildEnvelope(envelopeExistente);
+            let savedEnvelope: ReportEnvelope;
+            
             if (!envelope.id) {
-                const savedEnvelope = await saveReport(envelope);
+                savedEnvelope = await saveReport(envelope);
                 setEnvelopeExistente(savedEnvelope);
-                message.success("Reporte guardado");
-                // Redirect to order detail after successful save
-                if (savedEnvelope.order_id) {
-                    navigate(`/orders/${savedEnvelope.order_id}`);
-                }
             } else {
                 await saveReportVersion(envelope);
-                message.success("Reporte guardado");
-                // Redirect to order detail after successful save
-                if (envelope.order_id) {
-                    navigate(`/orders/${envelope.order_id}`);
-                }
+                // For existing reports, update the envelope with the saved data
+                savedEnvelope = { ...envelope, status: "DRAFT" as const };
+                setEnvelopeExistente(savedEnvelope);
+            }
+            
+            // Update localStorage with the saved version after successful cloud save
+            const localStorageKey = "reportEnvelopeDraft";
+            localStorage.setItem(localStorageKey, JSON.stringify(savedEnvelope));
+            
+            message.success("Reporte guardado");
+            // Redirect to order detail after successful save
+            if (savedEnvelope.order_id) {
+                navigate(`/orders/${savedEnvelope.order_id}`);
             }
         } catch (error) {
             console.error(error);

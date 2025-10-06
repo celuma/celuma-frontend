@@ -166,6 +166,10 @@ export default function OrderDetail() {
                 },
             };
             const created = await saveReport(envelope);
+            
+            // Update localStorage with the created report to ensure consistency
+            localStorage.setItem("reportEnvelopeDraft", JSON.stringify(created));
+            
             message.success("Reporte creado");
             setReportId(created.id);
             // Navigate to the report
