@@ -14,7 +14,7 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = token;
 
-    const res = await fetch(`${base}/v1/reports`, {
+    const res = await fetch(`${base}/v1/reports/`, {
         method: "POST",
         headers,
         body: JSON.stringify(report),
