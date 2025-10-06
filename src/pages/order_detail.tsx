@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton, message } from "antd";
+import { ReloadOutlined, FilePdfOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens } from "../components/design/tokens";
-import { saveReport } from "../services/report_service";
+import { saveReport, getLatestReportByOrderId } from "../services/report_service";
 import type { ReportEnvelope, ReportFlags } from "../models/report";
+import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -80,6 +82,9 @@ export default function OrderDetail() {
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<OrderFullResponse | null>(null);
     const [reportId, setReportId] = useState<string | null>(null);
+    const [latestReport, setLatestReport] = useState<ReportEnvelope | null>(null);
+    const [reportLoading, setReportLoading] = useState(false);
+    const previewRef = useRef<ReportPreviewRef>(null);
 
     // Default flags for initial report when creating
     const DEFAULT_FLAGS: ReportFlags = {
@@ -96,11 +101,27 @@ export default function OrderDetail() {
         incluirInmunotinciones: false,
     };
 
+    // Function to load the latest report by report ID
+    const loadLatestReport = async (reportId: string) => {
+        setReportLoading(true);
+        try {
+            const report = await getLatestReportByOrderId(reportId);
+            setLatestReport(report);
+        } catch (err) {
+            console.error("Error loading latest report:", err);
+            setLatestReport(null);
+        } finally {
+            setReportLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (!orderId) return;
         (async () => {
             setLoading(true);
             setError(null);
+            let foundReportId: string | null = null;
+            
             try {
                 const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
                 setData(full);
@@ -109,8 +130,14 @@ export default function OrderDetail() {
                 try {
                     const cases = await getJSON<PatientCasesResponse>(`/v1/laboratory/patients/${full.patient.id}/cases`);
                     const found = cases.cases.find((c) => c.order.id === full.order.id);
-                    setReportId(found?.report?.id ?? null);
+                    foundReportId = found?.report?.id ?? null;
+                    setReportId(foundReportId);
                 } catch { /* optional */ }
+
+                // Load latest report for preview if reportId exists
+                if (foundReportId) {
+                    await loadLatestReport(foundReportId);
+                }
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             } finally {
@@ -166,8 +193,13 @@ export default function OrderDetail() {
                 },
             };
             const created = await saveReport(envelope);
+            
+            // Update localStorage with the created report to ensure consistency
+            localStorage.setItem("reportEnvelopeDraft", JSON.stringify(created));
+            
             message.success("Reporte creado");
             setReportId(created.id);
+            setLatestReport(created);
             // Navigate to the report
             navigate(`/reports/${created.id}`);
         } catch (error) {
@@ -238,14 +270,52 @@ export default function OrderDetail() {
                         style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                     >
                         {reportId ? (
-                            <List
-                                dataSource={[{ id: reportId }]}
-                                renderItem={() => (
-                                    <List.Item onClick={() => navigate(`/reports/${reportId}`)} style={{ cursor: "pointer" }}>
-                                        <List.Item.Meta title="Ver reporte" description="Ir al detalle del reporte" />
-                                    </List.Item>
+                            <div style={{ display: "grid", gap: 16 }}>
+                                <List
+                                    dataSource={[{ id: reportId }]}
+                                    renderItem={() => (
+                                        <List.Item onClick={() => navigate(`/reports/${reportId}`)} style={{ cursor: "pointer" }}>
+                                            <List.Item.Meta title="Editar reporte" description="Ir al editor del reporte" />
+                                        </List.Item>
+                                    )}
+                                />
+                                {latestReport && (
+                                    <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                                            <h4 style={{ fontFamily: tokens.titleFont, fontSize: 16, fontWeight: 600, color: "#0d1b2a", margin: 0 }}>
+                                                Vista previa del reporte
+                                            </h4>
+                                            <div style={{ display: "flex", gap: 8 }}>
+                                                <AntButton 
+                                                    type="text" 
+                                                    icon={<ReloadOutlined />} 
+                                                    onClick={() => reportId && loadLatestReport(reportId)}
+                                                    loading={reportLoading}
+                                                    title="Actualizar vista previa"
+                                                >
+                                                    Actualizar
+                                                </AntButton>
+                                                <AntButton 
+                                                    type="primary" 
+                                                    icon={<FilePdfOutlined />}
+                                                    onClick={() => {
+                                                        previewRef.current?.exportPDF();
+                                                    }}
+                                                    title="Exportar reporte a PDF"
+                                                >
+                                                    Exportar PDF
+                                                </AntButton>
+                                            </div>
+                                        </div>
+                                        <ReportPreview 
+                                            ref={previewRef}
+                                            report={latestReport} 
+                                            loading={reportLoading}
+                                            style={{ margin: 0 }}
+                                        />
+                                    </div>
                                 )}
-                            />
+                            </div>
                         ) : (
                             <div style={{ display: "grid", gap: 12 }}>
                                 <Empty description="Sin reporte" />

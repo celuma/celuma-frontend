@@ -14,7 +14,7 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = token;
 
-    const res = await fetch(`${base}/v1/reports`, {
+    const res = await fetch(`${base}/v1/reports/`, {
         method: "POST",
         headers,
         body: JSON.stringify(report),
@@ -60,6 +60,31 @@ export async function getReport(reportId: string): Promise<ReportEnvelope> {
         const errText = await res.text();
         throw new Error(`Error al obtener reporte: ${res.status} - ${errText}`);
     }
+    return (await res.json()) as ReportEnvelope;
+}
+
+// Get latest report by order id (using existing report ID)
+export async function getLatestReportByOrderId(reportId: string): Promise<ReportEnvelope | null> {
+    if (!reportId) return null;
+    
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}`, {
+        method: "GET",
+        headers,
+    });
+    
+    if (res.status === 404) {
+        return null; // No report found
+    }
+    
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener reporte: ${res.status} - ${errText}`);
+    }
+    
     return (await res.json()) as ReportEnvelope;
 }
 
