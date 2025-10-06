@@ -17,7 +17,7 @@ const Home: React.FC = () => {
     const { pathname } = useLocation();
     const { data, loading, error } = useDashboardData();
 
-    const handleActivityClick = (item: any) => {
+    const handleActivityClick = (item: { id: string; type: string }) => {
         switch (item.type) {
             case "order":
                 nav(`/orders/${item.id}`);
@@ -59,7 +59,7 @@ const Home: React.FC = () => {
                                 color: "#0d1b2a" 
                             }}
                         >
-                            Dashboard
+                            Inicio
                         </Title>
                         <p style={{ margin: "8px 0 0 0", color: "#6b7280", fontSize: 16 }}>
                             Resumen de información importante del laboratorio
