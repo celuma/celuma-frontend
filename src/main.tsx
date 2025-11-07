@@ -18,6 +18,15 @@ import SamplesList from "./pages/samples_list";
 import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
 import PathologistWorklist from "./pages/pathologist_worklist";
+import BillingDetail from "./pages/billing_detail";
+import PriceCatalog from "./pages/price_catalog";
+import UsersManagement from "./pages/users_management";
+import PasswordResetRequest from "./pages/password_reset_request";
+import PasswordResetConfirm from "./pages/password_reset_confirm";
+import TenantSettings from "./pages/tenant_settings";
+import PhysicianPortal from "./pages/physician_portal";
+import PatientPortal from "./pages/patient_portal";
+import AcceptInvitation from "./pages/accept_invitation";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -41,6 +50,15 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
             <Route path="/worklist" element={<PathologistWorklist />} />
+            <Route path="/billing/:orderId" element={<BillingDetail />} />
+            <Route path="/catalog" element={<PriceCatalog />} />
+            <Route path="/users" element={<UsersManagement />} />
+            <Route path="/password-reset" element={<PasswordResetRequest />} />
+            <Route path="/reset-password" element={<PasswordResetConfirm />} />
+            <Route path="/settings" element={<TenantSettings />} />
+            <Route path="/physician-portal" element={<PhysicianPortal />} />
+            <Route path="/patient-portal" element={<PatientPortal />} />
+            <Route path="/accept-invitation" element={<AcceptInvitation />} />
         </Routes>
     </BrowserRouter>
 );
