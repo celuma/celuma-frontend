@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton, message } from "antd";
-import { ReloadOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { Layout, Card, Descriptions, Tag, List, Avatar, Empty, Button as AntButton, message, Timeline } from "antd";
+import { ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, ClockCircleOutlined, FileImageOutlined, FileTextOutlined, DollarOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -85,6 +85,13 @@ export default function OrderDetail() {
     const [latestReport, setLatestReport] = useState<ReportEnvelope | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
     const previewRef = useRef<ReportPreviewRef>(null);
+    const [timeline, setTimeline] = useState<Array<{
+        id: string;
+        event_type: string;
+        description: string;
+        created_at: string;
+        created_by?: string;
+    }>>([]);
 
     // Default flags for initial report when creating
     const DEFAULT_FLAGS: ReportFlags = {
@@ -125,6 +132,20 @@ export default function OrderDetail() {
             try {
                 const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
                 setData(full);
+
+                // Load timeline events
+                try {
+                    const eventsResult = await getJSON<{ events: Array<{
+                        id: string;
+                        event_type: string;
+                        description: string;
+                        created_at: string;
+                        created_by?: string;
+                    }> }>(`/v1/laboratory/orders/${orderId}/events`);
+                    setTimeline(eventsResult.events);
+                } catch {
+                    // Timeline is optional, ignore errors
+                }
 
                 // Fetch cases to discover linked report id (if any)
                 try {
@@ -222,15 +243,38 @@ export default function OrderDetail() {
                         style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                     >
                         {data && (
-                            <Descriptions bordered column={1} size="middle">
-                                <Descriptions.Item label="Orden">{data.order.order_code}</Descriptions.Item>
-                                <Descriptions.Item label="Estado"><Tag color="#49b6ad">{data.order.status}</Tag></Descriptions.Item>
-                                <Descriptions.Item label="Paciente">
-                                    <a onClick={() => navigate(`/patients/${data.patient.id}`)}>{fullName || data.patient.patient_code}</a>
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Solicitante">{data.order.requested_by || "—"}</Descriptions.Item>
-                                <Descriptions.Item label="Notas">{data.order.notes || "—"}</Descriptions.Item>
-                            </Descriptions>
+                            <>
+                                {data.order.billed_lock && (
+                                    <div style={{ 
+                                        marginBottom: 16, 
+                                        padding: 12, 
+                                        background: "#fff7e6", 
+                                        border: "1px solid #ffd591", 
+                                        borderRadius: 4 
+                                    }}>
+                                        <Tag color="orange" style={{ marginBottom: 8 }}>Retenido por Pago Pendiente</Tag>
+                                        <div style={{ fontSize: 13, color: "#ad6800" }}>
+                                            Esta orden tiene pagos pendientes. El acceso al reporte está bloqueado hasta que se complete el pago.
+                                        </div>
+                                        <Button 
+                                            size="small" 
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate(`/billing/${data.order.id}`)}
+                                        >
+                                            Ver Facturación
+                                        </Button>
+                                    </div>
+                                )}
+                                <Descriptions bordered column={1} size="middle">
+                                    <Descriptions.Item label="Orden">{data.order.order_code}</Descriptions.Item>
+                                    <Descriptions.Item label="Estado"><Tag color="#49b6ad">{data.order.status}</Tag></Descriptions.Item>
+                                    <Descriptions.Item label="Paciente">
+                                        <a onClick={() => navigate(`/patients/${data.patient.id}`)}>{fullName || data.patient.patient_code}</a>
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Solicitante">{data.order.requested_by || "—"}</Descriptions.Item>
+                                    <Descriptions.Item label="Notas">{data.order.notes || "—"}</Descriptions.Item>
+                                </Descriptions>
+                            </>
                         )}
                         <ErrorText>{error}</ErrorText>
                     </Card>
@@ -261,6 +305,49 @@ export default function OrderDetail() {
                             />
                         ) : (
                             <Empty description="Sin muestras" />
+                        )}
+                    </Card>
+
+                    {/* Timeline Card */}
+                    <Card
+                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Línea de Tiempo</span>}
+                        loading={loading}
+                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                    >
+                        {timeline.length > 0 ? (
+                            <Timeline
+                                items={timeline.map((event) => {
+                                    const getIcon = (eventType: string) => {
+                                        if (eventType.includes("REPORT")) return <FileTextOutlined />;
+                                        if (eventType.includes("IMAGE")) return <FileImageOutlined />;
+                                        if (eventType.includes("PAYMENT")) return <DollarOutlined />;
+                                        if (eventType.includes("APPROVED") || eventType.includes("SIGNED")) return <CheckCircleOutlined />;
+                                        return <ClockCircleOutlined />;
+                                    };
+
+                                    const getColor = (eventType: string) => {
+                                        if (eventType.includes("SIGNED") || eventType.includes("APPROVED")) return "green";
+                                        if (eventType.includes("PAYMENT")) return "blue";
+                                        if (eventType.includes("CANCELLED")) return "red";
+                                        return "gray";
+                                    };
+
+                                    return {
+                                        dot: getIcon(event.event_type),
+                                        color: getColor(event.event_type),
+                                        children: (
+                                            <div>
+                                                <div style={{ fontWeight: 600 }}>{event.description}</div>
+                                                <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                                                    {new Date(event.created_at).toLocaleString('es-MX')}
+                                                </div>
+                                            </div>
+                                        ),
+                                    };
+                                })}
+                            />
+                        ) : (
+                            <Empty description="Sin eventos registrados" />
                         )}
                     </Card>
 
