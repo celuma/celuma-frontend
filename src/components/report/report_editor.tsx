@@ -155,6 +155,7 @@ type OrderFullResponse = {
         branch_id: string;
         requested_by?: string | null;
         notes?: string | null;
+        billed_lock?: boolean;
     };
     patient: {
         id: string;
@@ -765,6 +766,20 @@ const ReportEditor: React.FC = () => {
                         <div style={{ display: "grid", gap: 20 }}>
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Orden</h3>
+                                {orderFull?.order.billed_lock && (
+                                    <div style={{ 
+                                        padding: 12, 
+                                        background: "#fff7e6", 
+                                        border: "1px solid #ffd591", 
+                                        borderRadius: 4,
+                                        marginBottom: 8
+                                    }}>
+                                        <Tag color="orange">Retenido por Pago Pendiente</Tag>
+                                        <div style={{ fontSize: 13, color: "#ad6800", marginTop: 4 }}>
+                                            Esta orden tiene pagos pendientes. La descarga del PDF está bloqueada.
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="re-grid-2">
                                     <SelectField
                                         value={selectedOrderId || undefined}
