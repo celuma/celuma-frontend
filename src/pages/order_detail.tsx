@@ -186,6 +186,8 @@ export default function OrderDetail() {
                 diagnosis_text: "",
                 created_by: userId,
                 published_at: null,
+                signed_by: null,
+                signed_at: null,
                 report: {
                     tipo: "Histopatologia",
                     base: {
@@ -256,13 +258,13 @@ export default function OrderDetail() {
                                         <div style={{ fontSize: 13, color: "#ad6800" }}>
                                             Esta orden tiene pagos pendientes. El acceso al reporte está bloqueado hasta que se complete el pago.
                                         </div>
-                                        <Button 
+                                        <AntButton 
                                             size="small" 
                                             style={{ marginTop: 8 }}
                                             onClick={() => navigate(`/billing/${data.order.id}`)}
                                         >
                                             Ver Facturación
-                                        </Button>
+                                        </AntButton>
                                     </div>
                                 )}
                                 <Descriptions bordered column={1} size="middle">

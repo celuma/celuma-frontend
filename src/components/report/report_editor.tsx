@@ -10,7 +10,7 @@ import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
 import { DeleteOutlined } from "@ant-design/icons";
 import { usePdfExport } from "../../hooks/use_pdf_export";
-import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
+import type { ReportType, ReportEnvelope, ReportFlags, ReportStatus } from "../../models/report";
 import SelectField from "../ui/select_field";
 import TextField from "../ui/text_field";
 import DateField from "../ui/date_field";
@@ -548,6 +548,8 @@ const ReportEditor: React.FC = () => {
             diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
             created_by: session.userId || "",
             published_at: null,
+            signed_by: existing?.signed_by ?? null,
+            signed_at: existing?.signed_at ?? null,
             report: {
                 tipo: tipoActivo,
                 base: {
@@ -623,7 +625,7 @@ const ReportEditor: React.FC = () => {
         }
         try {
             const result = await submitReport(envelopeExistente.id);
-            setEnvelopeExistente({ ...envelopeExistente, status: result.status });
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
             message.success(result.message);
         } catch (error) {
             console.error(error);
@@ -635,7 +637,7 @@ const ReportEditor: React.FC = () => {
         if (!envelopeExistente?.id) return;
         try {
             const result = await approveReport(envelopeExistente.id);
-            setEnvelopeExistente({ ...envelopeExistente, status: result.status });
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
             message.success(result.message);
         } catch (error) {
             console.error(error);
@@ -651,7 +653,7 @@ const ReportEditor: React.FC = () => {
         }
         try {
             const result = await requestChanges(envelopeExistente.id, changesComment);
-            setEnvelopeExistente({ ...envelopeExistente, status: result.status });
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
             setIsChangesModalVisible(false);
             setChangesComment("");
             message.success(result.message);

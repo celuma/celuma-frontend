@@ -33,11 +33,11 @@ function PathologistWorklist() {
             const mapped = data.reports.map((r) => ({
                 id: r.id,
                 status: r.status,
-                title: r.title,
+                title: r.title || undefined,
                 order_code: r.order.order_code,
                 patient_name: r.order.patient?.full_name || "Sin nombre",
                 patient_code: r.order.patient?.patient_code || "",
-                created_at: r.created_at,
+                created_at: r.created_at || undefined,
             }));
             setReports(mapped);
         } catch (error) {
