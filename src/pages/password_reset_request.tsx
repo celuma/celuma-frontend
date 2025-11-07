@@ -29,7 +29,7 @@ function PasswordResetRequest() {
 
             setSubmitted(true);
             message.success("Si existe una cuenta con ese email, recibirás un enlace de recuperación");
-        } catch (error) {
+        } catch {
             message.error("Error al procesar la solicitud");
         } finally {
             setLoading(false);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, Table, Button, message, Typography, Tag } from "antd";
-import { FilePdfOutlined, DownloadOutlined } from "@ant-design/icons";
+import { DownloadOutlined } from "@ant-design/icons";
 import { tokens } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
@@ -46,7 +46,7 @@ function PhysicianPortal() {
         try {
             const data = await getJSON<PhysicianOrder[]>("/v1/portal/physician/orders");
             setOrders(data);
-        } catch (error) {
+        } catch {
             message.error("Error al cargar órdenes");
         } finally {
             setLoading(false);

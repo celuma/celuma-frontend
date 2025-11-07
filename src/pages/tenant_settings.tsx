@@ -50,6 +50,7 @@ function TenantSettings() {
 
     useEffect(() => {
         loadTenant();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const loadTenant = async () => {
@@ -68,14 +69,14 @@ function TenantSettings() {
                 legal_name: data.legal_name,
                 tax_id: data.tax_id,
             });
-        } catch (error) {
+        } catch {
             message.error("Error al cargar configuración");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async (values: any) => {
+    const handleSave = async (values: Partial<TenantInfo>) => {
         if (!tenant) return;
         
         setLoading(true);
@@ -83,7 +84,7 @@ function TenantSettings() {
             await patchJSON(`/v1/tenants/${tenant.id}`, values);
             message.success("Configuración actualizada");
             await loadTenant();
-        } catch (error) {
+        } catch {
             message.error("Error al actualizar configuración");
         } finally {
             setLoading(false);
@@ -94,7 +95,9 @@ function TenantSettings() {
         if (!logoFile || !tenant) return;
 
         const formData = new FormData();
-        formData.append("file", logoFile as any);
+        const fileObject = logoFile.originFileObj;
+        if (!fileObject) return;
+        formData.append("file", fileObject);
 
         const token = getAuthToken();
         const headers: Record<string, string> = {};
@@ -112,7 +115,7 @@ function TenantSettings() {
             message.success("Logo actualizado");
             await loadTenant();
             setLogoFile(null);
-        } catch (error) {
+        } catch {
             message.error("Error al subir logo");
         }
     };

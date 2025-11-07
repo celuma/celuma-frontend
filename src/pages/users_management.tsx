@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Tag, Space, Popconfirm, Switch } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, MailOutlined } from "@ant-design/icons";
+import { PlusOutlined, DeleteOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -33,15 +33,6 @@ async function postJSON<TRes>(path: string, body: unknown): Promise<TRes> {
     return await res.json();
 }
 
-async function putJSON<TRes>(path: string, body: unknown): Promise<TRes> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, { method: "PUT", headers, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
-}
-
 async function deleteJSON(path: string): Promise<void> {
     const token = getAuthToken();
     const headers: Record<string, string> = {};
@@ -65,7 +56,6 @@ function UsersManagement() {
     const [users, setUsers] = useState<User[]>([]);
     const [createModalVisible, setCreateModalVisible] = useState(false);
     const [inviteModalVisible, setInviteModalVisible] = useState(false);
-    const [editingUser, setEditingUser] = useState<User | null>(null);
     const [form] = Form.useForm();
     const [inviteForm] = Form.useForm();
 
@@ -78,14 +68,14 @@ function UsersManagement() {
         try {
             const data = await getJSON<{ users: User[] }>("/v1/users/");
             setUsers(data.users);
-        } catch (error) {
+        } catch {
             message.error("Error al cargar usuarios");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreate = async (values: any) => {
+    const handleCreate = async (values: Partial<User> & { password: string }) => {
         try {
             await postJSON("/v1/users/", values);
             message.success("Usuario creado");
@@ -97,7 +87,7 @@ function UsersManagement() {
         }
     };
 
-    const handleInvite = async (values: any) => {
+    const handleInvite = async (values: { email: string; full_name: string; role: string }) => {
         try {
             await postJSON("/v1/users/invitations", values);
             message.success("Invitación enviada por email");
@@ -113,7 +103,7 @@ function UsersManagement() {
             await postJSON(`/v1/users/${userId}/toggle-active`, {});
             message.success(`Usuario ${currentStatus ? 'desactivado' : 'activado'}`);
             await loadUsers();
-        } catch (error) {
+        } catch {
             message.error("Error al cambiar estado");
         }
     };
@@ -123,7 +113,7 @@ function UsersManagement() {
             await deleteJSON(`/v1/users/${userId}`);
             message.success("Usuario desactivado");
             await loadUsers();
-        } catch (error) {
+        } catch {
             message.error("Error al desactivar usuario");
         }
     };

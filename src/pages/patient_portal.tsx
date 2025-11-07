@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Card, Form, Input, Button, message, Typography, Descriptions, Tag } from "antd";
 import { SearchOutlined, DownloadOutlined } from "@ant-design/icons";
-import { tokens } from "../components/design/tokens";
 
 const { Title, Paragraph } = Typography;
 

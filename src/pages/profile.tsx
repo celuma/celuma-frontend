@@ -264,7 +264,9 @@ const Profile: React.FC = () => {
         if (!avatarFile || !profileData) return;
 
         const formData = new FormData();
-        formData.append("file", avatarFile as any);
+        const fileObject: File | undefined = avatarFile.originFileObj;
+        if (!fileObject) return;
+        formData.append("file", fileObject);
 
         const token = getAuthToken();
         const headers: Record<string, string> = {};
@@ -282,7 +284,7 @@ const Profile: React.FC = () => {
             antdMessage.success("Foto de perfil actualizada");
             await fetchProfile();
             setAvatarFile(null);
-        } catch (error) {
+        } catch {
             antdMessage.error("Error al subir foto");
         }
     };

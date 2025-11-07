@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Tag, Button, Form, Input, InputNumber, Select, message, Divider, Descriptions } from "antd";
+import { Layout, Card, Table, Tag, Button, Form, InputNumber, Select, message, Divider, Descriptions } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -82,6 +82,7 @@ function BillingDetail() {
     useEffect(() => {
         if (!orderId) return;
         loadInvoice();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderId]);
 
     const loadInvoice = async () => {
@@ -89,8 +90,8 @@ function BillingDetail() {
         setLoading(true);
         try {
             // First get invoices for the order
-            const invoices = await getJSON<{ id: string; invoice_number: string }[]>(`/v1/billing/invoices/`);
-            const orderInvoice = invoices.find((inv: any) => inv.order_id === orderId);
+            const invoices = await getJSON<{ id: string; invoice_number: string; order_id: string }[]>(`/v1/billing/invoices/`);
+            const orderInvoice = invoices.find((inv) => inv.order_id === orderId);
             
             if (orderInvoice) {
                 const detail = await getJSON<InvoiceDetail>(`/v1/billing/invoices/${orderInvoice.id}/full`);

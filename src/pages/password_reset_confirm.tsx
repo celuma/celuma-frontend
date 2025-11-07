@@ -40,7 +40,7 @@ function PasswordResetConfirm() {
                     message.error("El enlace ha expirado o es inválido");
                     setTimeout(() => navigate("/login"), 2000);
                 }
-            } catch (error) {
+            } catch {
                 message.error("Error al verificar el enlace");
                 setTimeout(() => navigate("/login"), 2000);
             } finally {
@@ -70,7 +70,7 @@ function PasswordResetConfirm() {
             setSuccess(true);
             message.success("Contraseña restablecida exitosamente");
             setTimeout(() => navigate("/login"), 2000);
-        } catch (error) {
+        } catch {
             message.error("Error al restablecer la contraseña");
         } finally {
             setLoading(false);

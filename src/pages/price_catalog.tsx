@@ -104,7 +104,7 @@ function PriceCatalog() {
         try {
             const data = await getJSON<Service[]>("/v1/billing/catalog?active_only=false");
             setServices(data);
-        } catch (error) {
+        } catch {
             message.error("Error al cargar catálogo");
         } finally {
             setLoading(false);
@@ -128,12 +128,12 @@ function PriceCatalog() {
             await deleteJSON(`/v1/billing/catalog/${serviceId}`);
             message.success("Servicio desactivado");
             await loadServices();
-        } catch (error) {
+        } catch {
             message.error("Error al desactivar servicio");
         }
     };
 
-    const handleSubmit = async (values: any) => {
+    const handleSubmit = async (values: Partial<Service>) => {
         try {
             if (editingService) {
                 await putJSON(`/v1/billing/catalog/${editingService.id}`, values);

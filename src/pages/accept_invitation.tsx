@@ -46,7 +46,7 @@ function AcceptInvitation() {
                     message.error("La invitación ha expirado o es inválida");
                     setTimeout(() => navigate("/login"), 2000);
                 }
-            } catch (error) {
+            } catch {
                 message.error("Error al verificar la invitación");
                 setTimeout(() => navigate("/login"), 2000);
             } finally {
