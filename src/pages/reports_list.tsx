@@ -37,16 +37,16 @@ type ReportsListResponse = {
             order_code: string;
             status: string;
             requested_by?: string | null;
-            patient: { id: string; full_name: string; patient_code: string };
+            patient?: { id: string; full_name: string; patient_code: string };
         };
-        title: string;
+        title?: string | null;
         diagnosis_text?: string | null;
         published_at?: string | null;
         created_at?: string | null;
         created_by?: string | null;
         signed_by?: string | null;
         signed_at?: string | null;
-        version_no: number;
+        version_no?: number | null;
         has_pdf: boolean;
     }>;
 };
@@ -78,7 +78,7 @@ export default function ReportsList() {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
         return rows.filter((r) =>
-            [r.title, r.diagnosis_text, r.order.order_code, r.order.patient.full_name, r.order.patient.patient_code, r.branch.name, r.branch.code, r.order.requested_by]
+            [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.branch.name, r.branch.code, r.order.requested_by]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q))
         );
@@ -135,7 +135,7 @@ export default function ReportsList() {
                                 { title: "Título", dataIndex: "title", key: "title", width: 200 },
                                 { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => <Tag color={getStatusColor(v)}>{v}</Tag> },
                                 { title: "Orden", key: "order", render: (_, r) => r.order.order_code, width: 140 },
-                                { title: "Paciente", key: "patient", render: (_, r) => r.order.patient.full_name || r.order.patient.patient_code },
+                                { title: "Paciente", key: "patient", render: (_, r) => r.order.patient?.full_name || r.order.patient?.patient_code || "—" },
                                 { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
                                 { title: "Publicado", dataIndex: "published_at", key: "published_at", width: 180, render: (v: string | null) => v ? new Date(v).toLocaleString() : "—" },
                                 { 

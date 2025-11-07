@@ -333,16 +333,32 @@ export interface WorklistResponse {
     reports: Array<{
         id: string;
         status: string;
-        title?: string;
+        tenant_id: string;
+        branch: {
+            id: string;
+            name: string;
+            code?: string | null;
+        };
         order: {
             id: string;
             order_code: string;
+            status: string;
+            requested_by?: string | null;
             patient?: {
+                id: string;
                 full_name: string;
                 patient_code: string;
             };
         };
-        created_at?: string;
+        title?: string | null;
+        diagnosis_text?: string | null;
+        published_at?: string | null;
+        created_at?: string | null;
+        created_by?: string | null;
+        signed_by?: string | null;
+        signed_at?: string | null;
+        version_no?: number | null;
+        has_pdf: boolean;
     }>;
 }
 
