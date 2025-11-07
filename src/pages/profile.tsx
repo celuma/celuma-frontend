@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Layout, Card, notification, Avatar } from "antd";
+import { Layout, Card, notification, Avatar, Upload, message as antdMessage } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { UserOutlined, MailOutlined, KeyOutlined } from "@ant-design/icons";
+import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
@@ -13,6 +13,7 @@ import Button from "../components/ui/button";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens } from "../components/design/tokens";
+import type { UploadFile } from "antd/es/upload/interface";
 
 // Types for the API responses and form data
 interface UserProfile {
@@ -22,6 +23,7 @@ interface UserProfile {
     full_name: string;
     role: string;
     tenant_id: string;
+    avatar_url?: string;
 }
 
 // Validation schemas
@@ -56,6 +58,7 @@ const Profile: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [profileData, setProfileData] = useState<UserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
+    const [avatarFile, setAvatarFile] = useState<UploadFile | null>(null);
 
     // Forms for profile and password update with validation
     const profileForm = useForm<ProfileFormData>({
@@ -256,6 +259,34 @@ const Profile: React.FC = () => {
         }
     };
 
+    // Upload avatar
+    const handleAvatarUpload = async () => {
+        if (!avatarFile || !profileData) return;
+
+        const formData = new FormData();
+        formData.append("file", avatarFile as any);
+
+        const token = getAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = token;
+
+        try {
+            const res = await fetch(`${apiBase()}/v1/users/${profileData.id}/avatar`, {
+                method: "POST",
+                headers,
+                body: formData,
+            });
+
+            if (!res.ok) throw new Error("Upload failed");
+
+            antdMessage.success("Foto de perfil actualizada");
+            await fetchProfile();
+            setAvatarFile(null);
+        } catch (error) {
+            antdMessage.error("Error al subir foto");
+        }
+    };
+
     // Load profile on component mount
     useEffect(() => {
         fetchProfile();
@@ -341,10 +372,40 @@ const Profile: React.FC = () => {
                                         title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Mi Perfil</span>}
                                         style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                                     >
-                                        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                                            <Avatar size={64} style={{ background: "#0f8b8d", fontWeight: 800 }}>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", marginBottom: 16 }}>
+                                            <Avatar 
+                                                size={96} 
+                                                src={profileData?.avatar_url}
+                                                style={{ background: "#0f8b8d", fontWeight: 800 }}
+                                            >
                                                 {profileData?.full_name?.[0]?.toUpperCase() || "U"}
                                             </Avatar>
+                                            <Upload
+                                                beforeUpload={(file) => {
+                                                    setAvatarFile(file);
+                                                    return false;
+                                                }}
+                                                fileList={avatarFile ? [avatarFile] : []}
+                                                onRemove={() => setAvatarFile(null)}
+                                                accept="image/*"
+                                                maxCount={1}
+                                                showUploadList={false}
+                                            >
+                                                <Button size="small" icon={<UploadOutlined />}>
+                                                    Cambiar Foto
+                                                </Button>
+                                            </Upload>
+                                            {avatarFile && (
+                                                <Button 
+                                                    type="primary" 
+                                                    size="small"
+                                                    onClick={handleAvatarUpload}
+                                                >
+                                                    Subir
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <div style={{ textAlign: "center" }}>
                                             <div>
                                                 <div style={{ fontSize: 18, fontWeight: 800, color: "#0d1b2a" }}>{profileData?.full_name}</div>
                                                 <div style={{ color: "#6b7280" }}>{profileData?.email}</div>
