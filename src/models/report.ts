@@ -56,6 +56,8 @@ export interface ReportEnvelope {
     diagnosis_text: string;
     created_by: string;
     published_at: string | null;
+    signed_by: string | null;
+    signed_at: string | null;
 
     report: {
         tipo: ReportType;

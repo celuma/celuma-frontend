@@ -17,6 +17,7 @@ import CasesList from "./pages/cases_list";
 import SamplesList from "./pages/samples_list";
 import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
+import PathologistWorklist from "./pages/pathologist_worklist";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -39,6 +40,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports" element={<ReportsList />} />
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
+            <Route path="/worklist" element={<PathologistWorklist />} />
         </Routes>
     </BrowserRouter>
 );

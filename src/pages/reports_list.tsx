@@ -44,6 +44,8 @@ type ReportsListResponse = {
         published_at?: string | null;
         created_at?: string | null;
         created_by?: string | null;
+        signed_by?: string | null;
+        signed_at?: string | null;
         version_no: number;
         has_pdf: boolean;
     }>;
@@ -136,6 +138,12 @@ export default function ReportsList() {
                                 { title: "Paciente", key: "patient", render: (_, r) => r.order.patient.full_name || r.order.patient.patient_code },
                                 { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
                                 { title: "Publicado", dataIndex: "published_at", key: "published_at", width: 180, render: (v: string | null) => v ? new Date(v).toLocaleString() : "—" },
+                                { 
+                                    title: "Firmado por", 
+                                    key: "signed_by", 
+                                    width: 150, 
+                                    render: (_, r) => r.signed_by && r.status === "PUBLISHED" ? r.signed_by : "—" 
+                                },
                                 { title: "Versión", dataIndex: "version_no", key: "version_no", width: 100 },
                                 { title: "PDF", dataIndex: "has_pdf", key: "has_pdf", width: 80, render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag> },
                             ]}

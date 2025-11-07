@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 const { Sider } = Layout;
@@ -9,6 +9,7 @@ const { Sider } = Layout;
 export type CelumaKey = 
     | "/home" 
     | "/reports" 
+    | "/worklist"
     | "/patients"
     | "/cases"
     | "/samples"
@@ -20,6 +21,7 @@ export type CelumaKey =
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
+    { key: "/worklist", icon: <CheckSquareOutlined />, label: "Worklist", title: "Worklist" },
     { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
     { key: "/cases", icon: <FileTextOutlined />, label: "Casos", title: "Casos" },

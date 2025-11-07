@@ -230,3 +230,136 @@ export async function fetchReportImages(
         .map(normalize)
         .filter((img): img is NormalizedImage => img !== null);
 }
+
+// Report state transitions
+export interface ReportActionResponse {
+    id: string;
+    status: string;
+    message: string;
+}
+
+export async function submitReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}/submit`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ changelog }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al enviar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function approveReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}/approve`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ changelog }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al aprobar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function requestChanges(reportId: string, comment: string): Promise<ReportActionResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}/request-changes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ comment, request_changes: true }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al solicitar cambios: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function signReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}/sign`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ changelog }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al firmar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function retractReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/${reportId}/retract`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ changelog }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al retirar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+// Get worklist
+export interface WorklistResponse {
+    reports: Array<{
+        id: string;
+        status: string;
+        title?: string;
+        order: {
+            id: string;
+            order_code: string;
+            patient?: {
+                full_name: string;
+                patient_code: string;
+            };
+        };
+        created_at?: string;
+    }>;
+}
+
+export async function getWorklist(branchId?: string): Promise<WorklistResponse> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const url = branchId ? `${base}/v1/reports/worklist?branch_id=${branchId}` : `${base}/v1/reports/worklist`;
+    const res = await fetch(url, {
+        method: "GET",
+        headers,
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener worklist: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
