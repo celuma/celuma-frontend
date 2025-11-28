@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Tag, Space, Popconfirm, Switch } from "antd";
-import { PlusOutlined, DeleteOutlined, MailOutlined } from "@ant-design/icons";
+import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Tag, Space, Popconfirm, Switch, Spin } from "antd";
+import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
+import { useUserProfile } from "../hooks/use_user_profile";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -33,6 +34,15 @@ async function postJSON<TRes>(path: string, body: unknown): Promise<TRes> {
     return await res.json();
 }
 
+async function putJSON<TRes>(path: string, body: unknown): Promise<TRes> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${getApiBase()}${path}`, { method: "PUT", headers, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+}
+
 async function deleteJSON(path: string): Promise<void> {
     const token = getAuthToken();
     const headers: Record<string, string> = {};
@@ -48,53 +58,108 @@ interface User {
     full_name: string;
     role: string;
     is_active: boolean;
+    branch_ids: string[];
+}
+
+interface Branch {
+    id: string;
+    name: string;
+    code: string;
 }
 
 function UsersManagement() {
     const navigate = useNavigate();
+    const { profile, loading: profileLoading, isAdmin } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [users, setUsers] = useState<User[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    
+    // Modals state
     const [createModalVisible, setCreateModalVisible] = useState(false);
+    const [editModalVisible, setEditModalVisible] = useState(false);
     const [inviteModalVisible, setInviteModalVisible] = useState(false);
-    const [form] = Form.useForm();
+    
+    // Forms
+    const [createForm] = Form.useForm();
+    const [editForm] = Form.useForm();
     const [inviteForm] = Form.useForm();
+    
+    const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
-        loadUsers();
-    }, []);
+        if (!profileLoading) {
+            if (!isAdmin) {
+                message.error("Acceso denegado: Solo administradores");
+                navigate("/home");
+                return;
+            }
+            loadData();
+        }
+    }, [profileLoading, isAdmin, navigate]);
 
-    const loadUsers = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            const data = await getJSON<{ users: User[] }>("/v1/users/");
-            setUsers(data.users);
+            const [usersData, branchesData] = await Promise.all([
+                getJSON<{ users: User[] }>("/v1/users/"),
+                getJSON<Branch[]>("/v1/branches/")
+            ]);
+            setUsers(usersData.users);
+            setBranches(branchesData);
         } catch {
-            message.error("Error al cargar usuarios");
+            message.error("Error al cargar datos");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreate = async (values: Partial<User> & { password: string }) => {
+    const handleCreate = async (values: any) => {
         try {
             await postJSON("/v1/users/", values);
             message.success("Usuario creado");
             setCreateModalVisible(false);
-            form.resetFields();
-            await loadUsers();
+            createForm.resetFields();
+            await loadData();
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al crear usuario");
+            message.error("Error al crear usuario");
         }
     };
 
-    const handleInvite = async (values: { email: string; full_name: string; role: string }) => {
+    const handleEdit = async (values: any) => {
+        if (!editingUser) return;
+        try {
+            await putJSON(`/v1/users/${editingUser.id}`, values);
+            message.success("Usuario actualizado");
+            setEditModalVisible(false);
+            editForm.resetFields();
+            setEditingUser(null);
+            await loadData();
+        } catch (error) {
+            message.error("Error al actualizar usuario");
+        }
+    };
+
+    const openEditModal = (user: User) => {
+        setEditingUser(user);
+        editForm.setFieldsValue({
+            email: user.email,
+            username: user.username,
+            full_name: user.full_name,
+            role: user.role,
+            is_active: user.is_active,
+            branch_ids: user.branch_ids
+        });
+        setEditModalVisible(true);
+    };
+
+    const handleInvite = async (values: any) => {
         try {
             await postJSON("/v1/users/invitations", values);
             message.success("Invitación enviada por email");
             setInviteModalVisible(false);
             inviteForm.resetFields();
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al enviar invitación");
+            message.error("Error al enviar invitación");
         }
     };
 
@@ -102,7 +167,7 @@ function UsersManagement() {
         try {
             await postJSON(`/v1/users/${userId}/toggle-active`, {});
             message.success(`Usuario ${currentStatus ? 'desactivado' : 'activado'}`);
-            await loadUsers();
+            await loadData();
         } catch {
             message.error("Error al cambiar estado");
         }
@@ -112,7 +177,7 @@ function UsersManagement() {
         try {
             await deleteJSON(`/v1/users/${userId}`);
             message.success("Usuario desactivado");
-            await loadUsers();
+            await loadData();
         } catch {
             message.error("Error al desactivar usuario");
         }
@@ -132,44 +197,89 @@ function UsersManagement() {
                     pathologist: "blue",
                     lab_tech: "green",
                     billing: "orange",
+                    assistant: "cyan",
+                    viewer: "default"
                 };
                 return <Tag color={colors[role] || "default"}>{role}</Tag>;
+            }
+        },
+        {
+            title: "Sucursales",
+            dataIndex: "branch_ids",
+            key: "branches",
+            render: (ids: string[], record) => {
+                if (record.role === 'admin') return <Tag color="gold">Todas (Admin)</Tag>;
+                if (!ids || ids.length === 0) return <Tag>Ninguna</Tag>;
+                
+                // Show count if many, or names if few
+                const branchNames = ids.map(id => branches.find(b => b.id === id)?.name || id);
+                if (branchNames.length > 2) {
+                    return <Tag title={branchNames.join(', ')}>{branchNames.length} Sucursales</Tag>;
+                }
+                return (
+                    <Space size={[0, 4]} wrap>
+                        {branchNames.map((name, i) => <Tag key={i}>{name}</Tag>)}
+                    </Space>
+                );
             }
         },
         { 
             title: "Estado", 
             dataIndex: "is_active", 
             key: "is_active",
-            render: (active, record) => (
-                <Switch
-                    checked={active}
-                    onChange={() => handleToggleActive(record.id, active)}
-                    checkedChildren="Activo"
-                    unCheckedChildren="Inactivo"
-                />
-            )
+            render: (active, record) => {
+                const isSelf = record.id === profile?.id;
+                return (
+                    <Switch
+                        checked={active}
+                        disabled={isSelf}
+                        onChange={() => handleToggleActive(record.id, active)}
+                        checkedChildren="Activo"
+                        unCheckedChildren="Inactivo"
+                    />
+                );
+            }
         },
         {
             title: "Acciones",
             key: "actions",
-            render: (_, record) => (
-                <Space>
-                    <Popconfirm
-                        title="¿Desactivar este usuario?"
-                        onConfirm={() => handleDelete(record.id)}
-                        okText="Sí"
-                        cancelText="No"
-                    >
-                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                    </Popconfirm>
-                </Space>
-            ),
+            render: (_, record) => {
+                const isSelf = record.id === profile?.id;
+                if (isSelf) return <Tag>Tú</Tag>;
+                
+                return (
+                    <Space>
+                        <Button 
+                            type="text" 
+                            icon={<EditOutlined />} 
+                            onClick={() => openEditModal(record)} 
+                            title="Editar"
+                        />
+                        <Popconfirm
+                            title="¿Desactivar este usuario?"
+                            onConfirm={() => handleDelete(record.id)}
+                            okText="Sí"
+                            cancelText="No"
+                        >
+                            <Button type="text" danger icon={<DeleteOutlined />} title="Desactivar" />
+                        </Popconfirm>
+                    </Space>
+                );
+            },
         },
     ];
 
+    if (profileLoading) {
+        return (
+            <Layout style={{ minHeight: "100vh", justifyContent: "center", alignItems: "center" }}>
+                <Spin size="large" />
+            </Layout>
+        );
+    }
+
     return (
         <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <SidebarCeluma selectedKey="/users" onNavigate={(k) => navigate(k)} logoSrc={logo} />
             <Layout.Content style={{ padding: 24, background: tokens.bg }}>
                 <div style={{ maxWidth: 1400, margin: "0 auto" }}>
                     <Card
@@ -201,37 +311,145 @@ function UsersManagement() {
                         open={createModalVisible}
                         onCancel={() => {
                             setCreateModalVisible(false);
-                            form.resetFields();
+                            createForm.resetFields();
                         }}
                         footer={null}
+                        width={600}
                     >
-                        <Form form={form} layout="vertical" onFinish={handleCreate}>
-                            <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                                <Input />
-                            </Form.Item>
-                            <Form.Item name="username" label="Usuario (opcional)">
-                                <Input />
-                            </Form.Item>
+                        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
+                                    <Input />
+                                </Form.Item>
+                                <Form.Item name="username" label="Usuario (opcional)">
+                                    <Input />
+                                </Form.Item>
+                            </div>
                             <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
                                 <Input />
                             </Form.Item>
-                            <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                                <Select>
-                                    <Select.Option value="admin">Administrador</Select.Option>
-                                    <Select.Option value="pathologist">Patólogo</Select.Option>
-                                    <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
-                                    <Select.Option value="billing">Facturación</Select.Option>
-                                    <Select.Option value="assistant">Asistente</Select.Option>
-                                    <Select.Option value="viewer">Visor</Select.Option>
-                                </Select>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
+                                    <Select>
+                                        <Select.Option value="admin">Administrador</Select.Option>
+                                        <Select.Option value="pathologist">Patólogo</Select.Option>
+                                        <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
+                                        <Select.Option value="billing">Facturación</Select.Option>
+                                        <Select.Option value="assistant">Asistente</Select.Option>
+                                        <Select.Option value="viewer">Visor</Select.Option>
+                                    </Select>
+                                </Form.Item>
+                                <Form.Item name="password" label="Contraseña" rules={[{ required: true, min: 8 }]}>
+                                    <Input.Password />
+                                </Form.Item>
+                            </div>
+                            
+                            <Form.Item 
+                                noStyle 
+                                shouldUpdate={(prev, current) => prev.role !== current.role}
+                            >
+                                {({ getFieldValue }) => {
+                                    const role = getFieldValue('role');
+                                    return role !== 'admin' ? (
+                                        <Form.Item name="branch_ids" label="Sucursales asignadas">
+                                            <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
+                                                {branches.map(b => (
+                                                    <Select.Option key={b.id} value={b.id}>
+                                                        {b.name} ({b.code})
+                                                    </Select.Option>
+                                                ))}
+                                            </Select>
+                                        </Form.Item>
+                                    ) : (
+                                        <div style={{ marginBottom: 24, color: '#888', fontStyle: 'italic' }}>
+                                            * Los administradores tienen acceso a todas las sucursales automáticamente.
+                                        </div>
+                                    );
+                                }}
                             </Form.Item>
-                            <Form.Item name="password" label="Contraseña" rules={[{ required: true, min: 8 }]}>
-                                <Input.Password />
-                            </Form.Item>
+
                             <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
                                 <Space>
                                     <Button onClick={() => setCreateModalVisible(false)}>Cancelar</Button>
                                     <Button type="primary" htmlType="submit">Crear</Button>
+                                </Space>
+                            </Form.Item>
+                        </Form>
+                    </Modal>
+
+                    {/* Edit User Modal */}
+                    <Modal
+                        title="Editar Usuario"
+                        open={editModalVisible}
+                        onCancel={() => {
+                            setEditModalVisible(false);
+                            editForm.resetFields();
+                            setEditingUser(null);
+                        }}
+                        footer={null}
+                        width={600}
+                    >
+                        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
+                                    <Input />
+                                </Form.Item>
+                                <Form.Item name="username" label="Usuario">
+                                    <Input />
+                                </Form.Item>
+                            </div>
+                            <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
+                                <Input />
+                            </Form.Item>
+                            
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
+                                    <Select>
+                                        <Select.Option value="admin">Administrador</Select.Option>
+                                        <Select.Option value="pathologist">Patólogo</Select.Option>
+                                        <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
+                                        <Select.Option value="billing">Facturación</Select.Option>
+                                        <Select.Option value="assistant">Asistente</Select.Option>
+                                        <Select.Option value="viewer">Visor</Select.Option>
+                                    </Select>
+                                </Form.Item>
+                                <Form.Item name="is_active" label="Estado" valuePropName="checked">
+                                    <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
+                                </Form.Item>
+                            </div>
+
+                            <Form.Item name="password" label="Nueva Contraseña (opcional)" help="Dejar en blanco para mantener la actual">
+                                <Input.Password placeholder="Nueva contraseña" />
+                            </Form.Item>
+
+                            <Form.Item 
+                                noStyle 
+                                shouldUpdate={(prev, current) => prev.role !== current.role}
+                            >
+                                {({ getFieldValue }) => {
+                                    const role = getFieldValue('role');
+                                    return role !== 'admin' ? (
+                                        <Form.Item name="branch_ids" label="Sucursales asignadas">
+                                            <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
+                                                {branches.map(b => (
+                                                    <Select.Option key={b.id} value={b.id}>
+                                                        {b.name} ({b.code})
+                                                    </Select.Option>
+                                                ))}
+                                            </Select>
+                                        </Form.Item>
+                                    ) : (
+                                        <div style={{ marginBottom: 24, color: '#888', fontStyle: 'italic' }}>
+                                            * Los administradores tienen acceso a todas las sucursales automáticamente.
+                                        </div>
+                                    );
+                                }}
+                            </Form.Item>
+
+                            <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+                                <Space>
+                                    <Button onClick={() => setEditModalVisible(false)}>Cancelar</Button>
+                                    <Button type="primary" htmlType="submit">Guardar Cambios</Button>
                                 </Space>
                             </Form.Item>
                         </Form>
@@ -261,6 +479,7 @@ function UsersManagement() {
                                     <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
                                     <Select.Option value="billing">Facturación</Select.Option>
                                     <Select.Option value="assistant">Asistente</Select.Option>
+                                    <Select.Option value="viewer">Visor</Select.Option>
                                 </Select>
                             </Form.Item>
                             <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
@@ -278,4 +497,3 @@ function UsersManagement() {
 }
 
 export default UsersManagement;
-

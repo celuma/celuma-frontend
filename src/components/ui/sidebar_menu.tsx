@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useUserProfile } from "../../hooks/use_user_profile";
 
 const { Sider } = Layout;
 
@@ -17,7 +18,8 @@ export type CelumaKey =
     | "/samples/register"
     | "/cases/register"
     | "/profile" 
-    | "/logout";
+    | "/logout"
+    | "/users";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
@@ -58,6 +60,13 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
         return saved ? JSON.parse(saved) : false;
     });
     const navigate = useNavigate();
+    const { isAdmin } = useUserProfile();
+
+    const menuItems = [...itemsTop];
+    if (isAdmin) {
+        menuItems.push({ key: "/users", icon: <TeamOutlined />, label: "Usuarios", title: "Gestión de Usuarios" });
+    }
+
     const selectedTop =
         selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);
     const selectedBottom =
@@ -143,7 +152,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                 </div>
 
                 <Menu
-                    items = {itemsTop}
+                    items = {menuItems}
                     selectedKeys = {selectedTop}
                     mode = "inline"
                     theme = "dark"
