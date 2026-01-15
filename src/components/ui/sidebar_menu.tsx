@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
-import { Layout, Menu, Button } from "antd";
+import { Layout, Menu, Button, Avatar } from "antd";
 import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -30,10 +30,45 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
 ];
 
-const itemsBottom: Required<MenuProps>["items"] = [
+// Generate initials from full name (first letter of first name + first letter of last name)
+const getInitials = (fullName?: string): string => {
+    if (!fullName) return "U";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) {
+        return parts[0][0]?.toUpperCase() || "U";
+    }
+    const firstInitial = parts[0][0]?.toUpperCase() || "";
+    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || "";
+    return firstInitial + lastInitial;
+};
+
+// User avatar component with monogram fallback
+const UserAvatar: React.FC<{ avatarUrl?: string; fullName?: string; size?: number }> = ({ 
+    avatarUrl, 
+    fullName = "", 
+    size = 20 
+}) => {
+    const initials = getInitials(fullName);
+    return (
+        <Avatar
+            size={size}
+            src={avatarUrl}
+            style={{
+                backgroundColor: avatarUrl ? "transparent" : "#0f8b8d",
+                color: "#fff",
+                fontSize: initials.length > 1 ? size * 0.4 : size * 0.5,
+                fontWeight: 700,
+            }}
+        >
+            {initials}
+        </Avatar>
+    );
+};
+
+const getBottomItems = (avatarUrl?: string, fullName?: string): Required<MenuProps>["items"] => [
     {
         key: "/profile",
-        icon: <UserOutlined />,
+        icon: <UserAvatar avatarUrl={avatarUrl} fullName={fullName} />,
         label: "Mi Perfil",
         style: { margin: 0 },
         title: "Mi Perfil", // Tooltip when collapsed
@@ -60,12 +95,14 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
         return saved ? JSON.parse(saved) : false;
     });
     const navigate = useNavigate();
-    const { isAdmin } = useUserProfile();
+    const { profile, isAdmin } = useUserProfile();
 
     const menuItems = [...itemsTop];
     if (isAdmin) {
         menuItems.push({ key: "/users", icon: <TeamOutlined />, label: "Usuarios", title: "Gestión de Usuarios" });
     }
+
+    const itemsBottom = getBottomItems(profile?.avatar_url, profile?.full_name);
 
     const selectedTop =
         selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);

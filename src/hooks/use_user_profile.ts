@@ -16,6 +16,7 @@ export interface UserProfile {
     role: string;
     tenant_id: string;
     branch_ids: string[];
+    avatar_url?: string;
 }
 
 export function useUserProfile() {

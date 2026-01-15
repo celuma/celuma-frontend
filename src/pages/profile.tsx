@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined } from "@ant-design/icons";
+import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
@@ -13,7 +13,7 @@ import Button from "../components/ui/button";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens } from "../components/design/tokens";
-import type { UploadFile } from "antd/es/upload/interface";
+import type { RcFile } from "antd/es/upload/interface";
 
 // Types for the API responses and form data
 interface UserProfile {
@@ -52,13 +52,27 @@ const passwordSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>;
 type PasswordFormData = z.infer<typeof passwordSchema>;
 
+// Generate initials from full name (first letter of first name + first letter of last name)
+const getInitials = (fullName?: string | null): string => {
+    if (!fullName) return "U";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) {
+        return parts[0][0]?.toUpperCase() || "U";
+    }
+    const firstInitial = parts[0][0]?.toUpperCase() || "";
+    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || "";
+    return firstInitial + lastInitial;
+};
+
 const Profile: React.FC = () => {
     const nav = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [profileData, setProfileData] = useState<UserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
-    const [avatarFile, setAvatarFile] = useState<UploadFile | null>(null);
+    const [avatarFile, setAvatarFile] = useState<RcFile | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     // Forms for profile and password update with validation
     const profileForm = useForm<ProfileFormData>({
@@ -259,14 +273,45 @@ const Profile: React.FC = () => {
         }
     };
 
-    // Upload avatar
+    // Handle file selection for avatar
+    const handleAvatarSelect = (file: RcFile) => {
+        // Validate file type
+        const isImage = file.type.startsWith("image/");
+        if (!isImage) {
+            antdMessage.error("Solo se permiten archivos de imagen");
+            return false;
+        }
+        
+        // Validate file size (max 5MB)
+        const isLt5M = file.size / 1024 / 1024 < 5;
+        if (!isLt5M) {
+            antdMessage.error("La imagen debe ser menor a 5MB");
+            return false;
+        }
+
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        setAvatarPreview(previewUrl);
+        setAvatarFile(file);
+        return false; // Prevent auto upload
+    };
+
+    // Clear avatar selection
+    const handleClearAvatarSelection = () => {
+        if (avatarPreview) {
+            URL.revokeObjectURL(avatarPreview);
+        }
+        setAvatarPreview(null);
+        setAvatarFile(null);
+    };
+
+    // Upload avatar to server
     const handleAvatarUpload = async () => {
         if (!avatarFile || !profileData) return;
 
+        setUploadingAvatar(true);
         const formData = new FormData();
-        const fileObject: File | undefined = avatarFile.originFileObj;
-        if (!fileObject) return;
-        formData.append("file", fileObject);
+        formData.append("file", avatarFile);
 
         const token = getAuthToken();
         const headers: Record<string, string> = {};
@@ -279,13 +324,18 @@ const Profile: React.FC = () => {
                 body: formData,
             });
 
-            if (!res.ok) throw new Error("Upload failed");
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Upload failed");
+            }
 
             antdMessage.success("Foto de perfil actualizada");
+            handleClearAvatarSelection();
             await fetchProfile();
-            setAvatarFile(null);
-        } catch {
-            antdMessage.error("Error al subir foto");
+        } catch (err) {
+            antdMessage.error(err instanceof Error ? err.message : "Error al subir foto");
+        } finally {
+            setUploadingAvatar(false);
         }
     };
 
@@ -375,36 +425,78 @@ const Profile: React.FC = () => {
                                         style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                                     >
                                         <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", marginBottom: 16 }}>
-                                            <Avatar 
-                                                size={96} 
-                                                src={profileData?.avatar_url}
-                                                style={{ background: "#0f8b8d", fontWeight: 800 }}
-                                            >
-                                                {profileData?.full_name?.[0]?.toUpperCase() || "U"}
-                                            </Avatar>
-                                            <Upload
-                                                beforeUpload={(file) => {
-                                                    setAvatarFile(file);
-                                                    return false;
-                                                }}
-                                                fileList={avatarFile ? [avatarFile] : []}
-                                                onRemove={() => setAvatarFile(null)}
-                                                accept="image/*"
-                                                maxCount={1}
-                                                showUploadList={false}
-                                            >
-                                                <Button size="small" icon={<UploadOutlined />}>
-                                                    Cambiar Foto
-                                                </Button>
-                                            </Upload>
-                                            {avatarFile && (
-                                                <Button 
-                                                    type="primary" 
-                                                    size="small"
-                                                    onClick={handleAvatarUpload}
+                                            {/* Avatar with preview support */}
+                                            <div style={{ position: "relative" }}>
+                                                <Avatar 
+                                                    size={96} 
+                                                    src={avatarPreview || profileData?.avatar_url}
+                                                    style={{ 
+                                                        background: "#0f8b8d", 
+                                                        fontWeight: 800,
+                                                        fontSize: 36,
+                                                        border: avatarPreview ? "3px solid #0f8b8d" : "none",
+                                                    }}
                                                 >
-                                                    Subir
-                                                </Button>
+                                                    {getInitials(profileData?.full_name)}
+                                                </Avatar>
+                                                {avatarPreview && (
+                                                    <div 
+                                                        style={{
+                                                            position: "absolute",
+                                                            top: -4,
+                                                            right: -4,
+                                                            background: "#0f8b8d",
+                                                            borderRadius: "50%",
+                                                            width: 20,
+                                                            height: 20,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            fontSize: 10,
+                                                            color: "#fff",
+                                                        }}
+                                                    >
+                                                        ✓
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Upload controls */}
+                                            {!avatarFile ? (
+                                                <Upload
+                                                    beforeUpload={handleAvatarSelect}
+                                                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                                    maxCount={1}
+                                                    showUploadList={false}
+                                                >
+                                                    <Button size="small" icon={<CameraOutlined />}>
+                                                        {profileData?.avatar_url ? "Cambiar Foto" : "Subir Foto"}
+                                                    </Button>
+                                                </Upload>
+                                            ) : (
+                                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                                                    <Button 
+                                                        type="primary" 
+                                                        size="small"
+                                                        onClick={handleAvatarUpload}
+                                                        loading={uploadingAvatar}
+                                                        icon={<UploadOutlined />}
+                                                    >
+                                                        Guardar
+                                                    </Button>
+                                                    <Button 
+                                                        size="small"
+                                                        onClick={handleClearAvatarSelection}
+                                                        disabled={uploadingAvatar}
+                                                    >
+                                                        Cancelar
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            {avatarFile && (
+                                                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                                                    {avatarFile.name}
+                                                </span>
                                             )}
                                         </div>
                                         <div style={{ textAlign: "center" }}>
