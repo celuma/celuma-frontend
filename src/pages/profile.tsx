@@ -74,6 +74,50 @@ const Profile: React.FC = () => {
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+    // Convert image to SDR preview using canvas (normalizes HDR to sRGB)
+    const createSDRPreview = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                // Create canvas - this forces sRGB color space (SDR)
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d", { colorSpace: "srgb" });
+                if (!ctx) {
+                    reject(new Error("Canvas not supported"));
+                    return;
+                }
+
+                // Calculate size (max 256px for preview)
+                const maxSize = 256;
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = (height * maxSize) / width;
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = (width * maxSize) / height;
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                // Draw image - this converts to sRGB (SDR)
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Get as JPEG data URL
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+                resolve(dataUrl);
+            };
+            img.onerror = () => reject(new Error("Failed to load image"));
+            img.src = URL.createObjectURL(file);
+        });
+    };
+
     // Forms for profile and password update with validation
     const profileForm = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
@@ -274,7 +318,7 @@ const Profile: React.FC = () => {
     };
 
     // Handle file selection for avatar
-    const handleAvatarSelect = (file: RcFile) => {
+    const handleAvatarSelect = async (file: RcFile) => {
         // Validate file type
         const isImage = file.type.startsWith("image/");
         if (!isImage) {
@@ -289,20 +333,24 @@ const Profile: React.FC = () => {
             return false;
         }
 
-        // Create preview URL
-        const previewUrl = URL.createObjectURL(file);
-        setAvatarPreview(previewUrl);
         setAvatarFile(file);
+
+        // Create SDR preview (converts HDR to standard colors)
+        try {
+            const preview = await createSDRPreview(file);
+            setAvatarPreview(preview);
+        } catch {
+            // If preview fails, just don't show it
+            setAvatarPreview(null);
+        }
+
         return false; // Prevent auto upload
     };
 
     // Clear avatar selection
     const handleClearAvatarSelection = () => {
-        if (avatarPreview) {
-            URL.revokeObjectURL(avatarPreview);
-        }
-        setAvatarPreview(null);
         setAvatarFile(null);
+        setAvatarPreview(null);
     };
 
     // Upload avatar to server
@@ -425,7 +473,7 @@ const Profile: React.FC = () => {
                                         style={{ marginBottom: 24, borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
                                     >
                                         <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", marginBottom: 16 }}>
-                                            {/* Avatar with preview support */}
+                                            {/* Avatar with SDR preview */}
                                             <div style={{ position: "relative" }}>
                                                 <Avatar 
                                                     size={96} 
@@ -447,13 +495,14 @@ const Profile: React.FC = () => {
                                                             right: -4,
                                                             background: "#0f8b8d",
                                                             borderRadius: "50%",
-                                                            width: 20,
-                                                            height: 20,
+                                                            width: 22,
+                                                            height: 22,
                                                             display: "flex",
                                                             alignItems: "center",
                                                             justifyContent: "center",
-                                                            fontSize: 10,
+                                                            fontSize: 11,
                                                             color: "#fff",
+                                                            border: "2px solid #fff",
                                                         }}
                                                     >
                                                         ✓
@@ -474,7 +523,7 @@ const Profile: React.FC = () => {
                                                     </Button>
                                                 </Upload>
                                             ) : (
-                                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                                                <div style={{ display: "flex", gap: 8 }}>
                                                     <Button 
                                                         type="primary" 
                                                         size="small"
@@ -492,11 +541,6 @@ const Profile: React.FC = () => {
                                                         Cancelar
                                                     </Button>
                                                 </div>
-                                            )}
-                                            {avatarFile && (
-                                                <span style={{ fontSize: 12, color: "#6b7280" }}>
-                                                    {avatarFile.name}
-                                                </span>
                                             )}
                                         </div>
                                         <div style={{ textAlign: "center" }}>
