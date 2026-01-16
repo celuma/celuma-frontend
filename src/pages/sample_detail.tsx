@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown } from "antd";
+import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown, Input, Popconfirm, Spin } from "antd";
 import type { UploadProps, MenuProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import { 
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, PlusOutlined, FileImageOutlined,
     InboxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, MedicineBoxOutlined,
-    ContainerOutlined
+    ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -157,6 +157,16 @@ export default function SampleDetailPage() {
     const [preview, setPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
     const [updatingState, setUpdatingState] = useState(false);
     const [events, setEvents] = useState<TimelineEvent[]>([]);
+    // Notes editing state
+    const [editingNotes, setEditingNotes] = useState(false);
+    const [notesValue, setNotesValue] = useState("");
+    const [savingNotes, setSavingNotes] = useState(false);
+    // Drag and drop state
+    const [isDragging, setIsDragging] = useState(false);
+    // Upload progress state
+    const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+    // Deleting image state
+    const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         if (!sampleId) return;
@@ -213,6 +223,69 @@ export default function SampleDetailPage() {
         }
     }, [sampleId, updatingState, refresh]);
 
+    // Update sample notes
+    const updateNotes = useCallback(async () => {
+        if (!sampleId || savingNotes) return;
+        setSavingNotes(true);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/notes`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
+                },
+                body: JSON.stringify({ notes: notesValue || null }),
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            message.success("Descripción actualizada");
+            setEditingNotes(false);
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al actualizar la descripción";
+            message.error(errMsg);
+        } finally {
+            setSavingNotes(false);
+        }
+    }, [sampleId, savingNotes, notesValue, refresh]);
+
+    // Delete sample image
+    const deleteImage = useCallback(async (imageId: string) => {
+        if (!sampleId || deletingImageId) return;
+        setDeletingImageId(imageId);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/images/${imageId}`, {
+                method: "DELETE",
+                headers: {
+                    ...(token ? { Authorization: token } : {}),
+                },
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            message.success("Imagen eliminada");
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al eliminar la imagen";
+            message.error(errMsg);
+        } finally {
+            setDeletingImageId(null);
+        }
+    }, [sampleId, deletingImageId, refresh]);
+
     const uploadProps: UploadProps = {
         name: "file",
         multiple: true,
@@ -221,8 +294,14 @@ export default function SampleDetailPage() {
             if (!sampleId) return;
             const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
             const formData = new FormData();
-            formData.append("file", options.file as Blob);
+            const file = options.file as File;
+            const fileName = file.name || "archivo";
+            formData.append("file", file);
+            
+            // Add to uploading files list
+            setUploadingFiles(prev => [...prev, fileName]);
             setUploading(true);
+            
             try {
                 const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/images`, {
                     method: "POST",
@@ -237,17 +316,24 @@ export default function SampleDetailPage() {
                     const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
                     throw new Error(msg);
                 }
-                message.success("Imagen subida correctamente");
+                message.success(`"${fileName}" subida correctamente`);
                 options.onSuccess?.({}, undefined as unknown as XMLHttpRequest);
                 await refresh();
             } catch (e) {
                 const errMsg = e instanceof Error ? e.message : "Error al subir la imagen";
-                message.error(errMsg);
+                message.error(`Error al subir "${fileName}": ${errMsg}`);
                 options.onError?.(new ProgressEvent("error"));
             } finally {
-                setUploading(false);
+                // Remove from uploading files list
+                setUploadingFiles(prev => prev.filter(f => f !== fileName));
+                // Only set uploading to false when all files are done
+                setUploadingFiles(prev => {
+                    if (prev.length === 0) setUploading(false);
+                    return prev;
+                });
             }
         },
+        onDrop: () => setIsDragging(false),
     } as const;
 
     const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
@@ -285,6 +371,7 @@ export default function SampleDetailPage() {
         SAMPLE_CREATED: { icon: <ExperimentOutlined />, color: "blue" },
         SAMPLE_RECEIVED: { icon: <InboxOutlined />, color: "green" },
         SAMPLE_STATE_CHANGED: { icon: <SettingOutlined />, color: "orange" },
+        SAMPLE_NOTES_UPDATED: { icon: <EditOutlined />, color: "cyan" },
         SAMPLE_DAMAGED: { icon: <ExperimentOutlined />, color: "red" },
         SAMPLE_CANCELLED: { icon: <ExperimentOutlined />, color: "gray" },
         IMAGE_UPLOADED: { icon: <FileImageOutlined />, color: "purple" },
@@ -346,6 +433,13 @@ export default function SampleDetailPage() {
             case "IMAGE_DELETED": {
                 const filename = meta.filename as string || "imagen";
                 return `eliminó la imagen ${filename}`;
+            }
+            case "SAMPLE_NOTES_UPDATED": {
+                const newNotes = meta.new_notes as string || "";
+                if (newNotes) {
+                    return "actualizó la descripción";
+                }
+                return "eliminó la descripción de la muestra";
             }
             case "SAMPLE_CREATED":
                 return "registró la muestra";
@@ -740,34 +834,86 @@ export default function SampleDetailPage() {
                                             </div>
                                         </div>
 
-                                        {/* Description - at the bottom */}
-                                        {detail.notes && (
+                                        {/* Description - editable */}
+                                        <div style={{ 
+                                            padding: 16, 
+                                            background: "#f9fafb", 
+                                            borderRadius: 8,
+                                            border: "1px solid #e5e7eb"
+                                        }}>
                                             <div style={{ 
-                                                padding: 16, 
-                                                background: "#f9fafb", 
-                                                borderRadius: 8,
-                                                border: "1px solid #e5e7eb"
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                marginBottom: 8
                                             }}>
                                                 <div style={{ 
                                                     fontSize: 12, 
                                                     fontWeight: 600, 
                                                     color: tokens.textSecondary, 
-                                                    marginBottom: 8,
                                                     textTransform: "uppercase",
                                                     letterSpacing: "0.5px"
                                                 }}>
                                                     Descripción
                                                 </div>
+                                                {!editingNotes && (
+                                                    <Tooltip title="Editar descripción">
+                                                        <AntButton
+                                                            type="text"
+                                                            size="small"
+                                                            icon={<EditOutlined />}
+                                                            onClick={() => {
+                                                                setNotesValue(detail.notes || "");
+                                                                setEditingNotes(true);
+                                                            }}
+                                                            style={{ color: tokens.textSecondary }}
+                                                        />
+                                                    </Tooltip>
+                                                )}
+                                            </div>
+                                            {editingNotes ? (
+                                                <div>
+                                                    <Input.TextArea
+                                                        value={notesValue}
+                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        placeholder="Escribe una descripción para esta muestra..."
+                                                        autoSize={{ minRows: 2, maxRows: 6 }}
+                                                        style={{ marginBottom: 8 }}
+                                                        autoFocus
+                                                    />
+                                                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                                                        <AntButton 
+                                                            size="small"
+                                                            onClick={() => {
+                                                                setEditingNotes(false);
+                                                                setNotesValue(detail.notes || "");
+                                                            }}
+                                                            disabled={savingNotes}
+                                                        >
+                                                            Cancelar
+                                                        </AntButton>
+                                                        <AntButton 
+                                                            size="small" 
+                                                            type="primary"
+                                                            onClick={updateNotes}
+                                                            loading={savingNotes}
+                                                        >
+                                                            Guardar
+                                                        </AntButton>
+                                                    </div>
+                                                </div>
+                                            ) : (
                                                 <div style={{ 
-                                                    color: tokens.textPrimary, 
+                                                    color: detail.notes ? tokens.textPrimary : tokens.textSecondary, 
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
-                                                    whiteSpace: "pre-wrap"
+                                                    whiteSpace: "pre-wrap",
+                                                    fontStyle: detail.notes ? "normal" : "italic"
                                                 }}>
-                                                    {detail.notes}
+                                                    {detail.notes || "Sin descripción. Haz clic en el ícono de editar para agregar una."}
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </>
                         )}
                         <ErrorText>{error}</ErrorText>
@@ -801,27 +947,56 @@ export default function SampleDetailPage() {
                                     }}
                                 >
                                     {/* Drag and Drop Upload Area */}
-                                    <Upload.Dragger
-                                        {...uploadProps}
-                                        style={{
-                                            borderRadius: tokens.radius,
-                                            border: "1px dashed #d9d9d9",
-                                            background: "#fafafa",
-                                            padding: 12,
-                                            height: 160,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            flexDirection: "column",
-                                            color: "#8c8c8c",
+                                    <div
+                                        onDragEnter={() => setIsDragging(true)}
+                                        onDragLeave={(e) => {
+                                            // Only set to false if leaving the container entirely
+                                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                setIsDragging(false);
+                                            }
                                         }}
+                                        onDrop={() => setIsDragging(false)}
                                     >
-                                        <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
-                                        <Typography.Text strong>Agregar</Typography.Text>
-                                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 12 }}>
-                                            Clic o arrastra
-                                        </Typography.Paragraph>
-                                    </Upload.Dragger>
+                                        <Upload.Dragger
+                                            {...uploadProps}
+                                            style={{
+                                                borderRadius: tokens.radius,
+                                                border: isDragging ? "2px dashed #0f8b8d" : "1px dashed #d9d9d9",
+                                                background: isDragging ? "#e6f7f7" : "#fafafa",
+                                                padding: 12,
+                                                height: 160,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexDirection: "column",
+                                                color: isDragging ? "#0f8b8d" : "#8c8c8c",
+                                                transition: "all 0.2s ease",
+                                                transform: isDragging ? "scale(1.02)" : "scale(1)",
+                                            }}
+                                        >
+                                            {uploading ? (
+                                                <>
+                                                    <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                                                    <Typography.Text strong style={{ marginTop: 8 }}>
+                                                        Subiendo {uploadingFiles.length > 0 ? `(${uploadingFiles.length})` : "..."}
+                                                    </Typography.Text>
+                                                    {uploadingFiles.length > 0 && (
+                                                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 11 }}>
+                                                            {uploadingFiles.slice(0, 2).join(", ")}{uploadingFiles.length > 2 ? ` y ${uploadingFiles.length - 2} más` : ""}
+                                                        </Typography.Paragraph>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                                                    <Typography.Text strong>{isDragging ? "Suelta aquí" : "Agregar"}</Typography.Text>
+                                                    <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 12 }}>
+                                                        {isDragging ? "Suelta para subir" : "Clic o arrastra"}
+                                                    </Typography.Paragraph>
+                                                </>
+                                            )}
+                                        </Upload.Dragger>
+                                    </div>
 
                                     {/* Images Grid */}
                                     {images && images.images.length > 0 && (
@@ -834,7 +1009,7 @@ export default function SampleDetailPage() {
                                             }}
                                         >
                                             {images.images.map((img, idx) => (
-                    <Card
+                                    <Card
                                                     key={img.id ?? idx}
                                                     size="small"
                                                     hoverable
@@ -847,16 +1022,62 @@ export default function SampleDetailPage() {
                                                         display: "flex",
                                                         flexDirection: "column",
                                                         height: "100%",
+                                                        position: "relative",
                                                     }}
                                                     bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
                                                 >
+                                                    {/* Action buttons overlay */}
+                                                    <div style={{
+                                                        position: "absolute",
+                                                        top: 4,
+                                                        right: 4,
+                                                        display: "flex",
+                                                        gap: 4,
+                                                        zIndex: 10,
+                                                    }}>
+                                                        <Tooltip title="Ver imagen">
+                                                            <AntButton
+                                                                size="small"
+                                                                type="text"
+                                                                icon={<EyeOutlined />}
+                                                                onClick={() => setPreview({ visible: true, index: idx })}
+                                                                style={{ 
+                                                                    background: "rgba(255,255,255,0.9)", 
+                                                                    borderRadius: 4,
+                                                                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
+                                                                }}
+                                                            />
+                                                        </Tooltip>
+                                                        <Popconfirm
+                                                            title="Eliminar imagen"
+                                                            description="¿Estás seguro de eliminar esta imagen?"
+                                                            okText="Sí, eliminar"
+                                                            cancelText="Cancelar"
+                                                            okButtonProps={{ danger: true }}
+                                                            onConfirm={() => deleteImage(img.id)}
+                                                        >
+                                                            <Tooltip title="Eliminar">
+                                                                <AntButton
+                                                                    size="small"
+                                                                    type="text"
+                                                                    danger
+                                                                    icon={deletingImageId === img.id ? <LoadingOutlined spin /> : <DeleteOutlined />}
+                                                                    disabled={deletingImageId !== null}
+                                                                    style={{ 
+                                                                        background: "rgba(255,255,255,0.9)", 
+                                                                        borderRadius: 4,
+                                                                        boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
+                                                                    }}
+                                                                />
+                                                            </Tooltip>
+                                                        </Popconfirm>
+                                                    </div>
                                             <Image
                                                 src={img.urls.thumbnail || img.urls.processed}
                                                         alt={img.label || `Imagen ${idx + 1}`}
-                                                        style={{ width: "100%", height: 110, objectFit: "cover" }}
+                                                        style={{ width: "100%", height: 110, objectFit: "cover", cursor: "pointer" }}
                                                         fallback={img.urls.processed || img.urls.thumbnail}
                                                 preview={{ src: img.urls.processed || img.urls.thumbnail }}
-                                                        onClick={() => setPreview({ visible: true, index: idx })}
                                                     />
                                                     <div style={{ 
                                                         display: "flex", 

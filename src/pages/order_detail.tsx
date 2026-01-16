@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Layout, Card, Tag, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip } from "antd";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip, Input } from "antd";
 import { 
-    ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, ClockCircleOutlined, 
-    FileImageOutlined, FileTextOutlined, DollarOutlined, InboxOutlined, 
+    ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
+    FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined,
-    MedicineBoxOutlined, SkinOutlined, HeartOutlined, EyeOutlined
+    MedicineBoxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, EditOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -186,6 +186,11 @@ export default function OrderDetail() {
         created_by_avatar?: string;
         sample_id?: string;
     }>>([]);
+    
+    // Notes editing state
+    const [editingNotes, setEditingNotes] = useState(false);
+    const [notesValue, setNotesValue] = useState("");
+    const [savingNotes, setSavingNotes] = useState(false);
 
     // Default flags for initial report when creating
     const DEFAULT_FLAGS: ReportFlags = {
@@ -216,54 +221,90 @@ export default function OrderDetail() {
         }
     };
 
-    useEffect(() => {
+    // Function to refresh order data
+    const refresh = useCallback(async () => {
         if (!orderId) return;
-        (async () => {
-            setLoading(true);
-            setError(null);
-            let foundReportId: string | null = null;
-            
+        setLoading(true);
+        setError(null);
+        let foundReportId: string | null = null;
+        
+        try {
+            const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
+            setData(full);
+
+            // Load timeline events
             try {
-                const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
-                setData(full);
-
-                // Load timeline events
-                try {
-                    const eventsResult = await getJSON<{ events: Array<{
-                        id: string;
-                        event_type: string;
-                        description: string;
-                        metadata?: Record<string, unknown> | null;
-                        created_at: string;
-                        created_by?: string;
-                        created_by_name?: string;
-                        created_by_avatar?: string;
-                        sample_id?: string;
-                    }> }>(`/v1/laboratory/orders/${orderId}/events`);
-                    setTimeline(eventsResult.events);
-                } catch {
-                    // Timeline is optional, ignore errors
-                }
-
-                // Fetch cases to discover linked report id (if any)
-                try {
-                    const cases = await getJSON<PatientCasesResponse>(`/v1/laboratory/patients/${full.patient.id}/cases`);
-                    const found = cases.cases.find((c) => c.order.id === full.order.id);
-                    foundReportId = found?.report?.id ?? null;
-                    setReportId(foundReportId);
-                } catch { /* optional */ }
-
-                // Load latest report for preview if reportId exists
-                if (foundReportId) {
-                    await loadLatestReport(foundReportId);
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
-            } finally {
-                setLoading(false);
+                const eventsResult = await getJSON<{ events: Array<{
+                    id: string;
+                    event_type: string;
+                    description: string;
+                    metadata?: Record<string, unknown> | null;
+                    created_at: string;
+                    created_by?: string;
+                    created_by_name?: string;
+                    created_by_avatar?: string;
+                    sample_id?: string;
+                }> }>(`/v1/laboratory/orders/${orderId}/events`);
+                setTimeline(eventsResult.events);
+            } catch {
+                // Timeline is optional, ignore errors
             }
-        })();
+
+            // Fetch cases to discover linked report id (if any)
+            try {
+                const cases = await getJSON<PatientCasesResponse>(`/v1/laboratory/patients/${full.patient.id}/cases`);
+                const found = cases.cases.find((c) => c.order.id === full.order.id);
+                foundReportId = found?.report?.id ?? null;
+                setReportId(foundReportId);
+            } catch { /* optional */ }
+
+            // Load latest report for preview if reportId exists
+            if (foundReportId) {
+                await loadLatestReport(foundReportId);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+        } finally {
+            setLoading(false);
+        }
     }, [orderId]);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+    
+    // Update order notes
+    const updateNotes = useCallback(async () => {
+        if (!orderId || savingNotes) return;
+        setSavingNotes(true);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/notes`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
+                },
+                body: JSON.stringify({ notes: notesValue || null }),
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            message.success("Descripción actualizada");
+            setEditingNotes(false);
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al actualizar la descripción";
+            message.error(errMsg);
+        } finally {
+            setSavingNotes(false);
+        }
+    }, [orderId, savingNotes, notesValue, refresh]);
 
     const fullName = useMemo(() => {
         return `${data?.patient.first_name ?? ""} ${data?.patient.last_name ?? ""}`.trim();
@@ -867,33 +908,73 @@ export default function OrderDetail() {
                                         </div>
 
                                         {/* Description - at the bottom */}
-                                        {data.order.notes && (
+                                        <div style={{ 
+                                            padding: 16, 
+                                            background: "#f9fafb", 
+                                            borderRadius: 8,
+                                            border: "1px solid #e5e7eb"
+                                        }}>
                                             <div style={{ 
-                                                padding: 16, 
-                                                background: "#f9fafb", 
-                                                borderRadius: 8,
-                                                border: "1px solid #e5e7eb"
+                                                fontSize: 12, 
+                                                fontWeight: 600, 
+                                                color: tokens.textSecondary, 
+                                                marginBottom: 8,
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.5px",
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center"
                                             }}>
-                                                <div style={{ 
-                                                    fontSize: 12, 
-                                                    fontWeight: 600, 
-                                                    color: tokens.textSecondary, 
-                                                    marginBottom: 8,
-                                                    textTransform: "uppercase",
-                                                    letterSpacing: "0.5px"
-                                                }}>
-                                                    Descripción
+                                                <span>Descripción</span>
+                                                {!editingNotes && (
+                                                    <EditOutlined 
+                                                        style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
+                                                        onClick={() => {
+                                                            setNotesValue(data.order.notes || "");
+                                                            setEditingNotes(true);
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                            {editingNotes ? (
+                                                <div style={{ display: "grid", gap: 8 }}>
+                                                    <Input.TextArea
+                                                        value={notesValue}
+                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        placeholder="Agregar descripción o notas de la orden..."
+                                                        rows={4}
+                                                        maxLength={500}
+                                                    />
+                                                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                                                        <AntButton 
+                                                            size="small" 
+                                                            onClick={() => setEditingNotes(false)}
+                                                            disabled={savingNotes}
+                                                        >
+                                                            Cancelar
+                                                        </AntButton>
+                                                        <AntButton 
+                                                            type="primary" 
+                                                            size="small" 
+                                                            onClick={updateNotes}
+                                                            loading={savingNotes}
+                                                        >
+                                                            Guardar
+                                                        </AntButton>
+                                                    </div>
                                                 </div>
+                                            ) : (
                                                 <div style={{ 
-                                                    color: tokens.textPrimary, 
+                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary, 
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
-                                                    whiteSpace: "pre-wrap"
+                                                    whiteSpace: "pre-wrap",
+                                                    fontStyle: data.order.notes ? "normal" : "italic"
                                                 }}>
-                                                    {data.order.notes}
+                                                    {data.order.notes || "Sin descripción"}
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
@@ -957,11 +1038,11 @@ export default function OrderDetail() {
                                         const sampleId = meta.sample_id as string || event.sample_id;
                                         
                                         // Helper to render sample link
-                                        const renderSampleLink = (text: string) => {
+                                        const renderSampleLink = () => {
                                             if (!sampleCode) return null;
                                             return sampleId ? (
                                                 <span>
-                                                    {" "}en muestra{" "}
+                                                    {" "}en la muestra{" "}
                                                     <a 
                                                         href={`/samples/${sampleId}`}
                                                         onClick={(e) => {
@@ -978,7 +1059,7 @@ export default function OrderDetail() {
                                                         {sampleCode}
                                                     </a>
                                                 </span>
-                                            ) : ` en muestra ${sampleCode}`;
+                                            ) : ` en la muestra ${sampleCode}`;
                                         };
                                         
                                         switch (event.event_type) {
@@ -1020,7 +1101,7 @@ export default function OrderDetail() {
                                                             {newConfig.label}
                                                         </span>
                                                         {trigger}
-                                                        {renderSampleLink(sampleCode)}
+                                                        {renderSampleLink()}
                                                     </span>
                                                 );
                                             }
@@ -1029,7 +1110,7 @@ export default function OrderDetail() {
                                                 return (
                                                     <span>
                                                         subió imagen {filename}
-                                                        {renderSampleLink(sampleCode)}
+                                                        {renderSampleLink()}
                                                     </span>
                                                 );
                                             }
@@ -1038,7 +1119,36 @@ export default function OrderDetail() {
                                                 return (
                                                     <span>
                                                         eliminó imagen {filename}
-                                                        {renderSampleLink(sampleCode)}
+                                                        {renderSampleLink()}
+                                                    </span>
+                                                );
+                                            }
+                                            case "SAMPLE_NOTES_UPDATED": {
+                                                const newNotes = meta.new_notes as string || "";
+                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                return (
+                                                    <span>
+                                                        {action} la descripción
+                                                        {sampleCode && sampleId && (
+                                                            <span>
+                                                                {" "}de la muestra{" "}
+                                                                <a 
+                                                                    href={`/samples/${sampleId}`}
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        navigate(`/samples/${sampleId}`);
+                                                                    }}
+                                                                    style={{
+                                                                        color: "#0f8b8d",
+                                                                        fontWeight: 600,
+                                                                        textDecoration: "none",
+                                                                        borderBottom: "1px dashed #0f8b8d",
+                                                                    }}
+                                                                >
+                                                                    {sampleCode}
+                                                                </a>
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 );
                                             }
@@ -1188,6 +1298,11 @@ export default function OrderDetail() {
                                                 const oldStatus = meta.old_status as string;
                                                 const newStatus = meta.new_status as string;
                                                 return `cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
+                                            }
+                                            case "ORDER_NOTES_UPDATED": {
+                                                const newNotes = meta.new_notes as string || "";
+                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                return `${action} la descripción de la orden`;
                                             }
                                             default:
                                                 return event.description || event.event_type;
