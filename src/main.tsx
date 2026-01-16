@@ -10,7 +10,7 @@ import OrderRegister from "./pages/order_register";
 import SampleRegister from "./pages/sample_register";
 import CaseRegister from "./pages/case_register";
 import PatientsList from "./pages/patients_list";
-import PatientProfile from "./pages/patient_profile";
+import PatientDetailPage from "./pages/patient_detail";
 import OrderDetail from "./pages/order_detail";
 import SampleDetailPage from "./pages/sample_detail";
 import CasesList from "./pages/cases_list";
@@ -37,7 +37,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/register" element={<Register />} />
             <Route path="/patients/register" element={<PatientRegister />} />
             <Route path="/patients" element={<PatientsList />} />
-            <Route path="/patients/:patientId" element={<PatientProfile />} />
+            <Route path="/patients/:patientId" element={<PatientDetailPage />} />
             <Route path="/orders/register" element={<OrderRegister />} />
             <Route path="/cases" element={<CasesList />} />
             <Route path="/samples" element={<SamplesList />} />

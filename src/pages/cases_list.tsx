@@ -1,11 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button, Card, Space } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button, Card, Space, Avatar } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+
+// Generate initials from full name
+const getInitials = (fullName?: string): string => {
+    if (!fullName) return "P";
+    const parts = fullName.trim().split(/\s+/);
+    const first = parts[0]?.[0]?.toUpperCase() || "";
+    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
+    return first + last || "P";
+};
+
+// Generate a consistent color based on name
+const getAvatarColor = (name: string): string => {
+    const colors = [
+        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
+        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+};
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -112,7 +134,31 @@ export default function CasesList() {
                             columns={[
                                 { title: "Fecha", dataIndex: "created_at", key: "created_at", width: 180, render: (v: string | null) => v ? new Date(v).toLocaleString() : "—" },
                                 { title: "Orden", dataIndex: "order_code", key: "order_code", width: 140 },
-                                { title: "Paciente", key: "patient", render: (_, r) => r.patient.full_name || r.patient.patient_code },
+                                { 
+                                    title: "Paciente", 
+                                    key: "patient", 
+                                    render: (_, r) => {
+                                        const fullName = r.patient.full_name || r.patient.patient_code;
+                                        const initials = getInitials(fullName);
+                                        const color = getAvatarColor(fullName);
+                                        return (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                                <Avatar
+                                                    size={32}
+                                                    style={{
+                                                        backgroundColor: color,
+                                                        fontSize: 13,
+                                                        fontWeight: 600,
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    {initials}
+                                                </Avatar>
+                                                <span style={{ fontWeight: 500 }}>{fullName}</span>
+                                            </div>
+                                        );
+                                    }
+                                },
                                 { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
                                 { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
                                 { title: "Muestras", dataIndex: "sample_count", key: "sample_count", width: 110 },
