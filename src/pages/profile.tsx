@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Layout, Card, notification, Avatar, Upload, message as antdMessage } from "antd";
+import { Layout, Card, notification, Avatar, Upload, message as antdMessage, Tag, Divider } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined } from "@ant-design/icons";
+import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined, IdcardOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
@@ -15,7 +15,6 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { RcFile } from "antd/es/upload/interface";
 
-// Types for the API responses and form data
 interface UserProfile {
     id: string;
     email: string;
@@ -26,7 +25,6 @@ interface UserProfile {
     avatar_url?: string;
 }
 
-// Validation schemas
 const profileSchema = z.object({
     full_name: z.string().trim().nonempty("El nombre completo es obligatorio."),
     username: z.string(),
@@ -40,7 +38,7 @@ const passwordSchema = z.object({
         .min(8, "Mínimo 8 caracteres.")
         .regex(
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
-            "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."
+            "Debe contener mayúscula, minúscula, número y símbolo."
         ),
     confirm_password: z.string().nonempty("Confirmar contraseña es obligatorio."),
 }).refine((data) => data.new_password === data.confirm_password, {
@@ -48,20 +46,32 @@ const passwordSchema = z.object({
     path: ["confirm_password"],
 });
 
-// Type inference from schemas
 type ProfileFormData = z.infer<typeof profileSchema>;
 type PasswordFormData = z.infer<typeof passwordSchema>;
 
-// Generate initials from full name (first letter of first name + first letter of last name)
 const getInitials = (fullName?: string | null): string => {
     if (!fullName) return "U";
     const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 1) {
-        return parts[0][0]?.toUpperCase() || "U";
-    }
-    const firstInitial = parts[0][0]?.toUpperCase() || "";
-    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || "";
-    return firstInitial + lastInitial;
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || "U";
+    return (parts[0][0]?.toUpperCase() || "") + (parts[parts.length - 1][0]?.toUpperCase() || "");
+};
+
+const getAvatarColor = (name: string): string => {
+    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+};
+
+const getRoleDisplayName = (role: string): string => {
+    const roleNames: Record<string, string> = {
+        "admin": "Administrador",
+        "pathologist": "Patólogo",
+        "technician": "Técnico",
+        "receptionist": "Recepcionista",
+        "billing": "Facturación",
+    };
+    return roleNames[role.toLowerCase()] || role;
 };
 
 const Profile: React.FC = () => {
@@ -73,311 +83,146 @@ const Profile: React.FC = () => {
     const [avatarFile, setAvatarFile] = useState<RcFile | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [avatarHover, setAvatarHover] = useState(false);
 
-    // Convert image to SDR preview using canvas (normalizes HDR to sRGB)
     const createSDRPreview = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                // Create canvas - this forces sRGB color space (SDR)
                 const canvas = document.createElement("canvas");
                 const ctx = canvas.getContext("2d", { colorSpace: "srgb" });
-                if (!ctx) {
-                    reject(new Error("Canvas not supported"));
-                    return;
-                }
-
-                // Calculate size (max 256px for preview)
+                if (!ctx) { reject(new Error("Canvas not supported")); return; }
                 const maxSize = 256;
-                let width = img.width;
-                let height = img.height;
-                if (width > height) {
-                    if (width > maxSize) {
-                        height = (height * maxSize) / width;
-                        width = maxSize;
-                    }
-                } else {
-                    if (height > maxSize) {
-                        width = (width * maxSize) / height;
-                        height = maxSize;
-                    }
-                }
-
+                let width = img.width, height = img.height;
+                if (width > height) { if (width > maxSize) { height = (height * maxSize) / width; width = maxSize; } }
+                else { if (height > maxSize) { width = (width * maxSize) / height; height = maxSize; } }
                 canvas.width = width;
                 canvas.height = height;
-
-                // Draw image - this converts to sRGB (SDR)
                 ctx.drawImage(img, 0, 0, width, height);
-
-                // Get as JPEG data URL
-                const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-                resolve(dataUrl);
+                resolve(canvas.toDataURL("image/jpeg", 0.9));
             };
             img.onerror = () => reject(new Error("Failed to load image"));
             img.src = URL.createObjectURL(file);
         });
     };
 
-    // Forms for profile and password update with validation
-    const profileForm = useForm<ProfileFormData>({
-        resolver: zodResolver(profileSchema),
-        mode: "onChange",
-    });
-    
+    const profileForm = useForm<ProfileFormData>({ resolver: zodResolver(profileSchema), mode: "onChange" });
     const passwordForm = useForm<PasswordFormData>({
         resolver: zodResolver(passwordSchema),
         mode: "onChange",
-        defaultValues: {
-            current_password: "",
-            new_password: "",
-            confirm_password: "",
-        },
+        defaultValues: { current_password: "", new_password: "", confirm_password: "" },
     });
 
-    // API Base URL - consistent with login.tsx approach
-    const apiBase = () => {
-        return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
-    };
-    
-    // API configuration logs (can be removed in production)
-    if (import.meta.env.DEV) {
-        console.log("API_BASE configured as:", apiBase());
-    }
+    const apiBase = () => import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
+    const getAuthToken = () => localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
 
-    // Get auth token from localStorage
-    const getAuthToken = () => {
-        const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-        
-        // Debug logging (only in development)
-        if (import.meta.env.DEV && !token) {
-            console.warn("No authentication token found");
-        }
-        
-        return token;
-    };
-
-    // Fetch current user profile 
     const fetchProfile = async () => {
         try {
             setProfileLoading(true);
             const token = getAuthToken();
-            
-            if (!token) {
-                nav("/login");
-                return;
-            }
-
-            const url = `${apiBase()}/v1/auth/me`;
-            const response = await fetch(url, {
-                headers: {
-                    "Authorization": token, // token already includes "Bearer "
-                    "Content-Type": "application/json"
-                }
+            if (!token) { nav("/login"); return; }
+            const response = await fetch(`${apiBase()}/v1/auth/me`, {
+                headers: { "Authorization": token, "Content-Type": "application/json" }
             });
-
             if (response.status === 401) {
-                // Token expired or invalid
                 localStorage.removeItem("auth_token");
                 sessionStorage.removeItem("auth_token");
                 nav("/login");
                 return;
             }
-
-            if (!response.ok) {
-                throw new Error("Failed to fetch profile");
-            }
-
+            if (!response.ok) throw new Error("Failed to fetch profile");
             const data: UserProfile = await response.json();
             setProfileData(data);
-            
-            // Set form values
-            profileForm.reset({
-                full_name: data.full_name,
-                username: data.username || "",
-                email: data.email
-            });
-
+            profileForm.reset({ full_name: data.full_name, username: data.username || "", email: data.email });
         } catch (error) {
             console.error("Error fetching profile:", error);
-            notification.error({
-                message: "Error",
-                description: "No se pudo cargar el perfil. Por favor, intenta de nuevo."
-            });
+            notification.error({ message: "Error", description: "No se pudo cargar el perfil." });
         } finally {
             setProfileLoading(false);
         }
     };
 
-    // Build update payload only with changed fields
     const buildProfileUpdatePayload = (values: ProfileFormData) => {
-        if (!profileData) return {} as Record<string, unknown>;
+        if (!profileData) return {};
         const payload: Record<string, unknown> = {};
-        const currentUsername = profileData.username ?? "";
         if (values.full_name !== profileData.full_name) payload.full_name = values.full_name;
         if (values.email !== profileData.email) payload.email = values.email;
-        if (values.username !== currentUsername) payload.username = values.username === "" ? null : values.username;
+        if (values.username !== (profileData.username ?? "")) payload.username = values.username === "" ? null : values.username;
         return payload;
     };
 
-    // Update profile
     const handleProfileUpdate = async (data: ProfileFormData) => {
         try {
             setLoading(true);
             const token = getAuthToken();
-            if (!token) {
-                throw new Error("No authentication token found");
-            }
-            
-            const payload = buildProfileUpdatePayload(data);
-
-            const url = `${apiBase()}/v1/auth/me`;
-            const response = await fetch(url, {
+            if (!token) throw new Error("No authentication token found");
+            const response = await fetch(`${apiBase()}/v1/auth/me`, {
                 method: "PUT",
-                headers: {
-                    "Authorization": token, // token already includes "Bearer "
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
+                headers: { "Authorization": token, "Content-Type": "application/json" },
+                body: JSON.stringify(buildProfileUpdatePayload(data))
             });
-
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.detail || "Failed to update profile");
             }
-
             const updatedProfile: UserProfile = await response.json();
             setProfileData(updatedProfile);
-            
-            // Reset form with updated data
-            profileForm.reset({
-                full_name: updatedProfile.full_name,
-                username: updatedProfile.username || "",
-                email: updatedProfile.email
-            });
-            
-            notification.success({
-                message: "Perfil actualizado",
-                description: "Tu información de perfil ha sido actualizada exitosamente."
-            });
-
+            profileForm.reset({ full_name: updatedProfile.full_name, username: updatedProfile.username || "", email: updatedProfile.email });
+            notification.success({ message: "Perfil actualizado", description: "Tu información ha sido actualizada." });
         } catch (error) {
-            console.error("Error updating profile:", error);
-            notification.error({
-                message: "Error al actualizar",
-                description: error instanceof Error ? error.message : "No se pudo actualizar el perfil."
-            });
+            notification.error({ message: "Error", description: error instanceof Error ? error.message : "No se pudo actualizar." });
         } finally {
             setLoading(false);
         }
     };
 
-    // Update password (validation handled by zod schema)
     const handlePasswordUpdate = async (data: PasswordFormData) => {
         try {
             setLoading(true);
             const token = getAuthToken();
-            if (!token) {
-                throw new Error("No authentication token found");
-            }
-
-            const url = `${apiBase()}/v1/auth/me`;
-            const response = await fetch(url, {
+            if (!token) throw new Error("No authentication token found");
+            const response = await fetch(`${apiBase()}/v1/auth/me`, {
                 method: "PUT",
-                headers: {
-                    "Authorization": token, // token already includes "Bearer "
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    current_password: data.current_password,
-                    new_password: data.new_password
-                })
+                headers: { "Authorization": token, "Content-Type": "application/json" },
+                body: JSON.stringify({ current_password: data.current_password, new_password: data.new_password })
             });
-
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.detail || "Failed to update password");
             }
-
-            // Reset password form
             passwordForm.reset();
-            
-            notification.success({
-                message: "Contraseña actualizada",
-                description: "Tu contraseña ha sido actualizada exitosamente."
-            });
-
+            notification.success({ message: "Contraseña actualizada", description: "Tu contraseña ha sido cambiada." });
         } catch (error) {
-            console.error("Error updating password:", error);
-            notification.error({
-                message: "Error al actualizar contraseña",
-                description: error instanceof Error ? error.message : "No se pudo actualizar la contraseña."
-            });
+            notification.error({ message: "Error", description: error instanceof Error ? error.message : "No se pudo actualizar." });
         } finally {
             setLoading(false);
         }
     };
 
-    // Handle file selection for avatar
     const handleAvatarSelect = async (file: RcFile) => {
-        // Validate file type
-        const isImage = file.type.startsWith("image/");
-        if (!isImage) {
-            antdMessage.error("Solo se permiten archivos de imagen");
-            return false;
-        }
-        
-        // Validate file size (max 5MB)
-        const isLt5M = file.size / 1024 / 1024 < 5;
-        if (!isLt5M) {
-            antdMessage.error("La imagen debe ser menor a 5MB");
-            return false;
-        }
-
+        if (!file.type.startsWith("image/")) { antdMessage.error("Solo se permiten imágenes"); return false; }
+        if (file.size / 1024 / 1024 >= 5) { antdMessage.error("Máximo 5MB"); return false; }
         setAvatarFile(file);
-
-        // Create SDR preview (converts HDR to standard colors)
-        try {
-            const preview = await createSDRPreview(file);
-            setAvatarPreview(preview);
-        } catch {
-            // If preview fails, just don't show it
-            setAvatarPreview(null);
-        }
-
-        return false; // Prevent auto upload
+        try { setAvatarPreview(await createSDRPreview(file)); } catch { setAvatarPreview(null); }
+        return false;
     };
 
-    // Clear avatar selection
-    const handleClearAvatarSelection = () => {
-        setAvatarFile(null);
-        setAvatarPreview(null);
-    };
+    const handleClearAvatarSelection = () => { setAvatarFile(null); setAvatarPreview(null); };
 
-    // Upload avatar to server
     const handleAvatarUpload = async () => {
         if (!avatarFile || !profileData) return;
-
         setUploadingAvatar(true);
         const formData = new FormData();
         formData.append("file", avatarFile);
-
         const token = getAuthToken();
-        const headers: Record<string, string> = {};
-        if (token) headers["Authorization"] = token;
-
         try {
             const res = await fetch(`${apiBase()}/v1/users/${profileData.id}/avatar`, {
                 method: "POST",
-                headers,
+                headers: token ? { "Authorization": token } : {},
                 body: formData,
             });
-
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.detail || "Upload failed");
-            }
-
-            antdMessage.success("Foto de perfil actualizada");
+            if (!res.ok) throw new Error("Upload failed");
+            antdMessage.success("Foto actualizada");
             handleClearAvatarSelection();
             await fetchProfile();
         } catch (err) {
@@ -387,346 +232,203 @@ const Profile: React.FC = () => {
         }
     };
 
-    // Load profile on component mount
-    useEffect(() => {
-        fetchProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    useEffect(() => { fetchProfile(); /* eslint-disable-next-line */ }, []);
 
-    // Detect profile changes to enable update button
     const watched = profileForm.watch();
-    const hasProfileChanges = (() => {
-        if (!profileData) return false;
-        const currentUsername = profileData.username ?? "";
-        return (
-            watched?.full_name !== profileData.full_name ||
-            watched?.email !== profileData.email ||
-            (watched?.username ?? "") !== currentUsername
-        );
-    })();
+    const hasProfileChanges = profileData && (
+        watched?.full_name !== profileData.full_name ||
+        watched?.email !== profileData.email ||
+        (watched?.username ?? "") !== (profileData.username ?? "")
+    );
+
+    const initials = getInitials(profileData?.full_name);
+    const avatarColor = getAvatarColor(profileData?.full_name || "User");
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
-            <SidebarCeluma
-                selectedKey={(pathname as CelumaKey) ?? "/profile"}
-                onNavigate={(k) => nav(k)}
-                logoSrc={logo}
-            />
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/profile"} onNavigate={(k) => nav(k)} logoSrc={logo} />
 
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                    input:-webkit-autofill,
-                    input:-webkit-autofill:hover,
-                    input:-webkit-autofill:focus {
-                        -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
-                        box-shadow: 0 0 0 1000px #ffffff inset !important;
-                        -webkit-text-fill-color: #0d1b2a !important;
+                    input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset !important; -webkit-text-fill-color: #0d1b2a !important; }
+                    .profile-header { display: flex; align-items: flex-start; gap: 32px; }
+                    .profile-avatar-section { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+                    .profile-info-section { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+                    .profile-details { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
+                    @media (max-width: 640px) {
+                        .profile-header { flex-direction: column; align-items: center; text-align: center; }
+                        .profile-info-section { align-items: center; }
+                        .profile-details { justify-content: center; }
                     }
+                    .avatar-container { position: relative; cursor: pointer; }
+                    .avatar-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+                    .avatar-container:hover .avatar-overlay { opacity: 1; }
                 `}</style>
-                <div style={{ maxWidth: 1040, margin: "0 auto" }}>
 
-                    {profileLoading ? (
-                        <Card loading style={{ marginBottom: 24 }}>
-                            <div style={{ height: 200 }} />
-                        </Card>
-                    ) : (
-                        <>
-                            {/* Grid responsive estilo GitHub */}
-                            <style>{`
-                                .profile-grid { 
-                                    display: grid; 
-                                    gap: 24px; 
-                                    grid-template-columns: 1fr;
-                                }
-                                @media (min-width: 768px) { 
-                                    .profile-grid { 
-                                        grid-template-columns: 300px 1fr; 
-                                    } 
-                                }
-                                @media (min-width: 1024px) { 
-                                    .profile-grid { 
-                                        grid-template-columns: 320px 1fr; 
-                                    } 
-                                }
-                                
-                                .profile-summary-card {
-                                    order: 1;
-                                }
-                                .profile-forms-section {
-                                    order: 2;
-                                }
-                                
-                                @media (min-width: 768px) {
-                                    .profile-summary-card {
-                                        order: 0;
-                                    }
-                                    .profile-forms-section {
-                                        order: 0;
-                                    }
-                                }
-                            `}</style>
-                            <div className="profile-grid">
-                                {/* Columna izquierda: resumen */}
-                                <div className="profile-summary-card">
-                                    <Card
-                                        title={<span style={cardTitleStyle}>Mi Perfil</span>}
-                                        style={{ ...cardStyle, marginBottom: 24 }}
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    {/* Profile Header Card */}
+                    <Card style={cardStyle} loading={profileLoading}>
+                        {!profileLoading && profileData && (
+                            <div className="profile-header">
+                                {/* Avatar Section */}
+                                <div className="profile-avatar-section">
+                                    <div 
+                                        className="avatar-container"
+                                        onMouseEnter={() => setAvatarHover(true)}
+                                        onMouseLeave={() => setAvatarHover(false)}
                                     >
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", marginBottom: 16 }}>
-                                            {/* Avatar with SDR preview */}
-                                            <div style={{ position: "relative" }}>
-                                                <Avatar 
-                                                    size={96} 
-                                                    src={avatarPreview || profileData?.avatar_url}
-                                                    style={{ 
-                                                        background: "#0f8b8d", 
-                                                        fontWeight: 800,
-                                                        fontSize: 36,
-                                                        border: avatarPreview ? "3px solid #0f8b8d" : "none",
-                                                    }}
-                                                >
-                                                    {getInitials(profileData?.full_name)}
-                                                </Avatar>
-                                                {avatarPreview && (
-                                                    <div 
-                                                        style={{
-                                                            position: "absolute",
-                                                            top: -4,
-                                                            right: -4,
-                                                            background: "#0f8b8d",
-                                                            borderRadius: "50%",
-                                                            width: 22,
-                                                            height: 22,
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                            fontSize: 11,
-                                                            color: "#fff",
-                                                            border: "2px solid #fff",
-                                                        }}
-                                                    >
-                                                        ✓
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Upload controls */}
-                                            {!avatarFile ? (
-                                                <Upload
-                                                    beforeUpload={handleAvatarSelect}
-                                                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                                                    maxCount={1}
-                                                    showUploadList={false}
-                                                >
-                                                    <Button size="small" icon={<CameraOutlined />}>
-                                                        {profileData?.avatar_url ? "Cambiar Foto" : "Subir Foto"}
-                                                    </Button>
-                                                </Upload>
-                                            ) : (
-                                                <div style={{ display: "flex", gap: 8 }}>
-                                                    <Button 
-                                                        type="primary" 
-                                                        size="small"
-                                                        onClick={handleAvatarUpload}
-                                                        loading={uploadingAvatar}
-                                                        icon={<UploadOutlined />}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                    <Button 
-                                                        size="small"
-                                                        onClick={handleClearAvatarSelection}
-                                                        disabled={uploadingAvatar}
-                                                    >
-                                                        Cancelar
-                                                    </Button>
+                                        <Avatar
+                                            size={140}
+                                            src={avatarPreview || profileData.avatar_url}
+                                            style={{
+                                                backgroundColor: (avatarPreview || profileData.avatar_url) ? "transparent" : avatarColor,
+                                                fontSize: 52,
+                                                fontWeight: 700,
+                                                border: avatarPreview ? `3px solid ${tokens.primary}` : "3px solid #e5e7eb",
+                                            }}
+                                        >
+                                            {initials}
+                                        </Avatar>
+                                        {!avatarFile && (
+                                            <Upload
+                                                beforeUpload={handleAvatarSelect}
+                                                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                                maxCount={1}
+                                                showUploadList={false}
+                                            >
+                                                <div className="avatar-overlay" style={{ opacity: avatarHover ? 1 : 0 }}>
+                                                    <CameraOutlined style={{ color: "#fff", fontSize: 28 }} />
                                                 </div>
-                                            )}
+                                            </Upload>
+                                        )}
+                                    </div>
+                                    
+                                    {avatarFile && (
+                                        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                                            <Button type="primary" size="small" onClick={handleAvatarUpload} loading={uploadingAvatar} icon={<UploadOutlined />}>
+                                                Guardar
+                                            </Button>
+                                            <Button size="small" onClick={handleClearAvatarSelection} disabled={uploadingAvatar}>
+                                                Cancelar
+                                            </Button>
                                         </div>
-                                        <div style={{ textAlign: "center" }}>
-                                            <div>
-                                                <div style={{ fontSize: 18, fontWeight: 800, color: "#0d1b2a" }}>{profileData?.full_name}</div>
-                                                <div style={{ color: "#6b7280" }}>{profileData?.email}</div>
-                                                <div style={{ color: "#6b7280", marginTop: 4 }}>Usuario: <span style={{ color: "#0d1b2a", fontWeight: 600 }}>{profileData?.username ?? "—"}</span></div>
-                                                <div style={{ color: "#6b7280", marginTop: 2 }}>Rol: <span style={{ color: "#0d1b2a", fontWeight: 600 }}>{profileData?.role}</span></div>
-                                            </div>
-                                        </div>
-                                        <div style={{ marginTop: 16 }}>
-                                            <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>Tenant</div>
-                                            <div style={{ wordBreak: "break-all" }}>{profileData?.tenant_id}</div>
-                                        </div>
-                                    </Card>
+                                    )}
+
+                                    <h1 style={{ margin: "16px 0 0 0", fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800, color: tokens.textPrimary }}>
+                                        {profileData.full_name}
+                                    </h1>
+                                    {profileData.username && (
+                                        <div style={{ color: tokens.textSecondary, fontSize: 15 }}>@{profileData.username}</div>
+                                    )}
                                 </div>
 
-                                {/* Columna derecha: formularios */}
-                                <div className="profile-forms-section">
-                                    {/* Información del perfil */}
-                                    <Card 
-                                        title={<span style={cardTitleStyle}>Información del Perfil</span>} 
-                                        style={{ ...cardStyle, marginBottom: 24 }}
-                                        extra={
-                                            profileData && (
-                                                <span style={{ color: "#6b7280", fontSize: 14 }}>
-                                                    Rol: {profileData.role}
-                                                </span>
-                                            )
-                                        }
-                                    >
-                                        <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)}>
-                                            <div style={{ display: "grid", gap: 16 }}>
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Nombre completo *
-                                                    </label>
-                                                    <FormField
-                                                        control={profileForm.control}
-                                                        name="full_name"
-                                                        render={({ value, onChange, error }) => (
-                                                            <TextField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<UserOutlined />}
-                                                                placeholder="Ingresa tu nombre completo"
-                                                                disabled={loading}
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Nombre de usuario
-                                                    </label>
-                                                    <FormField
-                                                        control={profileForm.control}
-                                                        name="username"
-                                                        render={({ value, onChange, error }) => (
-                                                            <TextField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<UserOutlined />}
-                                                                placeholder="Nombre de usuario (opcional)"
-                                                                disabled={loading}
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Correo electrónico *
-                                                    </label>
-                                                    <FormField
-                                                        control={profileForm.control}
-                                                        name="email"
-                                                        render={({ value, onChange, error }) => (
-                                                            <TextField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<MailOutlined />}
-                                                                placeholder="tu@correo.com"
-                                                                disabled={loading}
-                                                                type="email"
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <Button
-                                                    type="primary"
-                                                    htmlType="submit"
-                                                    loading={loading}
-                                                    disabled={!hasProfileChanges || loading}
-                                                    style={{ marginTop: 8 }}
-                                                >
-                                                    Actualizar Información
-                                                </Button>
-                                            </div>
-                                        </form>
-                                    </Card>
-
-                                    {/* Cambiar contraseña */}
-                                    <Card title={<span style={cardTitleStyle}>Cambiar Contraseña</span>} style={cardStyle}>
-                                        <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
-                                            <div style={{ display: "grid", gap: 16 }}>
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Contraseña actual *
-                                                    </label>
-                                                    <FormField
-                                                        control={passwordForm.control}
-                                                        name="current_password"
-                                                        render={({ value, onChange, error }) => (
-                                                            <PasswordField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<KeyOutlined />}
-                                                                placeholder="Ingresa tu contraseña actual"
-                                                                disabled={loading}
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Nueva contraseña *
-                                                    </label>
-                                                    <FormField
-                                                        control={passwordForm.control}
-                                                        name="new_password"
-                                                        render={({ value, onChange, error }) => (
-                                                            <PasswordField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<KeyOutlined />}
-                                                                placeholder="Ingresa tu nueva contraseña"
-                                                                disabled={loading}
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>
-                                                        Confirmar nueva contraseña *
-                                                    </label>
-                                                    <FormField
-                                                        control={passwordForm.control}
-                                                        name="confirm_password"
-                                                        render={({ value, onChange, error }) => (
-                                                            <PasswordField
-                                                                value={value}
-                                                                onChange={onChange}
-                                                                error={error}
-                                                                prefixNode={<KeyOutlined />}
-                                                                placeholder="Confirma tu nueva contraseña"
-                                                                disabled={loading}
-                                                            />
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                <Button
-                                                    type="primary"
-                                                    htmlType="submit"
-                                                    loading={loading}
-                                                    style={{ marginTop: 8 }}
-                                                >
-                                                    Cambiar Contraseña
-                                                </Button>
-                                            </div>
-                                        </form>
-                                    </Card>
+                                {/* Info Section */}
+                                <div className="profile-info-section">
+                                    <div className="profile-details">
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
+                                            <MailOutlined style={{ fontSize: 16, color: tokens.primary }} />
+                                            <span>{profileData.email}</span>
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
+                                            <IdcardOutlined style={{ fontSize: 16, color: tokens.primary }} />
+                                            <span style={{ fontSize: 13, wordBreak: "break-all" }}>{profileData.tenant_id}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </>
-                    )}
+                        )}
+                    </Card>
+
+                    {/* Profile Edit Card */}
+                    <Card
+                        title={<span style={cardTitleStyle}>Editar Información</span>}
+                        style={cardStyle}
+                        extra={
+                            profileData && (
+                                <Tag color={tokens.primary} style={{ fontSize: 13, padding: "4px 12px" }}>
+                                    {getRoleDisplayName(profileData.role)}
+                                </Tag>
+                            )
+                        }
+                    >
+                        <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)}>
+                            <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                                <div>
+                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre completo *</label>
+                                    <FormField control={profileForm.control} name="full_name" render={({ value, onChange, error }) => (
+                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="Tu nombre" disabled={loading} />
+                                    )} />
+                                </div>
+                                <div>
+                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre de usuario</label>
+                                    <FormField control={profileForm.control} name="username" render={({ value, onChange, error }) => (
+                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="username (opcional)" disabled={loading} />
+                                    )} />
+                                </div>
+                                <div>
+                                    <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Correo electrónico *</label>
+                                    <FormField control={profileForm.control} name="email" render={({ value, onChange, error }) => (
+                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} placeholder="tu@correo.com" disabled={loading} type="email" />
+                                    )} />
+                                </div>
+                            </div>
+                            <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
+                                <Button type="primary" htmlType="submit" loading={loading} disabled={!hasProfileChanges || loading}>
+                                    Guardar Cambios
+                                </Button>
+                            </div>
+                        </form>
+
+                        {/* Password Change Section */}
+                        <Divider style={{ margin: "32px 0 24px 0" }} />
+                        
+                        <div>
+                            <h3 style={{ 
+                                margin: "0 0 20px 0", 
+                                fontFamily: tokens.titleFont, 
+                                fontSize: 18, 
+                                fontWeight: 700, 
+                                color: tokens.textPrimary,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                            }}>
+                                <KeyOutlined style={{ color: tokens.primary }} />
+                                Cambiar Contraseña
+                            </h3>
+                            
+                            <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
+                                <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                                    <div>
+                                        <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Contraseña actual *</label>
+                                        <FormField control={passwordForm.control} name="current_password" render={({ value, onChange, error }) => (
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Contraseña actual" disabled={loading} />
+                                        )} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nueva contraseña *</label>
+                                        <FormField control={passwordForm.control} name="new_password" render={({ value, onChange, error }) => (
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Nueva contraseña" disabled={loading} />
+                                        )} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Confirmar contraseña *</label>
+                                        <FormField control={passwordForm.control} name="confirm_password" render={({ value, onChange, error }) => (
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Confirmar contraseña" disabled={loading} />
+                                        )} />
+                                    </div>
+                                </div>
+                                <div style={{ marginTop: 6, fontSize: 12, color: tokens.textSecondary }}>
+                                    Mínimo 8 caracteres con mayúscula, minúscula, número y símbolo (!@#$%^&*).
+                                </div>
+                                <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+                                    <Button type="primary" htmlType="submit" loading={loading}>
+                                        Cambiar Contraseña
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>
