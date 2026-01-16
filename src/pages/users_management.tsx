@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Tag, Space, Popconfirm, Switch, Spin } from "antd";
+import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Tag, Space, Popconfirm, Switch, Spin, Avatar } from "antd";
 import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -7,6 +7,18 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
+
+// Generate initials from full name (first letter of first name + first letter of last name)
+const getInitials = (fullName?: string | null): string => {
+    if (!fullName) return "U";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) {
+        return parts[0][0]?.toUpperCase() || "U";
+    }
+    const firstInitial = parts[0][0]?.toUpperCase() || "";
+    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || "";
+    return firstInitial + lastInitial;
+};
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -59,6 +71,7 @@ interface User {
     role: string;
     is_active: boolean;
     branch_ids: string[];
+    avatar_url?: string;
 }
 
 interface Branch {
@@ -184,7 +197,27 @@ function UsersManagement() {
     };
 
     const columns: ColumnsType<User> = [
-        { title: "Nombre", dataIndex: "full_name", key: "full_name" },
+        { 
+            title: "Nombre", 
+            dataIndex: "full_name", 
+            key: "full_name",
+            render: (name: string, record: User) => (
+                <Space>
+                    <Avatar 
+                        size={32} 
+                        src={record.avatar_url}
+                        style={{ 
+                            backgroundColor: record.avatar_url ? "transparent" : "#0f8b8d",
+                            fontWeight: 700,
+                            fontSize: 13,
+                        }}
+                    >
+                        {getInitials(name)}
+                    </Avatar>
+                    <span>{name}</span>
+                </Space>
+            )
+        },
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Usuario", dataIndex: "username", key: "username", render: (text) => text || "—" },
         { 
