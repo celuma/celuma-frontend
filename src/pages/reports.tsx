@@ -16,8 +16,8 @@ function Reports() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <ReportEditor />
                 </div>
             </Layout.Content>

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Layout, Table, Tag, Button, message } from "antd";
+import { Layout, Table, Tag, Button, message, Card } from "antd";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { getWorklist, type WorklistResponse } from "../services/report_service";
 import type { ColumnsType } from "antd/es/table";
 
@@ -108,40 +108,12 @@ function PathologistWorklist() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content
-                style={{
-                    padding: 24,
-                    background: tokens.bg,
-                    fontFamily: tokens.textFont,
-                }}
-            >
-                <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-                    <div
-                        style={{
-                            background: tokens.cardBg,
-                            borderRadius: tokens.radius,
-                            boxShadow: tokens.shadow,
-                            padding: 24,
-                        }}
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    <Card
+                        title={<span style={cardTitleStyle}>Worklist</span>}
+                        style={cardStyle}
                     >
-                        <div style={{ marginBottom: 24 }}>
-                            <h1
-                                style={{
-                                    marginTop: 0,
-                                    marginBottom: 8,
-                                    fontFamily: tokens.titleFont,
-                                    fontSize: 24,
-                                    fontWeight: 800,
-                                    color: "#0d1b2a",
-                                }}
-                            >
-                                Worklist del Patólogo
-                            </h1>
-                            <p style={{ margin: 0, color: "#666" }}>
-                                Reportes pendientes de revisión
-                            </p>
-                        </div>
-
                         <Table
                             columns={columns}
                             dataSource={reports}
@@ -152,7 +124,7 @@ function PathologistWorklist() {
                                 showTotal: (total) => `Total: ${total} reportes`,
                             }}
                         />
-                    </div>
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

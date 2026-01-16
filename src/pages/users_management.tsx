@@ -4,7 +4,7 @@ import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-d
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 
@@ -313,10 +313,10 @@ function UsersManagement() {
     return (
         <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey="/users" onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: 24, background: tokens.bg }}>
-                <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800 }}>Gestión de Usuarios</span>}
+                        title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
                         extra={
                             <Space>
                                 <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
@@ -327,7 +327,7 @@ function UsersManagement() {
                                 </Button>
                             </Space>
                         }
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
+                        style={cardStyle}
                     >
                         <Table
                             columns={columns}

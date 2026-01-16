@@ -5,7 +5,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -101,7 +101,7 @@ export default function PatientProfile() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .pp-grid { display: grid; gap: ${tokens.gap}px; grid-template-columns: 1fr; }
                   .pp-card-table .ant-table { border-radius: 10px; overflow: hidden; }
@@ -110,9 +110,9 @@ export default function PatientProfile() {
                 <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <div className="pp-grid">
                         <Card
-                            title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Perfil del Paciente</span>}
+                            title={<span style={cardTitleStyle}>Perfil del Paciente</span>}
                             loading={loading}
-                            style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                            style={cardStyle}
                         >
                             {!loading && patient && (
                                 <Descriptions bordered column={2} size="middle">
@@ -126,9 +126,9 @@ export default function PatientProfile() {
                         </Card>
 
                         <Card
-                            title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Órdenes del paciente</span>}
+                            title={<span style={cardTitleStyle}>Órdenes del paciente</span>}
                             loading={loading}
-                            style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                            style={cardStyle}
                             extra={!loading && patient ? (
                                 <AntButton type="primary" onClick={() => navigate(`/cases/register?patientId=${patient.id}`)}>
                                     Registrar Caso

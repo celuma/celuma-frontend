@@ -13,7 +13,7 @@ import FormField from "../components/ui/form_field";
 import TextField from "../components/ui/text_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -87,14 +87,14 @@ type CreatePatientResponse = {
     branch_id: string;
 };
 
-const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
     <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: 24 }}>
-            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
+        <div style={{ padding: tokens.cardPadding }}>
+            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
         </div>
         <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: 24, display: "grid", gap: 12 }}>
-            <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>Complete los datos para registrar un paciente.</div>
+        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
+            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
             {children}
         </div>
     </div>
@@ -175,7 +175,7 @@ export default function PatientRegister() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .pr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
                   .pr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
@@ -185,7 +185,7 @@ export default function PatientRegister() {
                   }
                 `}</style>
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <Card title="Registrar Paciente">
+                    <FormCard title="Registrar Paciente" description="Complete los datos para registrar un paciente.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (
                                 <section style={{ display: "grid", gap: 10 }}>
@@ -297,7 +297,7 @@ export default function PatientRegister() {
                         </form>
 
                         <ErrorText>{serverError}</ErrorText>
-                    </Card>
+                    </FormCard>
                 </div>
             </Layout.Content>
         </Layout>

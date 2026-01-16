@@ -8,7 +8,7 @@ import RecentActivity from "../components/ui/recent_activity";
 import ErrorText from "../components/ui/error_text";
 import { useDashboardData } from "../hooks/use_dashboard_data";
 import logo from "../images/celuma-isotipo.png";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 
 const { Title } = Typography;
 
@@ -42,26 +42,20 @@ const Home: React.FC = () => {
                 logoSrc = {logo}
             />
 
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     {/* Header */}
                     <Card
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
-                        bodyStyle={{ padding: 24 }}
+                        style={cardStyle}
+                        bodyStyle={{ padding: tokens.cardPadding }}
                     >
                         <Title 
                             level={2} 
-                            style={{ 
-                                margin: 0, 
-                                fontFamily: tokens.titleFont, 
-                                fontSize: 28, 
-                                fontWeight: 800, 
-                                color: "#0d1b2a" 
-                            }}
+                            style={pageTitleStyle}
                         >
                             Inicio
                         </Title>
-                        <p style={{ margin: "8px 0 0 0", color: "#6b7280", fontSize: 16 }}>
+                        <p style={subtitleStyle}>
                             Resumen de información importante del laboratorio
                         </p>
                     </Card>
@@ -146,14 +140,14 @@ const Home: React.FC = () => {
                         </Col>
                         <Col xs={24} lg={12}>
                             <Card
-                                style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
-                                bodyStyle={{ padding: 20 }}
+                                style={cardStyle}
+                                bodyStyle={{ padding: tokens.cardPadding }}
                             >
                                 <h3 style={{ 
                                     fontFamily: tokens.titleFont, 
-                                    fontSize: 18, 
-                                    fontWeight: 800, 
-                                    color: "#0d1b2a", 
+                                    fontSize: tokens.titleSize, 
+                                    fontWeight: tokens.titleWeight, 
+                                    color: tokens.textPrimary, 
                                     margin: "0 0 16px 0" 
                                 }}>
                                     Acciones Rápidas

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button as AntButton } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button, Card, Space } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -109,31 +109,27 @@ export default function SamplesList() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <style>{`
-                  .sl-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.06); padding: 16px; }
-                  .sl-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-                  .sl-title { margin: 0, font-size: 20px; }
-                  .sl-search { max-width: 360px; }
-                `}</style>
-
-                <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <div className="sl-card" style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
-                        <div className="sl-toolbar">
-                            <h2 className="sl-title" style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Muestras</h2>
-                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    <Card
+                        title={<span style={cardTitleStyle}>Muestras</span>}
+                        extra={
+                            <Space>
                                 <Input.Search
-                                    className="sl-search"
                                     allowClear
                                     placeholder="Buscar por código, tipo, orden o sucursal" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
+                                    style={{ width: 320 }}
                                 />
-                                <AntButton type="primary" onClick={() => navigate("/samples/register")}>Registrar Muestra</AntButton>
-                            </div>
-                        </div>
-
+                                <Button type="primary" onClick={() => navigate("/samples/register")}>
+                                    Registrar Muestra
+                                </Button>
+                            </Space>
+                        }
+                        style={cardStyle}
+                    >
                         <Table
                             loading={loading}
                             dataSource={filtered}
@@ -143,7 +139,7 @@ export default function SamplesList() {
                             columns={[
                                 { title: "Código", dataIndex: "sample_code", key: "sample_code", width: 140 },
                                 { title: "Tipo", dataIndex: "type", key: "type", width: 140 },
-                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => <Tag color="#49b6ad">{v}</Tag> },
+                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
                                 { title: "Orden", key: "order", render: (_, r: Row) => r.order.order_code, width: 140 },
                                 { title: "Paciente", key: "patient", render: (_, r: Row) => r.patient_name || "—" },
                                 { title: "Solicitante", key: "requested_by", render: (_, r: Row) => r.requested_by || "—" },
@@ -154,9 +150,8 @@ export default function SamplesList() {
                                 style: { cursor: "pointer" },
                             })}
                         />
-
-                        <ErrorText>{error}</ErrorText>
-                    </div>
+                        {error && <ErrorText>{error}</ErrorText>}
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button as AntButton } from "antd";
+import { Layout, Table, Input, Tag, Empty, Button, Card, Space } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -100,31 +100,27 @@ export default function ReportsList() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <style>{`
-                  .rl-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.06); padding: 16px; }
-                  .rl-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-                  .rl-title { margin: 0; font-size: 20px; }
-                  .rl-search { max-width: 360px; }
-                `}</style>
-
-                <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <div className="rl-card" style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}>
-                        <div className="rl-toolbar">
-                            <h2 className="rl-title" style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Reportes</h2>
-                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    <Card
+                        title={<span style={cardTitleStyle}>Reportes</span>}
+                        extra={
+                            <Space>
                                 <Input.Search
-                                    className="rl-search"
                                     allowClear
                                     placeholder="Buscar por título, diagnóstico, orden o paciente" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
+                                    style={{ width: 320 }}
                                 />
-                                <AntButton type="primary" onClick={() => navigate("/reports/editor")}>Crear Reporte</AntButton>
-                            </div>
-                        </div>
-
+                                <Button type="primary" onClick={() => navigate("/reports/editor")}>
+                                    Crear Reporte
+                                </Button>
+                            </Space>
+                        }
+                        style={cardStyle}
+                    >
                         <Table
                             loading={loading}
                             dataSource={filtered}
@@ -152,9 +148,8 @@ export default function ReportsList() {
                                 style: { cursor: "pointer" },
                             })}
                         />
-
-                        <ErrorText>{error}</ErrorText>
-                    </div>
+                        {error && <ErrorText>{error}</ErrorText>}
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

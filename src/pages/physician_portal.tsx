@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Table, Button, message, Typography, Tag } from "antd";
 import { DownloadOutlined } from "@ant-design/icons";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
 const { Title } = Typography;
@@ -112,15 +112,15 @@ function PhysicianPortal() {
     ];
 
     return (
-        <div style={{ minHeight: "100vh", background: tokens.bg, padding: 24 }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ minHeight: "100vh", background: tokens.bg, padding: tokens.contentPadding }}>
+            <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                 <Card
                     title={
-                        <Title level={2} style={{ margin: 0, fontFamily: tokens.titleFont }}>
+                        <Title level={2} style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: tokens.titleSize, fontWeight: tokens.titleWeight }}>
                             Portal del Médico
                         </Title>
                     }
-                    style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
+                    style={cardStyle}
                 >
                     <Table
                         columns={columns}

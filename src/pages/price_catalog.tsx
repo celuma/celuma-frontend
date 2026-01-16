@@ -4,7 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
 function getApiBase(): string {
@@ -203,16 +203,16 @@ function PriceCatalog() {
     return (
         <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: 24, background: tokens.bg }}>
-                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800 }}>Catálogo de Precios</span>}
+                        title={<span style={cardTitleStyle}>Catálogo de Precios</span>}
                         extra={
                             <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
                                 Nuevo Servicio
                             </Button>
                         }
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
+                        style={cardStyle}
                     >
                         <Table
                             columns={columns}

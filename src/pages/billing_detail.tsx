@@ -3,7 +3,7 @@ import { Layout, Card, Table, Tag, Button, Form, InputNumber, Select, message, D
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
 function getApiBase(): string {
@@ -142,12 +142,12 @@ function BillingDetail() {
     return (
         <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: 24, background: tokens.bg }}>
-                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800 }}>Detalle de Facturación</span>}
+                        title={<span style={cardTitleStyle}>Detalle de Facturación</span>}
                         loading={loading}
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
+                        style={cardStyle}
                     >
                         {invoice ? (
                             <>

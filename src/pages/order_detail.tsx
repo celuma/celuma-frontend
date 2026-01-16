@@ -6,7 +6,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import { saveReport, getLatestReportByOrderId } from "../services/report_service";
 import type { ReportEnvelope, ReportFlags } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
@@ -237,12 +237,12 @@ export default function OrderDetail() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Detalle de Orden</span>}
+                        title={<span style={cardTitleStyle}>Detalle de Orden</span>}
                         loading={loading}
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                        style={cardStyle}
                     >
                         {data && (
                             <>
@@ -282,9 +282,9 @@ export default function OrderDetail() {
                     </Card>
 
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Muestras</span>}
+                        title={<span style={cardTitleStyle}>Muestras</span>}
                         loading={loading}
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                        style={cardStyle}
                         extra={data ? (
                             <AntButton type="primary" onClick={() => navigate(`/samples/register?orderId=${data.order.id}`)}>
                                 Registrar Muestra
@@ -312,9 +312,9 @@ export default function OrderDetail() {
 
                     {/* Timeline Card */}
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Línea de Tiempo</span>}
+                        title={<span style={cardTitleStyle}>Línea de Tiempo</span>}
                         loading={loading}
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                        style={cardStyle}
                     >
                         {timeline.length > 0 ? (
                             <Timeline
@@ -354,9 +354,9 @@ export default function OrderDetail() {
                     </Card>
 
                     <Card
-                        title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Reporte</span>}
+                        title={<span style={cardTitleStyle}>Reporte</span>}
                         loading={loading}
-                        style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow, background: tokens.cardBg }}
+                        style={cardStyle}
                     >
                         {reportId ? (
                             <div style={{ display: "grid", gap: 16 }}>
