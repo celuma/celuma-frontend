@@ -228,7 +228,7 @@ export default function SampleDetailPage() {
                     marginBottom: 12
                 }}>
                     <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Asignado
+                        Asignados
                     </span>
                     <Tooltip title="Próximamente">
                         <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />

@@ -115,7 +115,7 @@ const Profile: React.FC = () => {
 
     const apiBase = () => import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
     const getAuthToken = () => localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-
+        
     const fetchProfile = async () => {
         try {
             setProfileLoading(true);
@@ -232,14 +232,15 @@ const Profile: React.FC = () => {
         }
     };
 
-    useEffect(() => { fetchProfile(); /* eslint-disable-next-line */ }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchProfile(); }, []);
 
     const watched = profileForm.watch();
     const hasProfileChanges = profileData && (
-        watched?.full_name !== profileData.full_name ||
-        watched?.email !== profileData.email ||
+            watched?.full_name !== profileData.full_name ||
+            watched?.email !== profileData.email ||
         (watched?.username ?? "") !== (profileData.username ?? "")
-    );
+        );
 
     const initials = getInitials(profileData?.full_name);
     const avatarColor = getAvatarColor(profileData?.full_name || "User");
@@ -277,7 +278,7 @@ const Profile: React.FC = () => {
                                         onMouseEnter={() => setAvatarHover(true)}
                                         onMouseLeave={() => setAvatarHover(false)}
                                     >
-                                        <Avatar
+                                            <Avatar 
                                             size={140}
                                             src={avatarPreview || profileData.avatar_url}
                                             style={{
@@ -286,9 +287,9 @@ const Profile: React.FC = () => {
                                                 fontWeight: 700,
                                                 border: avatarPreview ? `3px solid ${tokens.primary}` : "3px solid #e5e7eb",
                                             }}
-                                        >
+                                            >
                                             {initials}
-                                        </Avatar>
+                                            </Avatar>
                                         {!avatarFile && (
                                             <Upload
                                                 beforeUpload={handleAvatarSelect}
@@ -303,14 +304,14 @@ const Profile: React.FC = () => {
                                         )}
                                     </div>
                                     
-                                    {avatarFile && (
+                                            {avatarFile && (
                                         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                                             <Button type="primary" size="small" onClick={handleAvatarUpload} loading={uploadingAvatar} icon={<UploadOutlined />}>
                                                 Guardar
                                             </Button>
                                             <Button size="small" onClick={handleClearAvatarSelection} disabled={uploadingAvatar}>
                                                 Cancelar
-                                            </Button>
+                                                </Button>
                                         </div>
                                     )}
 
@@ -320,7 +321,7 @@ const Profile: React.FC = () => {
                                     {profileData.username && (
                                         <div style={{ color: tokens.textSecondary, fontSize: 15 }}>@{profileData.username}</div>
                                     )}
-                                </div>
+                                            </div>
 
                                 {/* Info Section */}
                                 <div className="profile-info-section">
@@ -340,44 +341,44 @@ const Profile: React.FC = () => {
                     </Card>
 
                     {/* Profile Edit Card */}
-                    <Card
+                                    <Card 
                         title={<span style={cardTitleStyle}>Editar Información</span>}
                         style={cardStyle}
-                        extra={
-                            profileData && (
+                                        extra={
+                                            profileData && (
                                 <Tag color={tokens.primary} style={{ fontSize: 13, padding: "4px 12px" }}>
                                     {getRoleDisplayName(profileData.role)}
                                 </Tag>
-                            )
-                        }
-                    >
-                        <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)}>
+                                            )
+                                        }
+                                    >
+                                        <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)}>
                             <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-                                <div>
+                                                <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre completo *</label>
                                     <FormField control={profileForm.control} name="full_name" render={({ value, onChange, error }) => (
                                         <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="Tu nombre" disabled={loading} />
                                     )} />
-                                </div>
-                                <div>
+                                                </div>
+                                                <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre de usuario</label>
                                     <FormField control={profileForm.control} name="username" render={({ value, onChange, error }) => (
                                         <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="username (opcional)" disabled={loading} />
                                     )} />
-                                </div>
-                                <div>
+                                                </div>
+                                                <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Correo electrónico *</label>
                                     <FormField control={profileForm.control} name="email" render={({ value, onChange, error }) => (
                                         <TextField value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} placeholder="tu@correo.com" disabled={loading} type="email" />
                                     )} />
                                 </div>
-                            </div>
+                                                </div>
                             <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
                                 <Button type="primary" htmlType="submit" loading={loading} disabled={!hasProfileChanges || loading}>
                                     Guardar Cambios
-                                </Button>
-                            </div>
-                        </form>
+                                                </Button>
+                                            </div>
+                                        </form>
 
                         {/* Password Change Section */}
                         <Divider style={{ margin: "32px 0 24px 0" }} />
@@ -397,21 +398,21 @@ const Profile: React.FC = () => {
                                 Cambiar Contraseña
                             </h3>
                             
-                            <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
+                                        <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
                                 <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-                                    <div>
+                                                <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Contraseña actual *</label>
                                         <FormField control={passwordForm.control} name="current_password" render={({ value, onChange, error }) => (
                                             <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Contraseña actual" disabled={loading} />
                                         )} />
-                                    </div>
-                                    <div>
+                                                </div>
+                                                <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nueva contraseña *</label>
                                         <FormField control={passwordForm.control} name="new_password" render={({ value, onChange, error }) => (
                                             <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Nueva contraseña" disabled={loading} />
                                         )} />
-                                    </div>
-                                    <div>
+                                                </div>
+                                                <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Confirmar contraseña *</label>
                                         <FormField control={passwordForm.control} name="confirm_password" render={({ value, onChange, error }) => (
                                             <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Confirmar contraseña" disabled={loading} />
@@ -420,15 +421,15 @@ const Profile: React.FC = () => {
                                 </div>
                                 <div style={{ marginTop: 6, fontSize: 12, color: tokens.textSecondary }}>
                                     Mínimo 8 caracteres con mayúscula, minúscula, número y símbolo (!@#$%^&*).
-                                </div>
+                                                </div>
                                 <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
                                     <Button type="primary" htmlType="submit" loading={loading}>
-                                        Cambiar Contraseña
-                                    </Button>
-                                </div>
-                            </form>
+                                                    Cambiar Contraseña
+                                                </Button>
+                                            </div>
+                                        </form>
                         </div>
-                    </Card>
+                                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

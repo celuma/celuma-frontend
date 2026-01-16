@@ -126,19 +126,19 @@ function UsersManagement() {
         }
     };
 
-    const handleCreate = async (values: any) => {
+    const handleCreate = async (values: Record<string, unknown>) => {
         try {
             await postJSON("/v1/users/", values);
             message.success("Usuario creado");
             setCreateModalVisible(false);
             createForm.resetFields();
             await loadData();
-        } catch (error) {
+        } catch {
             message.error("Error al crear usuario");
         }
     };
 
-    const handleEdit = async (values: any) => {
+    const handleEdit = async (values: Record<string, unknown>) => {
         if (!editingUser) return;
         try {
             await putJSON(`/v1/users/${editingUser.id}`, values);
@@ -147,7 +147,7 @@ function UsersManagement() {
             editForm.resetFields();
             setEditingUser(null);
             await loadData();
-        } catch (error) {
+        } catch {
             message.error("Error al actualizar usuario");
         }
     };
@@ -165,13 +165,13 @@ function UsersManagement() {
         setEditModalVisible(true);
     };
 
-    const handleInvite = async (values: any) => {
+    const handleInvite = async (values: Record<string, unknown>) => {
         try {
             await postJSON("/v1/users/invitations", values);
             message.success("Invitación enviada por email");
             setInviteModalVisible(false);
             inviteForm.resetFields();
-        } catch (error) {
+        } catch {
             message.error("Error al enviar invitación");
         }
     };
