@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
-import { Form, message, Divider, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image } from "antd";
+import { Form, message, Divider, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image, Modal } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { useAutoSave, loadAutoSave } from "../../hooks/auto_save";
-import { saveReport, saveReportVersion } from "../../services/report_service";
+import { saveReport, saveReportVersion, submitReport, approveReport, requestChanges, signReport } from "../../services/report_service";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
 import { DeleteOutlined } from "@ant-design/icons";
 import { usePdfExport } from "../../hooks/use_pdf_export";
-import type { ReportType, ReportEnvelope, ReportFlags } from "../../models/report";
+import type { ReportType, ReportEnvelope, ReportFlags, ReportStatus } from "../../models/report";
 import SelectField from "../ui/select_field";
 import TextField from "../ui/text_field";
 import DateField from "../ui/date_field";
@@ -155,6 +155,7 @@ type OrderFullResponse = {
         branch_id: string;
         requested_by?: string | null;
         notes?: string | null;
+        billed_lock?: boolean;
     };
     patient: {
         id: string;
@@ -274,6 +275,15 @@ const ReportEditor: React.FC = () => {
     const tipoActivo = useMemo<ReportType>(() => (tipo && tipo in FLAGS_BY_TYPE ? (tipo as ReportType) : "Histopatologia"), [tipo]);
     // Autosave loading state
     const [isLoaded, setIsLoaded] = useState(false);
+    // User role for state transitions
+    const [userRole, setUserRole] = useState<string>("");
+    // Modal for request changes
+    const [isChangesModalVisible, setIsChangesModalVisible] = useState(false);
+    const [changesComment, setChangesComment] = useState("");
+    // Read-only mode: reports that are not in DRAFT are read-only
+    const isReadOnly = useMemo(() => {
+        return envelopeExistente?.status && envelopeExistente.status !== "DRAFT";
+    }, [envelopeExistente?.status]);
     // Quill ref (if needed later)
     const quillRef = useRef<ReactQuill>(null);
 
@@ -476,6 +486,18 @@ const ReportEditor: React.FC = () => {
         })();
     }, []);
 
+    // Load user role
+    useEffect(() => {
+        (async () => {
+            try {
+                const user = await getJSON<{ role: string }>("/v1/auth/me");
+                setUserRole(user.role);
+            } catch {
+                // ignore softly
+            }
+        })();
+    }, []);
+
     // When order selected, fetch full and populate
     useEffect(() => {
         (async () => {
@@ -526,6 +548,8 @@ const ReportEditor: React.FC = () => {
             diagnosis_text: (diagnosticoEnvio || "").replace(/<[^>]+>/g, "").slice(0, 1000),
             created_by: session.userId || "",
             published_at: null,
+            signed_by: existing?.signed_by ?? null,
+            signed_at: existing?.signed_at ?? null,
             report: {
                 tipo: tipoActivo,
                 base: {
@@ -590,6 +614,66 @@ const ReportEditor: React.FC = () => {
         } catch (error) {
             console.error(error);
             message.error("No se pudo guardar el reporte");
+        }
+    };
+
+    // State transition handlers
+    const handleSubmit = async () => {
+        if (!envelopeExistente?.id) {
+            message.warning("Guarda el reporte primero antes de enviarlo a revisión");
+            return;
+        }
+        try {
+            const result = await submitReport(envelopeExistente.id);
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
+            message.success(result.message);
+        } catch (error) {
+            console.error(error);
+            message.error(error instanceof Error ? error.message : "Error al enviar reporte");
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!envelopeExistente?.id) return;
+        try {
+            const result = await approveReport(envelopeExistente.id);
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
+            message.success(result.message);
+        } catch (error) {
+            console.error(error);
+            message.error(error instanceof Error ? error.message : "Error al aprobar reporte");
+        }
+    };
+
+    const handleRequestChanges = async () => {
+        if (!envelopeExistente?.id) return;
+        if (!changesComment.trim()) {
+            message.warning("Por favor ingresa un comentario");
+            return;
+        }
+        try {
+            const result = await requestChanges(envelopeExistente.id, changesComment);
+            setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
+            setIsChangesModalVisible(false);
+            setChangesComment("");
+            message.success(result.message);
+        } catch (error) {
+            console.error(error);
+            message.error(error instanceof Error ? error.message : "Error al solicitar cambios");
+        }
+    };
+
+    const handleSign = async () => {
+        if (!envelopeExistente?.id) return;
+        try {
+            const result = await signReport(envelopeExistente.id);
+            message.success(result.message);
+            // Reload the report to get updated signature information
+            const updatedReport = await getReport(envelopeExistente.id);
+            setEnvelopeExistente(updatedReport);
+        } catch (error) {
+            console.error(error);
+            message.error(error instanceof Error ? error.message : "Error al firmar reporte");
         }
     };
 
@@ -684,6 +768,20 @@ const ReportEditor: React.FC = () => {
                         <div style={{ display: "grid", gap: 20 }}>
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Orden</h3>
+                                {orderFull?.order.billed_lock && (
+                                    <div style={{ 
+                                        padding: 12, 
+                                        background: "#fff7e6", 
+                                        border: "1px solid #ffd591", 
+                                        borderRadius: 4,
+                                        marginBottom: 8
+                                    }}>
+                                        <Tag color="orange">Retenido por Pago Pendiente</Tag>
+                                        <div style={{ fontSize: 13, color: "#ad6800", marginTop: 4 }}>
+                                            Esta orden tiene pagos pendientes. La descarga del PDF está bloqueada.
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="re-grid-2">
                                     <SelectField
                                         value={selectedOrderId || undefined}
@@ -814,66 +912,109 @@ const ReportEditor: React.FC = () => {
                     >
                         <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
                             <div style={{ padding: 24 }}>
-                                <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                        <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>Contenido del reporte</h2>
+                                        {envelopeExistente?.status === "PUBLISHED" && envelopeExistente.signed_by && envelopeExistente.signed_at && (
+                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                Firmado por: {envelopeExistente.signed_by} el {new Date(envelopeExistente.signed_at).toLocaleString()}
+                                            </Typography.Text>
+                                        )}
+                                    </div>
+                                    {envelopeExistente?.status && (
+                                        <Tag color={
+                                            envelopeExistente.status === "DRAFT" ? "default" :
+                                            envelopeExistente.status === "IN_REVIEW" ? "blue" :
+                                            envelopeExistente.status === "APPROVED" ? "cyan" :
+                                            envelopeExistente.status === "PUBLISHED" ? "green" :
+                                            envelopeExistente.status === "RETRACTED" ? "red" : "default"
+                                        }>
+                                            {envelopeExistente.status === "DRAFT" ? "Borrador" :
+                                             envelopeExistente.status === "IN_REVIEW" ? "En Revisión" :
+                                             envelopeExistente.status === "APPROVED" ? "Aprobado" :
+                                             envelopeExistente.status === "PUBLISHED" ? "Publicado" :
+                                             envelopeExistente.status === "RETRACTED" ? "Retirado" : envelopeExistente.status}
+                                        </Tag>
+                                    )}
+                                </div>
                             </div>
                             <div style={{ height: 1, background: "#e5e7eb" }} />
                             <div style={{ padding: 24 }}>
                                 <Form layout="vertical">
+                                {isReadOnly && (
+                                    <Typography.Paragraph type="secondary" style={{ marginBottom: 16, padding: 12, background: "#f0f0f0", borderRadius: 4 }}>
+                                        Este reporte está en modo de solo lectura porque se encuentra en revisión o ya ha sido publicado.
+                                    </Typography.Paragraph>
+                                )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirMacroscopia && (
                                     <Form.Item label="Descripción macroscópica">
-                                        <ReactQuill ref={quillRef} theme="snow" value={descripcionMacroscopia || ""} onChange={(html) => setDescMacro(html)} modules={quillModules} />
+                                        <ReactQuill ref={quillRef} theme="snow" value={descripcionMacroscopia || ""} onChange={(html) => setDescMacro(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirMicroscopia && (
                                     <Form.Item label="Descripción microscópica">
-                                        <ReactQuill theme="snow" value={descripcionMicroscopia || ""} onChange={(html) => setDescMicro(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={descripcionMicroscopia || ""} onChange={(html) => setDescMicro(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirCitomorfologia && (
                                     <Form.Item label="Descripción citomorfológica">
-                                        <ReactQuill theme="snow" value={descripcionCitomorfologica || ""} onChange={(html) => setDescCito(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={descripcionCitomorfologica || ""} onChange={(html) => setDescCito(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirInterpretacion && (
                                     <Form.Item label="Interpretación / Conclusiones">
-                                        <ReactQuill theme="snow" value={interpretacion || ""} onChange={(html) => setInterpretacion(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={interpretacion || ""} onChange={(html) => setInterpretacion(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirDiagnostico && (
                                     <Form.Item label="Diagnóstico">
-                                        <ReactQuill theme="snow" value={diagnostico || ""} onChange={(html) => setDiagnostico(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={diagnostico || ""} onChange={(html) => setDiagnostico(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirComentario && (
                                     <Form.Item label="Comentario / Notas">
-                                        <ReactQuill theme="snow" value={comentario || ""} onChange={(html) => setComentario(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={comentario || ""} onChange={(html) => setComentario(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirCU && (
                                     <Form.Item label="Citología urinaria">
-                                        <ReactQuill theme="snow" value={citologiaUrinariaHTML || ""} onChange={(html) => setCU(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={citologiaUrinariaHTML || ""} onChange={(html) => setCU(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirIF && (
                                     <Form.Item label="Inmunofluorescencia (panel)">
-                                        <ReactQuill theme="snow" value={inmunofluorescenciaHTML || ""} onChange={(html) => setIF(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={inmunofluorescenciaHTML || ""} onChange={(html) => setIF(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirInmunotinciones && (
                                     <Form.Item label="Inmunotinciones">
-                                        <ReactQuill theme="snow" value={inmunotincionesHTML || ""} onChange={(html) => setInmunotinciones(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={inmunotincionesHTML || ""} onChange={(html) => setInmunotinciones(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
                                 {FLAGS_BY_TYPE[tipoActivo]?.incluirME && (
                                     <Form.Item label="Microscopía electrónica (descripción)">
-                                        <ReactQuill theme="snow" value={microscopioElectronicoHTML || ""} onChange={(html) => setME(html)} modules={quillModules} />
+                                        <ReactQuill theme="snow" value={microscopioElectronicoHTML || ""} onChange={(html) => setME(html)} modules={quillModules} readOnly={isReadOnly} />
                                     </Form.Item>
                                 )}
 
                                     <Divider />
                                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                                        <Button type="primary" onClick={handleSave}>Guardar reporte</Button>
+                                        {!isReadOnly && <Button type="primary" onClick={handleSave}>Guardar reporte</Button>}
                                         <Button onClick={handleExportPDF}>Exportar a PDF</Button>
+                                        
+                                        {/* State transition buttons */}
+                                        {envelopeExistente?.status === "DRAFT" && (
+                                            <Button type="default" onClick={handleSubmit}>Enviar a Revisión</Button>
+                                        )}
+                                        {envelopeExistente?.status === "IN_REVIEW" && userRole === "pathologist" && (
+                                            <>
+                                                <Button type="default" style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }} onClick={handleApprove}>Aprobar</Button>
+                                                <Button danger onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
+                                            </>
+                                        )}
+                                        {envelopeExistente?.status === "APPROVED" && userRole === "pathologist" && (
+                                            <Button type="default" style={{ background: "#1890ff", color: "white", borderColor: "#1890ff" }} onClick={handleSign}>Firmar y Publicar</Button>
+                                        )}
                                     </div>
                                 </Form>
                             </div>
@@ -1132,6 +1273,28 @@ const ReportEditor: React.FC = () => {
                 </div>
             </div>
 
+            {/* Modal for requesting changes */}
+            <Modal
+                title="Solicitar Cambios"
+                open={isChangesModalVisible}
+                onOk={handleRequestChanges}
+                onCancel={() => {
+                    setIsChangesModalVisible(false);
+                    setChangesComment("");
+                }}
+                okText="Enviar"
+                cancelText="Cancelar"
+            >
+                <Typography.Paragraph>
+                    Por favor, describe los cambios que necesita el reporte:
+                </Typography.Paragraph>
+                <Input.TextArea
+                    rows={4}
+                    value={changesComment}
+                    onChange={(e) => setChangesComment(e.target.value)}
+                    placeholder="Escribe tus comentarios aquí..."
+                />
+            </Modal>
         </>
     );
 };

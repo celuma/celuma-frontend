@@ -10,13 +10,23 @@ import OrderRegister from "./pages/order_register";
 import SampleRegister from "./pages/sample_register";
 import CaseRegister from "./pages/case_register";
 import PatientsList from "./pages/patients_list";
-import PatientProfile from "./pages/patient_profile";
+import PatientDetailPage from "./pages/patient_detail";
 import OrderDetail from "./pages/order_detail";
 import SampleDetailPage from "./pages/sample_detail";
 import CasesList from "./pages/cases_list";
 import SamplesList from "./pages/samples_list";
 import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
+import PathologistWorklist from "./pages/pathologist_worklist";
+import BillingDetail from "./pages/billing_detail";
+import PriceCatalog from "./pages/price_catalog";
+import UsersManagement from "./pages/users_management";
+import PasswordResetRequest from "./pages/password_reset_request";
+import PasswordResetConfirm from "./pages/password_reset_confirm";
+import TenantSettings from "./pages/tenant_settings";
+import PhysicianPortal from "./pages/physician_portal";
+import PatientPortal from "./pages/patient_portal";
+import AcceptInvitation from "./pages/accept_invitation";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -27,7 +37,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/register" element={<Register />} />
             <Route path="/patients/register" element={<PatientRegister />} />
             <Route path="/patients" element={<PatientsList />} />
-            <Route path="/patients/:patientId" element={<PatientProfile />} />
+            <Route path="/patients/:patientId" element={<PatientDetailPage />} />
             <Route path="/orders/register" element={<OrderRegister />} />
             <Route path="/cases" element={<CasesList />} />
             <Route path="/samples" element={<SamplesList />} />
@@ -39,6 +49,16 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports" element={<ReportsList />} />
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
+            <Route path="/worklist" element={<PathologistWorklist />} />
+            <Route path="/billing/:orderId" element={<BillingDetail />} />
+            <Route path="/catalog" element={<PriceCatalog />} />
+            <Route path="/users" element={<UsersManagement />} />
+            <Route path="/password-reset" element={<PasswordResetRequest />} />
+            <Route path="/reset-password" element={<PasswordResetConfirm />} />
+            <Route path="/settings" element={<TenantSettings />} />
+            <Route path="/physician-portal" element={<PhysicianPortal />} />
+            <Route path="/patient-portal" element={<PatientPortal />} />
+            <Route path="/accept-invitation" element={<AcceptInvitation />} />
         </Routes>
     </BrowserRouter>
 );

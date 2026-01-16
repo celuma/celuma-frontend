@@ -1,14 +1,16 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined, ContainerOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useUserProfile } from "../../hooks/use_user_profile";
 
 const { Sider } = Layout;
 
 export type CelumaKey = 
     | "/home" 
     | "/reports" 
+    | "/worklist"
     | "/patients"
     | "/cases"
     | "/samples"
@@ -16,13 +18,15 @@ export type CelumaKey =
     | "/samples/register"
     | "/cases/register"
     | "/profile" 
-    | "/logout";
+    | "/logout"
+    | "/users";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
+    { key: "/worklist", icon: <CheckSquareOutlined />, label: "Worklist", title: "Worklist" },
     { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
-    { key: "/cases", icon: <FileTextOutlined />, label: "Casos", title: "Casos" },
+    { key: "/cases", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
 ];
 
@@ -56,6 +60,13 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
         return saved ? JSON.parse(saved) : false;
     });
     const navigate = useNavigate();
+    const { isAdmin } = useUserProfile();
+
+    const menuItems = [...itemsTop];
+    if (isAdmin) {
+        menuItems.push({ key: "/users", icon: <TeamOutlined />, label: "Usuarios", title: "Gestión de Usuarios" });
+    }
+
     const selectedTop =
         selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);
     const selectedBottom =
@@ -141,7 +152,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                 </div>
 
                 <Menu
-                    items = {itemsTop}
+                    items = {menuItems}
                     selectedKeys = {selectedTop}
                     mode = "inline"
                     theme = "dark"

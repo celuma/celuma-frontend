@@ -13,7 +13,7 @@ import SelectField from "../components/ui/select_field";
 import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens } from "../components/design/tokens";
+import { tokens, cardTitleStyle } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -96,14 +96,14 @@ type UnifiedResponse = {
     samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
-const Card: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
+const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
     <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: 24 }}>
-            <h2 style={{ marginTop: 0, marginBottom: 8, fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</h2>
+        <div style={{ padding: tokens.cardPadding }}>
+            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
         </div>
         <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: 24, display: "grid", gap: 12 }}>
-            {description && <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>{description}</div>}
+        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
+            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
             {children}
         </div>
     </div>
@@ -215,7 +215,7 @@ export default function CaseRegister() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: 24, background: tokens.bg, fontFamily: tokens.textFont }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
                   .cr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
                   .cr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
@@ -226,7 +226,7 @@ export default function CaseRegister() {
                   .sample-card { border: 1px dashed #c8e6e5; border-radius: 10px; padding: 12px; background: #fbffff; }
                 `}</style>
                 <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <Card title="Registrar Caso" description="Cree una orden y una o más muestras en una sola operación.">
+                    <FormCard title="Registrar Caso" description="Cree una orden y una o más muestras en una sola operación.">
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                             {!session.tenantId ? (
                                 <section style={{ display: "grid", gap: 10 }}>
@@ -404,7 +404,7 @@ export default function CaseRegister() {
                         </form>
 
                         <ErrorText>{serverError}</ErrorText>
-                    </Card>
+                    </FormCard>
                 </div>
             </Layout.Content>
         </Layout>
