@@ -106,13 +106,13 @@ export default function ReportsList() {
         );
     }, [rows, search]);
 
-    const getStatusColor = (status: string) => {
-        switch (status.toUpperCase()) {
-            case "PUBLISHED": return "#22c55e";
-            case "DRAFT": return "#f59e0b";
-            case "PENDING": return "#3b82f6";
-            default: return "#94a3b8";
-        }
+    // Report status configuration
+    const REPORT_STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+        DRAFT: { color: "#f59e0b", bg: "#fffbeb", label: "Borrador" },
+        IN_REVIEW: { color: "#3b82f6", bg: "#eff6ff", label: "En Revisión" },
+        APPROVED: { color: "#10b981", bg: "#ecfdf5", label: "Aprobado" },
+        PUBLISHED: { color: "#22c55e", bg: "#f0fdf4", label: "Publicado" },
+        RETRACTED: { color: "#ef4444", bg: "#fef2f2", label: "Retractado" },
     };
 
     return (
@@ -151,7 +151,22 @@ export default function ReportsList() {
                             locale={{ emptyText: <Empty description="Sin reportes" /> }}
                             columns={[
                                 { title: "Título", dataIndex: "title", key: "title", width: 200 },
-                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => <Tag color={getStatusColor(v)}>{v}</Tag> },
+                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => {
+                                    const config = REPORT_STATUS_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
+                                    return (
+                                        <div style={{
+                                            backgroundColor: config.bg,
+                                            color: config.color,
+                                            borderRadius: 12,
+                                            fontSize: 11,
+                                            fontWeight: 500,
+                                            padding: "4px 10px",
+                                            display: "inline-block",
+                                        }}>
+                                            {config.label}
+                                        </div>
+                                    );
+                                } },
                                 { title: "Orden", key: "order", render: (_, r) => r.order.order_code, width: 140 },
                                 { 
                                     title: "Paciente", 

@@ -29,6 +29,15 @@ const getAvatarColor = (name: string): string => {
     return colors[Math.abs(hash) % colors.length];
 };
 
+// Sample state configuration - matches backend SampleState enum
+const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
+    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista" },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada" },
+    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada" },
+};
+
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
@@ -161,7 +170,22 @@ export default function SamplesList() {
                             columns={[
                                 { title: "Código", dataIndex: "sample_code", key: "sample_code", width: 140 },
                                 { title: "Tipo", dataIndex: "type", key: "type", width: 140 },
-                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
+                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => {
+                                    const config = SAMPLE_STATE_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
+                                    return (
+                                        <div style={{
+                                            backgroundColor: config.bg,
+                                            color: config.color,
+                                            borderRadius: 12,
+                                            fontSize: 11,
+                                            fontWeight: 500,
+                                            padding: "4px 10px",
+                                            display: "inline-block",
+                                        }}>
+                                            {config.label}
+                                        </div>
+                                    );
+                                } },
                                 { title: "Orden", key: "order", render: (_, r: Row) => r.order.order_code, width: 140 },
                                 { 
                                     title: "Paciente", 

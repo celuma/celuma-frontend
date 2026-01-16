@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography } from "antd";
-import type { UploadProps } from "antd";
+import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown } from "antd";
+import type { UploadProps, MenuProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import { 
     ExperimentOutlined, CheckCircleOutlined,
@@ -58,12 +58,32 @@ const getSampleTypeConfig = (type: string) => {
     return SAMPLE_TYPE_CONFIG.DEFAULT;
 };
 
-// Sample state configuration
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    REGISTERED: { color: "#3b82f6", bg: "#eff6ff", label: "Registrada" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    ANALYZED: { color: "#8b5cf6", bg: "#f5f3ff", label: "Analizada" },
-    COMPLETED: { color: "#10b981", bg: "#ecfdf5", label: "Completada" },
+// Sample state configuration - matches backend SampleState enum
+const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
+    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada", icon: <ExperimentOutlined /> },
+    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
+};
+
+// All valid sample states for the dropdown
+const SAMPLE_STATES = ["RECEIVED", "PROCESSING", "READY", "DAMAGED", "CANCELLED"] as const;
+
+// Format UTC datetime to local time
+const formatLocalDateTime = (utcDateString: string): string => {
+    // Ensure the date string is interpreted as UTC if it doesn't have a timezone
+    const dateStr = utcDateString.endsWith('Z') ? utcDateString : utcDateString + 'Z';
+    const date = new Date(dateStr);
+    
+    // Format in local timezone
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year}, ${hours}:${minutes}`;
 };
 
 function getApiBase(): string {
@@ -110,6 +130,21 @@ type SampleImages = {
     }>;
 };
 
+type TimelineEvent = {
+    id: string;
+    event_type: string;
+    description: string;
+    metadata?: Record<string, unknown> | null;
+    created_by?: string | null;
+    created_by_name?: string | null;
+    created_by_avatar?: string | null;
+    created_at: string;
+};
+
+type EventsResponse = {
+    events: TimelineEvent[];
+};
+
 export default function SampleDetailPage() {
     const { sampleId } = useParams();
     const navigate = useNavigate();
@@ -120,18 +155,22 @@ export default function SampleDetailPage() {
     const [images, setImages] = useState<SampleImages | null>(null);
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
+    const [updatingState, setUpdatingState] = useState(false);
+    const [events, setEvents] = useState<TimelineEvent[]>([]);
 
     const refresh = useCallback(async () => {
         if (!sampleId) return;
         setLoading(true);
         setError(null);
         try {
-            const [d, imgs] = await Promise.all([
+            const [d, imgs, evts] = await Promise.all([
                 getJSON<SampleDetail>(`/v1/laboratory/samples/${sampleId}`),
                 getJSON<SampleImages>(`/v1/laboratory/samples/${sampleId}/images`),
+                getJSON<EventsResponse>(`/v1/laboratory/samples/${sampleId}/events`),
             ]);
             setDetail(d);
             setImages(imgs);
+            setEvents(evts.events);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -140,6 +179,39 @@ export default function SampleDetailPage() {
     }, [sampleId]);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    // Update sample state
+    const updateState = useCallback(async (newState: string) => {
+        if (!sampleId || updatingState) return;
+        setUpdatingState(true);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/state`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
+                },
+                body: JSON.stringify({ state: newState }),
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            const stateConfig = SAMPLE_STATE_CONFIG[newState] || SAMPLE_STATE_CONFIG.RECEIVED;
+            message.success(`Estado cambiado a "${stateConfig.label}"`);
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al actualizar el estado";
+            message.error(errMsg);
+        } finally {
+            setUpdatingState(false);
+        }
+    }, [sampleId, updatingState, refresh]);
 
     const uploadProps: UploadProps = {
         name: "file",
@@ -178,38 +250,180 @@ export default function SampleDetailPage() {
         },
     } as const;
 
-    const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "REGISTERED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—" };
+    const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
     const typeConfig = getSampleTypeConfig(detail?.type || "");
 
-    // Build timeline from dates
-    const timelineItems = [];
-    if (detail?.collected_at) {
-        timelineItems.push({
-            dot: <ExperimentOutlined />,
-            color: "blue",
+    // Dropdown menu for state change with styled tags (no icons)
+    const stateMenuItems: MenuProps["items"] = SAMPLE_STATES.map((state) => {
+        const config = SAMPLE_STATE_CONFIG[state];
+        return {
+            key: state,
+            label: (
+                <div style={{
+                    backgroundColor: config.bg,
+                    color: config.color,
+                    borderRadius: 12,
+                    padding: "6px 12px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textAlign: "center",
+                    margin: "-4px -8px",
+                }}>
+                    {config.label}
+                </div>
+            ),
+            disabled: detail?.state === state,
+        };
+    });
+
+    const handleStateMenuClick: MenuProps["onClick"] = ({ key }) => {
+        updateState(key);
+    };
+
+    // Event type configuration for timeline display
+    const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
+        SAMPLE_CREATED: { icon: <ExperimentOutlined />, color: "blue" },
+        SAMPLE_RECEIVED: { icon: <InboxOutlined />, color: "green" },
+        SAMPLE_STATE_CHANGED: { icon: <SettingOutlined />, color: "orange" },
+        SAMPLE_DAMAGED: { icon: <ExperimentOutlined />, color: "red" },
+        SAMPLE_CANCELLED: { icon: <ExperimentOutlined />, color: "gray" },
+        IMAGE_UPLOADED: { icon: <FileImageOutlined />, color: "purple" },
+        IMAGE_DELETED: { icon: <FileImageOutlined />, color: "red" },
+        STATUS_CHANGED: { icon: <SettingOutlined />, color: "orange" },
+    };
+
+    // Build action JSX from event (sample context - no need to mention sample)
+    // Returns styled elements with state tags matching the UI
+    const buildActionText = (event: TimelineEvent): React.ReactNode => {
+        const meta = event.metadata || {};
+        
+        switch (event.event_type) {
+            case "SAMPLE_STATE_CHANGED":
+            case "SAMPLE_DAMAGED":
+            case "SAMPLE_CANCELLED": {
+                const oldState = meta.old_state as string;
+                const newState = meta.new_state as string;
+                const oldConfig = SAMPLE_STATE_CONFIG[oldState] || { color: "#6b7280", bg: "#f3f4f6", label: oldState, icon: null };
+                const newConfig = SAMPLE_STATE_CONFIG[newState] || { color: "#6b7280", bg: "#f3f4f6", label: newState, icon: null };
+                const trigger = meta.trigger === "first_image_upload" ? " (automático)" : "";
+                
+                return (
+                    <span>
+                        cambió el estado de{" "}
+                        <span style={{
+                            backgroundColor: oldConfig.bg,
+                            color: oldConfig.color,
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            padding: "2px 8px",
+                            margin: "0 2px",
+                            display: "inline-block",
+                        }}>
+                            {oldConfig.label}
+                        </span>
+                        {" "}a{" "}
+                        <span style={{
+                            backgroundColor: newConfig.bg,
+                            color: newConfig.color,
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            padding: "2px 8px",
+                            margin: "0 2px",
+                            display: "inline-block",
+                        }}>
+                            {newConfig.label}
+                        </span>
+                        {trigger}
+                    </span>
+                );
+            }
+            case "IMAGE_UPLOADED": {
+                const filename = meta.filename as string || "imagen";
+                return `subió la imagen ${filename}`;
+            }
+            case "IMAGE_DELETED": {
+                const filename = meta.filename as string || "imagen";
+                return `eliminó la imagen ${filename}`;
+            }
+            case "SAMPLE_CREATED":
+                return "registró la muestra";
+            case "SAMPLE_RECEIVED":
+                return "recibió la muestra en laboratorio";
+            default:
+                return event.description || event.event_type;
+        }
+    };
+
+    // Build timeline from events API with avatar/monogram format
+    const timelineItems = events.map((event) => {
+        const config = EVENT_CONFIG[event.event_type] || { 
+            icon: <CheckCircleOutlined />, 
+            color: "gray"
+        };
+        const actionText = buildActionText(event);
+        const userName = event.created_by_name || "Sistema";
+        const userAvatar = event.created_by_avatar;
+        
+        return {
+            dot: (
+                <Avatar 
+                    size={28}
+                    src={userAvatar}
+                    style={{ 
+                        backgroundColor: userAvatar ? undefined : getAvatarColor(userName),
+                        fontSize: 12,
+                    }}
+                >
+                    {!userAvatar && getInitials(userName)}
+                </Avatar>
+            ),
+            color: config.color,
             children: (
-                <div>
-                    <div style={{ fontWeight: 600 }}>Muestra recolectada</div>
-                    <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                        {new Date(detail.collected_at).toLocaleString('es-MX')}
+                <div style={{ marginLeft: 4 }}>
+                    <div style={{ lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600 }}>{userName}</span>
+                        <span style={{ color: "#666", marginLeft: 6 }}>{actionText}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                        {formatLocalDateTime(event.created_at)}
                     </div>
                 </div>
             ),
-        });
-    }
-    if (detail?.received_at) {
-        timelineItems.push({
-            dot: <InboxOutlined />,
-            color: "green",
-            children: (
-                <div>
-                    <div style={{ fontWeight: 600 }}>Muestra recibida en laboratorio</div>
-                    <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                        {new Date(detail.received_at).toLocaleString('es-MX')}
+        };
+    });
+    
+    // Add initial dates if no events yet (fallback)
+    if (timelineItems.length === 0) {
+        if (detail?.collected_at) {
+            timelineItems.push({
+                dot: <ExperimentOutlined />,
+                color: "blue",
+                children: (
+                    <div>
+                        <div style={{ fontWeight: 600 }}>Muestra recolectada</div>
+                        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                            {new Date(detail.collected_at).toLocaleString('es-MX')}
+                        </div>
                     </div>
-                </div>
-            ),
-        });
+                ),
+            });
+        }
+        if (detail?.received_at) {
+            timelineItems.push({
+                dot: <InboxOutlined />,
+                color: "green",
+                children: (
+                    <div>
+                        <div style={{ fontWeight: 600 }}>Muestra recibida en laboratorio</div>
+                        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                            {new Date(detail.received_at).toLocaleString('es-MX')}
+                        </div>
+                    </div>
+                ),
+            });
+        }
     }
 
     // Sidebar content component
@@ -382,12 +596,12 @@ export default function SampleDetailPage() {
                         {/* Left Column - Main Content */}
                         <div style={{ display: "grid", gap: tokens.gap }}>
                             {/* Sample Header Card */}
-                            <Card
+                    <Card
                                 title={<span style={cardTitleStyle}>Detalle de Muestra</span>}
-                                loading={loading}
+                        loading={loading}
                                 style={cardStyle}
-                            >
-                                {detail && (
+                    >
+                        {detail && (
                                     <>
                                         {/* Sample Code & Status */}
                                         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -411,20 +625,36 @@ export default function SampleDetailPage() {
                                                     }}>
                                                         {detail.sample_code}
                                                     </h2>
-                                                    <div style={{ 
-                                                        padding: "4px 10px",
-                                                        borderRadius: 12,
-                                                        background: stateConfig.bg,
-                                                        color: stateConfig.color,
-                                                        fontWeight: 600,
-                                                        fontSize: 11,
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 4
-                                                    }}>
-                                                        <CheckCircleOutlined />
-                                                        {stateConfig.label}
-                                                    </div>
+                                                    <Dropdown 
+                                                        menu={{ items: stateMenuItems, onClick: handleStateMenuClick }} 
+                                                        trigger={["click"]}
+                                                        disabled={updatingState}
+                                                    >
+                                                        <div style={{ 
+                                                            padding: "4px 10px",
+                                                            borderRadius: 12,
+                                                            background: stateConfig.bg,
+                                                            color: stateConfig.color,
+                                                            fontWeight: 600,
+                                                            fontSize: 11,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 4,
+                                                            cursor: "pointer",
+                                                            transition: "all 0.15s ease",
+                                                            border: `1px solid transparent`,
+                                                        }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.borderColor = stateConfig.color}
+                                                            onMouseLeave={(e) => e.currentTarget.style.borderColor = "transparent"}
+                                                        >
+                                                            {updatingState ? (
+                                                                <SettingOutlined spin />
+                                                            ) : (
+                                                                stateConfig.icon
+                                                            )}
+                                                            {stateConfig.label}
+                                                        </div>
+                                                    </Dropdown>
                                                 </div>
                                                 <div style={{ fontSize: 14, color: tokens.textSecondary, marginTop: 4 }}>
                                                     {detail.type}
@@ -539,9 +769,9 @@ export default function SampleDetailPage() {
                                             </div>
                                         )}
                                     </>
-                                )}
-                                <ErrorText>{error}</ErrorText>
-                            </Card>
+                        )}
+                        <ErrorText>{error}</ErrorText>
+                    </Card>
 
                             {/* Timeline Card */}
                             {timelineItems.length > 0 && (
@@ -604,7 +834,7 @@ export default function SampleDetailPage() {
                                             }}
                                         >
                                             {images.images.map((img, idx) => (
-                                                <Card
+                    <Card
                                                     key={img.id ?? idx}
                                                     size="small"
                                                     hoverable
@@ -620,12 +850,12 @@ export default function SampleDetailPage() {
                                                     }}
                                                     bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
                                                 >
-                                                    <Image
-                                                        src={img.urls.thumbnail || img.urls.processed}
+                                            <Image
+                                                src={img.urls.thumbnail || img.urls.processed}
                                                         alt={img.label || `Imagen ${idx + 1}`}
                                                         style={{ width: "100%", height: 110, objectFit: "cover" }}
                                                         fallback={img.urls.processed || img.urls.thumbnail}
-                                                        preview={{ src: img.urls.processed || img.urls.thumbnail }}
+                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
                                                         onClick={() => setPreview({ visible: true, index: idx })}
                                                     />
                                                     <div style={{ 
@@ -644,8 +874,8 @@ export default function SampleDetailPage() {
                                                                 Principal
                                                             </Tag>
                                                         )}
-                                                    </div>
-                                                </Card>
+                                            </div>
+                                        </Card>
                                             ))}
                                         </Image.PreviewGroup>
                                     )}
@@ -662,8 +892,8 @@ export default function SampleDetailPage() {
                                     }}>
                                         No hay imágenes adicionales. Usa el área de arriba para subir.
                                     </div>
-                                )}
-                            </Card>
+                        )}
+                    </Card>
 
                             {/* Mobile Sidebar */}
                             <div className="sample-detail-sidebar-mobile">

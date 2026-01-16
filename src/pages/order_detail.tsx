@@ -137,12 +137,29 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }
     CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
 };
 
-// Sample state colors
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; label: string }> = {
-    REGISTERED: { color: "#3b82f6", label: "Registrada" },
-    PROCESSING: { color: "#f59e0b", label: "En Proceso" },
-    ANALYZED: { color: "#8b5cf6", label: "Analizada" },
-    COMPLETED: { color: "#10b981", label: "Completada" },
+// Sample state configuration - matches backend SampleState enum
+const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
+    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada", icon: <ExperimentOutlined /> },
+    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
+};
+
+// Format UTC datetime to local time
+const formatLocalDateTime = (utcDateString: string): string => {
+    // Ensure the date string is interpreted as UTC if it doesn't have a timezone
+    const dateStr = utcDateString.endsWith('Z') ? utcDateString : utcDateString + 'Z';
+    const date = new Date(dateStr);
+    
+    // Format in local timezone
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year}, ${hours}:${minutes}`;
 };
 
 export default function OrderDetail() {
@@ -162,8 +179,12 @@ export default function OrderDetail() {
         id: string;
         event_type: string;
         description: string;
+        metadata?: Record<string, unknown> | null;
         created_at: string;
         created_by?: string;
+        created_by_name?: string;
+        created_by_avatar?: string;
+        sample_id?: string;
     }>>([]);
 
     // Default flags for initial report when creating
@@ -212,8 +233,12 @@ export default function OrderDetail() {
                         id: string;
                         event_type: string;
                         description: string;
+                        metadata?: Record<string, unknown> | null;
                         created_at: string;
                         created_by?: string;
+                        created_by_name?: string;
+                        created_by_avatar?: string;
+                        sample_id?: string;
                     }> }>(`/v1/laboratory/orders/${orderId}/events`);
                     setTimeline(eventsResult.events);
                 } catch {
@@ -250,8 +275,8 @@ export default function OrderDetail() {
         { key: "PROCESSING", title: "En Proceso", icon: <ExperimentOutlined /> },
         { key: "DIAGNOSIS", title: "Diagnóstico", icon: <SolutionOutlined /> },
         { key: "REVIEW", title: "Revisión", icon: <AuditOutlined /> },
-        { key: "RELEASED", title: "Liberada", icon: <SendOutlined /> },
         { key: "CLOSED", title: "Cerrada", icon: <LockOutlined /> },
+        { key: "RELEASED", title: "Liberada", icon: <SendOutlined /> },
     ];
 
     const getCurrentStep = (status: string | undefined): number => {
@@ -357,7 +382,7 @@ export default function OrderDetail() {
                     overflow: "hidden" 
                 }}>
                     {data.samples.map((sample, index) => {
-                        const stateConfig = SAMPLE_STATE_CONFIG[sample.state] || { color: "#6b7280", label: sample.state };
+                        const stateConfig = SAMPLE_STATE_CONFIG[sample.state] || { color: "#6b7280", bg: "#f3f4f6", label: sample.state, icon: <CheckCircleOutlined /> };
                         const typeConfig = getSampleTypeConfig(sample.type);
                         return (
                             <div
@@ -393,17 +418,17 @@ export default function OrderDetail() {
                                         {sample.type}
                                     </div>
                                 </div>
-                                <Tag 
-                                    color={stateConfig.color}
-                                    style={{ 
-                                        borderRadius: 12,
-                                        fontSize: 11,
-                                        fontWeight: 500,
-                                        border: "none"
-                                    }}
-                                >
+                                <div style={{
+                                    backgroundColor: stateConfig.bg,
+                                    color: stateConfig.color,
+                                    borderRadius: 12,
+                                    fontSize: 11,
+                                    fontWeight: 500,
+                                    padding: "4px 10px",
+                                    display: "inline-block",
+                                }}>
                                     {stateConfig.label}
-                                </Tag>
+                                </div>
                             </div>
                         );
                     })}
@@ -685,6 +710,7 @@ export default function OrderDetail() {
                         .order-detail-sidebar-mobile {
                             display: none;
                         }
+                        
                         @media (max-width: 900px) {
                             .order-detail-grid {
                                 grid-template-columns: 1fr;
@@ -740,6 +766,15 @@ export default function OrderDetail() {
 
                                         {/* Order Title & Status */}
                                         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                                            <h2 style={{ 
+                                                margin: 0, 
+                                                fontFamily: tokens.titleFont, 
+                                                fontSize: 22, 
+                                                fontWeight: 700,
+                                                color: tokens.textPrimary
+                                            }}>
+                                                {data.order.order_code}
+                                            </h2>
                                             <div style={{ 
                                                 padding: "6px 12px",
                                                 borderRadius: 16,
@@ -754,15 +789,6 @@ export default function OrderDetail() {
                                                 {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
                                                 {statusConfig.label}
                                             </div>
-                                            <h2 style={{ 
-                                                margin: 0, 
-                                                fontFamily: tokens.titleFont, 
-                                                fontSize: 22, 
-                                                fontWeight: 700,
-                                                color: tokens.textPrimary
-                                            }}>
-                                                {data.order.order_code}
-                                            </h2>
                                         </div>
 
                                         {/* Patient Info */}
@@ -897,11 +923,23 @@ export default function OrderDetail() {
                                             <Steps
                                                 current={getCurrentStep(data.order.status)}
                                                 size="small"
-                                                items={ORDER_STEPS.map((step, index) => ({
-                                                    title: step.title,
-                                                    icon: step.icon,
-                                                    status: getStepStatus(index, getCurrentStep(data.order.status), data.order.status),
-                                                }))}
+                                                items={ORDER_STEPS.map((step, index) => {
+                                                    const stepStatus = getStepStatus(index, getCurrentStep(data.order.status), data.order.status);
+                                                    const stepConfig = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
+                                                    const isActive = stepStatus === "process" || stepStatus === "finish";
+                                                    
+                                                    return {
+                                                        title: step.title,
+                                                        icon: step.icon,
+                                                        status: stepStatus,
+                                                        styles: isActive ? {
+                                                            icon: {
+                                                                backgroundColor: stepConfig.color,
+                                                                borderColor: stepConfig.color,
+                                                            }
+                                                        } : undefined,
+                                                    };
+                                                })}
                                                 style={{ padding: "16px 0" }}
                                             />
                                         )}
@@ -911,29 +949,276 @@ export default function OrderDetail() {
                         {timeline.length > 0 ? (
                             <Timeline
                                 items={timeline.map((event) => {
-                                    const getIcon = (eventType: string) => {
-                                        if (eventType.includes("REPORT")) return <FileTextOutlined />;
-                                        if (eventType.includes("IMAGE")) return <FileImageOutlined />;
-                                        if (eventType.includes("PAYMENT")) return <DollarOutlined />;
-                                        if (eventType.includes("APPROVED") || eventType.includes("SIGNED")) return <CheckCircleOutlined />;
-                                        return <ClockCircleOutlined />;
+                                    // Build action JSX (order context - include sample info when applicable)
+                                    // Returns styled elements with state tags matching the UI
+                                    const buildActionText = (): React.ReactNode => {
+                                        const meta = event.metadata || {};
+                                        const sampleCode = meta.sample_code as string;
+                                        const sampleId = meta.sample_id as string || event.sample_id;
+                                        
+                                        // Helper to render sample link
+                                        const renderSampleLink = (text: string) => {
+                                            if (!sampleCode) return null;
+                                            return sampleId ? (
+                                                <span>
+                                                    {" "}en muestra{" "}
+                                                    <a 
+                                                        href={`/samples/${sampleId}`}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            navigate(`/samples/${sampleId}`);
+                                                        }}
+                                                        style={{
+                                                            color: "#0f8b8d",
+                                                            fontWeight: 600,
+                                                            textDecoration: "none",
+                                                            borderBottom: "1px dashed #0f8b8d",
+                                                        }}
+                                                    >
+                                                        {sampleCode}
+                                                    </a>
+                                                </span>
+                                            ) : ` en muestra ${sampleCode}`;
+                                        };
+                                        
+                                        switch (event.event_type) {
+                                            case "SAMPLE_STATE_CHANGED":
+                                            case "SAMPLE_DAMAGED":
+                                            case "SAMPLE_CANCELLED": {
+                                                const oldState = meta.old_state as string;
+                                                const newState = meta.new_state as string;
+                                                const oldConfig = SAMPLE_STATE_CONFIG[oldState] || { color: "#6b7280", bg: "#f3f4f6", label: oldState, icon: null };
+                                                const newConfig = SAMPLE_STATE_CONFIG[newState] || { color: "#6b7280", bg: "#f3f4f6", label: newState, icon: null };
+                                                const trigger = meta.trigger === "first_image_upload" ? " (automático)" : "";
+                                                
+                                                return (
+                                                    <span>
+                                                        cambió el estado de{" "}
+                                                        <span style={{
+                                                            backgroundColor: oldConfig.bg,
+                                                            color: oldConfig.color,
+                                                            borderRadius: 12,
+                                                            fontSize: 12,
+                                                            fontWeight: 500,
+                                                            padding: "2px 8px",
+                                                            margin: "0 2px",
+                                                            display: "inline-block",
+                                                        }}>
+                                                            {oldConfig.label}
+                                                        </span>
+                                                        {" "}a{" "}
+                                                        <span style={{
+                                                            backgroundColor: newConfig.bg,
+                                                            color: newConfig.color,
+                                                            borderRadius: 12,
+                                                            fontSize: 12,
+                                                            fontWeight: 500,
+                                                            padding: "2px 8px",
+                                                            margin: "0 2px",
+                                                            display: "inline-block",
+                                                        }}>
+                                                            {newConfig.label}
+                                                        </span>
+                                                        {trigger}
+                                                        {renderSampleLink(sampleCode)}
+                                                    </span>
+                                                );
+                                            }
+                                            case "IMAGE_UPLOADED": {
+                                                const filename = meta.filename as string || "imagen";
+                                                return (
+                                                    <span>
+                                                        subió imagen {filename}
+                                                        {renderSampleLink(sampleCode)}
+                                                    </span>
+                                                );
+                                            }
+                                            case "IMAGE_DELETED": {
+                                                const filename = meta.filename as string || "imagen";
+                                                return (
+                                                    <span>
+                                                        eliminó imagen {filename}
+                                                        {renderSampleLink(sampleCode)}
+                                                    </span>
+                                                );
+                                            }
+                                            case "SAMPLE_CREATED":
+                                                return sampleId ? (
+                                                    <span>
+                                                        registró muestra{" "}
+                                                        <a 
+                                                            href={`/samples/${sampleId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/samples/${sampleId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#0f8b8d",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #0f8b8d",
+                                                            }}
+                                                        >
+                                                            {sampleCode}
+                                                        </a>
+                                                    </span>
+                                                ) : (sampleCode ? `registró muestra ${sampleCode}` : "registró una muestra");
+                                            case "SAMPLE_RECEIVED":
+                                                return sampleId ? (
+                                                    <span>
+                                                        recibió muestra{" "}
+                                                        <a 
+                                                            href={`/samples/${sampleId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/samples/${sampleId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#0f8b8d",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #0f8b8d",
+                                                            }}
+                                                        >
+                                                            {sampleCode}
+                                                        </a>
+                                                    </span>
+                                                ) : (sampleCode ? `recibió muestra ${sampleCode}` : "recibió una muestra");
+                                            case "REPORT_CREATED": {
+                                                const reportId = meta.report_id as string;
+                                                return reportId ? (
+                                                    <span>
+                                                        creó el{" "}
+                                                        <a 
+                                                            href={`/reports/${reportId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/reports/${reportId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#0f8b8d",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #0f8b8d",
+                                                            }}
+                                                        >
+                                                            reporte
+                                                        </a>
+                                                    </span>
+                                                ) : "creó el reporte";
+                                            }
+                                            case "REPORT_VERSION_CREATED": {
+                                                const reportId = meta.report_id as string;
+                                                return reportId ? (
+                                                    <span>
+                                                        editó el{" "}
+                                                        <a 
+                                                            href={`/reports/${reportId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/reports/${reportId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#0f8b8d",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #0f8b8d",
+                                                            }}
+                                                        >
+                                                            reporte
+                                                        </a>
+                                                    </span>
+                                                ) : "editó el reporte";
+                                            }
+                                            case "REPORT_SUBMITTED": {
+                                                const reportId = meta.report_id as string;
+                                                return reportId ? (
+                                                    <span>
+                                                        envió a revisión el{" "}
+                                                        <a 
+                                                            href={`/reports/${reportId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/reports/${reportId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#0f8b8d",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #0f8b8d",
+                                                            }}
+                                                        >
+                                                            reporte
+                                                        </a>
+                                                    </span>
+                                                ) : "envió a revisión el reporte";
+                                            }
+                                            case "REPORT_RETRACTED": {
+                                                const reportId = meta.report_id as string;
+                                                const reason = meta.reason as string;
+                                                return (
+                                                    <span>
+                                                        retrajo el{" "}
+                                                        {reportId ? (
+                                                            <a 
+                                                                href={`/reports/${reportId}`}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    navigate(`/reports/${reportId}`);
+                                                                }}
+                                                                style={{
+                                                                    color: "#0f8b8d",
+                                                                    fontWeight: 600,
+                                                                    textDecoration: "none",
+                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                }}
+                                                            >
+                                                                reporte
+                                                            </a>
+                                                        ) : "reporte"}
+                                                        {reason && reason !== "Sin razón especificada" && (
+                                                            <span style={{ fontStyle: "italic", color: "#888" }}>
+                                                                {" "}({reason})
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
+                                            }
+                                            case "ORDER_STATUS_CHANGED": {
+                                                const oldStatus = meta.old_status as string;
+                                                const newStatus = meta.new_status as string;
+                                                return `cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
+                                            }
+                                            default:
+                                                return event.description || event.event_type;
+                                        }
                                     };
 
-                                    const getColor = (eventType: string) => {
-                                        if (eventType.includes("SIGNED") || eventType.includes("APPROVED")) return "green";
-                                        if (eventType.includes("PAYMENT")) return "blue";
-                                        if (eventType.includes("CANCELLED")) return "red";
-                                        return "gray";
-                                    };
+                                    const userName = event.created_by_name || "Sistema";
+                                    const userAvatar = event.created_by_avatar;
+                                    const actionText = buildActionText();
 
                                     return {
-                                        dot: getIcon(event.event_type),
-                                        color: getColor(event.event_type),
+                                        dot: (
+                                            <Avatar 
+                                                size={28}
+                                                src={userAvatar}
+                                                style={{ 
+                                                    backgroundColor: userAvatar ? undefined : getAvatarColor(userName),
+                                                    fontSize: 12,
+                                                }}
+                                            >
+                                                {!userAvatar && getInitials(userName)}
+                                            </Avatar>
+                                        ),
                                         children: (
-                                            <div>
-                                                <div style={{ fontWeight: 600 }}>{event.description}</div>
-                                                <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                                                    {new Date(event.created_at).toLocaleString('es-MX')}
+                                            <div style={{ marginLeft: 4 }}>
+                                                <div style={{ lineHeight: 1.5 }}>
+                                                    <span style={{ fontWeight: 600 }}>{userName}</span>
+                                                    <span style={{ color: "#666", marginLeft: 6 }}>{actionText}</span>
+                                                </div>
+                                                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                                                    {formatLocalDateTime(event.created_at)}
                                                 </div>
                                             </div>
                                         ),
@@ -994,8 +1279,8 @@ export default function OrderDetail() {
                             {/* Mobile Sidebar - Shows below main content on small screens */}
                             <div className="order-detail-sidebar-mobile">
                                 <SidebarContent />
+                                    </div>
                             </div>
-                        </div>
 
                         {/* Right Column - Sidebar (Desktop only) */}
                         <div className="order-detail-sidebar-desktop">
