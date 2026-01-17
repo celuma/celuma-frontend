@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip, Input } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
@@ -1196,7 +1197,7 @@ export default function OrderDetail() {
                             </div>
                         )}
                         <Input.TextArea
-                            ref={textAreaRef as React.Ref<any>}
+                            ref={textAreaRef as React.Ref<TextAreaRef>}
                             value={commentText}
                             onChange={handleCommentChange}
                             placeholder="Escribe un comentario... Usa @ para mencionar a alguien"
