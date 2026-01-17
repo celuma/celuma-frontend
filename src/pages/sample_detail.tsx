@@ -1026,28 +1026,31 @@ export default function SampleDetailPage() {
                                                     }}
                                                     bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
                                                 >
-                                                    {/* Action buttons overlay */}
-                                                    <div style={{
-                                                        position: "absolute",
-                                                        top: 4,
-                                                        right: 4,
-                                                        display: "flex",
-                                                        gap: 4,
-                                                        zIndex: 10,
+                                            <Image
+                                                src={img.urls.thumbnail || img.urls.processed}
+                                                        alt={img.label || `Imagen ${idx + 1}`}
+                                                        style={{ width: "100%", height: 110, objectFit: "cover", cursor: "pointer" }}
+                                                        fallback={img.urls.processed || img.urls.thumbnail}
+                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
+                                                    />
+                                                    <div style={{ 
+                                                        display: "flex", 
+                                                        alignItems: "center", 
+                                                        justifyContent: "space-between", 
+                                                        padding: "8px 10px", 
+                                                        gap: 6,
+                                                        borderTop: "1px solid #f0f0f0"
                                                     }}>
-                                                        <Tooltip title="Ver imagen">
-                                                            <AntButton
-                                                                size="small"
-                                                                type="text"
-                                                                icon={<EyeOutlined />}
-                                                                onClick={() => setPreview({ visible: true, index: idx })}
-                                                                style={{ 
-                                                                    background: "rgba(255,255,255,0.9)", 
-                                                                    borderRadius: 4,
-                                                                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
-                                                                }}
-                                                            />
-                                                        </Tooltip>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                            <span style={{ color: tokens.textSecondary, fontSize: 11 }}>
+                                                                {new Date(img.created_at).toLocaleDateString("es-MX")}
+                                                            </span>
+                                                            {img.is_primary && (
+                                                                <Tag color="#10b981" style={{ margin: 0, fontSize: 10, borderRadius: 8 }}>
+                                                                    Principal
+                                                                </Tag>
+                                                            )}
+                                                        </div>
                                                         <Popconfirm
                                                             title="Eliminar imagen"
                                                             description="¿Estás seguro de eliminar esta imagen?"
@@ -1064,37 +1067,13 @@ export default function SampleDetailPage() {
                                                                     icon={deletingImageId === img.id ? <LoadingOutlined spin /> : <DeleteOutlined />}
                                                                     disabled={deletingImageId !== null}
                                                                     style={{ 
-                                                                        background: "rgba(255,255,255,0.9)", 
-                                                                        borderRadius: 4,
-                                                                        boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
+                                                                        padding: "0 4px",
+                                                                        height: 20,
+                                                                        minWidth: 20
                                                                     }}
                                                                 />
                                                             </Tooltip>
                                                         </Popconfirm>
-                                                    </div>
-                                            <Image
-                                                src={img.urls.thumbnail || img.urls.processed}
-                                                        alt={img.label || `Imagen ${idx + 1}`}
-                                                        style={{ width: "100%", height: 110, objectFit: "cover", cursor: "pointer" }}
-                                                        fallback={img.urls.processed || img.urls.thumbnail}
-                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
-                                                    />
-                                                    <div style={{ 
-                                                        display: "flex", 
-                                                        alignItems: "center", 
-                                                        justifyContent: "space-between", 
-                                                        padding: "8px 10px", 
-                                                        gap: 6,
-                                                        borderTop: "1px solid #f0f0f0"
-                                                    }}>
-                                                        <span style={{ color: tokens.textSecondary, fontSize: 11 }}>
-                                                            {new Date(img.created_at).toLocaleDateString("es-MX")}
-                                                        </span>
-                                                        {img.is_primary && (
-                                                            <Tag color="#10b981" style={{ margin: 0, fontSize: 10, borderRadius: 8 }}>
-                                                                Principal
-                                                            </Tag>
-                                                        )}
                                             </div>
                                         </Card>
                                             ))}
