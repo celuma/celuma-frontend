@@ -1864,7 +1864,7 @@ export default function OrderDetail() {
                                                 
                                                 return (
                                                     <span>
-                                                        cambió el estado de{" "}
+                                                        Cambió el estado de{" "}
                                                         <span style={{
                                                             backgroundColor: oldConfig.bg,
                                                             color: oldConfig.color,
@@ -1899,7 +1899,7 @@ export default function OrderDetail() {
                                                 const filename = meta.filename as string || "imagen";
                                                 return (
                                                     <span>
-                                                        subió imagen {filename}
+                                                        Subió imagen {filename}
                                                         {renderSampleLink()}
                                                     </span>
                                                 );
@@ -1908,14 +1908,14 @@ export default function OrderDetail() {
                                                 const filename = meta.filename as string || "imagen";
                                                 return (
                                                     <span>
-                                                        eliminó imagen {filename}
+                                                        Eliminó imagen {filename}
                                                         {renderSampleLink()}
                                                     </span>
                                                 );
                                             }
                                             case "SAMPLE_NOTES_UPDATED": {
                                                 const newNotes = meta.new_notes as string || "";
-                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                const action = newNotes ? "Actualizó" : "Eliminó";
                                                 return (
                                                     <span>
                                                         {action} la descripción
@@ -1945,7 +1945,7 @@ export default function OrderDetail() {
                                             case "SAMPLE_CREATED":
                                                 return sampleId ? (
                                                     <span>
-                                                        registró muestra{" "}
+                                                        Registró muestra{" "}
                                                         <a 
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
@@ -1962,11 +1962,11 @@ export default function OrderDetail() {
                                                             {sampleCode}
                                                         </a>
                                                     </span>
-                                                ) : (sampleCode ? `registró muestra ${sampleCode}` : "registró una muestra");
+                                                ) : (sampleCode ? `Registró muestra ${sampleCode}` : "Registró una muestra");
                                             case "SAMPLE_RECEIVED":
                                                 return sampleId ? (
                                                     <span>
-                                                        recibió muestra{" "}
+                                                        Recibió muestra{" "}
                                                         <a 
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
@@ -1983,12 +1983,12 @@ export default function OrderDetail() {
                                                             {sampleCode}
                                                         </a>
                                                     </span>
-                                                ) : (sampleCode ? `recibió muestra ${sampleCode}` : "recibió una muestra");
+                                                ) : (sampleCode ? `Recibió muestra ${sampleCode}` : "Recibió una muestra");
                                             case "REPORT_CREATED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        creó el{" "}
+                                                        Creó el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -2005,13 +2005,13 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "creó el reporte";
+                                                ) : "Creó el reporte";
                                             }
                                             case "REPORT_VERSION_CREATED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        editó el{" "}
+                                                        Editó el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -2028,13 +2028,13 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "editó el reporte";
+                                                ) : "Editó el reporte";
                                             }
                                             case "REPORT_SUBMITTED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        envió a revisión el{" "}
+                                                        Envió a revisión el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -2051,14 +2051,14 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "envió a revisión el reporte";
+                                                ) : "Envió a revisión el reporte";
                                             }
                                             case "REPORT_RETRACTED": {
                                                 const reportId = meta.report_id as string;
                                                 const reason = meta.reason as string;
                                                 return (
                                                     <span>
-                                                        retrajo el{" "}
+                                                        Retrajo el{" "}
                                                         {reportId ? (
                                                             <a 
                                                                 href={`/reports/${reportId}`}
@@ -2087,18 +2087,18 @@ export default function OrderDetail() {
                                             case "ORDER_STATUS_CHANGED": {
                                                 const oldStatus = meta.old_status as string;
                                                 const newStatus = meta.new_status as string;
-                                                return `cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
+                                                return `Cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
                                             }
                                             case "ORDER_NOTES_UPDATED": {
                                                 const newNotes = meta.new_notes as string || "";
-                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                const action = newNotes ? "Actualizó" : "Eliminó";
                                                 return `${action} la descripción de la orden`;
                                             }
                                             case "COMMENT_ADDED": {
                                                 const preview = meta.comment_preview as string || "";
                                                 return (
                                                     <span>
-                                                        agregó un comentario
+                                                        Agregó un comentario
                                                         {preview && (
                                                             <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
                                                                 : "{preview}"
@@ -2120,7 +2120,7 @@ export default function OrderDetail() {
                                                 if (selfAssigned && othersCount === 0) {
                                                     return (
                                                         <span>
-                                                            se asignó a sí mismo
+                                                            Se asignó a sí mismo
                                                             {renderSampleLink()}
                                                         </span>
                                                     );
@@ -2128,7 +2128,7 @@ export default function OrderDetail() {
                                                     const others = added.filter(u => u.name !== userName);
                                                     return (
                                                         <span>
-                                                            se asignó a sí mismo y a{" "}
+                                                            Se asignó a sí mismo y a{" "}
                                                             {others.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2141,7 +2141,7 @@ export default function OrderDetail() {
                                                 } else {
                                                     return (
                                                         <span>
-                                                            asignó a{" "}
+                                                            Asignó a{" "}
                                                             {added.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2167,7 +2167,7 @@ export default function OrderDetail() {
                                                 if (selfRemoved && othersCount === 0) {
                                                     return (
                                                         <span>
-                                                            se desasignó a sí mismo
+                                                            Se desasignó a sí mismo
                                                             {sampleCodeMeta && (
                                                                 <span>
                                                                     {" "}de la muestra{" "}
@@ -2196,7 +2196,7 @@ export default function OrderDetail() {
                                                     const others = removed.filter(u => u.name !== userName);
                                                     return (
                                                         <span>
-                                                            se desasignó a sí mismo y a{" "}
+                                                            Se desasignó a sí mismo y a{" "}
                                                             {others.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2230,7 +2230,7 @@ export default function OrderDetail() {
                                                 } else {
                                                     return (
                                                         <span>
-                                                            desasignó a{" "}
+                                                            Desasignó a{" "}
                                                             {removed.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2273,12 +2273,12 @@ export default function OrderDetail() {
                                                 const othersCount = selfAssigned ? count - 1 : count;
                                                 
                                                 if (selfAssigned && othersCount === 0) {
-                                                    return "se asignó como revisor";
+                                                    return "Se asignó como revisor";
                                                 } else if (selfAssigned && othersCount > 0) {
                                                     const others = added.filter(u => u.name !== userName);
                                                     return (
                                                         <span>
-                                                            se asignó como revisor junto con{" "}
+                                                            Se asignó como revisor junto con{" "}
                                                             {others.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2290,7 +2290,7 @@ export default function OrderDetail() {
                                                 } else {
                                                     return (
                                                         <span>
-                                                            asignó como {count === 1 ? "revisor" : "revisores"} a{" "}
+                                                            Asignó como {count === 1 ? "revisor" : "revisores"} a{" "}
                                                             {added.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2311,12 +2311,12 @@ export default function OrderDetail() {
                                                 const othersCount = selfRemoved ? count - 1 : count;
                                                 
                                                 if (selfRemoved && othersCount === 0) {
-                                                    return "se removió como revisor";
+                                                    return "Se removió como revisor";
                                                 } else if (selfRemoved && othersCount > 0) {
                                                     const others = removed.filter(u => u.name !== userName);
                                                     return (
                                                         <span>
-                                                            se removió como revisor junto con{" "}
+                                                            Se removió como revisor junto con{" "}
                                                             {others.map((u, idx) => (
                                                                 <span key={u.name}>
                                                                     {idx > 0 && ", "}
@@ -2345,7 +2345,7 @@ export default function OrderDetail() {
                                                 const sampleCodeMeta = meta.sample_code as string | undefined;
                                                 return (
                                                     <span>
-                                                        agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                                                        Agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
                                                         {added.map((label, idx) => {
                                                             const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
                                                             return (
@@ -2400,7 +2400,7 @@ export default function OrderDetail() {
                                                 const sampleCodeMeta = meta.sample_code as string | undefined;
                                                 return (
                                                     <span>
-                                                        removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                                                        Removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
                                                         {removed.map((label, idx) => {
                                                             const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
                                                             return (
@@ -2481,13 +2481,15 @@ export default function OrderDetail() {
                                         ),
                                         children: (
                                             <div style={{ marginLeft: 4 }}>
-                                                <div style={{ lineHeight: 1.5 }}>
-                                                    {!isSameUserAsPrevious && (
-                                                        <span style={{ fontWeight: 600 }}>{userName}</span>
-                                                    )}
-                                                    <span style={{ color: "#666", marginLeft: isSameUserAsPrevious ? 0 : 6 }}>{actionText}</span>
+                                                {!isSameUserAsPrevious && (
+                                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                                        {userName}
+                                                    </div>
+                                                )}
+                                                <div style={{ color: "#666", lineHeight: 1.5, marginBottom: 4 }}>
+                                                    {actionText}
                                                 </div>
-                                                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                                                <div style={{ fontSize: 12, color: "#888" }}>
                                                     {formatLocalDateTime(event.created_at)}
                                                 </div>
                                             </div>

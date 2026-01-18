@@ -534,7 +534,7 @@ export default function SampleDetailPage() {
                 
                 return (
                     <span>
-                        cambió el estado de{" "}
+                        Cambió el estado de{" "}
                         <span style={{
                             backgroundColor: oldConfig.bg,
                             color: oldConfig.color,
@@ -566,23 +566,23 @@ export default function SampleDetailPage() {
             }
             case "IMAGE_UPLOADED": {
                 const filename = meta.filename as string || "imagen";
-                return `subió la imagen ${filename}`;
+                return `Subió la imagen ${filename}`;
             }
             case "IMAGE_DELETED": {
                 const filename = meta.filename as string || "imagen";
-                return `eliminó la imagen ${filename}`;
+                return `Eliminó la imagen ${filename}`;
             }
             case "SAMPLE_NOTES_UPDATED": {
                 const newNotes = meta.new_notes as string || "";
                 if (newNotes) {
-                    return "actualizó la descripción";
+                    return "Actualizó la descripción";
                 }
-                return "eliminó la descripción de la muestra";
+                return "Eliminó la descripción de la muestra";
             }
             case "SAMPLE_CREATED":
-                return "registró la muestra";
+                return "Registró la muestra";
             case "SAMPLE_RECEIVED":
-                return "recibió la muestra en laboratorio";
+                return "Recibió la muestra en laboratorio";
             case "ASSIGNEES_ADDED": {
                 const added = (meta.added as Array<{name: string; username?: string; avatar?: string | null}>) || [];
                 const count = added.length;
@@ -593,12 +593,12 @@ export default function SampleDetailPage() {
                 const othersCount = selfAssigned ? count - 1 : count;
                 
                 if (selfAssigned && othersCount === 0) {
-                    return "se asignó a sí mismo";
+                    return "Se asignó a sí mismo";
                 } else if (selfAssigned && othersCount > 0) {
                     const others = added.filter(u => u.name !== userName);
                     return (
                         <span>
-                            se asignó a sí mismo y a{" "}
+                            Se asignó a sí mismo y a{" "}
                             {others.map((u, idx) => (
                                 <span key={u.name}>
                                     {idx > 0 && ", "}
@@ -610,7 +610,7 @@ export default function SampleDetailPage() {
                 } else {
                     return (
                         <span>
-                            asignó a{" "}
+                            Asignó a{" "}
                             {added.map((u, idx) => (
                                 <span key={u.name}>
                                     {idx > 0 && ", "}
@@ -631,12 +631,12 @@ export default function SampleDetailPage() {
                 const othersCount = selfRemoved ? count - 1 : count;
                 
                 if (selfRemoved && othersCount === 0) {
-                    return "se desasignó a sí mismo";
+                    return "Se desasignó a sí mismo";
                 } else if (selfRemoved && othersCount > 0) {
                     const others = removed.filter(u => u.name !== userName);
                     return (
                         <span>
-                            se desasignó a sí mismo y a{" "}
+                            Se desasignó a sí mismo y a{" "}
                             {others.map((u, idx) => (
                                 <span key={u.name}>
                                     {idx > 0 && ", "}
@@ -648,7 +648,7 @@ export default function SampleDetailPage() {
                 } else {
                     return (
                         <span>
-                            desasignó a{" "}
+                            Desasignó a{" "}
                             {removed.map((u, idx) => (
                                 <span key={u.name}>
                                     {idx > 0 && ", "}
@@ -664,7 +664,7 @@ export default function SampleDetailPage() {
                 const count = added.length;
                 return (
                     <span>
-                        agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                        Agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
                         {added.map((label, idx) => {
                             const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
                             return (
@@ -696,7 +696,7 @@ export default function SampleDetailPage() {
                 const count = removed.length;
                 return (
                     <span>
-                        removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                        Removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
                         {removed.map((label, idx) => {
                             const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
                             return (
@@ -766,13 +766,15 @@ export default function SampleDetailPage() {
             color: config.color,
             children: (
                 <div style={{ marginLeft: 4 }}>
-                    <div style={{ lineHeight: 1.5 }}>
-                        {!isSameUserAsPrevious && (
-                            <span style={{ fontWeight: 600 }}>{userName}</span>
-                        )}
-                        <span style={{ color: "#666", marginLeft: isSameUserAsPrevious ? 0 : 6 }}>{actionText}</span>
+                    {!isSameUserAsPrevious && (
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                        {userName}
                     </div>
-                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                )}
+                <div style={{ color: "#666", lineHeight: 1.5, marginBottom: 4 }}>
+                    {actionText}
+                </div>
+                    <div style={{ fontSize: 12, color: "#888" }}>
                         {formatLocalDateTime(event.created_at)}
                     </div>
                 </div>
