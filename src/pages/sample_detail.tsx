@@ -14,6 +14,31 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import AssigneesSection from "../components/collaboration/AssigneesSection";
+import LabelsSection from "../components/collaboration/LabelsSection";
+import type { Label, LabUser, LabelWithInheritance } from "../services/collaboration_service";
+import { 
+    getLabels, 
+    getLabUsers, 
+    updateSampleAssignees, 
+    updateSampleLabels 
+} from "../services/collaboration_service";
+
+// Predefined label colors (same as in LabelsSection)
+const LABEL_COLORS = [
+    { color: "#3b82f6", bg: "#eff6ff" },
+    { color: "#f59e0b", bg: "#fffbeb" },
+    { color: "#8b5cf6", bg: "#f5f3ff" },
+    { color: "#ec4899", bg: "#fdf2f8" },
+    { color: "#10b981", bg: "#ecfdf5" },
+    { color: "#ef4444", bg: "#fef2f2" },
+    { color: "#06b6d4", bg: "#ecfeff" },
+    { color: "#84cc16", bg: "#f7fee7" },
+    { color: "#6366f1", bg: "#eef2ff" },
+    { color: "#a855f7", bg: "#faf5ff" },
+    { color: "#f97316", bg: "#fff7ed" },
+    { color: "#14b8a6", bg: "#f0fdfa" },
+];
 
 // Generate initials from full name
 const getInitials = (fullName?: string): string => {
@@ -35,6 +60,49 @@ const getAvatarColor = (name: string): string => {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
+};
+
+// Helper function to render user mention with tooltip (for timeline events)
+const renderUserMention = (user: {name: string; username?: string; avatar?: string | null}, key?: string | number): React.ReactNode => {
+    const username = user.username || user.name.toLowerCase().replace(/\s+/g, '');
+    
+    const tooltipContent = (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Avatar 
+                size={32}
+                src={user.avatar}
+                style={{ 
+                    backgroundColor: user.avatar ? undefined : getAvatarColor(user.name),
+                    fontSize: 12,
+                    flexShrink: 0
+                }}
+            >
+                {!user.avatar && getInitials(user.name)}
+            </Avatar>
+            <span style={{ fontWeight: 500 }}>{user.name}</span>
+        </div>
+    );
+    
+    return (
+        <Tooltip key={key} title={tooltipContent} placement="top">
+            <span 
+                style={{
+                    color: "#0f8b8d",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "color 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "#0a6566";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "#0f8b8d";
+                }}
+            >
+                @{username}
+            </span>
+        </Tooltip>
+    );
 };
 
 // Sample type configuration with icons and colors
@@ -117,6 +185,8 @@ type SampleDetail = {
     branch: { id: string; name?: string; code?: string | null };
     order: { id: string; order_code: string; status: string };
     patient: { id: string; full_name: string; patient_code: string };
+    assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }> | null;
+    labels?: LabelWithInheritance[] | null;
 };
 
 type SampleImages = {
@@ -168,6 +238,10 @@ export default function SampleDetailPage() {
     // Deleting image state
     const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
     
+    // Collaboration states
+    const [allLabels, setAllLabels] = useState<Label[]>([]);
+    const [allUsers, setAllUsers] = useState<LabUser[]>([]);
+    
     // Ref for gallery scroll
     const galleryRef = useRef<HTMLDivElement>(null);
 
@@ -191,7 +265,54 @@ export default function SampleDetailPage() {
         }
     }, [sampleId]);
 
-    useEffect(() => { refresh(); }, [refresh]);
+    // Function to load collaboration data (labels and users)
+    const loadCollaborationData = useCallback(async () => {
+        try {
+            const [labelsData, usersData] = await Promise.all([
+                getLabels(),
+                getLabUsers(),
+            ]);
+            setAllLabels(labelsData);
+            setAllUsers(usersData);
+        } catch (err) {
+            console.error("Error loading collaboration data:", err);
+        }
+    }, []);
+
+    // Handlers for updating collaboration
+    const handleUpdateAssignees = useCallback(async (userIds: string[]) => {
+        if (!sampleId) return;
+        try {
+            await updateSampleAssignees(sampleId, userIds);
+            await refresh();
+            message.success("Assignees actualizados");
+        } catch (err: any) {
+            message.error(err.message || "Error al actualizar assignees");
+            throw err;
+        }
+    }, [sampleId, refresh]);
+
+    const handleUpdateLabels = useCallback(async (labelIds: string[]) => {
+        if (!sampleId || !detail) return;
+        // Only send own labels (filter out inherited ones)
+        const newOwnLabels = labelIds.filter(id => 
+            !detail.labels?.some(l => l.id === id && l.inherited)
+        );
+        
+        try {
+            await updateSampleLabels(sampleId, newOwnLabels);
+            await refresh();
+            message.success("Labels actualizados");
+        } catch (err: any) {
+            message.error(err.message || "Error al actualizar labels");
+            throw err;
+        }
+    }, [sampleId, refresh, detail]);
+
+    useEffect(() => { 
+        refresh();
+        loadCollaborationData();
+    }, [refresh, loadCollaborationData]);
 
     // Update sample state
     const updateState = useCallback(async (newState: string) => {
@@ -462,13 +583,157 @@ export default function SampleDetailPage() {
                 return "registró la muestra";
             case "SAMPLE_RECEIVED":
                 return "recibió la muestra en laboratorio";
+            case "ASSIGNEES_ADDED": {
+                const added = (meta.added as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                const count = added.length;
+                const userName = event.created_by_name || "Sistema";
+                
+                // Check if user assigned themselves
+                const selfAssigned = added.some(u => u.name === userName);
+                const othersCount = selfAssigned ? count - 1 : count;
+                
+                if (selfAssigned && othersCount === 0) {
+                    return "se asignó a sí mismo";
+                } else if (selfAssigned && othersCount > 0) {
+                    const others = added.filter(u => u.name !== userName);
+                    return (
+                        <span>
+                            se asignó a sí mismo y a{" "}
+                            {others.map((u, idx) => (
+                                <span key={u.name}>
+                                    {idx > 0 && ", "}
+                                    {renderUserMention(u)}
+                                </span>
+                            ))}
+                        </span>
+                    );
+                } else {
+                    return (
+                        <span>
+                            asignó a{" "}
+                            {added.map((u, idx) => (
+                                <span key={u.name}>
+                                    {idx > 0 && ", "}
+                                    {renderUserMention(u)}
+                                </span>
+                            ))}
+                        </span>
+                    );
+                }
+            }
+            case "ASSIGNEES_REMOVED": {
+                const removed = (meta.removed as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                const count = removed.length;
+                const userName = event.created_by_name || "Sistema";
+                
+                // Check if user removed themselves
+                const selfRemoved = removed.some(u => u.name === userName);
+                const othersCount = selfRemoved ? count - 1 : count;
+                
+                if (selfRemoved && othersCount === 0) {
+                    return "se desasignó a sí mismo";
+                } else if (selfRemoved && othersCount > 0) {
+                    const others = removed.filter(u => u.name !== userName);
+                    return (
+                        <span>
+                            se desasignó a sí mismo y a{" "}
+                            {others.map((u, idx) => (
+                                <span key={u.name}>
+                                    {idx > 0 && ", "}
+                                    {renderUserMention(u)}
+                                </span>
+                            ))}
+                        </span>
+                    );
+                } else {
+                    return (
+                        <span>
+                            desasignó a{" "}
+                            {removed.map((u, idx) => (
+                                <span key={u.name}>
+                                    {idx > 0 && ", "}
+                                    {renderUserMention(u)}
+                                </span>
+                            ))}
+                        </span>
+                    );
+                }
+            }
+            case "LABELS_ADDED": {
+                const added = (meta.added as Array<{name: string; color: string}>) || [];
+                const count = added.length;
+                return (
+                    <span>
+                        agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                        {added.map((label, idx) => {
+                            const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
+                            return (
+                                <span key={idx}>
+                                    <span
+                                        style={{ 
+                                            padding: "2px 8px",
+                                            borderRadius: 4,
+                                            background: colorConfig.bg,
+                                            color: colorConfig.color,
+                                            fontWeight: 600,
+                                            fontSize: 11,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            margin: "0 4px",
+                                        }}
+                                    >
+                                        {label.name}
+                                    </span>
+                                    {idx < added.length - 1 && ", "}
+                                </span>
+                            );
+                        })}
+                    </span>
+                );
+            }
+            case "LABELS_REMOVED": {
+                const removed = (meta.removed as Array<{name: string; color: string}>) || [];
+                const count = removed.length;
+                return (
+                    <span>
+                        removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                        {removed.map((label, idx) => {
+                            const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
+                            return (
+                                <span key={idx}>
+                                    <span
+                                        style={{ 
+                                            padding: "2px 8px",
+                                            borderRadius: 4,
+                                            background: colorConfig.bg,
+                                            color: colorConfig.color,
+                                            fontWeight: 600,
+                                            fontSize: 11,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            margin: "0 4px",
+                                        }}
+                                    >
+                                        {label.name}
+                                    </span>
+                                    {idx < removed.length - 1 && ", "}
+                                </span>
+                            );
+                        })}
+                    </span>
+                );
+            }
             default:
                 return event.description || event.event_type;
         }
     };
 
     // Build timeline from events API with avatar/monogram format
-    const timelineItems = events.map((event) => {
+    const timelineItems = events.map((event, index) => {
+        // Check if previous event is from the same user
+        const prevEvent = index > 0 ? events[index - 1] : null;
+        const isSameUserAsPrevious = prevEvent && prevEvent.created_by === event.created_by;
+        
         const config = EVENT_CONFIG[event.event_type] || { 
             icon: <CheckCircleOutlined />, 
             color: "gray"
@@ -478,7 +743,15 @@ export default function SampleDetailPage() {
         const userAvatar = event.created_by_avatar;
         
         return {
-            dot: (
+            dot: isSameUserAsPrevious ? (
+                <div style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    backgroundColor: "#d1d5db",
+                    border: "2px solid white",
+                }} />
+            ) : (
                 <Avatar 
                     size={28}
                     src={userAvatar}
@@ -494,8 +767,10 @@ export default function SampleDetailPage() {
             children: (
                 <div style={{ marginLeft: 4 }}>
                     <div style={{ lineHeight: 1.5 }}>
-                        <span style={{ fontWeight: 600 }}>{userName}</span>
-                        <span style={{ color: "#666", marginLeft: 6 }}>{actionText}</span>
+                        {!isSameUserAsPrevious && (
+                            <span style={{ fontWeight: 600 }}>{userName}</span>
+                        )}
+                        <span style={{ color: "#666", marginLeft: isSameUserAsPrevious ? 0 : 6 }}>{actionText}</span>
                     </div>
                     <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
                         {formatLocalDateTime(event.created_at)}
@@ -546,22 +821,11 @@ export default function SampleDetailPage() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center",
-                    marginBottom: 12
-                }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Asignados
-                    </span>
-                    <Tooltip title="Próximamente">
-                        <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                    </Tooltip>
-                </div>
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Sin asignar
-                </div>
+                <AssigneesSection
+                    assignees={detail?.assignees || []}
+                    allUsers={allUsers}
+                    onUpdate={handleUpdateAssignees}
+                />
             </Card>
 
             {/* Labels */}
@@ -570,22 +834,13 @@ export default function SampleDetailPage() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center",
-                    marginBottom: 12
-                }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Etiquetas
-                    </span>
-                    <Tooltip title="Próximamente">
-                        <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                    </Tooltip>
-                </div>
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Ninguna
-                </div>
+                <LabelsSection
+                    labels={detail?.labels || []}
+                    allLabels={allLabels}
+                    onUpdate={handleUpdateLabels}
+                    onLabelsRefresh={loadCollaborationData}
+                    showInheritance={true}
+                />
             </Card>
 
             {/* Quick Actions */}
