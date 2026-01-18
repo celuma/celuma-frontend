@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown, Input, Popconfirm, Spin } from "antd";
 import type { UploadProps, MenuProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
@@ -6,7 +6,7 @@ import {
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, PlusOutlined, FileImageOutlined,
     InboxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, MedicineBoxOutlined,
-    ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined
+    ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, DownOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -63,7 +63,7 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
     PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
     READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada", icon: <ExperimentOutlined /> },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
 
@@ -167,6 +167,9 @@ export default function SampleDetailPage() {
     const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
     // Deleting image state
     const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+    
+    // Ref for gallery scroll
+    const galleryRef = useRef<HTMLDivElement>(null);
 
     const refresh = useCallback(async () => {
         if (!sampleId) return;
@@ -286,6 +289,13 @@ export default function SampleDetailPage() {
         }
     }, [sampleId, deletingImageId, refresh]);
 
+    // Handle navigation to gallery
+    const handleGoToGallery = useCallback(() => {
+        if (galleryRef.current) {
+            galleryRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, []);
+
     const uploadProps: UploadProps = {
         name: "file",
         multiple: true,
@@ -349,16 +359,23 @@ export default function SampleDetailPage() {
                     backgroundColor: config.bg,
                     color: config.color,
                     borderRadius: 12,
-                    padding: "6px 12px",
-                    fontSize: 13,
-                    fontWeight: 500,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontWeight: 600,
                     textAlign: "center",
-                    margin: "-4px -8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
                 }}>
                     {config.label}
                 </div>
             ),
             disabled: detail?.state === state,
+            style: {
+                padding: "4px 6px",
+                margin: "2px 0",
+            }
         };
     });
 
@@ -588,7 +605,7 @@ export default function SampleDetailPage() {
                     Acciones Rápidas
                 </div>
                 <div style={{ display: "grid", gap: 8 }}>
-                    <Upload {...uploadProps}>
+                    <Upload {...uploadProps} style={{ display: "block", width: "100%" }}>
                         <AntButton 
                             block 
                             icon={<PlusOutlined />}
@@ -691,39 +708,51 @@ export default function SampleDetailPage() {
                         <div style={{ display: "grid", gap: tokens.gap }}>
                             {/* Sample Header Card */}
                     <Card
-                                title={<span style={cardTitleStyle}>Detalle de Muestra</span>}
-                        loading={loading}
-                                style={cardStyle}
-                    >
-                        {detail && (
-                                    <>
-                                        {/* Sample Code & Status */}
-                                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                                            <Avatar
-                                                size={44}
-                                                icon={typeConfig.icon}
-                                                style={{ 
-                                                    backgroundColor: typeConfig.color,
-                                                    fontSize: 20,
-                                                    flexShrink: 0
-                                                }}
-                                            />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                    <h2 style={{ 
-                                                        margin: 0, 
+                                title={
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                        <span style={cardTitleStyle}>Detalle de Muestra</span>
+                                        {detail && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                <Avatar
+                                                    size={32}
+                                                    icon={typeConfig.icon}
+                                                    style={{ 
+                                                        backgroundColor: typeConfig.color,
+                                                        fontSize: 14,
+                                                        flexShrink: 0
+                                                    }}
+                                                />
+                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <span style={{ 
                                                         fontFamily: tokens.titleFont, 
-                                                        fontSize: 22, 
+                                                        fontSize: 16, 
                                                         fontWeight: 700,
                                                         color: tokens.textPrimary
                                                     }}>
                                                         {detail.sample_code}
-                                                    </h2>
-                                                    <Dropdown 
-                                                        menu={{ items: stateMenuItems, onClick: handleStateMenuClick }} 
-                                                        trigger={["click"]}
-                                                        disabled={updatingState}
-                                                    >
+                                                    </span>
+                                                    <span style={{ fontSize: 13, color: tokens.textSecondary }}>
+                                                        {detail.type}
+                                                    </span>
+                                                </div>
+                                                <Dropdown 
+                                                    menu={{ 
+                                                        items: stateMenuItems, 
+                                                        onClick: handleStateMenuClick,
+                                                        style: {
+                                                            padding: "8px",
+                                                            borderRadius: "12px",
+                                                        }
+                                                    }} 
+                                                    trigger={["click"]}
+                                                    disabled={updatingState}
+                                                >
+                                                    <div style={{ 
+                                                        display: "flex", 
+                                                        alignItems: "center", 
+                                                        gap: 6,
+                                                        cursor: "pointer",
+                                                    }}>
                                                         <div style={{ 
                                                             padding: "4px 10px",
                                                             borderRadius: 12,
@@ -734,7 +763,6 @@ export default function SampleDetailPage() {
                                                             display: "flex",
                                                             alignItems: "center",
                                                             gap: 4,
-                                                            cursor: "pointer",
                                                             transition: "all 0.15s ease",
                                                             border: `1px solid transparent`,
                                                         }}
@@ -748,14 +776,18 @@ export default function SampleDetailPage() {
                                                             )}
                                                             {stateConfig.label}
                                                         </div>
-                                                    </Dropdown>
-                                                </div>
-                                                <div style={{ fontSize: 14, color: tokens.textSecondary, marginTop: 4 }}>
-                                                    {detail.type}
-                                                </div>
+                                                        <DownOutlined style={{ fontSize: 9, color: stateConfig.color }} />
+                                                    </div>
+                                                </Dropdown>
                                             </div>
-                                        </div>
-
+                                        )}
+                                    </div>
+                                }
+                        loading={loading}
+                                style={cardStyle}
+                    >
+                        {detail && (
+                                    <>
                                         {/* Patient Info */}
                                         <Tooltip title="Ver perfil del paciente">
                                             <div 
@@ -775,10 +807,10 @@ export default function SampleDetailPage() {
                                                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                                             >
                                                 <Avatar 
-                                                    size={36}
+                                                    size={40}
                                                     style={{ 
                                                         backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
-                                                        fontSize: 14,
+                                                        fontSize: 15,
                                                         fontWeight: 600,
                                                         flexShrink: 0
                                                     }}
@@ -790,7 +822,7 @@ export default function SampleDetailPage() {
                                                         {detail.patient.full_name || detail.patient.patient_code}
                                                     </div>
                                                     <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                        Paciente · {detail.patient.patient_code}
+                                                        {detail.patient.patient_code}
                                                     </div>
                                                 </div>
                                             </div>
@@ -804,7 +836,7 @@ export default function SampleDetailPage() {
                                             gap: "12px 20px",
                                             color: tokens.textSecondary,
                                             fontSize: 13,
-                                            marginBottom: detail.notes ? 16 : 0
+                                            marginBottom: 16
                                         }}>
                                             <Tooltip title="Ver orden">
                                                 <div 
@@ -828,10 +860,17 @@ export default function SampleDetailPage() {
                                                 </div>
                                             )}
 
-                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <FileImageOutlined />
-                                                <span>{images?.images.length || 0} imagen{(images?.images.length || 0) !== 1 ? "es" : ""}</span>
-                                            </div>
+                                            <Tooltip title="Ver galería">
+                                                <div 
+                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                                                    onClick={handleGoToGallery}
+                                                >
+                                                    <FileImageOutlined />
+                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
+                                                        {images?.images.length || 0} imagen{(images?.images.length || 0) !== 1 ? "es" : ""}
+                                                    </span>
+                                                </div>
+                                            </Tooltip>
                                         </div>
 
                                         {/* Description - editable */}
@@ -842,44 +881,35 @@ export default function SampleDetailPage() {
                                             border: "1px solid #e5e7eb"
                                         }}>
                                             <div style={{ 
+                                                fontSize: 12, 
+                                                fontWeight: 600, 
+                                                color: tokens.textSecondary, 
+                                                marginBottom: 8,
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.5px",
                                                 display: "flex",
                                                 justifyContent: "space-between",
-                                                alignItems: "center",
-                                                marginBottom: 8
+                                                alignItems: "center"
                                             }}>
-                                                <div style={{ 
-                                                    fontSize: 12, 
-                                                    fontWeight: 600, 
-                                                    color: tokens.textSecondary, 
-                                                    textTransform: "uppercase",
-                                                    letterSpacing: "0.5px"
-                                                }}>
-                                                    Descripción
-                                                </div>
+                                                <span>Descripción</span>
                                                 {!editingNotes && (
-                                                    <Tooltip title="Editar descripción">
-                                                        <AntButton
-                                                            type="text"
-                                                            size="small"
-                                                            icon={<EditOutlined />}
-                                                            onClick={() => {
-                                                                setNotesValue(detail.notes || "");
-                                                                setEditingNotes(true);
-                                                            }}
-                                                            style={{ color: tokens.textSecondary }}
-                                                        />
-                                                    </Tooltip>
+                                                    <EditOutlined 
+                                                        style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
+                                                        onClick={() => {
+                                                            setNotesValue(detail.notes || "");
+                                                            setEditingNotes(true);
+                                                        }}
+                                                    />
                                                 )}
                                             </div>
                                             {editingNotes ? (
-                                                <div>
+                                                <div style={{ display: "grid", gap: 8 }}>
                                                     <Input.TextArea
                                                         value={notesValue}
                                                         onChange={(e) => setNotesValue(e.target.value)}
                                                         placeholder="Escribe una descripción para esta muestra..."
-                                                        autoSize={{ minRows: 2, maxRows: 6 }}
-                                                        style={{ marginBottom: 8 }}
-                                                        autoFocus
+                                                        rows={4}
+                                                        maxLength={500}
                                                     />
                                                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                                                         <AntButton 
@@ -910,7 +940,7 @@ export default function SampleDetailPage() {
                                                     whiteSpace: "pre-wrap",
                                                     fontStyle: detail.notes ? "normal" : "italic"
                                                 }}>
-                                                    {detail.notes || "Sin descripción. Haz clic en el ícono de editar para agregar una."}
+                                                    {detail.notes || "Sin descripción"}
                                                 </div>
                                             )}
                                         </div>
@@ -931,10 +961,11 @@ export default function SampleDetailPage() {
                             )}
 
                             {/* Images Gallery Card */}
-                            <Card
-                                title={<span style={cardTitleStyle}>Galería de Imágenes</span>}
-                                style={cardStyle}
-                            >
+                            <div ref={galleryRef}>
+                                <Card
+                                    title={<span style={cardTitleStyle}>Galería de Imágenes</span>}
+                                    style={cardStyle}
+                                >
                                 <Typography.Paragraph type="secondary" style={{ margin: "0 0 16px 0" }}>
                                     Arrastra o haz clic para subir imágenes de la muestra.
                                 </Typography.Paragraph>
@@ -1094,6 +1125,7 @@ export default function SampleDetailPage() {
                                     </div>
                         )}
                     </Card>
+                            </div>
 
                             {/* Mobile Sidebar */}
                             <div className="sample-detail-sidebar-mobile">

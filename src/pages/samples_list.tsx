@@ -34,7 +34,7 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
     PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
     READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista" },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada" },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente" },
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada" },
 };
 

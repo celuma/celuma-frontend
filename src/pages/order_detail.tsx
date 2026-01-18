@@ -32,16 +32,16 @@ const getInitials = (fullName?: string): string => {
 
 // Extract mention IDs from commentText using mentionMap
 const extractMentionIdsFromMap = (text: string, mentionMap: Record<string, { id: string; name: string; avatar?: string | null }>): string[] => {
-    const ids: string[] = [];
+    const idsSet = new Set<string>();
     const mentionRegex = /@\w+/g;
     let match;
     while ((match = mentionRegex.exec(text)) !== null) {
         const mentionText = match[0];
         if (mentionMap[mentionText]) {
-            ids.push(mentionMap[mentionText].id);
+            idsSet.add(mentionMap[mentionText].id);
         }
     }
-    return ids;
+    return Array.from(idsSet);
 };
 
 // Render text with parsed mentions - simple @username format with tooltip
@@ -245,7 +245,7 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
     PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
     READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Dañada", icon: <ExperimentOutlined /> },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
 
@@ -329,6 +329,7 @@ export default function OrderDetail() {
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const conversationScrollRef = useRef<HTMLDivElement>(null);
+    const tabsContainerRef = useRef<HTMLDivElement>(null);
     
     // Track mentions separately: map of "@username" -> { id, name, avatar }
     const [mentionMap, setMentionMap] = useState<Record<string, { id: string; name: string; avatar?: string | null }>>({});
@@ -474,23 +475,42 @@ export default function OrderDetail() {
         }
         
         try {
-            const response = await getJSON<{ comments: Array<{
-                id: string;
-                user_id: string;
-                user_name: string;
-                user_avatar?: string | null;
-                text: string;
-                mentions: string[];
-                mentioned_users?: Array<{
-                    user_id: string;
-                    username: string;
-                    name: string;
-                    avatar?: string | null;
+            const response = await getJSON<{ 
+                items: Array<{
+                    id: string;
+                    created_by: string;
+                    created_by_name?: string | null;
+                    created_by_avatar?: string | null;
+                    text: string;
+                    mentions: string[];
+                    mentioned_users?: Array<{
+                        user_id: string;
+                        username: string;
+                        name: string;
+                        avatar?: string | null;
+                    }>;
+                    created_at: string;
                 }>;
-                created_at: string;
-            }> }>(`/v1/laboratory/orders/${orderId}/conversation`);
+                page_info: {
+                    has_more: boolean;
+                    next_before?: string | null;
+                    next_after?: string | null;
+                };
+            }>(`/v1/laboratory/orders/${orderId}/comments`);
             
-            setConversation(response.comments);
+            // Map backend fields to frontend format
+            const mappedComments = (response.items || []).map(item => ({
+                id: item.id,
+                user_id: item.created_by,
+                user_name: item.created_by_name || "Unknown User",
+                user_avatar: item.created_by_avatar,
+                text: item.text,
+                mentions: item.mentions,
+                mentioned_users: item.mentioned_users,
+                created_at: item.created_at,
+            }));
+            
+            setConversation(mappedComments);
             
             // Only scroll to bottom if: forced, was at bottom, or first load
             if (options?.forceScrollToBottom || wasAtBottom || conversation.length === 0) {
@@ -521,16 +541,8 @@ export default function OrderDetail() {
             // Extract mention IDs from the text using mentionMap
             const mentionIds = extractMentionIdsFromMap(commentText, mentionMap);
             
-            // Convert mentionMap to mentioned_users array
-            const mentionedUsers = Object.entries(mentionMap).map(([mentionText, userData]) => ({
-                user_id: userData.id,
-                username: mentionText.substring(1), // Remove @ prefix
-                name: userData.name,
-                avatar: userData.avatar || null
-            }));
-            
             const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-            const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/conversation`, {
+            const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/comments`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -538,8 +550,7 @@ export default function OrderDetail() {
                 },
                 body: JSON.stringify({ 
                     text: commentText,
-                    mentions: mentionIds,
-                    mentioned_users: mentionedUsers
+                    mentions: mentionIds
                 }),
                 credentials: "include",
             });
@@ -710,6 +721,30 @@ export default function OrderDetail() {
             setSavingNotes(false);
         }
     }, [orderId, savingNotes, notesValue, refresh]);
+
+    // Handle quick action to add comment - switch to conversation tab and focus textarea
+    const handleGoToComment = useCallback(() => {
+        setActiveTab("conversation");
+        // Scroll to tabs container
+        if (tabsContainerRef.current) {
+            tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        // Use setTimeout to ensure the tab content is rendered before focusing
+        setTimeout(() => {
+            if (textAreaRef.current) {
+                textAreaRef.current.focus();
+            }
+        }, 300);
+    }, []);
+
+    // Handle navigation to samples tab
+    const handleGoToSamples = useCallback(() => {
+        setActiveTab("samples");
+        // Scroll to tabs container
+        if (tabsContainerRef.current) {
+            tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, []);
 
     const fullName = useMemo(() => {
         return `${data?.patient.first_name ?? ""} ${data?.patient.last_name ?? ""}`.trim();
@@ -1330,6 +1365,14 @@ export default function OrderDetail() {
                     <AntButton 
                         block 
                         size="small"
+                        icon={<MessageOutlined />}
+                        onClick={handleGoToComment}
+                    >
+                        Hacer Comentario
+                    </AntButton>
+                    <AntButton 
+                        block 
+                        size="small"
                         icon={<PlusOutlined />}
                         onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
                     >
@@ -1407,7 +1450,37 @@ export default function OrderDetail() {
                         <div style={{ display: "grid", gap: tokens.gap }}>
                             {/* Order Header Card */}
                     <Card
-                                title={<span style={cardTitleStyle}>Detalle de Orden</span>}
+                                title={
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                        <span style={cardTitleStyle}>Detalle de Orden</span>
+                                        {data && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                <span style={{ 
+                                                    fontFamily: tokens.titleFont, 
+                                                    fontSize: 16, 
+                                                    fontWeight: 700,
+                                                    color: tokens.textPrimary
+                                                }}>
+                                                    {data.order.order_code}
+                                                </span>
+                                                <div style={{ 
+                                                    padding: "4px 10px",
+                                                    borderRadius: 12,
+                                                    background: statusConfig.bg,
+                                                    color: statusConfig.color,
+                                                    fontWeight: 600,
+                                                    fontSize: 11,
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 4
+                                                }}>
+                                                    {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                                                    {statusConfig.label}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                }
                         loading={loading}
                                 style={cardStyle}
                     >
@@ -1440,33 +1513,6 @@ export default function OrderDetail() {
                                         </AntButton>
                                     </div>
                                 )}
-
-                                        {/* Order Title & Status */}
-                                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                                            <h2 style={{ 
-                                                margin: 0, 
-                                                fontFamily: tokens.titleFont, 
-                                                fontSize: 22, 
-                                                fontWeight: 700,
-                                                color: tokens.textPrimary
-                                            }}>
-                                                {data.order.order_code}
-                                            </h2>
-                                            <div style={{ 
-                                                padding: "6px 12px",
-                                                borderRadius: 16,
-                                                background: statusConfig.bg,
-                                                color: statusConfig.color,
-                                                fontWeight: 600,
-                                                fontSize: 12,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 6
-                                            }}>
-                                                {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
-                                                {statusConfig.label}
-                                            </div>
-                                        </div>
 
                                         {/* Patient Info */}
                                         <Tooltip title="Ver perfil del paciente">
@@ -1516,7 +1562,7 @@ export default function OrderDetail() {
                                             gap: "12px 20px",
                                             color: tokens.textSecondary,
                                             fontSize: 13,
-                                            marginBottom: data.order.notes ? 16 : 0
+                                            marginBottom: 16
                                         }}>
                                             {data.order.requested_by && (
                                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1537,10 +1583,17 @@ export default function OrderDetail() {
                                                 </div>
                                             )}
 
-                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <ExperimentOutlined />
-                                                <span>{data.samples.length} muestra{data.samples.length !== 1 ? "s" : ""}</span>
-                                            </div>
+                                            <Tooltip title="Ver muestras">
+                                                <div 
+                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                                                    onClick={handleGoToSamples}
+                                                >
+                                                    <ExperimentOutlined />
+                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
+                                                        {data.samples.length} muestra{data.samples.length !== 1 ? "s" : ""}
+                                                    </span>
+                                                </div>
+                                            </Tooltip>
                                         </div>
 
                                         {/* Description - at the bottom */}
@@ -1995,10 +2048,11 @@ export default function OrderDetail() {
                     </Card>
 
                             {/* Tabs Card - Samples, Report, Conversation */}
-                            <Card style={cardStyle}>
-                                <Tabs
-                                    activeKey={activeTab}
-                                    onChange={setActiveTab}
+                            <div ref={tabsContainerRef}>
+                                <Card style={cardStyle}>
+                                    <Tabs
+                                        activeKey={activeTab}
+                                        onChange={setActiveTab}
                                     items={[
                                         {
                                             key: "samples",
@@ -2039,6 +2093,7 @@ export default function OrderDetail() {
                                     ]}
                                 />
                             </Card>
+                            </div>
 
                             {/* Mobile Sidebar - Shows below main content on small screens */}
                             <div className="order-detail-sidebar-mobile">
