@@ -29,6 +29,17 @@ const getAvatarColor = (name: string): string => {
     return colors[Math.abs(hash) % colors.length];
 };
 
+// Order status configuration
+const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
+    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico" },
+    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión" },
+    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada" },
+    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada" },
+    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
+};
+
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
@@ -160,7 +171,22 @@ export default function CasesList() {
                                     }
                                 },
                                 { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
-                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
+                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => {
+                                    const config = STATUS_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
+                                    return (
+                                        <div style={{
+                                            backgroundColor: config.bg,
+                                            color: config.color,
+                                            borderRadius: 12,
+                                            fontSize: 11,
+                                            fontWeight: 500,
+                                            padding: "4px 10px",
+                                            display: "inline-block",
+                                        }}>
+                                            {config.label}
+                                        </div>
+                                    );
+                                } },
                                 { title: "Muestras", dataIndex: "sample_count", key: "sample_count", width: 110 },
                                 { title: "Reporte", dataIndex: "has_report", key: "has_report", width: 110, render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag> },
                             ]}

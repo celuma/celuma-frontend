@@ -1,12 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
-import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography } from "antd";
-import type { UploadProps } from "antd";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown, Input, Popconfirm, Spin } from "antd";
+import type { UploadProps, MenuProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import { 
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, PlusOutlined, FileImageOutlined,
     InboxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, MedicineBoxOutlined,
-    ContainerOutlined
+    ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, DownOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -58,12 +58,32 @@ const getSampleTypeConfig = (type: string) => {
     return SAMPLE_TYPE_CONFIG.DEFAULT;
 };
 
-// Sample state configuration
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    REGISTERED: { color: "#3b82f6", bg: "#eff6ff", label: "Registrada" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    ANALYZED: { color: "#8b5cf6", bg: "#f5f3ff", label: "Analizada" },
-    COMPLETED: { color: "#10b981", bg: "#ecfdf5", label: "Completada" },
+// Sample state configuration - matches backend SampleState enum
+const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
+    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
+    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
+};
+
+// All valid sample states for the dropdown
+const SAMPLE_STATES = ["RECEIVED", "PROCESSING", "READY", "DAMAGED", "CANCELLED"] as const;
+
+// Format UTC datetime to local time
+const formatLocalDateTime = (utcDateString: string): string => {
+    // Ensure the date string is interpreted as UTC if it doesn't have a timezone
+    const dateStr = utcDateString.endsWith('Z') ? utcDateString : utcDateString + 'Z';
+    const date = new Date(dateStr);
+    
+    // Format in local timezone
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year}, ${hours}:${minutes}`;
 };
 
 function getApiBase(): string {
@@ -110,6 +130,21 @@ type SampleImages = {
     }>;
 };
 
+type TimelineEvent = {
+    id: string;
+    event_type: string;
+    description: string;
+    metadata?: Record<string, unknown> | null;
+    created_by?: string | null;
+    created_by_name?: string | null;
+    created_by_avatar?: string | null;
+    created_at: string;
+};
+
+type EventsResponse = {
+    events: TimelineEvent[];
+};
+
 export default function SampleDetailPage() {
     const { sampleId } = useParams();
     const navigate = useNavigate();
@@ -120,18 +155,35 @@ export default function SampleDetailPage() {
     const [images, setImages] = useState<SampleImages | null>(null);
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
+    const [updatingState, setUpdatingState] = useState(false);
+    const [events, setEvents] = useState<TimelineEvent[]>([]);
+    // Notes editing state
+    const [editingNotes, setEditingNotes] = useState(false);
+    const [notesValue, setNotesValue] = useState("");
+    const [savingNotes, setSavingNotes] = useState(false);
+    // Drag and drop state
+    const [isDragging, setIsDragging] = useState(false);
+    // Upload progress state
+    const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+    // Deleting image state
+    const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+    
+    // Ref for gallery scroll
+    const galleryRef = useRef<HTMLDivElement>(null);
 
     const refresh = useCallback(async () => {
         if (!sampleId) return;
         setLoading(true);
         setError(null);
         try {
-            const [d, imgs] = await Promise.all([
+            const [d, imgs, evts] = await Promise.all([
                 getJSON<SampleDetail>(`/v1/laboratory/samples/${sampleId}`),
                 getJSON<SampleImages>(`/v1/laboratory/samples/${sampleId}/images`),
+                getJSON<EventsResponse>(`/v1/laboratory/samples/${sampleId}/events`),
             ]);
             setDetail(d);
             setImages(imgs);
+            setEvents(evts.events);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -141,6 +193,109 @@ export default function SampleDetailPage() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
+    // Update sample state
+    const updateState = useCallback(async (newState: string) => {
+        if (!sampleId || updatingState) return;
+        setUpdatingState(true);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/state`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
+                },
+                body: JSON.stringify({ state: newState }),
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            const stateConfig = SAMPLE_STATE_CONFIG[newState] || SAMPLE_STATE_CONFIG.RECEIVED;
+            message.success(`Estado cambiado a "${stateConfig.label}"`);
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al actualizar el estado";
+            message.error(errMsg);
+        } finally {
+            setUpdatingState(false);
+        }
+    }, [sampleId, updatingState, refresh]);
+
+    // Update sample notes
+    const updateNotes = useCallback(async () => {
+        if (!sampleId || savingNotes) return;
+        setSavingNotes(true);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/notes`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
+                },
+                body: JSON.stringify({ notes: notesValue || null }),
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            message.success("Descripción actualizada");
+            setEditingNotes(false);
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al actualizar la descripción";
+            message.error(errMsg);
+        } finally {
+            setSavingNotes(false);
+        }
+    }, [sampleId, savingNotes, notesValue, refresh]);
+
+    // Delete sample image
+    const deleteImage = useCallback(async (imageId: string) => {
+        if (!sampleId || deletingImageId) return;
+        setDeletingImageId(imageId);
+        try {
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/images/${imageId}`, {
+                method: "DELETE",
+                headers: {
+                    ...(token ? { Authorization: token } : {}),
+                },
+                credentials: "include",
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let parsed: unknown = undefined;
+                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                throw new Error(msg);
+            }
+            message.success("Imagen eliminada");
+            await refresh();
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : "Error al eliminar la imagen";
+            message.error(errMsg);
+        } finally {
+            setDeletingImageId(null);
+        }
+    }, [sampleId, deletingImageId, refresh]);
+
+    // Handle navigation to gallery
+    const handleGoToGallery = useCallback(() => {
+        if (galleryRef.current) {
+            galleryRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, []);
+
     const uploadProps: UploadProps = {
         name: "file",
         multiple: true,
@@ -149,8 +304,14 @@ export default function SampleDetailPage() {
             if (!sampleId) return;
             const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
             const formData = new FormData();
-            formData.append("file", options.file as Blob);
+            const file = options.file as File;
+            const fileName = file.name || "archivo";
+            formData.append("file", file);
+            
+            // Add to uploading files list
+            setUploadingFiles(prev => [...prev, fileName]);
             setUploading(true);
+            
             try {
                 const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/images`, {
                     method: "POST",
@@ -165,51 +326,215 @@ export default function SampleDetailPage() {
                     const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
                     throw new Error(msg);
                 }
-                message.success("Imagen subida correctamente");
+                message.success(`"${fileName}" subida correctamente`);
                 options.onSuccess?.({}, undefined as unknown as XMLHttpRequest);
                 await refresh();
             } catch (e) {
                 const errMsg = e instanceof Error ? e.message : "Error al subir la imagen";
-                message.error(errMsg);
+                message.error(`Error al subir "${fileName}": ${errMsg}`);
                 options.onError?.(new ProgressEvent("error"));
             } finally {
-                setUploading(false);
+                // Remove from uploading files list
+                setUploadingFiles(prev => prev.filter(f => f !== fileName));
+                // Only set uploading to false when all files are done
+                setUploadingFiles(prev => {
+                    if (prev.length === 0) setUploading(false);
+                    return prev;
+                });
             }
         },
+        onDrop: () => setIsDragging(false),
     } as const;
 
-    const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "REGISTERED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—" };
+    const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
     const typeConfig = getSampleTypeConfig(detail?.type || "");
 
-    // Build timeline from dates
-    const timelineItems = [];
-    if (detail?.collected_at) {
-        timelineItems.push({
-            dot: <ExperimentOutlined />,
-            color: "blue",
+    // Dropdown menu for state change with styled tags (no icons)
+    const stateMenuItems: MenuProps["items"] = SAMPLE_STATES.map((state) => {
+        const config = SAMPLE_STATE_CONFIG[state];
+        return {
+            key: state,
+            label: (
+                <div style={{
+                    backgroundColor: config.bg,
+                    color: config.color,
+                    borderRadius: 12,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textAlign: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
+                }}>
+                    {config.label}
+                </div>
+            ),
+            disabled: detail?.state === state,
+            style: {
+                padding: "4px 6px",
+                margin: "2px 0",
+            }
+        };
+    });
+
+    const handleStateMenuClick: MenuProps["onClick"] = ({ key }) => {
+        updateState(key);
+    };
+
+    // Event type configuration for timeline display
+    const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
+        SAMPLE_CREATED: { icon: <ExperimentOutlined />, color: "blue" },
+        SAMPLE_RECEIVED: { icon: <InboxOutlined />, color: "green" },
+        SAMPLE_STATE_CHANGED: { icon: <SettingOutlined />, color: "orange" },
+        SAMPLE_NOTES_UPDATED: { icon: <EditOutlined />, color: "cyan" },
+        SAMPLE_DAMAGED: { icon: <ExperimentOutlined />, color: "red" },
+        SAMPLE_CANCELLED: { icon: <ExperimentOutlined />, color: "gray" },
+        IMAGE_UPLOADED: { icon: <FileImageOutlined />, color: "purple" },
+        IMAGE_DELETED: { icon: <FileImageOutlined />, color: "red" },
+        STATUS_CHANGED: { icon: <SettingOutlined />, color: "orange" },
+    };
+
+    // Build action JSX from event (sample context - no need to mention sample)
+    // Returns styled elements with state tags matching the UI
+    const buildActionText = (event: TimelineEvent): React.ReactNode => {
+        const meta = event.metadata || {};
+        
+        switch (event.event_type) {
+            case "SAMPLE_STATE_CHANGED":
+            case "SAMPLE_DAMAGED":
+            case "SAMPLE_CANCELLED": {
+                const oldState = meta.old_state as string;
+                const newState = meta.new_state as string;
+                const oldConfig = SAMPLE_STATE_CONFIG[oldState] || { color: "#6b7280", bg: "#f3f4f6", label: oldState, icon: null };
+                const newConfig = SAMPLE_STATE_CONFIG[newState] || { color: "#6b7280", bg: "#f3f4f6", label: newState, icon: null };
+                const trigger = meta.trigger === "first_image_upload" ? " (automático)" : "";
+                
+                return (
+                    <span>
+                        cambió el estado de{" "}
+                        <span style={{
+                            backgroundColor: oldConfig.bg,
+                            color: oldConfig.color,
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            padding: "2px 8px",
+                            margin: "0 2px",
+                            display: "inline-block",
+                        }}>
+                            {oldConfig.label}
+                        </span>
+                        {" "}a{" "}
+                        <span style={{
+                            backgroundColor: newConfig.bg,
+                            color: newConfig.color,
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            padding: "2px 8px",
+                            margin: "0 2px",
+                            display: "inline-block",
+                        }}>
+                            {newConfig.label}
+                        </span>
+                        {trigger}
+                    </span>
+                );
+            }
+            case "IMAGE_UPLOADED": {
+                const filename = meta.filename as string || "imagen";
+                return `subió la imagen ${filename}`;
+            }
+            case "IMAGE_DELETED": {
+                const filename = meta.filename as string || "imagen";
+                return `eliminó la imagen ${filename}`;
+            }
+            case "SAMPLE_NOTES_UPDATED": {
+                const newNotes = meta.new_notes as string || "";
+                if (newNotes) {
+                    return "actualizó la descripción";
+                }
+                return "eliminó la descripción de la muestra";
+            }
+            case "SAMPLE_CREATED":
+                return "registró la muestra";
+            case "SAMPLE_RECEIVED":
+                return "recibió la muestra en laboratorio";
+            default:
+                return event.description || event.event_type;
+        }
+    };
+
+    // Build timeline from events API with avatar/monogram format
+    const timelineItems = events.map((event) => {
+        const config = EVENT_CONFIG[event.event_type] || { 
+            icon: <CheckCircleOutlined />, 
+            color: "gray"
+        };
+        const actionText = buildActionText(event);
+        const userName = event.created_by_name || "Sistema";
+        const userAvatar = event.created_by_avatar;
+        
+        return {
+            dot: (
+                <Avatar 
+                    size={28}
+                    src={userAvatar}
+                    style={{ 
+                        backgroundColor: userAvatar ? undefined : getAvatarColor(userName),
+                        fontSize: 12,
+                    }}
+                >
+                    {!userAvatar && getInitials(userName)}
+                </Avatar>
+            ),
+            color: config.color,
             children: (
-                <div>
-                    <div style={{ fontWeight: 600 }}>Muestra recolectada</div>
-                    <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                        {new Date(detail.collected_at).toLocaleString('es-MX')}
+                <div style={{ marginLeft: 4 }}>
+                    <div style={{ lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600 }}>{userName}</span>
+                        <span style={{ color: "#666", marginLeft: 6 }}>{actionText}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                        {formatLocalDateTime(event.created_at)}
                     </div>
                 </div>
             ),
-        });
-    }
-    if (detail?.received_at) {
-        timelineItems.push({
-            dot: <InboxOutlined />,
-            color: "green",
-            children: (
-                <div>
-                    <div style={{ fontWeight: 600 }}>Muestra recibida en laboratorio</div>
-                    <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                        {new Date(detail.received_at).toLocaleString('es-MX')}
+        };
+    });
+    
+    // Add initial dates if no events yet (fallback)
+    if (timelineItems.length === 0) {
+        if (detail?.collected_at) {
+            timelineItems.push({
+                dot: <ExperimentOutlined />,
+                color: "blue",
+                children: (
+                    <div>
+                        <div style={{ fontWeight: 600 }}>Muestra recolectada</div>
+                        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                            {new Date(detail.collected_at).toLocaleString('es-MX')}
+                        </div>
                     </div>
-                </div>
-            ),
-        });
+                ),
+            });
+        }
+        if (detail?.received_at) {
+            timelineItems.push({
+                dot: <InboxOutlined />,
+                color: "green",
+                children: (
+                    <div>
+                        <div style={{ fontWeight: 600 }}>Muestra recibida en laboratorio</div>
+                        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                            {new Date(detail.received_at).toLocaleString('es-MX')}
+                        </div>
+                    </div>
+                ),
+            });
+        }
     }
 
     // Sidebar content component
@@ -280,7 +605,7 @@ export default function SampleDetailPage() {
                     Acciones Rápidas
                 </div>
                 <div style={{ display: "grid", gap: 8 }}>
-                    <Upload {...uploadProps}>
+                    <Upload {...uploadProps} style={{ display: "block", width: "100%" }}>
                         <AntButton 
                             block 
                             icon={<PlusOutlined />}
@@ -382,56 +707,87 @@ export default function SampleDetailPage() {
                         {/* Left Column - Main Content */}
                         <div style={{ display: "grid", gap: tokens.gap }}>
                             {/* Sample Header Card */}
-                            <Card
-                                title={<span style={cardTitleStyle}>Detalle de Muestra</span>}
-                                loading={loading}
-                                style={cardStyle}
-                            >
-                                {detail && (
-                                    <>
-                                        {/* Sample Code & Status */}
-                                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                                            <Avatar
-                                                size={44}
-                                                icon={typeConfig.icon}
-                                                style={{ 
-                                                    backgroundColor: typeConfig.color,
-                                                    fontSize: 20,
-                                                    flexShrink: 0
-                                                }}
-                                            />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                    <h2 style={{ 
-                                                        margin: 0, 
+                    <Card
+                                title={
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                        <span style={cardTitleStyle}>Detalle de Muestra</span>
+                                        {detail && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                <Avatar
+                                                    size={32}
+                                                    icon={typeConfig.icon}
+                                                    style={{ 
+                                                        backgroundColor: typeConfig.color,
+                                                        fontSize: 14,
+                                                        flexShrink: 0
+                                                    }}
+                                                />
+                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <span style={{ 
                                                         fontFamily: tokens.titleFont, 
-                                                        fontSize: 22, 
+                                                        fontSize: 16, 
                                                         fontWeight: 700,
                                                         color: tokens.textPrimary
                                                     }}>
                                                         {detail.sample_code}
-                                                    </h2>
+                                                    </span>
+                                                    <span style={{ fontSize: 13, color: tokens.textSecondary }}>
+                                                        {detail.type}
+                                                    </span>
+                                                </div>
+                                                <Dropdown 
+                                                    menu={{ 
+                                                        items: stateMenuItems, 
+                                                        onClick: handleStateMenuClick,
+                                                        style: {
+                                                            padding: "8px",
+                                                            borderRadius: "12px",
+                                                        }
+                                                    }} 
+                                                    trigger={["click"]}
+                                                    disabled={updatingState}
+                                                >
                                                     <div style={{ 
-                                                        padding: "4px 10px",
-                                                        borderRadius: 12,
-                                                        background: stateConfig.bg,
-                                                        color: stateConfig.color,
-                                                        fontWeight: 600,
-                                                        fontSize: 11,
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 4
+                                                        display: "flex", 
+                                                        alignItems: "center", 
+                                                        gap: 6,
+                                                        cursor: "pointer",
                                                     }}>
-                                                        <CheckCircleOutlined />
-                                                        {stateConfig.label}
+                                                        <div style={{ 
+                                                            padding: "4px 10px",
+                                                            borderRadius: 12,
+                                                            background: stateConfig.bg,
+                                                            color: stateConfig.color,
+                                                            fontWeight: 600,
+                                                            fontSize: 11,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 4,
+                                                            transition: "all 0.15s ease",
+                                                            border: `1px solid transparent`,
+                                                        }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.borderColor = stateConfig.color}
+                                                            onMouseLeave={(e) => e.currentTarget.style.borderColor = "transparent"}
+                                                        >
+                                                            {updatingState ? (
+                                                                <SettingOutlined spin />
+                                                            ) : (
+                                                                stateConfig.icon
+                                                            )}
+                                                            {stateConfig.label}
+                                                        </div>
+                                                        <DownOutlined style={{ fontSize: 9, color: stateConfig.color }} />
                                                     </div>
-                                                </div>
-                                                <div style={{ fontSize: 14, color: tokens.textSecondary, marginTop: 4 }}>
-                                                    {detail.type}
-                                                </div>
+                                                </Dropdown>
                                             </div>
-                                        </div>
-
+                                        )}
+                                    </div>
+                                }
+                        loading={loading}
+                                style={cardStyle}
+                    >
+                        {detail && (
+                                    <>
                                         {/* Patient Info */}
                                         <Tooltip title="Ver perfil del paciente">
                                             <div 
@@ -451,10 +807,10 @@ export default function SampleDetailPage() {
                                                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                                             >
                                                 <Avatar 
-                                                    size={36}
+                                                    size={40}
                                                     style={{ 
                                                         backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
-                                                        fontSize: 14,
+                                                        fontSize: 15,
                                                         fontWeight: 600,
                                                         flexShrink: 0
                                                     }}
@@ -466,7 +822,7 @@ export default function SampleDetailPage() {
                                                         {detail.patient.full_name || detail.patient.patient_code}
                                                     </div>
                                                     <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                        Paciente · {detail.patient.patient_code}
+                                                        {detail.patient.patient_code}
                                                     </div>
                                                 </div>
                                             </div>
@@ -480,7 +836,7 @@ export default function SampleDetailPage() {
                                             gap: "12px 20px",
                                             color: tokens.textSecondary,
                                             fontSize: 13,
-                                            marginBottom: detail.notes ? 16 : 0
+                                            marginBottom: 16
                                         }}>
                                             <Tooltip title="Ver orden">
                                                 <div 
@@ -504,44 +860,94 @@ export default function SampleDetailPage() {
                                                 </div>
                                             )}
 
-                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <FileImageOutlined />
-                                                <span>{images?.images.length || 0} imagen{(images?.images.length || 0) !== 1 ? "es" : ""}</span>
-                                            </div>
+                                            <Tooltip title="Ver galería">
+                                                <div 
+                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                                                    onClick={handleGoToGallery}
+                                                >
+                                                    <FileImageOutlined />
+                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
+                                                        {images?.images.length || 0} imagen{(images?.images.length || 0) !== 1 ? "es" : ""}
+                                                    </span>
+                                                </div>
+                                            </Tooltip>
                                         </div>
 
-                                        {/* Description - at the bottom */}
-                                        {detail.notes && (
+                                        {/* Description - editable */}
+                                        <div style={{ 
+                                            padding: 16, 
+                                            background: "#f9fafb", 
+                                            borderRadius: 8,
+                                            border: "1px solid #e5e7eb"
+                                        }}>
                                             <div style={{ 
-                                                padding: 16, 
-                                                background: "#f9fafb", 
-                                                borderRadius: 8,
-                                                border: "1px solid #e5e7eb"
+                                                fontSize: 12, 
+                                                fontWeight: 600, 
+                                                color: tokens.textSecondary, 
+                                                marginBottom: 8,
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.5px",
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center"
                                             }}>
-                                                <div style={{ 
-                                                    fontSize: 12, 
-                                                    fontWeight: 600, 
-                                                    color: tokens.textSecondary, 
-                                                    marginBottom: 8,
-                                                    textTransform: "uppercase",
-                                                    letterSpacing: "0.5px"
-                                                }}>
-                                                    Descripción
+                                                <span>Descripción</span>
+                                                {!editingNotes && (
+                                                    <EditOutlined 
+                                                        style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
+                                                        onClick={() => {
+                                                            setNotesValue(detail.notes || "");
+                                                            setEditingNotes(true);
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                            {editingNotes ? (
+                                                <div style={{ display: "grid", gap: 8 }}>
+                                                    <Input.TextArea
+                                                        value={notesValue}
+                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        placeholder="Escribe una descripción para esta muestra..."
+                                                        rows={4}
+                                                        maxLength={500}
+                                                    />
+                                                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                                                        <AntButton 
+                                                            size="small"
+                                                            onClick={() => {
+                                                                setEditingNotes(false);
+                                                                setNotesValue(detail.notes || "");
+                                                            }}
+                                                            disabled={savingNotes}
+                                                        >
+                                                            Cancelar
+                                                        </AntButton>
+                                                        <AntButton 
+                                                            size="small" 
+                                                            type="primary"
+                                                            onClick={updateNotes}
+                                                            loading={savingNotes}
+                                                        >
+                                                            Guardar
+                                                        </AntButton>
+                                                    </div>
                                                 </div>
+                                            ) : (
                                                 <div style={{ 
-                                                    color: tokens.textPrimary, 
+                                                    color: detail.notes ? tokens.textPrimary : tokens.textSecondary, 
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
-                                                    whiteSpace: "pre-wrap"
+                                                    whiteSpace: "pre-wrap",
+                                                    fontStyle: detail.notes ? "normal" : "italic"
                                                 }}>
-                                                    {detail.notes}
+                                                    {detail.notes || "Sin descripción"}
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </>
-                                )}
-                                <ErrorText>{error}</ErrorText>
-                            </Card>
+                        )}
+                        <ErrorText>{error}</ErrorText>
+                    </Card>
 
                             {/* Timeline Card */}
                             {timelineItems.length > 0 && (
@@ -555,10 +961,11 @@ export default function SampleDetailPage() {
                             )}
 
                             {/* Images Gallery Card */}
-                            <Card
-                                title={<span style={cardTitleStyle}>Galería de Imágenes</span>}
-                                style={cardStyle}
-                            >
+                            <div ref={galleryRef}>
+                                <Card
+                                    title={<span style={cardTitleStyle}>Galería de Imágenes</span>}
+                                    style={cardStyle}
+                                >
                                 <Typography.Paragraph type="secondary" style={{ margin: "0 0 16px 0" }}>
                                     Arrastra o haz clic para subir imágenes de la muestra.
                                 </Typography.Paragraph>
@@ -571,27 +978,56 @@ export default function SampleDetailPage() {
                                     }}
                                 >
                                     {/* Drag and Drop Upload Area */}
-                                    <Upload.Dragger
-                                        {...uploadProps}
-                                        style={{
-                                            borderRadius: tokens.radius,
-                                            border: "1px dashed #d9d9d9",
-                                            background: "#fafafa",
-                                            padding: 12,
-                                            height: 160,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            flexDirection: "column",
-                                            color: "#8c8c8c",
+                                    <div
+                                        onDragEnter={() => setIsDragging(true)}
+                                        onDragLeave={(e) => {
+                                            // Only set to false if leaving the container entirely
+                                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                setIsDragging(false);
+                                            }
                                         }}
+                                        onDrop={() => setIsDragging(false)}
                                     >
-                                        <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
-                                        <Typography.Text strong>Agregar</Typography.Text>
-                                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 12 }}>
-                                            Clic o arrastra
-                                        </Typography.Paragraph>
-                                    </Upload.Dragger>
+                                        <Upload.Dragger
+                                            {...uploadProps}
+                                            style={{
+                                                borderRadius: tokens.radius,
+                                                border: isDragging ? "2px dashed #0f8b8d" : "1px dashed #d9d9d9",
+                                                background: isDragging ? "#e6f7f7" : "#fafafa",
+                                                padding: 12,
+                                                height: 160,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexDirection: "column",
+                                                color: isDragging ? "#0f8b8d" : "#8c8c8c",
+                                                transition: "all 0.2s ease",
+                                                transform: isDragging ? "scale(1.02)" : "scale(1)",
+                                            }}
+                                        >
+                                            {uploading ? (
+                                                <>
+                                                    <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                                                    <Typography.Text strong style={{ marginTop: 8 }}>
+                                                        Subiendo {uploadingFiles.length > 0 ? `(${uploadingFiles.length})` : "..."}
+                                                    </Typography.Text>
+                                                    {uploadingFiles.length > 0 && (
+                                                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 11 }}>
+                                                            {uploadingFiles.slice(0, 2).join(", ")}{uploadingFiles.length > 2 ? ` y ${uploadingFiles.length - 2} más` : ""}
+                                                        </Typography.Paragraph>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                                                    <Typography.Text strong>{isDragging ? "Suelta aquí" : "Agregar"}</Typography.Text>
+                                                    <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 12 }}>
+                                                        {isDragging ? "Suelta para subir" : "Clic o arrastra"}
+                                                    </Typography.Paragraph>
+                                                </>
+                                            )}
+                                        </Upload.Dragger>
+                                    </div>
 
                                     {/* Images Grid */}
                                     {images && images.images.length > 0 && (
@@ -604,7 +1040,7 @@ export default function SampleDetailPage() {
                                             }}
                                         >
                                             {images.images.map((img, idx) => (
-                                                <Card
+                                    <Card
                                                     key={img.id ?? idx}
                                                     size="small"
                                                     hoverable
@@ -617,16 +1053,16 @@ export default function SampleDetailPage() {
                                                         display: "flex",
                                                         flexDirection: "column",
                                                         height: "100%",
+                                                        position: "relative",
                                                     }}
                                                     bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
                                                 >
-                                                    <Image
-                                                        src={img.urls.thumbnail || img.urls.processed}
+                                            <Image
+                                                src={img.urls.thumbnail || img.urls.processed}
                                                         alt={img.label || `Imagen ${idx + 1}`}
-                                                        style={{ width: "100%", height: 110, objectFit: "cover" }}
+                                                        style={{ width: "100%", height: 110, objectFit: "cover", cursor: "pointer" }}
                                                         fallback={img.urls.processed || img.urls.thumbnail}
-                                                        preview={{ src: img.urls.processed || img.urls.thumbnail }}
-                                                        onClick={() => setPreview({ visible: true, index: idx })}
+                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
                                                     />
                                                     <div style={{ 
                                                         display: "flex", 
@@ -636,16 +1072,41 @@ export default function SampleDetailPage() {
                                                         gap: 6,
                                                         borderTop: "1px solid #f0f0f0"
                                                     }}>
-                                                        <span style={{ color: tokens.textSecondary, fontSize: 11 }}>
-                                                            {new Date(img.created_at).toLocaleDateString("es-MX")}
-                                                        </span>
-                                                        {img.is_primary && (
-                                                            <Tag color="#10b981" style={{ margin: 0, fontSize: 10, borderRadius: 8 }}>
-                                                                Principal
-                                                            </Tag>
-                                                        )}
-                                                    </div>
-                                                </Card>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                            <span style={{ color: tokens.textSecondary, fontSize: 11 }}>
+                                                                {new Date(img.created_at).toLocaleDateString("es-MX")}
+                                                            </span>
+                                                            {img.is_primary && (
+                                                                <Tag color="#10b981" style={{ margin: 0, fontSize: 10, borderRadius: 8 }}>
+                                                                    Principal
+                                                                </Tag>
+                                                            )}
+                                                        </div>
+                                                        <Popconfirm
+                                                            title="Eliminar imagen"
+                                                            description="¿Estás seguro de eliminar esta imagen?"
+                                                            okText="Sí, eliminar"
+                                                            cancelText="Cancelar"
+                                                            okButtonProps={{ danger: true }}
+                                                            onConfirm={() => deleteImage(img.id)}
+                                                        >
+                                                            <Tooltip title="Eliminar">
+                                                                <AntButton
+                                                                    size="small"
+                                                                    type="text"
+                                                                    danger
+                                                                    icon={deletingImageId === img.id ? <LoadingOutlined spin /> : <DeleteOutlined />}
+                                                                    disabled={deletingImageId !== null}
+                                                                    style={{ 
+                                                                        padding: "0 4px",
+                                                                        height: 20,
+                                                                        minWidth: 20
+                                                                    }}
+                                                                />
+                                                            </Tooltip>
+                                                        </Popconfirm>
+                                            </div>
+                                        </Card>
                                             ))}
                                         </Image.PreviewGroup>
                                     )}
@@ -662,8 +1123,9 @@ export default function SampleDetailPage() {
                                     }}>
                                         No hay imágenes adicionales. Usa el área de arriba para subir.
                                     </div>
-                                )}
-                            </Card>
+                        )}
+                    </Card>
+                            </div>
 
                             {/* Mobile Sidebar */}
                             <div className="sample-detail-sidebar-mobile">

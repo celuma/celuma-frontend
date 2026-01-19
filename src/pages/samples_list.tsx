@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button, Card, Space, Avatar } from "antd";
+import { Layout, Table, Input, Empty, Button, Card, Space, Avatar } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -27,6 +27,15 @@ const getAvatarColor = (name: string): string => {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
+};
+
+// Sample state configuration - matches backend SampleState enum
+const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
+    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista" },
+    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente" },
+    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada" },
 };
 
 function getApiBase(): string {
@@ -161,7 +170,22 @@ export default function SamplesList() {
                             columns={[
                                 { title: "Código", dataIndex: "sample_code", key: "sample_code", width: 140 },
                                 { title: "Tipo", dataIndex: "type", key: "type", width: 140 },
-                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
+                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => {
+                                    const config = SAMPLE_STATE_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
+                                    return (
+                                        <div style={{
+                                            backgroundColor: config.bg,
+                                            color: config.color,
+                                            borderRadius: 12,
+                                            fontSize: 11,
+                                            fontWeight: 500,
+                                            padding: "4px 10px",
+                                            display: "inline-block",
+                                        }}>
+                                            {config.label}
+                                        </div>
+                                    );
+                                } },
                                 { title: "Orden", key: "order", render: (_, r: Row) => r.order.order_code, width: 140 },
                                 { 
                                     title: "Paciente", 
