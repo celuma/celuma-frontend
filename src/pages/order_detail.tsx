@@ -20,6 +20,33 @@ import { saveReport, getLatestReportByOrderId } from "../services/report_service
 import type { ReportEnvelope, ReportFlags } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 import { useUserProfile } from "../hooks/use_user_profile";
+import AssigneesSection from "../components/collaboration/AssigneesSection";
+import ReviewersSection from "../components/collaboration/ReviewersSection";
+import LabelsSection from "../components/collaboration/LabelsSection";
+import type { Label, LabUser, UserRef } from "../services/collaboration_service";
+import { 
+    getLabels, 
+    getLabUsers, 
+    updateOrderAssignees, 
+    updateOrderReviewers, 
+    updateOrderLabels 
+} from "../services/collaboration_service";
+
+// Predefined label colors (same as in LabelsSection)
+const LABEL_COLORS = [
+    { color: "#3b82f6", bg: "#eff6ff" },
+    { color: "#f59e0b", bg: "#fffbeb" },
+    { color: "#8b5cf6", bg: "#f5f3ff" },
+    { color: "#ec4899", bg: "#fdf2f8" },
+    { color: "#10b981", bg: "#ecfdf5" },
+    { color: "#ef4444", bg: "#fef2f2" },
+    { color: "#06b6d4", bg: "#ecfeff" },
+    { color: "#84cc16", bg: "#f7fee7" },
+    { color: "#6366f1", bg: "#eef2ff" },
+    { color: "#a855f7", bg: "#faf5ff" },
+    { color: "#f97316", bg: "#fff7ed" },
+    { color: "#14b8a6", bg: "#f0fdfa" },
+];
 
 // Generate initials from full name
 const getInitials = (fullName?: string): string => {
@@ -97,20 +124,15 @@ const renderTextWithMentions = (
             <Tooltip key={key++} title={tooltipContent} placement="top">
                 <span 
                     style={{
-                        backgroundColor: "#e6f7f7",
                         color: "#0f8b8d",
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        fontWeight: 500,
+                        fontWeight: 600,
                         cursor: "pointer",
-                        transition: "all 0.2s",
+                        transition: "color 0.2s",
                     }}
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#b3e5e6";
                         e.currentTarget.style.color = "#0a6566";
                     }}
                     onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "#e6f7f7";
                         e.currentTarget.style.color = "#0f8b8d";
                     }}
                 >
@@ -128,6 +150,49 @@ const renderTextWithMentions = (
     }
     
     return parts.length > 0 ? parts : text;
+};
+
+// Helper function to render user mention with tooltip (for timeline events)
+const renderUserMention = (user: {name: string; username?: string; avatar?: string | null}, key?: string | number): React.ReactNode => {
+    const username = user.username || user.name.toLowerCase().replace(/\s+/g, '');
+    
+    const tooltipContent = (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Avatar 
+                size={32}
+                src={user.avatar}
+                style={{ 
+                    backgroundColor: user.avatar ? undefined : getAvatarColor(user.name),
+                    fontSize: 12,
+                    flexShrink: 0
+                }}
+            >
+                {!user.avatar && getInitials(user.name)}
+            </Avatar>
+            <span style={{ fontWeight: 500 }}>{user.name}</span>
+        </div>
+    );
+    
+    return (
+        <Tooltip key={key} title={tooltipContent} placement="top">
+            <span 
+                style={{
+                    color: "#0f8b8d",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "color 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "#0a6566";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "#0f8b8d";
+                }}
+            >
+                @{username}
+            </span>
+        </Tooltip>
+    );
 };
 
 // Generate a consistent color based on name
@@ -196,6 +261,9 @@ type OrderFullResponse = {
         notes?: string | null;
         billed_lock?: boolean;
         created_at?: string | null;
+        assignees?: UserRef[] | null;
+        reviewers?: UserRef[] | null;
+        labels?: Label[] | null;
     };
     patient: {
         id: string;
@@ -327,6 +395,11 @@ export default function OrderDetail() {
     const [mentionSearch, setMentionSearch] = useState("");
     const [loadingMentions, setLoadingMentions] = useState(false);
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+
+    // Collaboration states
+    const [allLabels, setAllLabels] = useState<Label[]>([]);
+    const [allUsers, setAllUsers] = useState<LabUser[]>([]);
+
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const conversationScrollRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -462,6 +535,60 @@ export default function OrderDetail() {
             console.error("Error loading timeline:", err);
         }
     }, [orderId]);
+
+    // Function to load collaboration data (labels and users)
+    const loadCollaborationData = useCallback(async () => {
+        try {
+            const [labelsData, usersData] = await Promise.all([
+                getLabels(),
+                getLabUsers(),
+            ]);
+            setAllLabels(labelsData);
+            setAllUsers(usersData);
+        } catch (err) {
+            console.error("Error loading collaboration data:", err);
+        }
+    }, []);
+
+    // Handlers for updating collaboration
+    const handleUpdateAssignees = useCallback(async (userIds: string[]) => {
+        if (!orderId) return;
+        try {
+            await updateOrderAssignees(orderId, userIds);
+            await refresh();
+            await refreshTimeline();
+            message.success("Assignees actualizados");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
+            throw err;
+        }
+    }, [orderId, refresh, refreshTimeline]);
+
+    const handleUpdateReviewers = useCallback(async (userIds: string[]) => {
+        if (!orderId) return;
+        try {
+            await updateOrderReviewers(orderId, userIds);
+            await refresh();
+            await refreshTimeline();
+            message.success("Reviewers actualizados");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar reviewers");
+            throw err;
+        }
+    }, [orderId, refresh, refreshTimeline]);
+
+    const handleUpdateLabels = useCallback(async (labelIds: string[]) => {
+        if (!orderId) return;
+        try {
+            await updateOrderLabels(orderId, labelIds);
+            await refresh();
+            await refreshTimeline();
+            message.success("Labels actualizados");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
+            throw err;
+        }
+    }, [orderId, refresh, refreshTimeline]);
 
     // Load conversation with smart scroll behavior
     const loadConversation = useCallback(async (options?: { forceScrollToBottom?: boolean; silent?: boolean }) => {
@@ -670,7 +797,8 @@ export default function OrderDetail() {
 
     useEffect(() => {
         refresh();
-    }, [refresh]);
+        loadCollaborationData();
+    }, [refresh, loadCollaborationData]);
     
     // Load conversation when tab changes to conversation (first load scrolls to bottom)
     useEffect(() => {
@@ -1279,22 +1407,11 @@ export default function OrderDetail() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center",
-                    marginBottom: 12
-                }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Asignados
-                    </span>
-                    <Tooltip title="Próximamente">
-                        <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                    </Tooltip>
-                </div>
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Sin asignar
-                </div>
+                <AssigneesSection
+                    assignees={data?.order.assignees || []}
+                    allUsers={allUsers}
+                    onUpdate={handleUpdateAssignees}
+                />
             </Card>
 
             {/* Reviewers */}
@@ -1303,22 +1420,12 @@ export default function OrderDetail() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center",
-                    marginBottom: 12
-                }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Revisores
-                    </span>
-                    <Tooltip title="Próximamente">
-                        <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                    </Tooltip>
-                </div>
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Sin revisores — se requiere al menos 1 revisión
-                </div>
+                <ReviewersSection
+                    reviewers={data?.order.reviewers || []}
+                    allUsers={allUsers}
+                    onUpdate={handleUpdateReviewers}
+                    orderStatus={data?.order.status}
+                />
             </Card>
 
             {/* Labels */}
@@ -1327,22 +1434,12 @@ export default function OrderDetail() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center",
-                    marginBottom: 12
-                }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Etiquetas
-                    </span>
-                    <Tooltip title="Próximamente">
-                        <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                    </Tooltip>
-                </div>
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Ninguna
-                </div>
+                <LabelsSection
+                    labels={data?.order.labels || []}
+                    allLabels={allLabels}
+                    onUpdate={handleUpdateLabels}
+                    onLabelsRefresh={loadCollaborationData}
+                />
             </Card>
 
             {/* Quick Actions */}
@@ -1718,7 +1815,11 @@ export default function OrderDetail() {
 
                         {timeline.length > 0 ? (
                             <Timeline
-                                items={timeline.map((event) => {
+                                items={timeline.map((event, index) => {
+                                    // Check if previous event is from the same user
+                                    const prevEvent = index > 0 ? timeline[index - 1] : null;
+                                    const isSameUserAsPrevious = prevEvent && prevEvent.created_by === event.created_by;
+                                    
                                     // Build action JSX (order context - include sample info when applicable)
                                     // Returns styled elements with state tags matching the UI
                                     const buildActionText = (): React.ReactNode => {
@@ -1763,7 +1864,7 @@ export default function OrderDetail() {
                                                 
                                                 return (
                                                     <span>
-                                                        cambió el estado de{" "}
+                                                        Cambió el estado de{" "}
                                                         <span style={{
                                                             backgroundColor: oldConfig.bg,
                                                             color: oldConfig.color,
@@ -1798,7 +1899,7 @@ export default function OrderDetail() {
                                                 const filename = meta.filename as string || "imagen";
                                                 return (
                                                     <span>
-                                                        subió imagen {filename}
+                                                        Subió imagen {filename}
                                                         {renderSampleLink()}
                                                     </span>
                                                 );
@@ -1807,14 +1908,14 @@ export default function OrderDetail() {
                                                 const filename = meta.filename as string || "imagen";
                                                 return (
                                                     <span>
-                                                        eliminó imagen {filename}
+                                                        Eliminó imagen {filename}
                                                         {renderSampleLink()}
                                                     </span>
                                                 );
                                             }
                                             case "SAMPLE_NOTES_UPDATED": {
                                                 const newNotes = meta.new_notes as string || "";
-                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                const action = newNotes ? "Actualizó" : "Eliminó";
                                                 return (
                                                     <span>
                                                         {action} la descripción
@@ -1844,7 +1945,7 @@ export default function OrderDetail() {
                                             case "SAMPLE_CREATED":
                                                 return sampleId ? (
                                                     <span>
-                                                        registró muestra{" "}
+                                                        Registró muestra{" "}
                                                         <a 
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
@@ -1861,11 +1962,11 @@ export default function OrderDetail() {
                                                             {sampleCode}
                                                         </a>
                                                     </span>
-                                                ) : (sampleCode ? `registró muestra ${sampleCode}` : "registró una muestra");
+                                                ) : (sampleCode ? `Registró muestra ${sampleCode}` : "Registró una muestra");
                                             case "SAMPLE_RECEIVED":
                                                 return sampleId ? (
                                                     <span>
-                                                        recibió muestra{" "}
+                                                        Recibió muestra{" "}
                                                         <a 
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
@@ -1882,12 +1983,12 @@ export default function OrderDetail() {
                                                             {sampleCode}
                                                         </a>
                                                     </span>
-                                                ) : (sampleCode ? `recibió muestra ${sampleCode}` : "recibió una muestra");
+                                                ) : (sampleCode ? `Recibió muestra ${sampleCode}` : "Recibió una muestra");
                                             case "REPORT_CREATED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        creó el{" "}
+                                                        Creó el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -1904,13 +2005,13 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "creó el reporte";
+                                                ) : "Creó el reporte";
                                             }
                                             case "REPORT_VERSION_CREATED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        editó el{" "}
+                                                        Editó el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -1927,13 +2028,13 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "editó el reporte";
+                                                ) : "Editó el reporte";
                                             }
                                             case "REPORT_SUBMITTED": {
                                                 const reportId = meta.report_id as string;
                                                 return reportId ? (
                                                     <span>
-                                                        envió a revisión el{" "}
+                                                        Envió a revisión el{" "}
                                                         <a 
                                                             href={`/reports/${reportId}`}
                                                             onClick={(e) => {
@@ -1950,14 +2051,14 @@ export default function OrderDetail() {
                                                             reporte
                                                         </a>
                                                     </span>
-                                                ) : "envió a revisión el reporte";
+                                                ) : "Envió a revisión el reporte";
                                             }
                                             case "REPORT_RETRACTED": {
                                                 const reportId = meta.report_id as string;
                                                 const reason = meta.reason as string;
                                                 return (
                                                     <span>
-                                                        retrajo el{" "}
+                                                        Retrajo el{" "}
                                                         {reportId ? (
                                                             <a 
                                                                 href={`/reports/${reportId}`}
@@ -1986,21 +2087,363 @@ export default function OrderDetail() {
                                             case "ORDER_STATUS_CHANGED": {
                                                 const oldStatus = meta.old_status as string;
                                                 const newStatus = meta.new_status as string;
-                                                return `cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
+                                                return `Cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
                                             }
                                             case "ORDER_NOTES_UPDATED": {
                                                 const newNotes = meta.new_notes as string || "";
-                                                const action = newNotes ? "actualizó" : "eliminó";
+                                                const action = newNotes ? "Actualizó" : "Eliminó";
                                                 return `${action} la descripción de la orden`;
                                             }
                                             case "COMMENT_ADDED": {
                                                 const preview = meta.comment_preview as string || "";
                                                 return (
                                                     <span>
-                                                        agregó un comentario
+                                                        Agregó un comentario
                                                         {preview && (
                                                             <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
                                                                 : "{preview}"
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
+                                            }
+                                            case "ASSIGNEES_ADDED": {
+                                                const added = (meta.added as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                                                const count = added.length;
+                                                const userName = event.created_by_name || "Sistema";
+                                                
+                                                // Check if user assigned themselves
+                                                const selfAssigned = added.some(u => u.name === userName);
+                                                const othersCount = selfAssigned ? count - 1 : count;
+                                                
+                                                // Build message with @username mentions
+                                                if (selfAssigned && othersCount === 0) {
+                                                    return (
+                                                        <span>
+                                                            Se asignó a sí mismo
+                                                            {renderSampleLink()}
+                                                        </span>
+                                                    );
+                                                } else if (selfAssigned && othersCount > 0) {
+                                                    const others = added.filter(u => u.name !== userName);
+                                                    return (
+                                                        <span>
+                                                            Se asignó a sí mismo y a{" "}
+                                                            {others.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                            {renderSampleLink()}
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <span>
+                                                            Asignó a{" "}
+                                                            {added.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                            {renderSampleLink()}
+                                                        </span>
+                                                    );
+                                                }
+                                            }
+                                            case "ASSIGNEES_REMOVED": {
+                                                const removed = (meta.removed as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                                                const count = removed.length;
+                                                const sampleCodeMeta = meta.sample_code as string | undefined;
+                                                const userName = event.created_by_name || "Sistema";
+                                                
+                                                // Check if user removed themselves
+                                                const selfRemoved = removed.some(u => u.name === userName);
+                                                const othersCount = selfRemoved ? count - 1 : count;
+                                                
+                                                // Build message with @username mentions
+                                                if (selfRemoved && othersCount === 0) {
+                                                    return (
+                                                        <span>
+                                                            Se desasignó a sí mismo
+                                                            {sampleCodeMeta && (
+                                                                <span>
+                                                                    {" "}de la muestra{" "}
+                                                                    {sampleId ? (
+                                                                        <a 
+                                                                            href={`/samples/${sampleId}`}
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                navigate(`/samples/${sampleId}`);
+                                                                            }}
+                                                                            style={{
+                                                                                color: "#0f8b8d",
+                                                                                fontWeight: 600,
+                                                                                textDecoration: "none",
+                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                            }}
+                                                                        >
+                                                                            {sampleCodeMeta}
+                                                                        </a>
+                                                                    ) : sampleCodeMeta}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                } else if (selfRemoved && othersCount > 0) {
+                                                    const others = removed.filter(u => u.name !== userName);
+                                                    return (
+                                                        <span>
+                                                            Se desasignó a sí mismo y a{" "}
+                                                            {others.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                            {sampleCodeMeta && (
+                                                                <span>
+                                                                    {" "}de la muestra{" "}
+                                                                    {sampleId ? (
+                                                                        <a 
+                                                                            href={`/samples/${sampleId}`}
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                navigate(`/samples/${sampleId}`);
+                                                                            }}
+                                                                            style={{
+                                                                                color: "#0f8b8d",
+                                                                                fontWeight: 600,
+                                                                                textDecoration: "none",
+                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                            }}
+                                                                        >
+                                                                            {sampleCodeMeta}
+                                                                        </a>
+                                                                    ) : sampleCodeMeta}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <span>
+                                                            Desasignó a{" "}
+                                                            {removed.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                            {sampleCodeMeta && (
+                                                                <span>
+                                                                    {" "}de la muestra{" "}
+                                                                    {sampleId ? (
+                                                                        <a 
+                                                                            href={`/samples/${sampleId}`}
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                navigate(`/samples/${sampleId}`);
+                                                                            }}
+                                                                            style={{
+                                                                                color: "#0f8b8d",
+                                                                                fontWeight: 600,
+                                                                                textDecoration: "none",
+                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                            }}
+                                                                        >
+                                                                            {sampleCodeMeta}
+                                                                        </a>
+                                                                    ) : sampleCodeMeta}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                }
+                                            }
+                                            case "REVIEWERS_ADDED": {
+                                                const added = (meta.added as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                                                const count = added.length;
+                                                const userName = event.created_by_name || "Sistema";
+                                                
+                                                // Check if user assigned themselves as reviewer
+                                                const selfAssigned = added.some(u => u.name === userName);
+                                                const othersCount = selfAssigned ? count - 1 : count;
+                                                
+                                                if (selfAssigned && othersCount === 0) {
+                                                    return "Se asignó como revisor";
+                                                } else if (selfAssigned && othersCount > 0) {
+                                                    const others = added.filter(u => u.name !== userName);
+                                                    return (
+                                                        <span>
+                                                            Se asignó como revisor junto con{" "}
+                                                            {others.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <span>
+                                                            Asignó como {count === 1 ? "revisor" : "revisores"} a{" "}
+                                                            {added.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                        </span>
+                                                    );
+                                                }
+                                            }
+                                            case "REVIEWERS_REMOVED": {
+                                                const removed = (meta.removed as Array<{name: string; username?: string; avatar?: string | null}>) || [];
+                                                const count = removed.length;
+                                                const userName = event.created_by_name || "Sistema";
+                                                
+                                                // Check if user removed themselves as reviewer
+                                                const selfRemoved = removed.some(u => u.name === userName);
+                                                const othersCount = selfRemoved ? count - 1 : count;
+                                                
+                                                if (selfRemoved && othersCount === 0) {
+                                                    return "Se removió como revisor";
+                                                } else if (selfRemoved && othersCount > 0) {
+                                                    const others = removed.filter(u => u.name !== userName);
+                                                    return (
+                                                        <span>
+                                                            Se removió como revisor junto con{" "}
+                                                            {others.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <span>
+                                                            removió como {count === 1 ? "revisor" : "revisores"} a{" "}
+                                                            {removed.map((u, idx) => (
+                                                                <span key={u.name}>
+                                                                    {idx > 0 && ", "}
+                                                                    {renderUserMention(u)}
+                                                                </span>
+                                                            ))}
+                                                        </span>
+                                                    );
+                                                }
+                                            }
+                                            case "LABELS_ADDED": {
+                                                const added = (meta.added as Array<{name: string; color: string}>) || [];
+                                                const count = added.length;
+                                                const sampleCodeMeta = meta.sample_code as string | undefined;
+                                                return (
+                                                    <span>
+                                                        Agregó {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                                                        {added.map((label, idx) => {
+                                                            const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
+                                                            return (
+                                                                <span key={idx}>
+                                                                    <span
+                                                                        style={{ 
+                                                                            padding: "2px 8px",
+                                                                            borderRadius: 4,
+                                                                            background: colorConfig.bg,
+                                                                            color: colorConfig.color,
+                                                                            fontWeight: 600,
+                                                                            fontSize: 11,
+                                                                            display: "inline-flex",
+                                                                            alignItems: "center",
+                                                                            margin: "0 4px",
+                                                                        }}
+                                                                    >
+                                                                        {label.name}
+                                                                    </span>
+                                                                    {idx < added.length - 1 && ", "}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                        {sampleCodeMeta && (
+                                                            <span>
+                                                                {" "}a la muestra{" "}
+                                                                {sampleId ? (
+                                                                    <a 
+                                                                        href={`/samples/${sampleId}`}
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            navigate(`/samples/${sampleId}`);
+                                                                        }}
+                                                                        style={{
+                                                                            color: "#0f8b8d",
+                                                                            fontWeight: 600,
+                                                                            textDecoration: "none",
+                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                        }}
+                                                                    >
+                                                                        {sampleCodeMeta}
+                                                                    </a>
+                                                                ) : sampleCodeMeta}
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
+                                            }
+                                            case "LABELS_REMOVED": {
+                                                const removed = (meta.removed as Array<{name: string; color: string}>) || [];
+                                                const count = removed.length;
+                                                const sampleCodeMeta = meta.sample_code as string | undefined;
+                                                return (
+                                                    <span>
+                                                        Removió {count} {count === 1 ? "etiqueta" : "etiquetas"}:{" "}
+                                                        {removed.map((label, idx) => {
+                                                            const colorConfig = LABEL_COLORS.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
+                                                            return (
+                                                                <span key={idx}>
+                                                                    <span
+                                                                        style={{ 
+                                                                            padding: "2px 8px",
+                                                                            borderRadius: 4,
+                                                                            background: colorConfig.bg,
+                                                                            color: colorConfig.color,
+                                                                            fontWeight: 600,
+                                                                            fontSize: 11,
+                                                                            display: "inline-flex",
+                                                                            alignItems: "center",
+                                                                            margin: "0 4px",
+                                                                        }}
+                                                                    >
+                                                                        {label.name}
+                                                                    </span>
+                                                                    {idx < removed.length - 1 && ", "}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                        {sampleCodeMeta && (
+                                                            <span>
+                                                                {" "}de la muestra{" "}
+                                                                {sampleId ? (
+                                                                    <a 
+                                                                        href={`/samples/${sampleId}`}
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            navigate(`/samples/${sampleId}`);
+                                                                        }}
+                                                                        style={{
+                                                                            color: "#0f8b8d",
+                                                                            fontWeight: 600,
+                                                                            textDecoration: "none",
+                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                        }}
+                                                                    >
+                                                                        {sampleCodeMeta}
+                                                                    </a>
+                                                                ) : sampleCodeMeta}
                                                             </span>
                                                         )}
                                                     </span>
@@ -2016,7 +2459,15 @@ export default function OrderDetail() {
                                     const actionText = buildActionText();
 
                                     return {
-                                        dot: (
+                                        dot: isSameUserAsPrevious ? (
+                                            <div style={{
+                                                width: 8,
+                                                height: 8,
+                                                borderRadius: "50%",
+                                                backgroundColor: "#d1d5db",
+                                                border: "2px solid white",
+                                            }} />
+                                        ) : (
                                             <Avatar 
                                                 size={28}
                                                 src={userAvatar}
@@ -2030,11 +2481,15 @@ export default function OrderDetail() {
                                         ),
                                         children: (
                                             <div style={{ marginLeft: 4 }}>
-                                                <div style={{ lineHeight: 1.5 }}>
-                                                    <span style={{ fontWeight: 600 }}>{userName}</span>
-                                                    <span style={{ color: "#666", marginLeft: 6 }}>{actionText}</span>
+                                                {!isSameUserAsPrevious && (
+                                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                                        {userName}
+                                                    </div>
+                                                )}
+                                                <div style={{ color: "#666", lineHeight: 1.5, marginBottom: 4 }}>
+                                                    {actionText}
                                                 </div>
-                                                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                                                <div style={{ fontSize: 12, color: "#888" }}>
                                                     {formatLocalDateTime(event.created_at)}
                                                 </div>
                                             </div>
