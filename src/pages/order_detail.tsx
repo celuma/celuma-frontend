@@ -558,8 +558,8 @@ export default function OrderDetail() {
             await refresh();
             await refreshTimeline();
             message.success("Assignees actualizados");
-        } catch (err: any) {
-            message.error(err.message || "Error al actualizar assignees");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
             throw err;
         }
     }, [orderId, refresh, refreshTimeline]);
@@ -571,8 +571,8 @@ export default function OrderDetail() {
             await refresh();
             await refreshTimeline();
             message.success("Reviewers actualizados");
-        } catch (err: any) {
-            message.error(err.message || "Error al actualizar reviewers");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar reviewers");
             throw err;
         }
     }, [orderId, refresh, refreshTimeline]);
@@ -584,8 +584,8 @@ export default function OrderDetail() {
             await refresh();
             await refreshTimeline();
             message.success("Labels actualizados");
-        } catch (err: any) {
-            message.error(err.message || "Error al actualizar labels");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
             throw err;
         }
     }, [orderId, refresh, refreshTimeline]);

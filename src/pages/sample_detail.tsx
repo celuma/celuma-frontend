@@ -286,8 +286,8 @@ export default function SampleDetailPage() {
             await updateSampleAssignees(sampleId, userIds);
             await refresh();
             message.success("Assignees actualizados");
-        } catch (err: any) {
-            message.error(err.message || "Error al actualizar assignees");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
             throw err;
         }
     }, [sampleId, refresh]);
@@ -303,8 +303,8 @@ export default function SampleDetailPage() {
             await updateSampleLabels(sampleId, newOwnLabels);
             await refresh();
             message.success("Labels actualizados");
-        } catch (err: any) {
-            message.error(err.message || "Error al actualizar labels");
+        } catch (err: unknown) {
+            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
             throw err;
         }
     }, [sampleId, refresh, detail]);
