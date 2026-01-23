@@ -263,7 +263,7 @@ type OrderFullResponse = {
         billed_lock?: boolean;
         created_at?: string | null;
         assignees?: UserRef[] | null;
-        reviewers?: UserRef[] | null;
+        reviewers?: ReviewerWithStatus[] | null;
         labels?: Label[] | null;
     };
     patient: {
@@ -1402,19 +1402,6 @@ export default function OrderDetail() {
     // Sidebar content component (for reuse in responsive layout)
     const SidebarContent = () => (
         <div style={{ display: "grid", gap: tokens.gap }}>
-            {/* Assignees */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle, padding: 0 }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <AssigneesSection
-                    assignees={data?.order.assignees || []}
-                    allUsers={allUsers}
-                    onUpdate={handleUpdateAssignees}
-                />
-            </Card>
-
             {/* Reviewers */}
             <Card 
                 size="small" 
@@ -1426,6 +1413,19 @@ export default function OrderDetail() {
                     allUsers={allUsers}
                     onUpdate={handleUpdateReviewers}
                     orderStatus={data?.order.status}
+                />
+            </Card>
+            
+            {/* Assignees */}
+            <Card 
+                size="small" 
+                style={{ ...cardStyle, padding: 0 }}
+                bodyStyle={{ padding: 16 }}
+            >
+                <AssigneesSection
+                    assignees={data?.order.assignees || []}
+                    allUsers={allUsers}
+                    onUpdate={handleUpdateAssignees}
                 />
             </Card>
 
@@ -2053,6 +2053,70 @@ export default function OrderDetail() {
                                                         </a>
                                                     </span>
                                                 ) : "Envió a revisión el reporte";
+                                            }
+                                            case "REPORT_APPROVED": {
+                                                const reportId = meta.report_id as string;
+                                                const reviewerName = meta.reviewer_name as string;
+                                                const comment = meta.comment as string;
+                                                return (
+                                                    <span>
+                                                        {reviewerName ? `${reviewerName} aprobó` : "Aprobó"} el{" "}
+                                                        {reportId ? (
+                                                            <a 
+                                                                href={`/reports/${reportId}`}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    navigate(`/reports/${reportId}`);
+                                                                }}
+                                                                style={{
+                                                                    color: "#0f8b8d",
+                                                                    fontWeight: 600,
+                                                                    textDecoration: "none",
+                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                }}
+                                                            >
+                                                                reporte
+                                                            </a>
+                                                        ) : "reporte"}
+                                                        {comment && (
+                                                            <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                                : "{comment}"
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
+                                            }
+                                            case "REPORT_CHANGES_REQUESTED": {
+                                                const reportId = meta.report_id as string;
+                                                const reviewerName = meta.reviewer_name as string;
+                                                const comment = meta.comment as string;
+                                                return (
+                                                    <span>
+                                                        {reviewerName ? `${reviewerName} solicitó cambios` : "Solicitó cambios"} en el{" "}
+                                                        {reportId ? (
+                                                            <a 
+                                                                href={`/reports/${reportId}`}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    navigate(`/reports/${reportId}`);
+                                                                }}
+                                                                style={{
+                                                                    color: "#0f8b8d",
+                                                                    fontWeight: 600,
+                                                                    textDecoration: "none",
+                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                }}
+                                                            >
+                                                                reporte
+                                                            </a>
+                                                        ) : "reporte"}
+                                                        {comment && (
+                                                            <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                                : "{comment}"
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
                                             }
                                             case "REPORT_RETRACTED": {
                                                 const reportId = meta.report_id as string;

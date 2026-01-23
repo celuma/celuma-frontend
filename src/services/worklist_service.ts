@@ -68,13 +68,12 @@ export interface AssignmentsListResponse {
 export interface ReportReviewResponse {
     id: string;
     tenant_id: string;
-    report_id: string;
+    order_id: string;
     reviewer_user_id: string;
     assigned_by_user_id?: string | null;
     assigned_at: string;
     decision_at?: string | null;
     status: "PENDING" | "APPROVED" | "REJECTED";
-    comment?: string | null;
     reviewer?: UserRef | null;
     assigned_by?: UserRef | null;
 }
@@ -201,7 +200,7 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
 // === Report Review API ===
 
 interface GetReportReviewsParams {
-    report_id?: string;
+    order_id?: string;
     reviewer_user_id?: string;
     status?: string;
 }
@@ -212,7 +211,7 @@ export async function getReportReviews(params?: GetReportReviewsParams): Promise
     if (token) headers["Authorization"] = token;
     
     const queryParams = new URLSearchParams();
-    if (params?.report_id) queryParams.set("report_id", params.report_id);
+    if (params?.order_id) queryParams.set("order_id", params.order_id);
     if (params?.reviewer_user_id) queryParams.set("reviewer_user_id", params.reviewer_user_id);
     if (params?.status) queryParams.set("status", params.status);
     

@@ -280,6 +280,9 @@ const ReportEditor: React.FC = () => {
     // Modal for request changes
     const [isChangesModalVisible, setIsChangesModalVisible] = useState(false);
     const [changesComment, setChangesComment] = useState("");
+    // Modal for approve with optional comment
+    const [isApproveModalVisible, setIsApproveModalVisible] = useState(false);
+    const [approveComment, setApproveComment] = useState("");
     // Read-only mode: reports that are not in DRAFT are read-only
     const isReadOnly = useMemo(() => {
         return envelopeExistente?.status && envelopeExistente.status !== "DRAFT";
@@ -636,8 +639,10 @@ const ReportEditor: React.FC = () => {
     const handleApprove = async () => {
         if (!envelopeExistente?.id) return;
         try {
-            const result = await approveReport(envelopeExistente.id);
+            const result = await approveReport(envelopeExistente.id, approveComment || undefined);
             setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
+            setIsApproveModalVisible(false);
+            setApproveComment("");
             message.success(result.message);
         } catch (error) {
             console.error(error);
@@ -1008,7 +1013,7 @@ const ReportEditor: React.FC = () => {
                                         )}
                                         {envelopeExistente?.status === "IN_REVIEW" && userRole === "pathologist" && (
                                             <>
-                                                <Button type="default" style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }} onClick={handleApprove}>Aprobar</Button>
+                                                <Button type="default" style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }} onClick={() => setIsApproveModalVisible(true)}>Aprobar</Button>
                                                 <Button danger onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
                                             </>
                                         )}
@@ -1272,6 +1277,29 @@ const ReportEditor: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Modal for approving with optional comment */}
+            <Modal
+                title="Aprobar Reporte"
+                open={isApproveModalVisible}
+                onOk={handleApprove}
+                onCancel={() => {
+                    setIsApproveModalVisible(false);
+                    setApproveComment("");
+                }}
+                okText="Aprobar"
+                cancelText="Cancelar"
+            >
+                <Typography.Paragraph>
+                    Puedes agregar un comentario opcional al aprobar el reporte:
+                </Typography.Paragraph>
+                <Input.TextArea
+                    rows={4}
+                    value={approveComment}
+                    onChange={(e) => setApproveComment(e.target.value)}
+                    placeholder="Comentario opcional..."
+                />
+            </Modal>
 
             {/* Modal for requesting changes */}
             <Modal
