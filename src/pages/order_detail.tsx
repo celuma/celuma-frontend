@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip, Input } from "antd";
-import type { TextAreaRef } from "antd/es/input/TextArea";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined,
-    MedicineBoxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, EditOutlined,
-    LoadingOutlined
+    MedicineBoxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, EditOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -32,6 +30,15 @@ import {
     updateOrderReviewers, 
     updateOrderLabels 
 } from "../services/collaboration_service";
+import CommentInput from "../components/comments/comment_input";
+import CommentList from "../components/comments/comment_list";
+import type { CommentData } from "../components/comments/comment_item";
+import { 
+    getInitials, 
+    getAvatarColor, 
+    formatLocalDateTime,
+    renderUserMention 
+} from "../components/comments/comment_utils";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -49,165 +56,6 @@ const LABEL_COLORS = [
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
 
-// Generate initials from full name
-const getInitials = (fullName?: string): string => {
-    if (!fullName) return "P";
-    const parts = fullName.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "P";
-};
-
-// Extract mention IDs from commentText using mentionMap
-const extractMentionIdsFromMap = (text: string, mentionMap: Record<string, { id: string; name: string; avatar?: string | null }>): string[] => {
-    const idsSet = new Set<string>();
-    const mentionRegex = /@\w+/g;
-    let match;
-    while ((match = mentionRegex.exec(text)) !== null) {
-        const mentionText = match[0];
-        if (mentionMap[mentionText]) {
-            idsSet.add(mentionMap[mentionText].id);
-        }
-    }
-    return Array.from(idsSet);
-};
-
-// Render text with parsed mentions - simple @username format with tooltip
-const renderTextWithMentions = (
-    text: string, 
-    mentionedUsers?: Array<{ user_id: string; username: string; name: string; avatar?: string | null }>
-): React.ReactNode => {
-    // Create a map of username -> user info for quick lookup
-    const userMap = new Map<string, { name: string; avatar?: string | null }>();
-    if (mentionedUsers) {
-        mentionedUsers.forEach(user => {
-            userMap.set(user.username, { name: user.name, avatar: user.avatar });
-        });
-    }
-    
-    // Match @username format (word characters only, no spaces)
-    const mentionRegex = /@(\w+)/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-    let key = 0;
-    
-    while ((match = mentionRegex.exec(text)) !== null) {
-        // Add text before mention
-        if (match.index > lastIndex) {
-            parts.push(text.substring(lastIndex, match.index));
-        }
-        
-        // Extract username
-        const username = match[1];
-        const userInfo = userMap.get(username);
-        
-        // Create tooltip content if we have user info
-        const tooltipContent = userInfo ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Avatar 
-                    size={32}
-                    src={userInfo.avatar}
-                    style={{ 
-                        backgroundColor: userInfo.avatar ? undefined : getAvatarColor(userInfo.name),
-                        fontSize: 12,
-                        flexShrink: 0
-                    }}
-                >
-                    {!userInfo.avatar && getInitials(userInfo.name)}
-                </Avatar>
-                <span style={{ fontWeight: 500 }}>{userInfo.name}</span>
-            </div>
-        ) : `@${username}`;
-        
-        // Add styled mention with hover effect and tooltip
-        parts.push(
-            <Tooltip key={key++} title={tooltipContent} placement="top">
-                <span 
-                    style={{
-                        color: "#0f8b8d",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "color 0.2s",
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "#0a6566";
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "#0f8b8d";
-                    }}
-                >
-                    @{username}
-                </span>
-            </Tooltip>
-        );
-        
-        lastIndex = match.index + match[0].length;
-    }
-    
-    // Add remaining text
-    if (lastIndex < text.length) {
-        parts.push(text.substring(lastIndex));
-    }
-    
-    return parts.length > 0 ? parts : text;
-};
-
-// Helper function to render user mention with tooltip (for timeline events)
-const renderUserMention = (user: {name: string; username?: string; avatar?: string | null}, key?: string | number): React.ReactNode => {
-    const username = user.username || user.name.toLowerCase().replace(/\s+/g, '');
-    
-    const tooltipContent = (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Avatar 
-                size={32}
-                src={user.avatar}
-                style={{ 
-                    backgroundColor: user.avatar ? undefined : getAvatarColor(user.name),
-                    fontSize: 12,
-                    flexShrink: 0
-                }}
-            >
-                {!user.avatar && getInitials(user.name)}
-            </Avatar>
-            <span style={{ fontWeight: 500 }}>{user.name}</span>
-        </div>
-    );
-    
-    return (
-        <Tooltip key={key} title={tooltipContent} placement="top">
-            <span 
-                style={{
-                    color: "#0f8b8d",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "color 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#0a6566";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "#0f8b8d";
-                }}
-            >
-                @{username}
-            </span>
-        </Tooltip>
-    );
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
 
 // Sample type configuration with icons and colors
 const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
@@ -318,22 +166,6 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
 
-// Format UTC datetime to local time
-const formatLocalDateTime = (utcDateString: string): string => {
-    // Ensure the date string is interpreted as UTC if it doesn't have a timezone
-    const dateStr = utcDateString.endsWith('Z') ? utcDateString : utcDateString + 'Z';
-    const date = new Date(dateStr);
-    
-    // Format in local timezone
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${day}/${month}/${year}, ${hours}:${minutes}`;
-};
-
 export default function OrderDetail() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
@@ -383,30 +215,13 @@ export default function OrderDetail() {
     const [commentText, setCommentText] = useState("");
     const [submittingComment, setSubmittingComment] = useState(false);
     const [loadingConversation, setLoadingConversation] = useState(false);
-    
-    // Mention system state
-    const [mentionUsers, setMentionUsers] = useState<Array<{
-        id: string;
-        name: string;
-        username?: string | null;
-        email: string;
-        avatar_url?: string | null;
-    }>>([]);
-    const [showMentionPopover, setShowMentionPopover] = useState(false);
-    const [mentionSearch, setMentionSearch] = useState("");
-    const [loadingMentions, setLoadingMentions] = useState(false);
-    const [mentionStartIndex, setMentionStartIndex] = useState(-1);
 
     // Collaboration states
     const [allLabels, setAllLabels] = useState<Label[]>([]);
     const [allUsers, setAllUsers] = useState<LabUser[]>([]);
 
-    const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const conversationScrollRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
-    
-    // Track mentions separately: map of "@username" -> { id, name, avatar }
-    const [mentionMap, setMentionMap] = useState<Record<string, { id: string; name: string; avatar?: string | null }>>({});
     
     // Get current user profile for avatar and name
     const { profile: currentUserProfile } = useUserProfile();
@@ -662,13 +477,10 @@ export default function OrderDetail() {
     }, [loadConversation, refreshTimeline]);
     
     // Add comment to conversation
-    const addComment = useCallback(async () => {
-        if (!orderId || !commentText.trim() || submittingComment) return;
+    const addComment = useCallback(async (text: string, mentionIds: string[]) => {
+        if (!orderId || !text.trim()) return;
         setSubmittingComment(true);
         try {
-            // Extract mention IDs from the text using mentionMap
-            const mentionIds = extractMentionIdsFromMap(commentText, mentionMap);
-            
             const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
             const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/comments`, {
                 method: "POST",
@@ -677,124 +489,31 @@ export default function OrderDetail() {
                     ...(token ? { Authorization: token } : {}),
                 },
                 body: JSON.stringify({ 
-                    text: commentText,
+                    text,
                     mentions: mentionIds
                 }),
                 credentials: "include",
             });
             if (!res.ok) {
-                const text = await res.text();
+                const responseText = await res.text();
                 let parsed: unknown = undefined;
-                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+                try { parsed = responseText ? JSON.parse(responseText) : undefined; } catch { /* ignore */ }
                 const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
                 throw new Error(msg);
             }
             message.success("Comentario agregado");
             setCommentText("");
-            setMentionMap({}); // Clear mention map after sending
             // Force scroll to bottom after adding new comment
             await loadConversation({ forceScrollToBottom: true, silent: false });
             await refreshTimeline(); // Update timeline without reloading entire page
         } catch (e) {
             const errMsg = e instanceof Error ? e.message : "Error al agregar comentario";
             message.error(errMsg);
+            throw e;
         } finally {
             setSubmittingComment(false);
         }
-    }, [orderId, commentText, submittingComment, loadConversation, refreshTimeline, mentionMap]);
-    
-    // Search users for mentions
-    const searchMentionUsers = useCallback(async (query: string) => {
-        setLoadingMentions(true);
-        try {
-            const response = await getJSON<{ users: Array<{
-                id: string;
-                name: string;
-                username?: string | null;
-                email: string;
-                avatar_url?: string | null;
-            }> }>(`/v1/laboratory/users/search?q=${encodeURIComponent(query)}`);
-            setMentionUsers(response.users);
-        } catch (err) {
-            console.error("Error searching users:", err);
-            setMentionUsers([]);
-        } finally {
-            setLoadingMentions(false);
-        }
-    }, []);
-    
-    // Handle text change with mention detection
-    const handleCommentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const value = e.target.value;
-        const cursorPos = e.target.selectionStart || 0;
-        setCommentText(value);
-        
-        // Find if we're in a mention context (typing after @)
-        const textBeforeCursor = value.substring(0, cursorPos);
-        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-        
-        if (lastAtIndex !== -1) {
-            // Check if there's a space between @ and cursor (meaning mention is complete)
-            const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-            // Only show popover if we're actively typing a mention (no space or newline after @)
-            if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-                setMentionStartIndex(lastAtIndex);
-                setMentionSearch(textAfterAt);
-                setShowMentionPopover(true);
-                searchMentionUsers(textAfterAt);
-                return;
-            }
-        }
-        
-        setShowMentionPopover(false);
-        setMentionStartIndex(-1);
-    }, [searchMentionUsers]);
-    
-    // Handle mention selection
-    const handleSelectMention = useCallback((user: { id: string; name: string; username?: string | null; avatar_url?: string | null }) => {
-        if (mentionStartIndex === -1) return;
-        
-        // Use username if available, otherwise create one from name
-        // Only allow alphanumeric characters and underscores
-        let mentionUsername = user.username;
-        if (!mentionUsername) {
-            // Remove all non-alphanumeric characters except spaces, then replace spaces with underscores
-            mentionUsername = user.name
-                .replace(/[^a-zA-Z0-9\s]/g, '')  // Remove special characters
-                .replace(/\s+/g, '_')             // Replace spaces with underscores
-                .toLowerCase();                   // Convert to lowercase
-        }
-        
-        const before = commentText.substring(0, mentionStartIndex);
-        const after = commentText.substring(mentionStartIndex + 1 + mentionSearch.length);
-        const mention = `@${mentionUsername}`;
-        
-        const newText = before + mention + after + " ";
-        setCommentText(newText);
-        
-        // Store the mapping of @username -> { id, name, avatar }
-        setMentionMap(prev => ({
-            ...prev,
-            [mention]: {
-                id: user.id,
-                name: user.name,
-                avatar: user.avatar_url
-            }
-        }));
-        
-        setShowMentionPopover(false);
-        setMentionStartIndex(-1);
-        setMentionSearch("");
-        
-        // Focus back on textarea
-        setTimeout(() => {
-            if (textAreaRef.current) {
-                textAreaRef.current.focus();
-                const newCursorPos = (before + mention + " ").length;
-                textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-            }
-        }, 0);
-    }, [commentText, mentionStartIndex, mentionSearch]);
+    }, [orderId, loadConversation, refreshTimeline]);
 
     useEffect(() => {
         refresh();
@@ -851,19 +570,13 @@ export default function OrderDetail() {
         }
     }, [orderId, savingNotes, notesValue, refresh]);
 
-    // Handle quick action to add comment - switch to conversation tab and focus textarea
+    // Handle quick action to add comment - switch to conversation tab
     const handleGoToComment = useCallback(() => {
         setActiveTab("conversation");
         // Scroll to tabs container
         if (tabsContainerRef.current) {
             tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-        // Use setTimeout to ensure the tab content is rendered before focusing
-        setTimeout(() => {
-            if (textAreaRef.current) {
-                textAreaRef.current.focus();
-            }
-        }, 300);
     }, []);
 
     // Handle navigation to samples tab
@@ -1150,99 +863,37 @@ export default function OrderDetail() {
     const currentUserName = currentUserProfile?.full_name || "Usuario";
     const currentUserAvatar = currentUserProfile?.avatar_url || null;
     
-    // Sort comments chronologically (oldest first, newest at bottom)
-    const sortedConversation = useMemo(() => {
-        return [...conversation].sort((a, b) => 
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
+    // Convert conversation to CommentData format
+    const conversationData: CommentData[] = useMemo(() => {
+        return conversation.map(c => ({
+            id: c.id,
+            user_id: c.user_id,
+            user_name: c.user_name,
+            user_avatar: c.user_avatar,
+            text: c.text,
+            mentions: c.mentions,
+            mentioned_users: c.mentioned_users,
+            created_at: c.created_at,
+        }));
     }, [conversation]);
 
     // Conversation content JSX (not a function component to avoid re-renders)
     const conversationContentJSX = (
         <div 
-            ref={conversationScrollRef}
             style={{ 
                 display: "flex", 
                 flexDirection: "column", 
-                height: "100%", 
-                overflowY: "auto",
-                paddingRight: 8
+                height: "100%"
             }}
         >
-            {/* Comments List - First (at top, older messages) */}
-            {loadingConversation && conversation.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 40 }}>
-                    <Empty description="Cargando conversación..." />
-                </div>
-            ) : conversation.length === 0 ? (
-        <div style={{ 
-                    padding: 40, 
-            textAlign: "center",
-            background: "#f9fafb",
-            borderRadius: tokens.radius,
-                    border: "1px solid #e5e7eb",
-                    marginBottom: 16
-        }}>
-            <MessageOutlined style={{ fontSize: 48, color: "#9ca3af", marginBottom: 16 }} />
-            <div style={{ fontSize: 16, fontWeight: 600, color: tokens.textPrimary, marginBottom: 8 }}>
-                        Sin comentarios
-            </div>
-                    <div style={{ color: tokens.textSecondary }}>
-                        Sé el primero en comentar sobre esta orden
-            </div>
-                </div>
-            ) : (
-                <div style={{ display: "grid", gap: 16, marginBottom: 16 }}>
-                    {sortedConversation.map((comment) => (
-                        <Card 
-                            key={comment.id}
-                            size="small"
-                            style={{ ...cardStyle }}
-                            bodyStyle={{ padding: 0 }}
-                        >
-                            {/* Comment Header */}
-                            <div style={{ 
-                                padding: "12px 16px",
-                                background: "#f9fafb",
-                                borderBottom: "1px solid #e5e7eb",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10
-                            }}>
-                                <Avatar 
-                                    size={28}
-                                    src={comment.user_avatar}
-                                    style={{ 
-                                        backgroundColor: comment.user_avatar ? undefined : getAvatarColor(comment.user_name),
-                                        fontSize: 12,
-                                        flexShrink: 0
-                                    }}
-                                >
-                                    {!comment.user_avatar && getInitials(comment.user_name)}
-                                </Avatar>
-                                <div style={{ flex: 1 }}>
-                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
-                                        {comment.user_name}
-                                    </span>
-                                    <span style={{ color: tokens.textSecondary, marginLeft: 8, fontSize: 12 }}>
-                                        comentó {formatLocalDateTime(comment.created_at)}
-                                    </span>
-                                </div>
-                            </div>
-                            {/* Comment Body */}
-                            <div style={{ 
-                                padding: 16,
-                                color: tokens.textPrimary,
-                                fontSize: 14,
-                                lineHeight: 1.6,
-                                whiteSpace: "pre-wrap"
-                            }}>
-                                {renderTextWithMentions(comment.text, comment.mentioned_users)}
-                            </div>
-                        </Card>
-                    ))}
-                </div>
-            )}
+            {/* Comments List with scroll */}
+            <CommentList
+                ref={conversationScrollRef}
+                comments={conversationData}
+                loading={loadingConversation}
+                emptyMessage="Sin comentarios"
+                emptyDescription="Sé el primero en comentar sobre esta orden"
+            />
 
             {/* Comment Input Form - At bottom */}
             <Card 
@@ -1262,138 +913,14 @@ export default function OrderDetail() {
                     >
                         {!currentUserAvatar && getInitials(currentUserName)}
                     </Avatar>
-                    <div style={{ flex: 1, position: "relative" }}>
-                        {/* Mention Dropdown - positioned ABOVE textarea */}
-                        {showMentionPopover && (
-                            <div style={{
-                                position: "absolute",
-                                bottom: "calc(100% - 8px)",
-                                left: 0,
-                                zIndex: 1050,
-                                width: "100%",
-                                maxWidth: 350,
-                                maxHeight: 190,
-                                overflowY: "auto",
-                                background: "white",
-                                borderRadius: 8,
-                                boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
-                                border: "1px solid #d1d5db",
-                                marginBottom: 4
-                            }}>
-                                {loadingMentions ? (
-                                    <div style={{ padding: 16, textAlign: "center" }}>
-                                        <LoadingOutlined spin /> Buscando...
-                                    </div>
-                                ) : mentionUsers.length === 0 ? (
-                                    <div style={{ padding: 16, textAlign: "center", color: tokens.textSecondary }}>
-                                        {mentionSearch ? "No se encontraron usuarios" : "Escribe para buscar"}
-                                    </div>
-                                ) : (
-                                    <div>
-                                        {mentionUsers.map((user, index) => (
-                                            <div
-                                                key={user.id}
-                                                style={{ 
-                                                    cursor: "pointer", 
-                                                    padding: "8px 12px",
-                                                    borderBottom: index < mentionUsers.length - 1 ? "1px solid #f3f4f6" : "none",
-                                                    transition: "background-color 0.2s"
-                                                }}
-                                                onClick={() => handleSelectMention(user)}
-                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
-                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                                            >
-                                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                    <Avatar 
-                                                        size={28} 
-                                                        src={user.avatar_url}
-                                                        style={{ 
-                                                            backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
-                                                            fontSize: 11,
-                                                            flexShrink: 0
-                                                        }}
-                                                    >
-                                                        {!user.avatar_url && getInitials(user.name)}
-                                                    </Avatar>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ 
-                                                            fontWeight: 500, 
-                                                            fontSize: 13,
-                                                            color: tokens.textPrimary,
-                                                            whiteSpace: "nowrap",
-                                                            overflow: "hidden",
-                                                            textOverflow: "ellipsis",
-                                                            lineHeight: "16px",
-                                                            marginBottom: 2
-                                                        }}>
-                                                            {user.name}
-                                                        </div>
-                                                        <div style={{ 
-                                                            fontSize: 11, 
-                                                            color: tokens.textSecondary,
-                                                            whiteSpace: "nowrap",
-                                                            overflow: "hidden",
-                                                            textOverflow: "ellipsis",
-                                                            lineHeight: "14px"
-                                                        }}>
-                                                            {user.email}
-                                                        </div>
-                                                    </div>
-                                                    {user.username && (
-                                                        <div style={{ 
-                                                            fontSize: 10,
-                                                            color: tokens.textSecondary,
-                                                            backgroundColor: "#f3f4f6",
-                                                            padding: "2px 6px",
-                                                            borderRadius: 3,
-                                                            fontFamily: "monospace",
-                                                            flexShrink: 0,
-                                                            marginLeft: "auto"
-                                                        }}>
-                                                            @{user.username}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        <Input.TextArea
-                            ref={textAreaRef as React.Ref<TextAreaRef>}
-                            value={commentText}
-                            onChange={handleCommentChange}
-                            placeholder="Escribe un comentario... Usa @ para mencionar a alguien"
-                            rows={3}
-                            style={{ marginBottom: 8 }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                                    e.preventDefault();
-                                    addComment();
-                                }
-                                // Close popover on Escape
-                                if (e.key === 'Escape' && showMentionPopover) {
-                                    setShowMentionPopover(false);
-                                }
-                            }}
-                        />
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                Tip: Presiona Cmd/Ctrl + Enter para enviar | @ para mencionar
-                            </div>
-                            <AntButton 
-                                type="primary" 
-                                size="small"
-                                onClick={addComment}
-                                loading={submittingComment}
-                                disabled={!commentText.trim()}
-                                icon={<SendOutlined />}
-                            >
-                                Comentar
-            </AntButton>
-                        </div>
-                    </div>
+                    <CommentInput
+                        value={commentText}
+                        onChange={setCommentText}
+                        onSubmit={addComment}
+                        loading={submittingComment}
+                        placeholder="Escribe un comentario... Usa @ para mencionar a alguien"
+                        rows={3}
+                    />
                 </div>
             </Card>
         </div>
