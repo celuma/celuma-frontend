@@ -17,7 +17,7 @@ import CasesList from "./pages/cases_list";
 import SamplesList from "./pages/samples_list";
 import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
-import PathologistWorklist from "./pages/pathologist_worklist";
+import Worklist from "./pages/worklist";
 import BillingDetail from "./pages/billing_detail";
 import PriceCatalog from "./pages/price_catalog";
 import UsersManagement from "./pages/users_management";
@@ -49,7 +49,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports" element={<ReportsList />} />
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
-            <Route path="/worklist" element={<PathologistWorklist />} />
+            <Route path="/worklist" element={<Worklist />} />
             <Route path="/billing/:orderId" element={<BillingDetail />} />
             <Route path="/catalog" element={<PriceCatalog />} />
             <Route path="/users" element={<UsersManagement />} />

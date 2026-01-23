@@ -24,6 +24,7 @@ import AssigneesSection from "../components/collaboration/AssigneesSection";
 import ReviewersSection from "../components/collaboration/ReviewersSection";
 import LabelsSection from "../components/collaboration/LabelsSection";
 import type { Label, LabUser, UserRef } from "../services/collaboration_service";
+import type { ReviewerWithStatus } from "../services/worklist_service";
 import { 
     getLabels, 
     getLabUsers, 
