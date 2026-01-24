@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Tag, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Button, Card, Space, Avatar } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -9,6 +9,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
+import { SEX_CONFIG } from "../components/ui/status_configs";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -133,20 +134,40 @@ export default function PatientsList() {
             dataIndex: "sex", 
             key: "sex", 
             width: 100,
-            render: (v: string | null) => v ? <Tag color={tokens.primary}>{v}</Tag> : "",
+            render: (v: string | null) => {
+                if (!v) return "";
+                const upperSex = v.toUpperCase();
+                const config = SEX_CONFIG[upperSex] || SEX_CONFIG.DEFAULT;
+                return (
+                    <div style={{
+                        backgroundColor: config.bg,
+                        color: config.color,
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: "4px 10px",
+                        display: "inline-block",
+                    }}>
+                        {config.label}
+                    </div>
+                );
+            },
             filters: sexFilters.length > 0 ? sexFilters : undefined,
             onFilter: (value, record) => record.sex === value,
+            sorter: stringSorter("sex"),
         },
         { 
             title: "Teléfono", 
             dataIndex: "phone", 
             key: "phone", 
-            width: 160 
+            width: 160,
+            sorter: stringSorter("phone"),
         },
         { 
             title: "Email", 
             dataIndex: "email", 
-            key: "email" 
+            key: "email",
+            sorter: stringSorter("email"),
         },
     ];
 
@@ -185,7 +206,26 @@ export default function PatientsList() {
                             loading={loading}
                             onRowClick={(record) => navigate(`/patients/${record.id}`)}
                             emptyText="Sin pacientes"
-                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
+                            pagination={{ pageSize: 10 }}
+                            locale={{
+                                filterTitle: 'Filtrar',
+                                filterConfirm: 'Aceptar',
+                                filterReset: 'Limpiar',
+                                filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
+                                emptyText: 'Sin pacientes',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
+                                sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
+                            }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>

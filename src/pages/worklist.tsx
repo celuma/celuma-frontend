@@ -301,14 +301,31 @@ function Worklist() {
                                 pageSize: pageSize,
                                 total: filteredItems.length,
                                 showTotal: (t) => `Total: ${t} elementos`,
-                                showSizeChanger: true,
-                                pageSizeOptions: ["10", "20", "50"],
                                 onChange: (p, ps) => {
                                     setPage(p);
                                     if (ps !== pageSize) setPageSize(ps);
                                 },
                             }}
                             emptyText="No tienes elementos pendientes"
+                            locale={{
+                                filterTitle: 'Filtrar',
+                                filterConfirm: 'Aceptar',
+                                filterReset: 'Limpiar',
+                                filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
+                                emptyText: 'No tienes elementos pendientes',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
+                                sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
+                            }}
                         />
                     </Card>
                 </div>

@@ -45,3 +45,14 @@ export const LABEL_COLORS = [
     { color: "#f97316", bg: "#fff7ed" },
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
+
+// Sex configuration for consistent badges
+export const SEX_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    "MALE": { color: "#3b82f6", bg: "#eff6ff", label: "M" },
+    "M": { color: "#3b82f6", bg: "#eff6ff", label: "M" },
+    "FEMALE": { color: "#ec4899", bg: "#fdf2f8", label: "F" },
+    "F": { color: "#ec4899", bg: "#fdf2f8", label: "F" },
+    "OTHER": { color: "#8b5cf6", bg: "#f5f3ff", label: "Otro" },
+    "O": { color: "#8b5cf6", bg: "#f5f3ff", label: "Otro" },
+    "DEFAULT": { color: "#6b7280", bg: "#f3f4f6", label: "N/A" },
+};

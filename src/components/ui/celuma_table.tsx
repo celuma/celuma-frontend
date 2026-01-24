@@ -68,12 +68,12 @@ export function CelumaTable<T extends Record<string, any>>({
         return sorted;
     }, [dataSource, defaultSort]);
 
-    // Default pagination config
-    const defaultPagination: TablePaginationConfig = {
+    // Default pagination config - spread pagination first so defaults don't override passed props
+    const defaultPagination: TablePaginationConfig = pagination !== false ? {
         pageSize: 10,
         showSizeChanger: false,
-        ...pagination,
-    };
+        ...(typeof pagination === 'object' ? pagination : {}),
+    } : false;
 
     return (
         <Table<T>

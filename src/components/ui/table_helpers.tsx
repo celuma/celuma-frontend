@@ -1,10 +1,62 @@
 import React from "react";
 import { Avatar, Tooltip } from "antd";
+import { 
+    ExperimentOutlined,
+    MedicineBoxOutlined,
+    SkinOutlined,
+    HeartOutlined,
+    EyeOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
 
 // Re-export utility functions from comment_utils for consistency
 export { getInitials, getAvatarColor } from "../comments/comment_utils";
+
+// Sample type configuration with icons and colors
+export const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+    "BIOPSIA": { icon: <SkinOutlined />, color: "#8b5cf6", label: "Biopsia" },
+    "CITOLOGIA": { icon: <EyeOutlined />, color: "#ec4899", label: "Citología" },
+    "TEJIDO": { icon: <HeartOutlined />, color: "#ef4444", label: "Tejido" },
+    "SANGRE": { icon: <MedicineBoxOutlined />, color: "#dc2626", label: "Sangre" },
+    "LIQUIDO": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Líquido" },
+    "ORINA": { icon: <ExperimentOutlined />, color: "#f59e0b", label: "Orina" },
+    "DEFAULT": { icon: <ExperimentOutlined />, color: "#0f8b8d", label: "Muestra" },
+};
+
+/**
+ * Gets the sample type configuration based on the type string
+ */
+export const getSampleTypeConfig = (type: string) => {
+    const upperType = type?.toUpperCase() || "";
+    for (const [key, config] of Object.entries(SAMPLE_TYPE_CONFIG)) {
+        if (key !== "DEFAULT" && upperType.includes(key)) {
+            return config;
+        }
+    }
+    return SAMPLE_TYPE_CONFIG.DEFAULT;
+};
+
+/**
+ * Component for rendering sample type badge with icon and label
+ */
+export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
+    const config = getSampleTypeConfig(type);
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Avatar
+                size={24}
+                icon={config.icon}
+                style={{ 
+                    backgroundColor: config.color, 
+                    fontSize: 12,
+                    flexShrink: 0
+                }}
+            />
+            <span style={{ fontWeight: 500 }}>{config.label}</span>
+        </div>
+    );
+};
 
 /**
  * Formats a date string to display only date (without time)
@@ -99,11 +151,20 @@ export const PatientCell: React.FC<{
     const color = getAvatarColor(patientName);
 
     return (
-        <div 
-            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
+        <a
+            href={`/patients/${patientId}`}
             onClick={(e) => {
+                e.preventDefault();
                 e.stopPropagation();
                 navigate(`/patients/${patientId}`);
+            }}
+            style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 12, 
+                cursor: "pointer",
+                textDecoration: "none",
+                color: "inherit"
             }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.opacity = "0.7";
@@ -124,12 +185,19 @@ export const PatientCell: React.FC<{
                 {initials}
             </Avatar>
             <div>
-                <div style={{ fontWeight: 500 }}>{patientName}</div>
+                <div style={{ 
+                    fontWeight: 600, 
+                    color: "#0f8b8d",
+                    borderBottom: "1px dashed #0f8b8d",
+                    display: "inline-block"
+                }}>
+                    {patientName}
+                </div>
                 {patientCode && (
                     <div style={{ fontSize: 11, color: "#888" }}>{patientCode}</div>
                 )}
             </div>
-        </div>
+        </a>
     );
 };
 

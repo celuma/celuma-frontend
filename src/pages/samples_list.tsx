@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space } from "antd";
+import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -8,7 +8,15 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
-import { PatientCell, renderStatusChip, renderLabels, stringSorter } from "../components/ui/table_helpers";
+import { 
+    PatientCell, 
+    renderStatusChip, 
+    renderLabels, 
+    stringSorter, 
+    getInitials, 
+    getAvatarColor,
+    SampleTypeBadge 
+} from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -40,6 +48,7 @@ type SamplesListResponse = {
         order: { id: string; order_code: string; status: string; patient?: { id: string; full_name: string; patient_code: string } | null };
         received_at?: string | null;
         labels?: Array<{ id: string; name: string; color: string }>;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
     }>;
 };
 
@@ -104,11 +113,24 @@ export default function SamplesList() {
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
-        return rows.filter((r) =>
-            [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
+        return rows.filter((r) => {
+            // Search in basic fields
+            const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
                 .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q))
-        );
+                .some((v) => String(v).toLowerCase().includes(q));
+            
+            // Search in labels
+            const labelMatch = r.labels?.some(label => 
+                label.name.toLowerCase().includes(q)
+            ) || false;
+            
+            // Search in assignees
+            const assigneeMatch = r.assignees?.some(user => 
+                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
+            ) || false;
+            
+            return basicFields || labelMatch || assigneeMatch;
+        });
     }, [rows, search]);
 
     // Get unique states and types for filters
@@ -128,6 +150,67 @@ export default function SamplesList() {
         }));
     }, [rows]);
 
+    // Get unique order codes for filters
+    const orderFilters = useMemo(() => {
+        const orders = new Set(rows.map(r => r.order.order_code));
+        return Array.from(orders).sort().map(code => ({
+            text: code,
+            value: code,
+        }));
+    }, [rows]);
+
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.patient_id && r.patient_name) {
+                patients.set(r.patient_id, r.patient_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
+    // Get unique labels for filters
+    const labelFilters = useMemo(() => {
+        const labelsMap = new Map<string, { name: string; color: string }>();
+        rows.forEach(r => {
+            r.labels?.forEach(label => {
+                if (!labelsMap.has(label.id)) {
+                    labelsMap.set(label.id, { name: label.name, color: label.color });
+                }
+            });
+        });
+        return Array.from(labelsMap.entries())
+            .sort((a, b) => a[1].name.localeCompare(b[1].name))
+            .map(([id, label]) => ({
+                text: label.name,
+                value: id,
+            }));
+    }, [rows]);
+
+    // Get unique assignees for filters
+    const assigneeFilters = useMemo(() => {
+        const assigneesMap = new Map<string, string>();
+        rows.forEach(r => {
+            r.assignees?.forEach(user => {
+                if (!assigneesMap.has(user.id)) {
+                    assigneesMap.set(user.id, user.name);
+                }
+            });
+        });
+        return Array.from(assigneesMap.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     const columns: ColumnsType<Row> = [
         { 
             title: "Código", 
@@ -138,24 +221,42 @@ export default function SamplesList() {
             defaultSortOrder: "ascend",
         },
         { 
-            title: "Orden", 
+            title: "Código de orden", 
             key: "order", 
-            width: 140,
+            width: 160,
+            sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
+            filters: orderFilters,
+            onFilter: (value, record) => record.order.order_code === value,
             render: (_, r) => (
-                <span 
-                    style={{ color: "#0f8b8d", cursor: "pointer", fontWeight: 500 }}
+                <a
+                    href={`/orders/${r.order.id}`}
                     onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         navigate(`/orders/${r.order.id}`);
                     }}
+                    style={{ 
+                        color: "#0f8b8d", 
+                        cursor: "pointer", 
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        borderBottom: "1px dashed #0f8b8d"
+                    }}
                 >
                     {r.order.order_code}
-                </span>
+                </a>
             ),
         },
         { 
             title: "Paciente", 
-            key: "patient", 
+            key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.patient_name || a.patient_code || "";
+                const nameB = b.patient_name || b.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.patient_id === value,
             render: (_, r) => {
                 if (!r.patient_name || !r.patient_id) return "—";
                 return (
@@ -171,9 +272,10 @@ export default function SamplesList() {
             title: "Tipo", 
             dataIndex: "type", 
             key: "type", 
-            width: 140,
+            width: 160,
             filters: typeFilters,
             onFilter: (value, record) => record.type === value,
+            render: (type: string) => <SampleTypeBadge type={type} />,
         },
         { 
             title: "Estado", 
@@ -185,11 +287,45 @@ export default function SamplesList() {
             onFilter: (value, record) => record.state === value,
         },
         ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
-            title: "Labels",
+            title: "Etiquetas",
             key: "labels",
             width: 200,
+            filters: labelFilters,
+            onFilter: (value: any, record: Row) => {
+                return record.labels?.some(label => label.id === value) || false;
+            },
             render: (_: any, r: Row) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
+        }] : []),
+        ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
+            title: "Asignados",
+            key: "assignees",
+            width: 140,
+            filters: assigneeFilters,
+            onFilter: (value: any, record: Row) => {
+                return record.assignees?.some(user => user.id === value) || false;
+            },
+            render: (_: any, r: Row) => {
+                if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
+                return (
+                    <Avatar.Group maxCount={3} size="small">
+                        {r.assignees.map(user => (
+                            <Tooltip key={user.id} title={user.name}>
+                                <Avatar 
+                                    size={24}
+                                    src={user.avatar_url}
+                                    style={{ 
+                                        backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {!user.avatar_url && getInitials(user.name)}
+                                </Avatar>
+                            </Tooltip>
+                        ))}
+                    </Avatar.Group>
+                );
+            },
         }] : []),
     ];
 
@@ -208,11 +344,11 @@ export default function SamplesList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por código, tipo, orden" 
+                                    placeholder="Buscar en muestras"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
-                                    style={{ width: 320 }}
+                                    style={{ width: 400 }}
                                 />
                                 <Button type="primary" onClick={() => navigate("/samples/register")}>
                                     Registrar Muestra
@@ -228,7 +364,26 @@ export default function SamplesList() {
                             loading={loading}
                             onRowClick={(record) => navigate(`/samples/${record.id}`)}
                             emptyText="Sin muestras"
-                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
+                            pagination={{ pageSize: 10 }}
+                            locale={{
+                                filterTitle: 'Filtrar',
+                                filterConfirm: 'Aceptar',
+                                filterReset: 'Limpiar',
+                                filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
+                                emptyText: 'Sin muestras',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
+                                sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
+                            }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>

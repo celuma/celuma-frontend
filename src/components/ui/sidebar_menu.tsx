@@ -12,11 +12,10 @@ export type CelumaKey =
     | "/reports" 
     | "/worklist"
     | "/patients"
-    | "/cases"
+    | "/orders"
     | "/samples"
     | "/orders/register"
     | "/samples/register"
-    | "/cases/register"
     | "/profile" 
     | "/logout"
     | "/users";
@@ -26,7 +25,7 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/worklist", icon: <CheckSquareOutlined />, label: "Worklist", title: "Worklist" },
     { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
-    { key: "/cases", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
+    { key: "/orders", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
 ];
 

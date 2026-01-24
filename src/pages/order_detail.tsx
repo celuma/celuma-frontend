@@ -5,8 +5,7 @@ import {
     FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
-    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined,
-    MedicineBoxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, EditOutlined
+    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -39,6 +38,8 @@ import {
     formatLocalDateTime,
     renderUserMention 
 } from "../components/comments/comment_utils";
+import { renderLabels } from "../components/ui/table_helpers";
+import { getSampleTypeConfig } from "../components/ui/table_helpers";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -55,29 +56,6 @@ const LABEL_COLORS = [
     { color: "#f97316", bg: "#fff7ed" },
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
-
-
-// Sample type configuration with icons and colors
-const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-    "BIOPSIA": { icon: <SkinOutlined />, color: "#8b5cf6", label: "Biopsia" },
-    "CITOLOGIA": { icon: <EyeOutlined />, color: "#ec4899", label: "Citología" },
-    "TEJIDO": { icon: <HeartOutlined />, color: "#ef4444", label: "Tejido" },
-    "SANGRE": { icon: <MedicineBoxOutlined />, color: "#dc2626", label: "Sangre" },
-    "LIQUIDO": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Líquido" },
-    "ORINA": { icon: <ExperimentOutlined />, color: "#f59e0b", label: "Orina" },
-    "DEFAULT": { icon: <ExperimentOutlined />, color: "#0f8b8d", label: "Muestra" },
-};
-
-const getSampleTypeConfig = (type: string) => {
-    const upperType = type?.toUpperCase() || "";
-    // Check if type contains any of the keys
-    for (const [key, config] of Object.entries(SAMPLE_TYPE_CONFIG)) {
-        if (key !== "DEFAULT" && upperType.includes(key)) {
-            return config;
-        }
-    }
-    return SAMPLE_TYPE_CONFIG.DEFAULT;
-};
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -135,15 +113,17 @@ type OrderFullResponse = {
         tenant_id: string;
         branch_id: string;
         created_at?: string | null;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }> | null;
+        labels?: Array<{ id: string; name: string; color: string; inherited?: boolean }> | null;
     }>;
-};
-
-type PatientCasesResponse = {
-    patient_id: string;
-    cases: Array<{
-        order: { id: string };
-        report?: { id: string } | null;
-    }>;
+    report?: {
+        id: string;
+        status: string;
+        title?: string | null;
+        published_at?: string | null;
+        version_no?: number | null;
+        has_pdf?: boolean;
+    } | null;
 };
 
 // Status configuration
@@ -304,13 +284,9 @@ export default function OrderDetail() {
                     // Timeline is optional, ignore errors
                 }
 
-                // Fetch cases to discover linked report id (if any)
-                try {
-                    const cases = await getJSON<PatientCasesResponse>(`/v1/laboratory/patients/${full.patient.id}/cases`);
-                    const found = cases.cases.find((c) => c.order.id === full.order.id);
-                    foundReportId = found?.report?.id ?? null;
+                // Get report id from the order full response
+                foundReportId = full.report?.id ?? null;
                     setReportId(foundReportId);
-                } catch { /* optional */ }
 
                 // Load latest report for preview if reportId exists
                 if (foundReportId) {
@@ -712,8 +688,6 @@ export default function OrderDetail() {
                                 key={sample.id}
                                 onClick={() => navigate(`/samples/${sample.id}`)}
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
                                     padding: "14px 16px",
                                     cursor: "pointer",
                                     borderBottom: index < data.samples.length - 1 ? "1px solid #e5e7eb" : "none",
@@ -723,35 +697,80 @@ export default function OrderDetail() {
                                 onMouseEnter={(e) => e.currentTarget.style.background = "#f9fafb"}
                                 onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
                             >
-                                <Avatar
-                                    size={36}
-                                    icon={typeConfig.icon}
-                                    style={{ 
-                                        backgroundColor: typeConfig.color,
-                                        fontSize: 16,
-                                        marginRight: 14,
-                                        flexShrink: 0
-                                    }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
-                                        {sample.sample_code}
+                                {/* Top Row: Avatar, Code/Type, and State */}
+                                <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+                                    <Avatar
+                                        size={36}
+                                        icon={typeConfig.icon}
+                                        style={{ 
+                                            backgroundColor: typeConfig.color,
+                                            fontSize: 16,
+                                            marginRight: 14,
+                                            flexShrink: 0
+                                        }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
+                                            {sample.sample_code}
+                                        </div>
+                                        <div style={{ fontSize: 13, color: tokens.textSecondary }}>
+                                            {sample.type}
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize: 13, color: tokens.textSecondary }}>
-                                        {sample.type}
+                                    <div style={{
+                                        backgroundColor: stateConfig.bg,
+                                        color: stateConfig.color,
+                                        borderRadius: 12,
+                                        fontSize: 11,
+                                        fontWeight: 500,
+                                        padding: "4px 10px",
+                                        display: "inline-block",
+                                    }}>
+                                        {stateConfig.label}
                                     </div>
                                 </div>
-                                <div style={{
-                                    backgroundColor: stateConfig.bg,
-                                    color: stateConfig.color,
-                                    borderRadius: 12,
-                                    fontSize: 11,
-                                    fontWeight: 500,
-                                    padding: "4px 10px",
-                                    display: "inline-block",
-                                }}>
-                                    {stateConfig.label}
-                                </div>
+                                
+                                {/* Bottom Row: Labels and Assignees */}
+                                {((sample.labels && sample.labels.length > 0) || (sample.assignees && sample.assignees.length > 0)) && (
+                                    <div style={{ 
+                                        display: "flex", 
+                                        gap: 16, 
+                                        marginLeft: 50,
+                                        flexWrap: "wrap",
+                                        alignItems: "center"
+                                    }}>
+                                        {/* Labels */}
+                                        {sample.labels && sample.labels.length > 0 && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Etiquetas:</span>
+                                                {renderLabels(sample.labels)}
+                                            </div>
+                                        )}
+                                        
+                                        {/* Assignees */}
+                                        {sample.assignees && sample.assignees.length > 0 && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Asignados:</span>
+                                                <Avatar.Group maxCount={3} size="small">
+                                                    {sample.assignees.map(user => (
+                                                        <Tooltip key={user.id} title={user.name}>
+                                                            <Avatar 
+                                                                size={24}
+                                                                src={user.avatar_url}
+                                                                style={{ 
+                                                                    backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
+                                                                    fontSize: 10,
+                                                                }}
+                                                            >
+                                                                {!user.avatar_url && getInitials(user.name)}
+                                                            </Avatar>
+                                                        </Tooltip>
+                                                    ))}
+                                                </Avatar.Group>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Tag, Button, Card, Space } from "antd";
+import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -8,7 +9,7 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
-import { PatientCell, renderStatusChip, renderLabels, stringSorter } from "../components/ui/table_helpers";
+import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -43,10 +44,11 @@ type OrdersListResponse = {
         sample_count: number;
         has_report: boolean;
         labels?: Array<{ id: string; name: string; color: string }>;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
     }>;
 };
 
-export default function CasesList() {
+export default function OrdersList() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -72,11 +74,24 @@ export default function CasesList() {
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
-        return rows.filter((r) =>
-            [r.order_code, r.patient.full_name, r.patient.patient_code, r.requested_by, r.notes]
+        return rows.filter((r) => {
+            // Search in basic fields
+            const basicFields = [r.order_code, r.patient.full_name, r.patient.patient_code, r.requested_by, r.notes]
                 .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q))
-        );
+                .some((v) => String(v).toLowerCase().includes(q));
+            
+            // Search in labels
+            const labelMatch = r.labels?.some(label => 
+                label.name.toLowerCase().includes(q)
+            ) || false;
+            
+            // Search in assignees
+            const assigneeMatch = r.assignees?.some(user => 
+                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
+            ) || false;
+            
+            return basicFields || labelMatch || assigneeMatch;
+        });
     }, [rows, search]);
 
     // Get unique statuses for filter
@@ -86,6 +101,42 @@ export default function CasesList() {
             text: renderStatusChip(status, "order").props.children,
             value: status,
         }));
+    }, [rows]);
+
+    // Get unique labels for filters
+    const labelFilters = useMemo(() => {
+        const labelsMap = new Map<string, { name: string; color: string }>();
+        rows.forEach(r => {
+            r.labels?.forEach(label => {
+                if (!labelsMap.has(label.id)) {
+                    labelsMap.set(label.id, { name: label.name, color: label.color });
+                }
+            });
+        });
+        return Array.from(labelsMap.entries())
+            .sort((a, b) => a[1].name.localeCompare(b[1].name))
+            .map(([id, label]) => ({
+                text: label.name,
+                value: id,
+            }));
+    }, [rows]);
+
+    // Get unique assignees for filters
+    const assigneeFilters = useMemo(() => {
+        const assigneesMap = new Map<string, string>();
+        rows.forEach(r => {
+            r.assignees?.forEach(user => {
+                if (!assigneesMap.has(user.id)) {
+                    assigneesMap.set(user.id, user.name);
+                }
+            });
+        });
+        return Array.from(assigneesMap.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
     }, [rows]);
 
     const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
@@ -116,29 +167,66 @@ export default function CasesList() {
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
             onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
         },
         ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
-            title: "Labels",
+            title: "Etiquetas",
             key: "labels",
             width: 200,
+            filters: labelFilters,
+            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+                return record.labels?.some(label => label.id === value) || false;
+            },
             render: (_: any, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        { 
-            title: "Muestras", 
-            dataIndex: "sample_count", 
-            key: "sample_count", 
-            width: 110,
-            align: "center" as const,
-        },
         { 
             title: "Reporte", 
             dataIndex: "has_report", 
             key: "has_report", 
             width: 110,
             align: "center" as const,
-            render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag>,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
         },
+        ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
+            title: "Asignados",
+            key: "assignees",
+            width: 140,
+            filters: assigneeFilters,
+            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+                return record.assignees?.some(user => user.id === value) || false;
+            },
+            render: (_: any, r: OrdersListResponse["orders"][number]) => {
+                if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
+                return (
+                    <Avatar.Group maxCount={3} size="small">
+                        {r.assignees.map(user => (
+                            <Tooltip key={user.id} title={user.name}>
+                                <Avatar 
+                                    size={24}
+                                    src={user.avatar_url}
+                                    style={{ 
+                                        backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {!user.avatar_url && getInitials(user.name)}
+                                </Avatar>
+                            </Tooltip>
+                        ))}
+                    </Avatar.Group>
+                );
+            },
+        }] : []),
     ];
 
     return (
@@ -151,7 +239,7 @@ export default function CasesList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={cardTitleStyle}>Ordenes</span>}
+                        title={<span style={cardTitleStyle}>Órdenes</span>}
                         extra={
                             <Space>
                                 <Input.Search
@@ -162,8 +250,8 @@ export default function CasesList() {
                                     onSearch={(v) => setSearch(v)}
                                     style={{ width: 320 }}
                                 />
-                                <Button type="primary" onClick={() => navigate("/cases/register")}>
-                                    Registrar Caso
+                                <Button type="primary" onClick={() => navigate("/orders/register")}>
+                                    Registrar Orden
                                 </Button>
                             </Space>
                         }
@@ -176,7 +264,26 @@ export default function CasesList() {
                             loading={loading}
                             onRowClick={(record) => navigate(`/orders/${record.id}`)}
                             emptyText="Sin casos"
-                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
+                            pagination={{ pageSize: 10 }}
+                            locale={{
+                                filterTitle: 'Filtrar',
+                                filterConfirm: 'Aceptar',
+                                filterReset: 'Limpiar',
+                                filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
+                                emptyText: 'Sin casos',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
+                                sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
+                            }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>

@@ -8,12 +8,11 @@ import PatientRegister from "./pages/patient_register";
 import Profile from "./pages/profile";
 import OrderRegister from "./pages/order_register";
 import SampleRegister from "./pages/sample_register";
-import CaseRegister from "./pages/case_register";
 import PatientsList from "./pages/patients_list";
 import PatientDetailPage from "./pages/patient_detail";
 import OrderDetail from "./pages/order_detail";
 import SampleDetailPage from "./pages/sample_detail";
-import CasesList from "./pages/cases_list";
+import OrdersList from "./pages/orders_list";
 import SamplesList from "./pages/samples_list";
 import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
@@ -39,12 +38,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/patients" element={<PatientsList />} />
             <Route path="/patients/:patientId" element={<PatientDetailPage />} />
             <Route path="/orders/register" element={<OrderRegister />} />
-            <Route path="/cases" element={<CasesList />} />
+            <Route path="/orders" element={<OrdersList />} />
             <Route path="/samples" element={<SamplesList />} />
             <Route path="/orders/:orderId" element={<OrderDetail />} />
             <Route path="/samples/:sampleId" element={<SampleDetailPage />} />
             <Route path="/samples/register" element={<SampleRegister />} />
-            <Route path="/cases/register" element={<CaseRegister />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/reports" element={<ReportsList />} />
             <Route path="/reports/editor" element={<Reports />} />
