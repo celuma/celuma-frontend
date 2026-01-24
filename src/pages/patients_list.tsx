@@ -1,31 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Tag, Button, Card, Space, Avatar } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-
-// Generate initials from name
-const getInitials = (firstName?: string, lastName?: string): string => {
-    const first = firstName?.trim()?.[0]?.toUpperCase() || "";
-    const last = lastName?.trim()?.[0]?.toUpperCase() || "";
-    return first + last || "P";
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
+import { CelumaTable } from "../components/ui/celuma_table";
+import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -61,6 +44,7 @@ type PatientRow = {
     sex?: string | null;
     phone?: string | null;
     email?: string | null;
+    created_at?: string | null;
 };
 
 export default function PatientsList() {
@@ -96,6 +80,76 @@ export default function PatientsList() {
         );
     }, [rows, search]);
 
+    // Sex filter
+    const sexFilters = useMemo(() => {
+        const sexes = new Set(rows.filter(r => r.sex).map(r => r.sex));
+        return Array.from(sexes).map(sex => ({
+            text: sex,
+            value: sex,
+        }));
+    }, [rows]);
+
+    const columns: ColumnsType<PatientRow> = [
+        { 
+            title: "Código", 
+            dataIndex: "patient_code", 
+            key: "patient_code", 
+            width: 120,
+            sorter: stringSorter("patient_code"),
+            defaultSortOrder: "ascend",
+        },
+        { 
+            title: "Nombre", 
+            key: "name", 
+            render: (_, r: PatientRow) => {
+                const fullName = `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim();
+                const initials = getInitials(fullName || r.patient_code);
+                const color = getAvatarColor(fullName || r.patient_code);
+                return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <Avatar
+                            size={32}
+                            style={{
+                                backgroundColor: color,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                flexShrink: 0,
+                            }}
+                        >
+                            {initials}
+                        </Avatar>
+                        <span style={{ fontWeight: 500 }}>{fullName || "—"}</span>
+                    </div>
+                );
+            },
+            sorter: (a, b) => {
+                const aName = `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim();
+                const bName = `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim();
+                return aName.localeCompare(bName);
+            },
+        },
+        { 
+            title: "Sexo", 
+            dataIndex: "sex", 
+            key: "sex", 
+            width: 100,
+            render: (v: string | null) => v ? <Tag color={tokens.primary}>{v}</Tag> : "",
+            filters: sexFilters.length > 0 ? sexFilters : undefined,
+            onFilter: (value, record) => record.sex === value,
+        },
+        { 
+            title: "Teléfono", 
+            dataIndex: "phone", 
+            key: "phone", 
+            width: 160 
+        },
+        { 
+            title: "Email", 
+            dataIndex: "email", 
+            key: "email" 
+        },
+    ];
+
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma
@@ -124,47 +178,14 @@ export default function PatientsList() {
                         }
                         style={cardStyle}
                     >
-                        <Table
-                            loading={loading}
+                        <CelumaTable
                             dataSource={filtered}
+                            columns={columns}
                             rowKey={(r) => r.id}
-                            pagination={{ pageSize: 10, showSizeChanger: false }}
-                            locale={{ emptyText: <Empty description="Sin pacientes" /> }}
-                            columns={[
-                                { title: "Código", dataIndex: "patient_code", key: "patient_code", width: 120 },
-                                { 
-                                    title: "Nombre", 
-                                    key: "name", 
-                                    render: (_, r: PatientRow) => {
-                                        const fullName = `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim();
-                                        const initials = getInitials(r.first_name, r.last_name);
-                                        const color = getAvatarColor(fullName || r.patient_code);
-                                        return (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                <Avatar
-                                                    size={32}
-                                                    style={{
-                                                        backgroundColor: color,
-                                                        fontSize: 13,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {initials}
-                                                </Avatar>
-                                                <span style={{ fontWeight: 500 }}>{fullName || "—"}</span>
-                                            </div>
-                                        );
-                                    }
-                                },
-                                { title: "Sexo", dataIndex: "sex", key: "sex", width: 100, render: (v: string | null) => v ? <Tag color={tokens.primary}>{v}</Tag> : "" },
-                                { title: "Teléfono", dataIndex: "phone", key: "phone", width: 160 },
-                                { title: "Email", dataIndex: "email", key: "email" },
-                            ]}
-                            onRow={(record) => ({
-                                onClick: () => navigate(`/patients/${record.id}`),
-                                style: { cursor: "pointer" },
-                            })}
+                            loading={loading}
+                            onRowClick={(record) => navigate(`/patients/${record.id}`)}
+                            emptyText="Sin pacientes"
+                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>
@@ -173,5 +194,3 @@ export default function PatientsList() {
         </Layout>
     );
 }
-
-

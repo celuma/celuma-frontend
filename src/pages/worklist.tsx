@@ -5,22 +5,23 @@
  * - Pending assignments (items where the user is assigned)
  * - Pending reviews (reports where the user needs to approve/reject)
  */
-import { useEffect, useState, useCallback } from "react";
-import { Layout, Table, Tag, Button, message, Card, Select, Space, Tooltip } from "antd";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Layout, Tag, Card, Space, Tooltip, Input } from "antd";
 import { useNavigate } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import { 
     UserOutlined, 
     FileTextOutlined, 
     ExperimentOutlined,
     InboxOutlined,
     CheckCircleOutlined,
-    EyeOutlined,
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
-import type { ColumnsType } from "antd/es/table";
+import { CelumaTable } from "../components/ui/celuma_table";
+import { PatientCell, renderDateCell, dateSorter } from "../components/ui/table_helpers";
 
 function Worklist() {
     const navigate = useNavigate();
@@ -30,17 +31,13 @@ function Worklist() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
     const [hasMore, setHasMore] = useState(false);
-    
-    // Filters
-    const [kindFilter, setKindFilter] = useState<"assignment" | "review" | undefined>(undefined);
-    const [itemTypeFilter, setItemTypeFilter] = useState<"lab_order" | "sample" | "report" | undefined>(undefined);
+    const [search, setSearch] = useState("");
+    const [hideCompleted, setHideCompleted] = useState(true);
 
     const loadWorklist = useCallback(async () => {
         setLoading(true);
         try {
             const data: WorklistResponse = await getMyWorklist({
-                kind: kindFilter,
-                item_type: itemTypeFilter,
                 page,
                 page_size: pageSize,
             });
@@ -48,11 +45,11 @@ function Worklist() {
             setTotal(data.total);
             setHasMore(data.has_more);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al cargar worklist");
+            console.error("Error loading worklist:", error);
         } finally {
             setLoading(false);
         }
-    }, [kindFilter, itemTypeFilter, page, pageSize]);
+    }, [page, pageSize]);
 
     useEffect(() => {
         loadWorklist();
@@ -71,7 +68,7 @@ function Worklist() {
         if (diffMins < 60) return `Hace ${diffMins} min`;
         if (diffHours < 24) return `Hace ${diffHours}h`;
         if (diffDays < 7) return `Hace ${diffDays}d`;
-        return date.toLocaleDateString("es-MX");
+        return null; // Return null to show only date
     };
 
     // Helper to get item type icon
@@ -134,52 +131,116 @@ function Worklist() {
         return statusMap[status.toUpperCase()] || status;
     };
 
+    // Completed statuses to filter out by default
+    const completedStatuses = ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"];
+
+    // Filter items based on search and hideCompleted
+    const filteredItems = useMemo(() => {
+        let result = items;
+        
+        // Filter by completed status
+        if (hideCompleted) {
+            result = result.filter(item => !completedStatuses.includes(item.item_status));
+        }
+        
+        // Filter by search
+        if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            result = result.filter(item => 
+                [item.display_id, item.patient_name, item.patient_code, item.order_code]
+                    .filter(Boolean)
+                    .some(v => String(v).toLowerCase().includes(q))
+            );
+        }
+        
+        return result;
+    }, [items, search, hideCompleted]);
+
+    // Get unique kinds and types for filters
+    const kindFilters = useMemo(() => {
+        const kinds = new Set(filteredItems.map(i => i.kind));
+        return Array.from(kinds).map(kind => ({
+            text: getKindBadge(kind).props.children[1], // Get label from badge
+            value: kind,
+        }));
+    }, [filteredItems]);
+
+    const typeFilters = useMemo(() => {
+        const types = new Set(filteredItems.map(i => i.item_type));
+        return Array.from(types).map(type => ({
+            text: getItemTypeLabel(type),
+            value: type,
+        }));
+    }, [filteredItems]);
+
+    const statusFilters = useMemo(() => {
+        const statuses = new Set(filteredItems.map(i => i.item_status));
+        return Array.from(statuses).map(status => ({
+            text: getStatusLabel(status),
+            value: status,
+        }));
+    }, [filteredItems]);
+
     const columns: ColumnsType<WorklistItem> = [
         {
-            title: "Tipo",
-            key: "kind",
+            title: "Fecha",
+            dataIndex: "assigned_at",
+            key: "assigned_at",
             width: 120,
-            render: (_, record) => getKindBadge(record.kind),
-        },
-        {
-            title: "Item",
-            key: "item",
-            width: 100,
-            render: (_, record) => (
-                <Tooltip title={getItemTypeLabel(record.item_type)}>
-                    <Space>
-                        {getItemTypeIcon(record.item_type)}
-                        <span>{getItemTypeLabel(record.item_type)}</span>
-                    </Space>
-                </Tooltip>
-            ),
+            render: (dateStr: string) => {
+                const relative = formatRelativeTime(dateStr);
+                const dateOnly = renderDateCell(dateStr);
+                return (
+                    <Tooltip title={new Date(dateStr).toLocaleString("es-MX")}>
+                        <div>
+                            <div>{dateOnly}</div>
+                            {relative && <div style={{ fontSize: 10, color: "#888" }}>{relative}</div>}
+                        </div>
+                    </Tooltip>
+                );
+            },
+            sorter: dateSorter("assigned_at"),
         },
         {
             title: "Código",
             dataIndex: "display_id",
             key: "display_id",
             width: 150,
-            render: (text, record) => (
-                <div>
-                    <div style={{ fontWeight: 600 }}>{text}</div>
-                    {record.order_code && record.item_type !== "lab_order" && (
-                        <div style={{ fontSize: 11, color: "#888" }}>Orden: {record.order_code}</div>
-                    )}
-                </div>
-            ),
         },
         {
             title: "Paciente",
             key: "patient",
-            width: 200,
+            render: (_, record) => {
+                if (!record.patient_name) return "—";
+                return (
+                    <PatientCell
+                        patientId={record.patient_id}
+                        patientName={record.patient_name}
+                        patientCode={record.patient_code}
+                    />
+                );
+            },
+        },
+        {
+            title: "Tipo",
+            key: "item_type",
+            width: 120,
             render: (_, record) => (
-                <div>
-                    <div style={{ fontWeight: 500 }}>{record.patient_name || "—"}</div>
-                    {record.patient_code && (
-                        <div style={{ fontSize: 12, color: "#888" }}>{record.patient_code}</div>
-                    )}
-                </div>
+                <Space>
+                    {getItemTypeIcon(record.item_type)}
+                    <span>{getItemTypeLabel(record.item_type)}</span>
+                </Space>
             ),
+            filters: typeFilters,
+            onFilter: (value, record) => record.item_type === value,
+        },
+        {
+            title: "Tarea",
+            key: "kind",
+            width: 120,
+            render: (_, record) => getKindBadge(record.kind),
+            filters: kindFilters,
+            onFilter: (value, record) => record.kind === value,
         },
         {
             title: "Estado",
@@ -191,32 +252,8 @@ function Worklist() {
                     {getStatusLabel(status)}
                 </Tag>
             ),
-        },
-        {
-            title: "Asignado",
-            dataIndex: "assigned_at",
-            key: "assigned_at",
-            width: 120,
-            render: (date) => (
-                <Tooltip title={new Date(date).toLocaleString("es-MX")}>
-                    <span>{formatRelativeTime(date)}</span>
-                </Tooltip>
-            ),
-        },
-        {
-            title: "Acciones",
-            key: "actions",
-            width: 100,
-            render: (_, record) => (
-                <Button
-                    type="primary"
-                    size="small"
-                    icon={<EyeOutlined />}
-                    onClick={() => navigate(record.link)}
-                >
-                    Ver
-                </Button>
-            ),
+            filters: statusFilters,
+            onFilter: (value, record) => record.item_status === value,
         },
     ];
 
@@ -234,41 +271,35 @@ function Worklist() {
                         style={cardStyle}
                         extra={
                             <Space>
-                                <Select
-                                    placeholder="Tipo de tarea"
+                                <Input.Search
                                     allowClear
-                                    style={{ width: 150 }}
-                                    value={kindFilter}
-                                    onChange={(v) => { setKindFilter(v); setPage(1); }}
-                                    options={[
-                                        { value: "assignment", label: "Asignaciones" },
-                                        { value: "review", label: "Revisiones" },
-                                    ]}
+                                    placeholder="Buscar por código, paciente, orden" 
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    onSearch={(v) => setSearch(v)}
+                                    style={{ width: 320 }}
                                 />
-                                <Select
-                                    placeholder="Tipo de item"
-                                    allowClear
-                                    style={{ width: 150 }}
-                                    value={itemTypeFilter}
-                                    onChange={(v) => { setItemTypeFilter(v); setPage(1); }}
-                                    options={[
-                                        { value: "lab_order", label: "Órdenes" },
-                                        { value: "sample", label: "Muestras" },
-                                        { value: "report", label: "Reportes" },
-                                    ]}
-                                />
+                                <Tag 
+                                    color={hideCompleted ? "blue" : "default"}
+                                    style={{ cursor: "pointer", userSelect: "none" }}
+                                    onClick={() => setHideCompleted(!hideCompleted)}
+                                >
+                                    {hideCompleted ? "Ocultar completadas" : "Mostrar todas"}
+                                </Tag>
                             </Space>
                         }
                     >
-                        <Table
+                        <CelumaTable
+                            dataSource={filteredItems}
                             columns={columns}
-                            dataSource={items}
-                            loading={loading}
                             rowKey="id"
+                            loading={loading}
+                            onRowClick={(record) => navigate(record.link)}
+                            defaultSort={{ field: "assigned_at", order: "descend" }}
                             pagination={{
                                 current: page,
                                 pageSize: pageSize,
-                                total: total,
+                                total: filteredItems.length,
                                 showTotal: (t) => `Total: ${t} elementos`,
                                 showSizeChanger: true,
                                 pageSizeOptions: ["10", "20", "50"],
@@ -277,16 +308,7 @@ function Worklist() {
                                     if (ps !== pageSize) setPageSize(ps);
                                 },
                             }}
-                            locale={{
-                                emptyText: (
-                                    <div style={{ padding: 40, textAlign: "center" }}>
-                                        <InboxOutlined style={{ fontSize: 48, color: "#ccc" }} />
-                                        <p style={{ color: "#888", marginTop: 16 }}>
-                                            No tienes elementos pendientes
-                                        </p>
-                                    </div>
-                                ),
-                            }}
+                            emptyText="No tienes elementos pendientes"
                         />
                     </Card>
                 </div>

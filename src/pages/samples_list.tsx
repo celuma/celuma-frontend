@@ -1,42 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Empty, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Button, Card, Space } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-
-// Generate initials from full name
-const getInitials = (fullName?: string): string => {
-    if (!fullName) return "P";
-    const parts = fullName.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "P";
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
-// Sample state configuration - matches backend SampleState enum
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista" },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente" },
-    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada" },
-};
+import { CelumaTable } from "../components/ui/celuma_table";
+import { PatientCell, renderStatusChip, renderLabels, stringSorter } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -65,7 +37,9 @@ type SamplesListResponse = {
         state: string;
         tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
-        order: { id: string; order_code: string; status: string };
+        order: { id: string; order_code: string; status: string; patient?: { id: string; full_name: string; patient_code: string } | null };
+        received_at?: string | null;
+        labels?: Array<{ id: string; name: string; color: string }>;
     }>;
 };
 
@@ -89,7 +63,7 @@ export default function SamplesList() {
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    type Row = SamplesListResponse["samples"][number] & { patient_name?: string; requested_by?: string | null };
+    type Row = SamplesListResponse["samples"][number] & { patient_name?: string; patient_id?: string; patient_code?: string; requested_by?: string | null };
     const [rows, setRows] = useState<Row[]>([]);
     const [search, setSearch] = useState("");
 
@@ -102,16 +76,20 @@ export default function SamplesList() {
                     getJSON<SamplesListResponse>("/v1/laboratory/samples/"),
                     getJSON<OrdersListResponse>("/v1/laboratory/orders/"),
                 ]);
-                const orderMap = new Map<string, { patient_name?: string; requested_by?: string | null }>();
+                const orderMap = new Map<string, { patient_id: string; patient_name?: string; patient_code?: string; requested_by?: string | null }>();
                 for (const o of ordersRes.orders || []) {
                     orderMap.set(o.id, {
+                        patient_id: o.patient.id,
                         patient_name: o.patient?.full_name || o.patient?.patient_code,
+                        patient_code: o.patient?.patient_code,
                         requested_by: o.requested_by ?? null,
                     });
                 }
                 const enriched = (samplesRes.samples || []).map((s) => ({
                     ...s,
+                    patient_id: orderMap.get(s.order.id)?.patient_id,
                     patient_name: orderMap.get(s.order.id)?.patient_name,
+                    patient_code: orderMap.get(s.order.id)?.patient_code,
                     requested_by: orderMap.get(s.order.id)?.requested_by ?? null,
                 }));
                 setRows(enriched);
@@ -127,11 +105,93 @@ export default function SamplesList() {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
         return rows.filter((r) =>
-            [r.sample_code, r.type, r.state, r.order.order_code, r.branch.name, r.branch.code, r.patient_name, r.requested_by]
+            [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q))
         );
     }, [rows, search]);
+
+    // Get unique states and types for filters
+    const stateFilters = useMemo(() => {
+        const states = new Set(rows.map(r => r.state));
+        return Array.from(states).map(state => ({
+            text: renderStatusChip(state, "sample").props.children,
+            value: state,
+        }));
+    }, [rows]);
+
+    const typeFilters = useMemo(() => {
+        const types = new Set(rows.map(r => r.type));
+        return Array.from(types).map(type => ({
+            text: type,
+            value: type,
+        }));
+    }, [rows]);
+
+    const columns: ColumnsType<Row> = [
+        { 
+            title: "Código", 
+            dataIndex: "sample_code", 
+            key: "sample_code", 
+            width: 140,
+            sorter: stringSorter("sample_code"),
+            defaultSortOrder: "ascend",
+        },
+        { 
+            title: "Orden", 
+            key: "order", 
+            width: 140,
+            render: (_, r) => (
+                <span 
+                    style={{ color: "#0f8b8d", cursor: "pointer", fontWeight: 500 }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/orders/${r.order.id}`);
+                    }}
+                >
+                    {r.order.order_code}
+                </span>
+            ),
+        },
+        { 
+            title: "Paciente", 
+            key: "patient", 
+            render: (_, r) => {
+                if (!r.patient_name || !r.patient_id) return "—";
+                return (
+                    <PatientCell
+                        patientId={r.patient_id}
+                        patientName={r.patient_name}
+                        patientCode={r.patient_code}
+                    />
+                );
+            },
+        },
+        { 
+            title: "Tipo", 
+            dataIndex: "type", 
+            key: "type", 
+            width: 140,
+            filters: typeFilters,
+            onFilter: (value, record) => record.type === value,
+        },
+        { 
+            title: "Estado", 
+            dataIndex: "state", 
+            key: "state", 
+            width: 120,
+            render: (state: string) => renderStatusChip(state, "sample"),
+            filters: stateFilters,
+            onFilter: (value, record) => record.state === value,
+        },
+        ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
+            title: "Labels",
+            key: "labels",
+            width: 200,
+            render: (_: any, r: Row) => 
+                r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
+        }] : []),
+    ];
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
@@ -148,7 +208,7 @@ export default function SamplesList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por código, tipo, orden o sucursal" 
+                                    placeholder="Buscar por código, tipo, orden" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
@@ -161,64 +221,14 @@ export default function SamplesList() {
                         }
                         style={cardStyle}
                     >
-                        <Table
-                            loading={loading}
+                        <CelumaTable
                             dataSource={filtered}
+                            columns={columns}
                             rowKey={(r) => r.id}
-                            pagination={{ pageSize: 10, showSizeChanger: false }}
-                            locale={{ emptyText: <Empty description="Sin muestras" /> }}
-                            columns={[
-                                { title: "Código", dataIndex: "sample_code", key: "sample_code", width: 140 },
-                                { title: "Tipo", dataIndex: "type", key: "type", width: 140 },
-                                { title: "Estado", dataIndex: "state", key: "state", width: 120, render: (v: string) => {
-                                    const config = SAMPLE_STATE_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
-                                    return (
-                                        <div style={{
-                                            backgroundColor: config.bg,
-                                            color: config.color,
-                                            borderRadius: 12,
-                                            fontSize: 11,
-                                            fontWeight: 500,
-                                            padding: "4px 10px",
-                                            display: "inline-block",
-                                        }}>
-                                            {config.label}
-                                        </div>
-                                    );
-                                } },
-                                { title: "Orden", key: "order", render: (_, r: Row) => r.order.order_code, width: 140 },
-                                { 
-                                    title: "Paciente", 
-                                    key: "patient", 
-                                    render: (_, r: Row) => {
-                                        if (!r.patient_name) return "—";
-                                        const initials = getInitials(r.patient_name);
-                                        const color = getAvatarColor(r.patient_name);
-                                        return (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                <Avatar
-                                                    size={32}
-                                                    style={{
-                                                        backgroundColor: color,
-                                                        fontSize: 13,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {initials}
-                                                </Avatar>
-                                                <span style={{ fontWeight: 500 }}>{r.patient_name}</span>
-                                            </div>
-                                        );
-                                    }
-                                },
-                                { title: "Solicitante", key: "requested_by", render: (_, r: Row) => r.requested_by || "—" },
-                                { title: "Sucursal", key: "branch", render: (_, r: Row) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
-                            ]}
-                            onRow={(record) => ({
-                                onClick: () => navigate(`/samples/${record.id}`),
-                                style: { cursor: "pointer" },
-                            })}
+                            loading={loading}
+                            onRowClick={(record) => navigate(`/samples/${record.id}`)}
+                            emptyText="Sin muestras"
+                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>
@@ -227,5 +237,3 @@ export default function SamplesList() {
         </Layout>
     );
 }
-
-

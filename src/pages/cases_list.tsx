@@ -1,44 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Tag, Button, Card, Space } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-
-// Generate initials from full name
-const getInitials = (fullName?: string): string => {
-    if (!fullName) return "P";
-    const parts = fullName.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "P";
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
-// Order status configuration
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico" },
-    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión" },
-    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada" },
-    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada" },
-    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
-};
+import { CelumaTable } from "../components/ui/celuma_table";
+import { PatientCell, renderStatusChip, renderLabels, stringSorter } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -72,6 +42,7 @@ type OrdersListResponse = {
         created_at?: string | null;
         sample_count: number;
         has_report: boolean;
+        labels?: Array<{ id: string; name: string; color: string }>;
     }>;
 };
 
@@ -102,11 +73,73 @@ export default function CasesList() {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
         return rows.filter((r) =>
-            [r.order_code, r.patient.full_name, r.patient.patient_code, r.branch.name, r.requested_by, r.notes]
+            [r.order_code, r.patient.full_name, r.patient.patient_code, r.requested_by, r.notes]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q))
         );
     }, [rows, search]);
+
+    // Get unique statuses for filter
+    const statusFilters = useMemo(() => {
+        const statuses = new Set(rows.map(r => r.status));
+        return Array.from(statuses).map(status => ({
+            text: renderStatusChip(status, "order").props.children,
+            value: status,
+        }));
+    }, [rows]);
+
+    const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
+        { 
+            title: "Código", 
+            dataIndex: "order_code", 
+            key: "order_code", 
+            width: 140,
+            sorter: stringSorter("order_code"),
+            defaultSortOrder: "ascend",
+        },
+        { 
+            title: "Paciente", 
+            key: "patient", 
+            render: (_, r) => (
+                <PatientCell
+                    patientId={r.patient.id}
+                    patientName={r.patient.full_name || r.patient.patient_code}
+                    patientCode={r.patient.patient_code}
+                />
+            ),
+        },
+        { 
+            title: "Estado", 
+            dataIndex: "status", 
+            key: "status", 
+            width: 120,
+            render: (status: string) => renderStatusChip(status, "order"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+        },
+        ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
+            title: "Labels",
+            key: "labels",
+            width: 200,
+            render: (_: any, r: OrdersListResponse["orders"][number]) => 
+                r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
+        }] : []),
+        { 
+            title: "Muestras", 
+            dataIndex: "sample_count", 
+            key: "sample_count", 
+            width: 110,
+            align: "center" as const,
+        },
+        { 
+            title: "Reporte", 
+            dataIndex: "has_report", 
+            key: "has_report", 
+            width: 110,
+            align: "center" as const,
+            render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag>,
+        },
+    ];
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
@@ -118,12 +151,12 @@ export default function CasesList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={cardTitleStyle}>Casos</span>}
+                        title={<span style={cardTitleStyle}>Ordenes</span>}
                         extra={
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por orden, paciente, sucursal" 
+                                    placeholder="Buscar por orden, paciente" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
@@ -136,64 +169,14 @@ export default function CasesList() {
                         }
                         style={cardStyle}
                     >
-                        <Table
-                            loading={loading}
+                        <CelumaTable
                             dataSource={filtered}
+                            columns={columns}
                             rowKey={(r) => r.id}
-                            pagination={{ pageSize: 10, showSizeChanger: false }}
-                            locale={{ emptyText: <Empty description="Sin casos" /> }}
-                            columns={[
-                                { title: "Fecha", dataIndex: "created_at", key: "created_at", width: 180, render: (v: string | null) => v ? new Date(v).toLocaleString() : "—" },
-                                { title: "Orden", dataIndex: "order_code", key: "order_code", width: 140 },
-                                { 
-                                    title: "Paciente", 
-                                    key: "patient", 
-                                    render: (_, r) => {
-                                        const fullName = r.patient.full_name || r.patient.patient_code;
-                                        const initials = getInitials(fullName);
-                                        const color = getAvatarColor(fullName);
-                                        return (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                <Avatar
-                                                    size={32}
-                                                    style={{
-                                                        backgroundColor: color,
-                                                        fontSize: 13,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {initials}
-                                                </Avatar>
-                                                <span style={{ fontWeight: 500 }}>{fullName}</span>
-                                            </div>
-                                        );
-                                    }
-                                },
-                                { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
-                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => {
-                                    const config = STATUS_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
-                                    return (
-                                        <div style={{
-                                            backgroundColor: config.bg,
-                                            color: config.color,
-                                            borderRadius: 12,
-                                            fontSize: 11,
-                                            fontWeight: 500,
-                                            padding: "4px 10px",
-                                            display: "inline-block",
-                                        }}>
-                                            {config.label}
-                                        </div>
-                                    );
-                                } },
-                                { title: "Muestras", dataIndex: "sample_count", key: "sample_count", width: 110 },
-                                { title: "Reporte", dataIndex: "has_report", key: "has_report", width: 110, render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag> },
-                            ]}
-                            onRow={(record) => ({
-                                onClick: () => navigate(`/orders/${record.id}`),
-                                style: { cursor: "pointer" },
-                            })}
+                            loading={loading}
+                            onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                            emptyText="Sin casos"
+                            pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ["10", "20", "50"] }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>
@@ -202,5 +185,3 @@ export default function CasesList() {
         </Layout>
     );
 }
-
-

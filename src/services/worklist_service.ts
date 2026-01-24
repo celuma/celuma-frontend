@@ -32,6 +32,7 @@ export interface WorklistItem {
     display_id: string;
     item_status: string;
     assigned_at: string;
+    patient_id?: string | null;
     patient_name?: string | null;
     patient_code?: string | null;
     order_code?: string | null;
