@@ -1340,6 +1340,7 @@ const ReportEditor: React.FC = () => {
                 <CommentInput
                     value={approveComment}
                     onChange={setApproveComment}
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     onSubmit={async (text, _mentionIds) => {
                         // Update the comment value for handleApprove to use
                         setApproveComment(text);
@@ -1407,6 +1408,7 @@ const ReportEditor: React.FC = () => {
                 <CommentInput
                     value={changesComment}
                     onChange={setChangesComment}
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     onSubmit={async (text, _mentionIds) => {
                         // Update the comment value for handleRequestChanges to use
                         setChangesComment(text);
