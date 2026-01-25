@@ -174,7 +174,7 @@ export default function OrdersList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.labels?.some(label => label.id === value) || false;
             },
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
@@ -202,7 +202,7 @@ export default function OrdersList() {
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;
             },
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => {

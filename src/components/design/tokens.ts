@@ -10,6 +10,7 @@ export const tokens = {
     bg: "#fbf6ec",
     cardBg: "#fff",
     primary: "#0f8b8d",
+    accent: "#0f8b8d",
     textPrimary: "#0d1b2a",
     textSecondary: "#6b7280",
     

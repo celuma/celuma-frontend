@@ -201,7 +201,7 @@ export default function ReportsList() {
             key: "reviewers",
             width: 140,
             filters: reviewerFilters,
-            onFilter: (value: string | number | boolean, record: ReportsListResponse["reports"][number]) => {
+            onFilter: (value: boolean | React.Key, record: ReportsListResponse["reports"][number]) => {
                 return record.reviewers?.some(reviewer => reviewer.id === value) || false;
             },
             render: (_: unknown, r: ReportsListResponse["reports"][number]) => {

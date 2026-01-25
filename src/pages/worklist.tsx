@@ -195,7 +195,11 @@ function Worklist() {
                     </Tooltip>
                 );
             },
-            sorter: dateSorter("assigned_at"),
+            sorter: (a, b) => {
+                const dateA = a.assigned_at ? new Date(a.assigned_at).getTime() : 0;
+                const dateB = b.assigned_at ? new Date(b.assigned_at).getTime() : 0;
+                return dateA - dateB;
+            },
         },
         {
             title: "Código",
@@ -210,9 +214,9 @@ function Worklist() {
                 if (!record.patient_name) return "—";
                 return (
                     <PatientCell
-                        patientId={record.patient_id}
-                        patientName={record.patient_name}
-                        patientCode={record.patient_code}
+                        patientId={record.patient_id || ""}
+                        patientName={record.patient_name || ""}
+                        patientCode={record.patient_code || undefined}
                     />
                 );
             },
@@ -285,12 +289,12 @@ function Worklist() {
                             </Space>
                         }
                     >
-                        <CelumaTable
+                        <CelumaTable<WorklistItem>
                             dataSource={filteredItems}
                             columns={columns}
                             rowKey="id"
                             loading={loading}
-                            onRowClick={(record) => navigate(record.link)}
+                            onRowClick={(record) => navigate(record.link as string)}
                             defaultSort={{ field: "assigned_at", order: "descend" }}
                             pagination={{
                                 current: page,

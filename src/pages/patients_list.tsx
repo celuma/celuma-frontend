@@ -84,7 +84,7 @@ export default function PatientsList() {
     // Sex filter
     const sexFilters = useMemo(() => {
         const sexes = new Set(rows.filter(r => r.sex).map(r => r.sex));
-        return Array.from(sexes).map(sex => ({
+        return Array.from(sexes).filter((sex): sex is string => sex !== null && sex !== undefined).map(sex => ({
             text: sex,
             value: sex,
         }));

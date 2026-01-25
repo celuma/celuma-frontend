@@ -126,7 +126,7 @@ export default function OrderRegister() {
         return qs.get("patientId") || "";
     }, [search]);
 
-    const { control, handleSubmit, reset } = useForm<CaseFormData>({
+    const { control, handleSubmit, reset } = useForm<OrderFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -136,7 +136,7 @@ export default function OrderRegister() {
             requested_by: "",
             notes: "",
             samples: [
-                { sample_code: "", type: undefined as unknown as CaseFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" },
+                { sample_code: "", type: undefined as unknown as OrderFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" },
             ],
         },
         mode: "onTouched",
@@ -389,7 +389,7 @@ export default function OrderRegister() {
                                         <Button
                                             type="default"
                                             onClick={() =>
-                                                append({ sample_code: "", type: undefined as unknown as CaseFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" })
+                                                append({ sample_code: "", type: undefined as unknown as OrderFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" })
                                             }
                                         >
                                             Agregar otra muestra

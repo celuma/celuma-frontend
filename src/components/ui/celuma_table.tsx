@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Table, Empty } from "antd";
-import type { TableProps, ColumnsType, TablePaginationConfig } from "antd";
+import type { TableProps, TablePaginationConfig } from "antd";
+import type { ColumnsType } from "antd/es/table";
 
 export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {
     dataSource: T[];
@@ -50,11 +51,13 @@ export function CelumaTable<T extends Record<string, unknown>>({
             if (!bValue) return -1;
             
             // Try date comparison first
-            const aDate = new Date(aValue).getTime();
-            const bDate = new Date(bValue).getTime();
-            
-            if (!isNaN(aDate) && !isNaN(bDate)) {
-                return defaultSort.order === 'ascend' ? aDate - bDate : bDate - aDate;
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                const aDate = new Date(aValue).getTime();
+                const bDate = new Date(bValue).getTime();
+                
+                if (!isNaN(aDate) && !isNaN(bDate)) {
+                    return defaultSort.order === 'ascend' ? aDate - bDate : bDate - aDate;
+                }
             }
             
             // Fall back to string comparison
@@ -69,7 +72,7 @@ export function CelumaTable<T extends Record<string, unknown>>({
     }, [dataSource, defaultSort]);
 
     // Default pagination config - spread pagination first so defaults don't override passed props
-    const defaultPagination: TablePaginationConfig = pagination !== false ? {
+    const defaultPagination: TablePaginationConfig | false = pagination !== false ? {
         pageSize: 10,
         showSizeChanger: false,
         ...(typeof pagination === 'object' ? pagination : {}),
