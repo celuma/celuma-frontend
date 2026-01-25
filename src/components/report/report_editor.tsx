@@ -1340,7 +1340,7 @@ const ReportEditor: React.FC = () => {
                 <CommentInput
                     value={approveComment}
                     onChange={setApproveComment}
-                    onSubmit={async (text, mentionIds) => {
+                    onSubmit={async (text, _mentionIds) => {
                         // Update the comment value for handleApprove to use
                         setApproveComment(text);
                         // Note: mentionIds are available but approveReport API doesn't use them yet
@@ -1407,7 +1407,7 @@ const ReportEditor: React.FC = () => {
                 <CommentInput
                     value={changesComment}
                     onChange={setChangesComment}
-                    onSubmit={async (text, mentionIds) => {
+                    onSubmit={async (text, _mentionIds) => {
                         // Update the comment value for handleRequestChanges to use
                         setChangesComment(text);
                         // Note: mentionIds are available but requestChanges API doesn't use them yet

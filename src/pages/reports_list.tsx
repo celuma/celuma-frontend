@@ -146,7 +146,7 @@ export default function ReportsList() {
                     {r.order.order_code}
                 </span>
             ),
-            sorter: stringSorter((r: ReportsListResponse["reports"][number]) => r.order.order_code),
+            sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
             defaultSortOrder: "ascend",
         },
         { 
@@ -155,7 +155,7 @@ export default function ReportsList() {
             key: "title", 
             width: 200,
             render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
-            sorter: stringSorter((r: ReportsListResponse["reports"][number]) => r.title || ""),
+            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
         },
         { 
             title: "Paciente", 
@@ -201,10 +201,10 @@ export default function ReportsList() {
             key: "reviewers",
             width: 140,
             filters: reviewerFilters,
-            onFilter: (value: any, record: ReportsListResponse["reports"][number]) => {
+            onFilter: (value: string | number | boolean, record: ReportsListResponse["reports"][number]) => {
                 return record.reviewers?.some(reviewer => reviewer.id === value) || false;
             },
-            render: (_: any, r: ReportsListResponse["reports"][number]) => {
+            render: (_: unknown, r: ReportsListResponse["reports"][number]) => {
                 if (!r.reviewers || r.reviewers.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">

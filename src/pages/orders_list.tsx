@@ -174,10 +174,10 @@ export default function OrdersList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
                 return record.labels?.some(label => label.id === value) || false;
             },
-            render: (_: any, r: OrdersListResponse["orders"][number]) => 
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
         { 
@@ -202,10 +202,10 @@ export default function OrdersList() {
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;
             },
-            render: (_: any, r: OrdersListResponse["orders"][number]) => {
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">

@@ -27,10 +27,8 @@ function Worklist() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);
-    const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
-    const [hasMore, setHasMore] = useState(false);
     const [search, setSearch] = useState("");
     const [hideCompleted, setHideCompleted] = useState(true);
 
@@ -42,8 +40,6 @@ function Worklist() {
                 page_size: pageSize,
             });
             setItems(data.items);
-            setTotal(data.total);
-            setHasMore(data.has_more);
         } catch (error) {
             console.error("Error loading worklist:", error);
         } finally {
@@ -132,7 +128,7 @@ function Worklist() {
     };
 
     // Completed statuses to filter out by default
-    const completedStatuses = ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"];
+    const completedStatuses = useMemo(() => ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"], []);
 
     // Filter items based on search and hideCompleted
     const filteredItems = useMemo(() => {
@@ -154,7 +150,7 @@ function Worklist() {
         }
         
         return result;
-    }, [items, search, hideCompleted]);
+    }, [items, search, hideCompleted, completedStatuses]);
 
     // Get unique kinds and types for filters
     const kindFilters = useMemo(() => {

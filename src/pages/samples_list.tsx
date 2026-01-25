@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -291,10 +291,10 @@ export default function SamplesList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: any, record: Row) => {
+            onFilter: (value: boolean | React.Key, record: Row) => {
                 return record.labels?.some(label => label.id === value) || false;
             },
-            render: (_: any, r: Row) => 
+            render: (_: unknown, r: Row) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
         ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
@@ -302,10 +302,10 @@ export default function SamplesList() {
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: any, record: Row) => {
+            onFilter: (value: boolean | React.Key, record: Row) => {
                 return record.assignees?.some(user => user.id === value) || false;
             },
-            render: (_: any, r: Row) => {
+            render: (_: unknown, r: Row) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">

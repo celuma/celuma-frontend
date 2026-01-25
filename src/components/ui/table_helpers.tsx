@@ -1,5 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
 import React from "react";
-import { Avatar, Tooltip } from "antd";
+import { Avatar } from "antd";
 import { 
     ExperimentOutlined,
     MedicineBoxOutlined,
@@ -281,9 +282,9 @@ export const renderLabels = (
  * Helper to create a sorter function for dates
  */
 export const dateSorter = (field: string) => {
-    return (a: any, b: any) => {
-        const dateA = a[field] ? new Date(a[field]).getTime() : 0;
-        const dateB = b[field] ? new Date(b[field]).getTime() : 0;
+    return (a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const dateA = a[field] ? new Date(String(a[field])).getTime() : 0;
+        const dateB = b[field] ? new Date(String(b[field])).getTime() : 0;
         return dateA - dateB;
     };
 };
@@ -292,9 +293,9 @@ export const dateSorter = (field: string) => {
  * Helper to create a sorter function for strings
  */
 export const stringSorter = (field: string) => {
-    return (a: any, b: any) => {
-        const valA = a[field] || "";
-        const valB = b[field] || "";
+    return (a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const valA = String(a[field] || "");
+        const valB = String(b[field] || "");
         return valA.localeCompare(valB);
     };
 };
@@ -302,15 +303,20 @@ export const stringSorter = (field: string) => {
 /**
  * Helper to get nested field value for sorting
  */
-export const getNestedValue = (obj: any, path: string): any => {
-    return path.split('.').reduce((acc, part) => acc?.[part], obj);
+export const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
+    return path.split('.').reduce((acc, part) => {
+        if (acc && typeof acc === 'object' && part in acc) {
+            return (acc as Record<string, unknown>)[part];
+        }
+        return undefined;
+    }, obj as unknown);
 };
 
 /**
  * Helper to create a sorter function for nested fields
  */
 export const nestedStringSorter = (path: string) => {
-    return (a: any, b: any) => {
+    return (a: Record<string, unknown>, b: Record<string, unknown>) => {
         const valA = getNestedValue(a, path) || "";
         const valB = getNestedValue(b, path) || "";
         return String(valA).localeCompare(String(valB));

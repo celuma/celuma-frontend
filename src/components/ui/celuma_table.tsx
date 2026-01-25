@@ -24,7 +24,7 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
  * - Standardized pagination
  * - Empty state handling
  */
-export function CelumaTable<T extends Record<string, any>>({
+export function CelumaTable<T extends Record<string, unknown>>({
     dataSource,
     columns,
     rowKey,

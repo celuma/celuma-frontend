@@ -115,7 +115,7 @@ export default function PatientDetailPage() {
     const totalSamples = ordersResp?.orders?.reduce((acc, o) => acc + o.sample_count, 0) ?? 0;
 
     // Get rows for filters and search
-    const rows = ordersResp?.orders ?? [];
+    const rows = useMemo(() => ordersResp?.orders ?? [], [ordersResp?.orders]);
 
     // Filter orders based on search
     const filteredOrders = useMemo(() => {
@@ -209,10 +209,10 @@ export default function PatientDetailPage() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
                 return record.labels?.some(label => label.id === value) || false;
             },
-            render: (_: any, r: OrdersListResponse["orders"][number]) => 
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
         { 
@@ -237,10 +237,10 @@ export default function PatientDetailPage() {
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: any, record: OrdersListResponse["orders"][number]) => {
+            onFilter: (value: string | number | boolean, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;
             },
-            render: (_: any, r: OrdersListResponse["orders"][number]) => {
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">

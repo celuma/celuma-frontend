@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Input, Button as AntButton, Avatar } from "antd";
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import { SendOutlined, LoadingOutlined } from "@ant-design/icons";

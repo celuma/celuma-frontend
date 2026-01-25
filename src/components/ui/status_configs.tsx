@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircleOutlined, CloseCircleOutlined, InboxOutlined, SettingOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, InboxOutlined, SettingOutlined, ExperimentOutlined } from "@ant-design/icons";
 
 // Order status configuration - matches backend OrderStatus enum
 export const ORDER_STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
