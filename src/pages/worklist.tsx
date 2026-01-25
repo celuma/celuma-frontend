@@ -21,7 +21,7 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { CelumaTable } from "../components/ui/celuma_table";
-import { PatientCell, renderDateCell, dateSorter } from "../components/ui/table_helpers";
+import { PatientCell, renderDateCell } from "../components/ui/table_helpers";
 
 function Worklist() {
     const navigate = useNavigate();
