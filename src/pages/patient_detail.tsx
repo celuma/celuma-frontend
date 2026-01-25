@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Table, Tag, Empty, Button as AntButton, Avatar } from "antd";
-import { PhoneOutlined, MailOutlined, CalendarOutlined, ManOutlined, WomanOutlined } from "@ant-design/icons";
+import { Layout, Card, Space, Button as AntButton, Avatar, Input, Tag, Tooltip } from "antd";
+import { PhoneOutlined, MailOutlined, CalendarOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { CelumaTable } from "../components/ui/celuma_table";
+import { renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -27,35 +30,21 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
-const getInitials = (firstName?: string, lastName?: string): string => {
-    const first = firstName?.trim()?.[0]?.toUpperCase() || "";
-    const last = lastName?.trim()?.[0]?.toUpperCase() || "";
-    return first + last || "P";
-};
-
-const getAvatarColor = (name: string): string => {
-    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
-type PatientOrdersResponse = {
-    patient_id: string;
+type OrdersListResponse = {
     orders: Array<{
         id: string;
         order_code: string;
         status: string;
         tenant_id: string;
-        branch_id: string;
-        patient_id: string;
+        branch: { id: string; name?: string; code?: string | null };
+        patient: { id: string; full_name: string; patient_code: string };
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
         sample_count: number;
         has_report: boolean;
+        labels?: Array<{ id: string; name: string; color: string }> | null;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }> | null;
     }>;
 };
 
@@ -77,8 +66,9 @@ export default function PatientDetailPage() {
     const { patientId } = useParams();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [ordersResp, setOrdersResp] = useState<PatientOrdersResponse | null>(null);
+    const [ordersResp, setOrdersResp] = useState<OrdersListResponse | null>(null);
     const [patient, setPatient] = useState<PatientDetail | null>(null);
+    const [search, setSearch] = useState("");
 
     useEffect(() => {
         if (!patientId) return;
@@ -87,7 +77,7 @@ export default function PatientDetailPage() {
             setError(null);
             try {
                 const [orders, detail] = await Promise.all([
-                    getJSON<PatientOrdersResponse>(`/v1/laboratory/patients/${patientId}/orders`),
+                    getJSON<OrdersListResponse>(`/v1/laboratory/patients/${patientId}/orders`),
                     getJSON<PatientDetail>(`/v1/patients/${patientId}`),
                 ]);
                 orders.orders.sort((a, b) => {
@@ -107,7 +97,7 @@ export default function PatientDetailPage() {
     }, [patientId]);
 
     const fullName = useMemo(() => `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(), [patient]);
-    const initials = useMemo(() => getInitials(patient?.first_name, patient?.last_name), [patient]);
+    const initials = useMemo(() => getInitials(fullName || "Patient"), [fullName]);
     const avatarColor = useMemo(() => getAvatarColor(fullName || "Patient"), [fullName]);
 
     const age = useMemo(() => {
@@ -123,6 +113,156 @@ export default function PatientDetailPage() {
     const totalOrders = ordersResp?.orders?.length ?? 0;
     const totalReports = ordersResp?.orders?.filter(o => o.has_report).length ?? 0;
     const totalSamples = ordersResp?.orders?.reduce((acc, o) => acc + o.sample_count, 0) ?? 0;
+
+    // Get rows for filters and search
+    const rows = useMemo(() => ordersResp?.orders ?? [], [ordersResp?.orders]);
+
+    // Filter orders based on search
+    const filteredOrders = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return rows;
+        return rows.filter((r) => {
+            // Search in basic fields
+            const basicFields = [r.order_code, r.status, r.requested_by, r.notes]
+                .filter(Boolean)
+                .some((v) => String(v).toLowerCase().includes(q));
+            
+            // Search in labels
+            const labelMatch = r.labels?.some(label => 
+                label.name.toLowerCase().includes(q)
+            ) || false;
+            
+            // Search in assignees
+            const assigneeMatch = r.assignees?.some(user => 
+                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
+            ) || false;
+            
+            return basicFields || labelMatch || assigneeMatch;
+        });
+    }, [rows, search]);
+
+    // Get unique statuses for filter
+    const statusFilters = useMemo(() => {
+        const statuses = new Set(rows.map(r => r.status));
+        return Array.from(statuses).map(status => ({
+            text: renderStatusChip(status, "order").props.children,
+            value: status,
+        }));
+    }, [rows]);
+
+    // Get unique labels for filters
+    const labelFilters = useMemo(() => {
+        const labelsMap = new Map<string, { name: string; color: string }>();
+        rows.forEach(r => {
+            r.labels?.forEach(label => {
+                if (!labelsMap.has(label.id)) {
+                    labelsMap.set(label.id, { name: label.name, color: label.color });
+                }
+            });
+        });
+        return Array.from(labelsMap.entries())
+            .sort((a, b) => a[1].name.localeCompare(b[1].name))
+            .map(([id, label]) => ({
+                text: label.name,
+                value: id,
+            }));
+    }, [rows]);
+
+    // Get unique assignees for filters
+    const assigneeFilters = useMemo(() => {
+        const assigneesMap = new Map<string, string>();
+        rows.forEach(r => {
+            r.assignees?.forEach(user => {
+                if (!assigneesMap.has(user.id)) {
+                    assigneesMap.set(user.id, user.name);
+                }
+            });
+        });
+        return Array.from(assigneesMap.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
+    const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
+        { 
+            title: "Código", 
+            dataIndex: "order_code", 
+            key: "order_code", 
+            width: 140,
+            sorter: stringSorter("order_code"),
+        },
+        { 
+            title: "Estado", 
+            dataIndex: "status", 
+            key: "status", 
+            width: 120,
+            render: (status: string) => renderStatusChip(status, "order"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
+        },
+        ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
+            title: "Etiquetas",
+            key: "labels",
+            width: 200,
+            filters: labelFilters,
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
+                return record.labels?.some(label => label.id === value) || false;
+            },
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
+                r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
+        }] : []),
+        { 
+            title: "Reporte", 
+            dataIndex: "has_report", 
+            key: "has_report", 
+            width: 110,
+            align: "center" as const,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
+        },
+        ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
+            title: "Asignados",
+            key: "assignees",
+            width: 140,
+            filters: assigneeFilters,
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
+                return record.assignees?.some(user => user.id === value) || false;
+            },
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
+                if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
+                return (
+                    <Avatar.Group maxCount={3} size="small">
+                        {r.assignees.map(user => (
+                            <Tooltip key={user.id} title={user.name}>
+                                <Avatar 
+                                    size={24}
+                                    src={user.avatar_url}
+                                    style={{ 
+                                        backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {!user.avatar_url && getInitials(user.name)}
+                                </Avatar>
+                            </Tooltip>
+                        ))}
+                    </Avatar.Group>
+                );
+            },
+        }] : []),
+    ];
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
@@ -232,35 +372,52 @@ export default function PatientDetailPage() {
                         loading={loading}
                         style={cardStyle}
                         extra={!loading && patient ? (
-                            <AntButton type="primary" onClick={() => navigate(`/cases/register?patientId=${patient.id}`)}>
-                                Registrar Caso
+                            <Space>
+                                <Input.Search
+                                    allowClear
+                                    placeholder="Buscar por código, estado o notas"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    onSearch={(v) => setSearch(v)}
+                                    style={{ width: 300 }}
+                                />
+                                <AntButton type="primary" onClick={() => navigate(`/orders/register?patientId=${patient.id}`)}>
+                                    Registrar Orden
                             </AntButton>
+                            </Space>
                         ) : null}
                     >
                         {!loading && (
-                            <Table
-                                dataSource={ordersResp?.orders ?? []}
+                            <CelumaTable
+                                dataSource={filteredOrders}
+                                columns={columns}
                                 rowKey={(r) => r.id}
-                                pagination={{ pageSize: 10, showSizeChanger: false }}
-                                locale={{ emptyText: <Empty description="Sin órdenes" /> }}
-                                columns={[
-                                    { 
-                                        title: "Fecha", 
-                                        dataIndex: "created_at", 
-                                        key: "created_at", 
-                                        width: 140, 
-                                        render: (v: string | null) => v ? new Date(v).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" }) : "—" 
-                                    },
-                                    { title: "Folio", dataIndex: "order_code", key: "order_code", width: 120 },
-                                    { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => <Tag color={tokens.primary}>{v}</Tag> },
-                                    { title: "Muestras", dataIndex: "sample_count", key: "sample_count", width: 90, align: "center" as const },
-                                    { title: "Reporte", dataIndex: "has_report", key: "has_report", width: 90, align: "center" as const, render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag> },
-                                    { title: "Notas", dataIndex: "notes", key: "notes", ellipsis: true },
-                                ]}
-                                onRow={(record) => ({ onClick: () => navigate(`/orders/${record.id}`), style: { cursor: "pointer" } })}
+                                loading={loading}
+                                onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                                emptyText="Sin órdenes"
+                                pagination={{ pageSize: 10 }}
+                                locale={{
+                                    filterTitle: 'Filtrar',
+                                    filterConfirm: 'Aceptar',
+                                    filterReset: 'Limpiar',
+                                    filterEmptyText: 'Sin filtros',
+                                    filterCheckall: 'Seleccionar todo',
+                                    filterSearchPlaceholder: 'Buscar en filtros',
+                                    emptyText: 'Sin órdenes',
+                                    selectAll: 'Seleccionar todo',
+                                    selectInvert: 'Invertir selección',
+                                    selectNone: 'Limpiar selección',
+                                    selectionAll: 'Seleccionar todos',
+                                    sortTitle: 'Ordenar',
+                                    expand: 'Expandir fila',
+                                    collapse: 'Colapsar fila',
+                                    triggerDesc: 'Clic para ordenar descendente',
+                                    triggerAsc: 'Clic para ordenar ascendente',
+                                    cancelSort: 'Clic para cancelar ordenamiento',
+                                }}
                             />
                         )}
-                        <ErrorText>{error}</ErrorText>
+                        {error && <ErrorText>{error}</ErrorText>}
                     </Card>
                 </div>
             </Layout.Content>

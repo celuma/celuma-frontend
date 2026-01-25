@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -8,15 +9,7 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
-import { 
-    PatientCell, 
-    renderStatusChip, 
-    renderLabels, 
-    stringSorter, 
-    getInitials, 
-    getAvatarColor,
-    SampleTypeBadge 
-} from "../components/ui/table_helpers";
+import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -37,26 +30,12 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
-type SamplesListResponse = {
-    samples: Array<{
-        id: string;
-        sample_code: string;
-        type: string;
-        state: string;
-        tenant_id: string;
-        branch: { id: string; name?: string; code?: string | null };
-        order: { id: string; order_code: string; status: string; patient?: { id: string; full_name: string; patient_code: string } | null };
-        received_at?: string | null;
-        labels?: Array<{ id: string; name: string; color: string }>;
-        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
-    }>;
-};
-
 type OrdersListResponse = {
     orders: Array<{
         id: string;
         order_code: string;
         status: string;
+        tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
         patient: { id: string; full_name: string; patient_code: string };
         requested_by?: string | null;
@@ -64,16 +43,17 @@ type OrdersListResponse = {
         created_at?: string | null;
         sample_count: number;
         has_report: boolean;
+        labels?: Array<{ id: string; name: string; color: string }>;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
     }>;
 };
 
-export default function SamplesList() {
+export default function OrdersList() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    type Row = SamplesListResponse["samples"][number] & { patient_name?: string; patient_id?: string; patient_code?: string; requested_by?: string | null };
-    const [rows, setRows] = useState<Row[]>([]);
+    const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
     const [search, setSearch] = useState("");
 
     useEffect(() => {
@@ -81,27 +61,8 @@ export default function SamplesList() {
             setLoading(true);
             setError(null);
             try {
-                const [samplesRes, ordersRes] = await Promise.all([
-                    getJSON<SamplesListResponse>("/v1/laboratory/samples/"),
-                    getJSON<OrdersListResponse>("/v1/laboratory/orders/"),
-                ]);
-                const orderMap = new Map<string, { patient_id: string; patient_name?: string; patient_code?: string; requested_by?: string | null }>();
-                for (const o of ordersRes.orders || []) {
-                    orderMap.set(o.id, {
-                        patient_id: o.patient.id,
-                        patient_name: o.patient?.full_name || o.patient?.patient_code,
-                        patient_code: o.patient?.patient_code,
-                        requested_by: o.requested_by ?? null,
-                    });
-                }
-                const enriched = (samplesRes.samples || []).map((s) => ({
-                    ...s,
-                    patient_id: orderMap.get(s.order.id)?.patient_id,
-                    patient_name: orderMap.get(s.order.id)?.patient_name,
-                    patient_code: orderMap.get(s.order.id)?.patient_code,
-                    requested_by: orderMap.get(s.order.id)?.requested_by ?? null,
-                }));
-                setRows(enriched);
+                const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
+                setRows(data.orders || []);
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             } finally {
@@ -115,7 +76,7 @@ export default function SamplesList() {
         if (!q) return rows;
         return rows.filter((r) => {
             // Search in basic fields
-            const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
+            const basicFields = [r.order_code, r.patient.full_name, r.patient.patient_code, r.requested_by, r.notes]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q));
             
@@ -133,46 +94,13 @@ export default function SamplesList() {
         });
     }, [rows, search]);
 
-    // Get unique states and types for filters
-    const stateFilters = useMemo(() => {
-        const states = new Set(rows.map(r => r.state));
-        return Array.from(states).map(state => ({
-            text: renderStatusChip(state, "sample").props.children,
-            value: state,
+    // Get unique statuses for filter
+    const statusFilters = useMemo(() => {
+        const statuses = new Set(rows.map(r => r.status));
+        return Array.from(statuses).map(status => ({
+            text: renderStatusChip(status, "order").props.children,
+            value: status,
         }));
-    }, [rows]);
-
-    const typeFilters = useMemo(() => {
-        const types = new Set(rows.map(r => r.type));
-        return Array.from(types).map(type => ({
-            text: type,
-            value: type,
-        }));
-    }, [rows]);
-
-    // Get unique order codes for filters
-    const orderFilters = useMemo(() => {
-        const orders = new Set(rows.map(r => r.order.order_code));
-        return Array.from(orders).sort().map(code => ({
-            text: code,
-            value: code,
-        }));
-    }, [rows]);
-
-    // Get unique patients for filters
-    const patientFilters = useMemo(() => {
-        const patients = new Map<string, string>();
-        rows.forEach(r => {
-            if (r.patient_id && r.patient_name) {
-                patients.set(r.patient_id, r.patient_name);
-            }
-        });
-        return Array.from(patients.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
     }, [rows]);
 
     // Get unique labels for filters
@@ -211,101 +139,73 @@ export default function SamplesList() {
             }));
     }, [rows]);
 
-    const columns: ColumnsType<Row> = [
+    const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
         { 
             title: "Código", 
-            dataIndex: "sample_code", 
-            key: "sample_code", 
+            dataIndex: "order_code", 
+            key: "order_code", 
             width: 140,
-            sorter: stringSorter("sample_code"),
+            sorter: stringSorter("order_code"),
             defaultSortOrder: "ascend",
         },
         { 
-            title: "Código de orden", 
-            key: "order", 
-            width: 160,
-            sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
-            filters: orderFilters,
-            onFilter: (value, record) => record.order.order_code === value,
+            title: "Paciente", 
+            key: "patient", 
             render: (_, r) => (
-                <a
-                    href={`/orders/${r.order.id}`}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigate(`/orders/${r.order.id}`);
-                    }}
-                    style={{ 
-                        color: "#0f8b8d", 
-                        cursor: "pointer", 
-                        fontWeight: 600,
-                        textDecoration: "none",
-                        borderBottom: "1px dashed #0f8b8d"
-                    }}
-                >
-                    {r.order.order_code}
-                </a>
+                <PatientCell
+                    patientId={r.patient.id}
+                    patientName={r.patient.full_name || r.patient.patient_code}
+                    patientCode={r.patient.patient_code}
+                />
             ),
         },
         { 
-            title: "Paciente", 
-            key: "patient",
-            sorter: (a, b) => {
-                const nameA = a.patient_name || a.patient_code || "";
-                const nameB = b.patient_name || b.patient_code || "";
-                return nameA.localeCompare(nameB);
-            },
-            filters: patientFilters,
-            onFilter: (value, record) => record.patient_id === value,
-            render: (_, r) => {
-                if (!r.patient_name || !r.patient_id) return "—";
-                return (
-                    <PatientCell
-                        patientId={r.patient_id}
-                        patientName={r.patient_name}
-                        patientCode={r.patient_code}
-                    />
-                );
-            },
-        },
-        { 
-            title: "Tipo", 
-            dataIndex: "type", 
-            key: "type", 
-            width: 160,
-            filters: typeFilters,
-            onFilter: (value, record) => record.type === value,
-            render: (type: string) => <SampleTypeBadge type={type} />,
-        },
-        { 
             title: "Estado", 
-            dataIndex: "state", 
-            key: "state", 
+            dataIndex: "status", 
+            key: "status", 
             width: 120,
-            render: (state: string) => renderStatusChip(state, "sample"),
-            filters: stateFilters,
-            onFilter: (value, record) => record.state === value,
+            render: (status: string) => renderStatusChip(status, "order"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
         },
         ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
             title: "Etiquetas",
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: boolean | React.Key, record: Row) => {
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.labels?.some(label => label.id === value) || false;
             },
-            render: (_: unknown, r: Row) => 
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
+        { 
+            title: "Reporte", 
+            dataIndex: "has_report", 
+            key: "has_report", 
+            width: 110,
+            align: "center" as const,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
+        },
         ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: boolean | React.Key, record: Row) => {
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;
             },
-            render: (_: unknown, r: Row) => {
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">
@@ -339,19 +239,19 @@ export default function SamplesList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={cardTitleStyle}>Muestras</span>}
+                        title={<span style={cardTitleStyle}>Órdenes</span>}
                         extra={
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar en muestras"
+                                    placeholder="Buscar por orden, paciente" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
-                                    style={{ width: 400 }}
+                                    style={{ width: 320 }}
                                 />
-                                <Button type="primary" onClick={() => navigate("/samples/register")}>
-                                    Registrar Muestra
+                                <Button type="primary" onClick={() => navigate("/orders/register")}>
+                                    Registrar Orden
                                 </Button>
                             </Space>
                         }
@@ -362,8 +262,8 @@ export default function SamplesList() {
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
-                            onRowClick={(record) => navigate(`/samples/${record.id}`)}
-                            emptyText="Sin muestras"
+                            onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                            emptyText="Sin casos"
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',
@@ -372,7 +272,7 @@ export default function SamplesList() {
                                 filterEmptyText: 'Sin filtros',
                                 filterCheckall: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
-                                emptyText: 'Sin muestras',
+                                emptyText: 'Sin casos',
                                 selectAll: 'Seleccionar todo',
                                 selectInvert: 'Invertir selección',
                                 selectNone: 'Limpiar selección',

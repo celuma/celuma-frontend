@@ -16,6 +16,7 @@ import TextField from "../ui/text_field";
 import DateField from "../ui/date_field";
 import { tokens } from "../design/tokens";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
+import CommentInput from "../comments/comment_input";
 import { getReport } from "../../services/report_service";
 
 /* Flags by report type */
@@ -280,6 +281,9 @@ const ReportEditor: React.FC = () => {
     // Modal for request changes
     const [isChangesModalVisible, setIsChangesModalVisible] = useState(false);
     const [changesComment, setChangesComment] = useState("");
+    // Modal for approve with optional comment
+    const [isApproveModalVisible, setIsApproveModalVisible] = useState(false);
+    const [approveComment, setApproveComment] = useState("");
     // Read-only mode: reports that are not in DRAFT are read-only
     const isReadOnly = useMemo(() => {
         return envelopeExistente?.status && envelopeExistente.status !== "DRAFT";
@@ -636,8 +640,10 @@ const ReportEditor: React.FC = () => {
     const handleApprove = async () => {
         if (!envelopeExistente?.id) return;
         try {
-            const result = await approveReport(envelopeExistente.id);
+            const result = await approveReport(envelopeExistente.id, approveComment || undefined);
             setEnvelopeExistente({ ...envelopeExistente, status: result.status as ReportStatus });
+            setIsApproveModalVisible(false);
+            setApproveComment("");
             message.success(result.message);
         } catch (error) {
             console.error(error);
@@ -1008,8 +1014,8 @@ const ReportEditor: React.FC = () => {
                                         )}
                                         {envelopeExistente?.status === "IN_REVIEW" && userRole === "pathologist" && (
                                             <>
-                                                <Button type="default" style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }} onClick={handleApprove}>Aprobar</Button>
-                                                <Button danger onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
+                                                <Button type="default" style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }} onClick={() => setIsApproveModalVisible(true)}>Aprobar</Button>
+                                                <Button type="default" style={{ background: "#f59e0b", color: "white", borderColor: "#f59e0b" }} onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
                                             </>
                                         )}
                                         {envelopeExistente?.status === "APPROVED" && userRole === "pathologist" && (
@@ -1273,26 +1279,144 @@ const ReportEditor: React.FC = () => {
                 </div>
             </div>
 
+            {/* Modal for approving with optional comment */}
+            <Modal
+                title={
+                    <div style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: 12,
+                        padding: "4px 0"
+                    }}>
+                        <div>
+                            <div style={{ fontSize: 18, fontWeight: 600, color: "#0d1b2a" }}>
+                                Aprobar Reporte
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 400, color: "#64748b" }}>
+                                Confirma que el reporte está listo para ser publicado
+                            </div>
+                        </div>
+                    </div>
+                }
+                open={isApproveModalVisible}
+                onCancel={() => {
+                    setIsApproveModalVisible(false);
+                    setApproveComment("");
+                }}
+                width={600}
+                footer={[
+                    <Button 
+                        key="cancel" 
+                        onClick={() => {
+                            setIsApproveModalVisible(false);
+                            setApproveComment("");
+                        }}
+                        style={{ borderRadius: 6 }}
+                    >
+                        Cancelar
+                    </Button>,
+                    <Button 
+                        key="approve" 
+                        type="primary"
+                        onClick={handleApprove}
+                        style={{ 
+                            borderRadius: 6,
+                            background: "#52c41a",
+                            borderColor: "#52c41a",
+                            color: "white"
+                        }}
+                    >
+                        Aprobar
+                    </Button>
+                ]}
+                styles={{
+                    header: { paddingBottom: 16, borderBottom: "1px solid #e5e7eb" },
+                    body: { paddingTop: 20 }
+                }}
+            >
+                <Typography.Paragraph style={{ color: "#475569", marginBottom: 16 }}>
+                    Puedes agregar un comentario opcional (con menciones @) al aprobar el reporte:
+                </Typography.Paragraph>
+                <CommentInput
+                    value={approveComment}
+                    onChange={setApproveComment}
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    onSubmit={async (text, _mentionIds) => {
+                        // Update the comment value for handleApprove to use
+                        setApproveComment(text);
+                        // Note: mentionIds are available but approveReport API doesn't use them yet
+                    }}
+                    placeholder="Comentario opcional... Usa @ para mencionar a alguien"
+                    rows={4}
+                    hideSubmitButton={true}
+                />
+            </Modal>
+
             {/* Modal for requesting changes */}
             <Modal
-                title="Solicitar Cambios"
+                title={
+                    <div style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: 12,
+                        padding: "4px 0"
+                    }}>
+                        <div>
+                            <div style={{ fontSize: 18, fontWeight: 600, color: "#0d1b2a" }}>
+                                Solicitar Cambios
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 400, color: "#64748b" }}>
+                                Indica qué modificaciones necesita el reporte
+                            </div>
+                        </div>
+                    </div>
+                }
                 open={isChangesModalVisible}
-                onOk={handleRequestChanges}
                 onCancel={() => {
                     setIsChangesModalVisible(false);
                     setChangesComment("");
                 }}
-                okText="Enviar"
-                cancelText="Cancelar"
+                width={600}
+                footer={[
+                    <Button 
+                        key="cancel" 
+                        onClick={() => {
+                            setIsChangesModalVisible(false);
+                            setChangesComment("");
+                        }}
+                        style={{ borderRadius: 6 }}
+                    >
+                        Cancelar
+                    </Button>,
+                    <Button 
+                        key="send" 
+                        type="primary"
+                        onClick={handleRequestChanges}
+                        disabled={!changesComment.trim()}
+                        style={{ 
+                            borderRadius: 6,
+                            background: "#f59e0b",
+                            borderColor: "#f59e0b",
+                            color: "white"
+                        }}
+                    >
+                        Solicitar Cambios
+                    </Button>
+                ]}
+                
             >
-                <Typography.Paragraph>
-                    Por favor, describe los cambios que necesita el reporte:
-                </Typography.Paragraph>
-                <Input.TextArea
-                    rows={4}
+                <CommentInput
                     value={changesComment}
-                    onChange={(e) => setChangesComment(e.target.value)}
-                    placeholder="Escribe tus comentarios aquí..."
+                    onChange={setChangesComment}
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    onSubmit={async (text, _mentionIds) => {
+                        // Update the comment value for handleRequestChanges to use
+                        setChangesComment(text);
+                        // Note: mentionIds are available but requestChanges API doesn't use them yet
+                    }}
+                    placeholder="Describe los cambios necesarios... Usa @ para mencionar a alguien"
+                    rows={4}
+                    hideSubmitButton={true}
                 />
             </Modal>
         </>

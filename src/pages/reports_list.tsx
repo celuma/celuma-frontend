@@ -1,33 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Table, Input, Tag, Empty, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-
-// Generate initials from full name
-const getInitials = (fullName?: string): string => {
-    if (!fullName) return "P";
-    const parts = fullName.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "P";
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
+import { CelumaTable } from "../components/ui/celuma_table";
+import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -70,6 +52,7 @@ type ReportsListResponse = {
         signed_at?: string | null;
         version_no?: number | null;
         has_pdf: boolean;
+        reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null }>;
     }>;
 };
 
@@ -99,21 +82,151 @@ export default function ReportsList() {
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
-        return rows.filter((r) =>
-            [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.branch.name, r.branch.code, r.order.requested_by]
+        return rows.filter((r) => {
+            // Search in basic fields
+            const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
                 .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q))
-        );
+                .some((v) => String(v).toLowerCase().includes(q));
+            
+            // Search in reviewers
+            const reviewerMatch = r.reviewers?.some(reviewer => 
+                reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)
+            ) || false;
+            
+            return basicFields || reviewerMatch;
+        });
     }, [rows, search]);
 
-    // Report status configuration
-    const REPORT_STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-        DRAFT: { color: "#f59e0b", bg: "#fffbeb", label: "Borrador" },
-        IN_REVIEW: { color: "#3b82f6", bg: "#eff6ff", label: "En Revisión" },
-        APPROVED: { color: "#10b981", bg: "#ecfdf5", label: "Aprobado" },
-        PUBLISHED: { color: "#22c55e", bg: "#f0fdf4", label: "Publicado" },
-        RETRACTED: { color: "#ef4444", bg: "#fef2f2", label: "Retractado" },
-    };
+    // Get unique statuses for filter
+    const statusFilters = useMemo(() => {
+        const statuses = new Set(rows.map(r => r.status));
+        return Array.from(statuses).map(status => ({
+            text: renderStatusChip(status, "report").props.children,
+            value: status,
+        }));
+    }, [rows]);
+
+    // Get unique reviewers for filters
+    const reviewerFilters = useMemo(() => {
+        const reviewersMap = new Map<string, string>();
+        rows.forEach(r => {
+            r.reviewers?.forEach(reviewer => {
+                if (!reviewersMap.has(reviewer.id)) {
+                    reviewersMap.set(reviewer.id, reviewer.name);
+                }
+            });
+        });
+        return Array.from(reviewersMap.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+        }));
+    }, [rows]);
+
+    // Published filter -> PDF filter
+    const pdfFilters = [
+        { text: "Con PDF", value: true },
+        { text: "Sin PDF", value: false },
+    ];
+
+    const columns: ColumnsType<ReportsListResponse["reports"][number]> = [
+        { 
+            title: "Código de Orden", 
+            key: "order", 
+            width: 140,
+            render: (_, r) => (
+                <span 
+                    style={{ color: "#0f8b8d", cursor: "pointer", fontWeight: 500 }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/orders/${r.order.id}`);
+                    }}
+                >
+                    {r.order.order_code}
+                </span>
+            ),
+            sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
+            defaultSortOrder: "ascend",
+        },
+        { 
+            title: "Título", 
+            dataIndex: "title", 
+            key: "title", 
+            width: 200,
+            render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
+            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
+        },
+        { 
+            title: "Paciente", 
+            key: "patient", 
+            render: (_, r) => {
+                const patientName = r.order.patient?.full_name || r.order.patient?.patient_code;
+                if (!patientName || !r.order.patient) return "—";
+                return (
+                    <PatientCell
+                        patientId={r.order.patient.id}
+                        patientName={patientName}
+                        patientCode={r.order.patient.patient_code}
+                    />
+                );
+            },
+        },
+        { 
+            title: "Estado", 
+            dataIndex: "status", 
+            key: "status", 
+            width: 120,
+            render: (status: string) => renderStatusChip(status, "report"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
+        },
+        { 
+            title: "PDF", 
+            dataIndex: "has_pdf", 
+            key: "has_pdf", 
+            width: 80,
+            align: "center" as const,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: pdfFilters,
+            onFilter: (value, record) => record.has_pdf === value,
+        },
+        ...(rows.some(r => r.reviewers && r.reviewers.length > 0) ? [{
+            title: "Revisores",
+            key: "reviewers",
+            width: 140,
+            filters: reviewerFilters,
+            onFilter: (value: boolean | React.Key, record: ReportsListResponse["reports"][number]) => {
+                return record.reviewers?.some(reviewer => reviewer.id === value) || false;
+            },
+            render: (_: unknown, r: ReportsListResponse["reports"][number]) => {
+                if (!r.reviewers || r.reviewers.length === 0) return <span style={{ color: "#888" }}>—</span>;
+                return (
+                    <Avatar.Group maxCount={3} size="small">
+                        {r.reviewers.map(reviewer => (
+                            <Tooltip key={reviewer.id} title={`${reviewer.name} (${reviewer.status})`}>
+                                <Avatar 
+                                    size={24}
+                                    src={reviewer.avatar_url}
+                                    style={{ 
+                                        backgroundColor: reviewer.avatar_url ? undefined : getAvatarColor(reviewer.name),
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {!reviewer.avatar_url && getInitials(reviewer.name)}
+                                </Avatar>
+                            </Tooltip>
+                        ))}
+                    </Avatar.Group>
+                );
+            },
+        }] : []),
+    ];
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
@@ -143,72 +256,33 @@ export default function ReportsList() {
                         }
                         style={cardStyle}
                     >
-                        <Table
-                            loading={loading}
+                        <CelumaTable
                             dataSource={filtered}
+                            columns={columns}
                             rowKey={(r) => r.id}
-                            pagination={{ pageSize: 10, showSizeChanger: false }}
-                            locale={{ emptyText: <Empty description="Sin reportes" /> }}
-                            columns={[
-                                { title: "Título", dataIndex: "title", key: "title", width: 200 },
-                                { title: "Estado", dataIndex: "status", key: "status", width: 120, render: (v: string) => {
-                                    const config = REPORT_STATUS_CONFIG[v] || { color: "#6b7280", bg: "#f3f4f6", label: v };
-                                    return (
-                                        <div style={{
-                                            backgroundColor: config.bg,
-                                            color: config.color,
-                                            borderRadius: 12,
-                                            fontSize: 11,
-                                            fontWeight: 500,
-                                            padding: "4px 10px",
-                                            display: "inline-block",
-                                        }}>
-                                            {config.label}
-                                        </div>
-                                    );
-                                } },
-                                { title: "Orden", key: "order", render: (_, r) => r.order.order_code, width: 140 },
-                                { 
-                                    title: "Paciente", 
-                                    key: "patient", 
-                                    render: (_, r) => {
-                                        const patientName = r.order.patient?.full_name || r.order.patient?.patient_code;
-                                        if (!patientName) return "—";
-                                        const initials = getInitials(patientName);
-                                        const color = getAvatarColor(patientName);
-                                        return (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                <Avatar
-                                                    size={32}
-                                                    style={{
-                                                        backgroundColor: color,
-                                                        fontSize: 13,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {initials}
-                                                </Avatar>
-                                                <span style={{ fontWeight: 500 }}>{patientName}</span>
-                                            </div>
-                                        );
-                                    }
-                                },
-                                { title: "Sucursal", key: "branch", render: (_, r) => `${r.branch.code ?? ""} ${r.branch.name ?? ""}`.trim() },
-                                { title: "Publicado", dataIndex: "published_at", key: "published_at", width: 180, render: (v: string | null) => v ? new Date(v).toLocaleString() : "—" },
-                                { 
-                                    title: "Firmado por", 
-                                    key: "signed_by", 
-                                    width: 150, 
-                                    render: (_, r) => r.signed_by && r.status === "PUBLISHED" ? r.signed_by : "—" 
-                                },
-                                { title: "Versión", dataIndex: "version_no", key: "version_no", width: 100 },
-                                { title: "PDF", dataIndex: "has_pdf", key: "has_pdf", width: 80, render: (v: boolean) => v ? <Tag color="#22c55e">Sí</Tag> : <Tag color="#94a3b8">No</Tag> },
-                            ]}
-                            onRow={(record) => ({
-                                onClick: () => navigate(`/reports/${record.id}`),
-                                style: { cursor: "pointer" },
-                            })}
+                            loading={loading}
+                            onRowClick={(record) => navigate(`/reports/${record.id}`)}
+                            emptyText="Sin reportes"
+                            pagination={{ pageSize: 10 }}
+                            locale={{
+                                filterTitle: 'Filtrar',
+                                filterConfirm: 'Aceptar',
+                                filterReset: 'Limpiar',
+                                filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
+                                emptyText: 'Sin reportes',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
+                                sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
+                            }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>

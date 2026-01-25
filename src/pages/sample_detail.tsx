@@ -5,8 +5,7 @@ import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/li
 import { 
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, PlusOutlined, FileImageOutlined,
-    InboxOutlined, SkinOutlined, HeartOutlined, EyeOutlined, MedicineBoxOutlined,
-    ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, DownOutlined
+    InboxOutlined, ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, DownOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -23,6 +22,7 @@ import {
     updateSampleAssignees, 
     updateSampleLabels 
 } from "../services/collaboration_service";
+import { getSampleTypeConfig } from "../components/ui/table_helpers";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -103,27 +103,6 @@ const renderUserMention = (user: {name: string; username?: string; avatar?: stri
             </span>
         </Tooltip>
     );
-};
-
-// Sample type configuration with icons and colors
-const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-    "BIOPSIA": { icon: <SkinOutlined />, color: "#8b5cf6", label: "Biopsia" },
-    "CITOLOGIA": { icon: <EyeOutlined />, color: "#ec4899", label: "Citología" },
-    "TEJIDO": { icon: <HeartOutlined />, color: "#ef4444", label: "Tejido" },
-    "SANGRE": { icon: <MedicineBoxOutlined />, color: "#dc2626", label: "Sangre" },
-    "LIQUIDO": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Líquido" },
-    "ORINA": { icon: <ExperimentOutlined />, color: "#f59e0b", label: "Orina" },
-    "DEFAULT": { icon: <ExperimentOutlined />, color: "#0f8b8d", label: "Muestra" },
-};
-
-const getSampleTypeConfig = (type: string) => {
-    const upperType = type?.toUpperCase() || "";
-    for (const [key, config] of Object.entries(SAMPLE_TYPE_CONFIG)) {
-        if (key !== "DEFAULT" && upperType.includes(key)) {
-            return config;
-        }
-    }
-    return SAMPLE_TYPE_CONFIG.DEFAULT;
 };
 
 // Sample state configuration - matches backend SampleState enum

@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Avatar, Dropdown, Input, Button as AntButton, Spin } from "antd";
-import { SettingOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
-import type { UserRef, LabUser } from "../../services/collaboration_service";
+import { Avatar, Dropdown, Input, Button as AntButton, Spin, Tooltip } from "antd";
+import { SettingOutlined, CheckOutlined, CloseOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import type { LabUser } from "../../services/collaboration_service";
+import type { ReviewerWithStatus } from "../../services/worklist_service";
 import { tokens } from "../design/tokens";
 
 type ReviewersSectionProps = {
-    reviewers: UserRef[];
+    reviewers: ReviewerWithStatus[];
     allUsers: LabUser[];
     onUpdate: (userIds: string[]) => Promise<void>;
     disabled?: boolean;
@@ -344,37 +345,68 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                 </div>
             ) : reviewers.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {reviewers.map(reviewer => (
-                        <div
-                            key={reviewer.id}
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                            }}
-                        >
-                            <Avatar
-                                size={24}
-                                src={reviewer.avatar_url}
+                    {reviewers.map(reviewer => {
+                        // Determine status icon and color
+                        let statusIcon = null;
+                        let statusColor = "#faad14"; // yellow for pending
+                        let statusTooltip = "Revisión pendiente";
+                        
+                        if (reviewer.status === "approved") {
+                            statusIcon = <CheckCircleOutlined />;
+                            statusColor = "#52c41a"; // green
+                            statusTooltip = "Revisión aprobada";
+                        } else if (reviewer.status === "rejected") {
+                            statusIcon = <CloseCircleOutlined />;
+                            statusColor = "#ff4d4f"; // red
+                            statusTooltip = "Cambios solicitados";
+                        } else {
+                            statusIcon = <ClockCircleOutlined />;
+                            statusColor = "#faad14"; // yellow
+                            statusTooltip = "Revisión pendiente";
+                        }
+                        
+                        return (
+                            <div
+                                key={reviewer.id}
                                 style={{
-                                    backgroundColor: reviewer.avatar_url ? undefined : getAvatarColor(reviewer.name),
-                                    fontSize: 11,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
                                 }}
                             >
-                                {!reviewer.avatar_url && getInitials(reviewer.name)}
-                            </Avatar>
-                            <span style={{ 
-                                flex: 1, 
-                                fontSize: 13, 
-                                fontWeight: 500,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}>
-                                {reviewer.name}
-                            </span>
-                        </div>
-                    ))}
+                                <Avatar
+                                    size={24}
+                                    src={reviewer.avatar_url}
+                                    style={{
+                                        backgroundColor: reviewer.avatar_url ? undefined : getAvatarColor(reviewer.name),
+                                        fontSize: 11,
+                                    }}
+                                >
+                                    {!reviewer.avatar_url && getInitials(reviewer.name)}
+                                </Avatar>
+                                <span style={{ 
+                                    flex: 1, 
+                                    fontSize: 13, 
+                                    fontWeight: 500,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                }}>
+                                    {reviewer.name}
+                                </span>
+                                <Tooltip title={statusTooltip}>
+                                    <span style={{ 
+                                        fontSize: 16, 
+                                        color: statusColor,
+                                        display: "flex",
+                                        alignItems: "center",
+                                    }}>
+                                        {statusIcon}
+                                    </span>
+                                </Tooltip>
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
                 <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
