@@ -10,6 +10,7 @@ import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { SEX_CONFIG } from "../components/ui/status_configs";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -49,6 +50,7 @@ type PatientRow = {
 };
 
 export default function PatientsList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);

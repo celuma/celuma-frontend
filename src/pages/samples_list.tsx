@@ -17,6 +17,7 @@ import {
     getAvatarColor,
     SampleTypeBadge 
 } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -68,6 +69,7 @@ type OrdersListResponse = {
 };
 
 export default function SamplesList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);

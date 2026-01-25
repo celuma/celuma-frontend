@@ -18,9 +18,11 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { CelumaTable } from "../components/ui/celuma_table";
+import { usePageTitle } from "../hooks/use_page_title";
 import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
 
 function Worklist() {
+    usePageTitle();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);

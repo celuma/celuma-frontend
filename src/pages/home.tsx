@@ -7,12 +7,14 @@ import StatsCard from "../components/ui/stats_card";
 import RecentActivity from "../components/ui/recent_activity";
 import ErrorText from "../components/ui/error_text";
 import { useDashboardData } from "../hooks/use_dashboard_data";
+import { usePageTitle } from "../hooks/use_page_title";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 
 const { Title } = Typography;
 
 const Home: React.FC = () => {
+    usePageTitle();
     const nav = useNavigate();
     const { pathname } = useLocation();
     const { data, loading, error } = useDashboardData();
