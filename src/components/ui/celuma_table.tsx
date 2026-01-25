@@ -3,7 +3,7 @@ import { Table, Empty } from "antd";
 import type { TableProps, TablePaginationConfig } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {
+export interface CelumaTableProps<T = any> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {
     dataSource: T[];
     columns: ColumnsType<T>;
     rowKey: string | ((record: T) => string);
@@ -25,7 +25,7 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
  * - Standardized pagination
  * - Empty state handling
  */
-export function CelumaTable<T extends Record<string, unknown>>({
+export function CelumaTable<T = any>({
     dataSource,
     columns,
     rowKey,
