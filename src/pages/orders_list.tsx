@@ -162,7 +162,7 @@ export default function OrdersList() {
             title: "Código", 
             dataIndex: "order_code", 
             key: "order_code", 
-            width: 140,
+            width: 120,
             sorter: stringSorter("order_code"),
             defaultSortOrder: "ascend",
         },
@@ -188,6 +188,23 @@ export default function OrdersList() {
             },
         },
         { 
+            title: "Reporte", 
+            dataIndex: "has_report", 
+            key: "has_report", 
+            width: 40,
+            align: "center" as const,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
+        },
+        { 
             title: "Estado", 
             dataIndex: "status", 
             key: "status", 
@@ -208,27 +225,10 @@ export default function OrdersList() {
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        { 
-            title: "Reporte", 
-            dataIndex: "has_report", 
-            key: "has_report", 
-            width: 110,
-            align: "center" as const,
-            render: (v: boolean) => v ? (
-                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
-            ) : (
-                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
-            ),
-            filters: [
-                { text: "Con Reporte", value: true },
-                { text: "Sin Reporte", value: false },
-            ],
-            onFilter: (value, record) => record.has_report === value,
-        },
         ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
-            width: 140,
+            width: 80,
             filters: assigneeFilters,
             onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;

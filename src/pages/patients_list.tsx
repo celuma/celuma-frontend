@@ -139,7 +139,7 @@ export default function PatientsList() {
             title: "Sexo", 
             dataIndex: "sex", 
             key: "sex", 
-            width: 100,
+            width: 80,
             render: (v: string | null) => {
                 if (!v) return "";
                 const upperSex = v.toUpperCase();
@@ -166,13 +166,14 @@ export default function PatientsList() {
             title: "Teléfono", 
             dataIndex: "phone", 
             key: "phone", 
-            width: 160,
+            width: 120,
             sorter: stringSorter("phone"),
         },
         { 
             title: "Email", 
             dataIndex: "email", 
             key: "email",
+            width: 200,
             sorter: stringSorter("email"),
         },
     ];

@@ -243,7 +243,7 @@ function Worklist() {
             title: "Código",
             dataIndex: "display_id",
             key: "display_id",
-            width: 150,
+            width: 120,
         },
         {
             title: "Paciente",
@@ -269,7 +269,7 @@ function Worklist() {
         {
             title: "Tipo",
             key: "item_type",
-            width: 160,
+            width: 120,
             render: (_, record) => <ItemTypeBadge type={record.item_type} />,
             filters: typeFilters,
             onFilter: (value, record) => record.item_type === value,

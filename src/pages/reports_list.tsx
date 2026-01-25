@@ -152,7 +152,7 @@ export default function ReportsList() {
         { 
             title: "Código", 
             key: "order", 
-            width: 140,
+            width: 120,
             render: (_, r) => (
                 <span 
                 style={{ 
@@ -172,14 +172,6 @@ export default function ReportsList() {
             ),
             sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
             defaultSortOrder: "ascend",
-        },
-        { 
-            title: "Título", 
-            dataIndex: "title", 
-            key: "title", 
-            width: 200,
-            render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
-            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
         },
         { 
             title: "Paciente", 
@@ -204,20 +196,17 @@ export default function ReportsList() {
             },
         },
         { 
-            title: "Estado", 
-            dataIndex: "status", 
-            key: "status", 
-            width: 120,
-            render: (status: string) => renderStatusChip(status, "report"),
-            filters: statusFilters,
-            onFilter: (value, record) => record.status === value,
-            sorter: stringSorter("status"),
+            title: "Título", 
+            dataIndex: "title", 
+            key: "title",
+            render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
+            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
         },
         { 
             title: "PDF", 
             dataIndex: "has_pdf", 
             key: "has_pdf", 
-            width: 80,
+            width: 40,
             align: "center" as const,
             render: (v: boolean) => v ? (
                 <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
@@ -227,10 +216,20 @@ export default function ReportsList() {
             filters: pdfFilters,
             onFilter: (value, record) => record.has_pdf === value,
         },
+        { 
+            title: "Estado", 
+            dataIndex: "status", 
+            key: "status", 
+            width: 120,
+            render: (status: string) => renderStatusChip(status, "report"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
+        },
         ...(rows.some(r => r.reviewers && r.reviewers.length > 0) ? [{
             title: "Revisores",
             key: "reviewers",
-            width: 140,
+            width: 80,
             filters: reviewerFilters,
             onFilter: (value: boolean | React.Key, record: ReportsListResponse["reports"][number]) => {
                 return record.reviewers?.some(reviewer => reviewer.id === value) || false;
