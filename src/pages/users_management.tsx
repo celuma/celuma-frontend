@@ -7,6 +7,7 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
+import { usePageTitle } from "../hooks/use_page_title";
 
 // Generate initials from full name (first letter of first name + first letter of last name)
 const getInitials = (fullName?: string | null): string => {
@@ -94,6 +95,7 @@ interface Branch {
 }
 
 function UsersManagement() {
+    usePageTitle();
     const navigate = useNavigate();
     const { profile, loading: profileLoading, isAdmin } = useUserProfile();
     const [loading, setLoading] = useState(false);

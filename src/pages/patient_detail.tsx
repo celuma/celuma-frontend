@@ -375,7 +375,7 @@ export default function PatientDetailPage() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por código, estado o notas"
+                                    placeholder="Buscar en órdenes"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

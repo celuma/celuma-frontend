@@ -15,6 +15,7 @@ import Checkbox from "../components/ui/checkbox";
 import Button from "../components/ui/button";
 import AlertText from "../components/ui/error_text";
 import CelumaModal from "../components/ui/celuma_modal";
+import { usePageTitle } from "../hooks/use_page_title";
 // import SelectField from "../components/ui/select_field";
 
 /* --------- Validación --------- */
@@ -39,6 +40,7 @@ type LoginSuccess = {
 };
 
 export default function Login() {
+    usePageTitle();
     const [serverError, setServerError] = useState<string | null>(null);
     const [forgotOpen, setForgotOpen] = useState(false);
     // Branch selection moved to forms

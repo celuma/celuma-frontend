@@ -1,19 +1,16 @@
 /**
- * Worklist Page - Unified view for user's pending assignments and reviews
+ * Lista de Trabajo - Vista unificada para asignaciones y revisiones pendientes del usuario
  * 
- * This page shows:
- * - Pending assignments (items where the user is assigned)
- * - Pending reviews (reports where the user needs to approve/reject)
+ * Esta página muestra:
+ * - Asignaciones pendientes (items donde el usuario está asignado)
+ * - Revisiones pendientes (reportes que el usuario necesita aprobar/rechazar)
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Layout, Tag, Card, Space, Tooltip, Input } from "antd";
+import { Layout, Card, Tooltip, Input } from "antd";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import { 
     UserOutlined, 
-    FileTextOutlined, 
-    ExperimentOutlined,
-    InboxOutlined,
     CheckCircleOutlined,
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -21,14 +18,16 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { CelumaTable } from "../components/ui/celuma_table";
-import { PatientCell, renderDateCell } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
+import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
 
 function Worklist() {
+    usePageTitle();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);
     const [search, setSearch] = useState("");
-    const [hideCompleted, setHideCompleted] = useState(true);
+    const [statusFilteredValue, setStatusFilteredValue] = useState<React.Key[] | null>(null);
 
     const loadWorklist = useCallback(async () => {
         setLoading(true);
@@ -36,7 +35,7 @@ function Worklist() {
             const data: WorklistResponse = await getMyWorklist();
             setItems(data.items);
         } catch (error) {
-            console.error("Error loading worklist:", error);
+            console.error("Error cargando lista de trabajo:", error);
         } finally {
             setLoading(false);
         }
@@ -62,17 +61,7 @@ function Worklist() {
         return null; // Return null to show only date
     };
 
-    // Helper to get item type icon
-    const getItemTypeIcon = (itemType: string) => {
-        switch (itemType) {
-            case "lab_order": return <InboxOutlined style={{ color: tokens.accent }} />;
-            case "sample": return <ExperimentOutlined style={{ color: tokens.accent }} />;
-            case "report": return <FileTextOutlined style={{ color: tokens.accent }} />;
-            default: return <FileTextOutlined />;
-        }
-    };
-
-    // Helper to get item type label
+    // Helper to get item type label (for filters)
     const getItemTypeLabel = (itemType: string) => {
         switch (itemType) {
             case "lab_order": return "Orden";
@@ -82,25 +71,52 @@ function Worklist() {
         }
     };
 
-    // Helper to get kind badge
-    const getKindBadge = (kind: string) => {
+    // Helper to get kind label
+    const getKindLabel = (kind: string) => {
         if (kind === "review") {
-            return <Tag color="orange" icon={<CheckCircleOutlined />}>Revisión</Tag>;
+            return "Revisión";
         }
-        return <Tag color="blue" icon={<UserOutlined />}>Asignación</Tag>;
+        return "Asignación";
     };
 
-    // Helper to get status color
-    const getStatusColor = (status: string) => {
-        const statusLower = status.toLowerCase();
-        if (statusLower === "pending" || statusLower === "received" || statusLower === "draft") return "default";
-        if (statusLower === "in_review" || statusLower === "processing") return "processing";
-        if (statusLower === "approved" || statusLower === "ready" || statusLower === "released") return "success";
-        if (statusLower === "rejected" || statusLower === "cancelled" || statusLower === "damaged") return "error";
-        return "default";
+    // Helper to render kind chip with consistent styling (integrated icon + text)
+    const renderKindChip = (kind: string) => {
+        const config = kind === "review" 
+            ? { color: "#f59e0b", bg: "#fffbeb", label: "Revisión", icon: <CheckCircleOutlined /> }
+            : { color: "#3b82f6", bg: "#eff6ff", label: "Asignación", icon: <UserOutlined /> };
+
+        return (
+            <div style={{
+                padding: "4px 10px",
+                borderRadius: 12,
+                background: config.bg,
+                color: config.color,
+                fontWeight: 600,
+                fontSize: 11,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                width: "fit-content",
+            }}>
+                {config.icon}
+                {config.label}
+            </div>
+        );
     };
 
-    // Helper to get status label in Spanish
+    // Helper to render status chip based on item type
+    const renderWorklistStatusChip = (status: string, itemType: string) => {
+        // Determine which config to use based on item_type
+        let configType: "order" | "sample" | "report" = "order";
+        if (itemType === "sample") {
+            configType = "sample";
+        } else if (itemType === "report") {
+            configType = "report";
+        }
+        return renderStatusChip(status, configType);
+    };
+
+    // Helper to get status label for filters
     const getStatusLabel = (status: string) => {
         const statusMap: Record<string, string> = {
             "PENDING": "Pendiente",
@@ -122,17 +138,15 @@ function Worklist() {
         return statusMap[status.toUpperCase()] || status;
     };
 
-    // Completed statuses to filter out by default
-    const completedStatuses = useMemo(() => ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"], []);
+    // Helper to check if a status represents completion
+    const isCompletedStatus = useCallback((status: string) => {
+        const completedStatuses = ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"];
+        return completedStatuses.includes(status);
+    }, []);
 
-    // Filter items based on search and hideCompleted
+    // Filter items based on search only
     const filteredItems = useMemo(() => {
         let result = items;
-        
-        // Filter by completed status
-        if (hideCompleted) {
-            result = result.filter(item => !completedStatuses.includes(item.item_status));
-        }
         
         // Filter by search
         if (search.trim()) {
@@ -145,31 +159,60 @@ function Worklist() {
         }
         
         return result;
-    }, [items, search, hideCompleted, completedStatuses]);
+    }, [items, search]);
 
-    // Get unique kinds and types for filters
+    // Get unique kinds and types for filters (from all items, not filtered)
     const kindFilters = useMemo(() => {
-        const kinds = new Set(filteredItems.map(i => i.kind));
+        const kinds = new Set(items.map(i => i.kind));
         return Array.from(kinds).map(kind => ({
-            text: getKindBadge(kind).props.children[1], // Get label from badge
+            text: getKindLabel(kind),
             value: kind,
         }));
-    }, [filteredItems]);
+    }, [items]);
 
     const typeFilters = useMemo(() => {
-        const types = new Set(filteredItems.map(i => i.item_type));
+        const types = new Set(items.map(i => i.item_type));
         return Array.from(types).map(type => ({
             text: getItemTypeLabel(type),
             value: type,
         }));
-    }, [filteredItems]);
+    }, [items]);
 
     const statusFilters = useMemo(() => {
-        const statuses = new Set(filteredItems.map(i => i.item_status));
+        const statuses = new Set(items.map(i => i.item_status));
         return Array.from(statuses).map(status => ({
             text: getStatusLabel(status),
             value: status,
         }));
+    }, [items]);
+
+    // Default filtered values - exclude completed statuses (only on first load)
+    const defaultStatusFilteredValue = useMemo(() => {
+        const allStatuses = new Set(items.map(i => i.item_status));
+        return Array.from(allStatuses).filter(status => !isCompletedStatus(status));
+    }, [items, isCompletedStatus]);
+
+    // Set default filter on first load
+    useEffect(() => {
+        if (items.length > 0 && statusFilteredValue === null) {
+            setStatusFilteredValue(defaultStatusFilteredValue);
+        }
+    }, [items, defaultStatusFilteredValue, statusFilteredValue]);
+
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        filteredItems.forEach(item => {
+            if (item.patient_id && item.patient_name) {
+                patients.set(item.patient_id, item.patient_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
     }, [filteredItems]);
 
     const columns: ColumnsType<WorklistItem> = [
@@ -200,11 +243,18 @@ function Worklist() {
             title: "Código",
             dataIndex: "display_id",
             key: "display_id",
-            width: 150,
+            width: 120,
         },
         {
             title: "Paciente",
             key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.patient_name || a.patient_code || "";
+                const nameB = b.patient_name || b.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.patient_id === value,
             render: (_, record) => {
                 if (!record.patient_name) return "—";
                 return (
@@ -220,12 +270,7 @@ function Worklist() {
             title: "Tipo",
             key: "item_type",
             width: 120,
-            render: (_, record) => (
-                <Space>
-                    {getItemTypeIcon(record.item_type)}
-                    <span>{getItemTypeLabel(record.item_type)}</span>
-                </Space>
-            ),
+            render: (_, record) => <ItemTypeBadge type={record.item_type} />,
             filters: typeFilters,
             onFilter: (value, record) => record.item_type === value,
         },
@@ -233,7 +278,7 @@ function Worklist() {
             title: "Tarea",
             key: "kind",
             width: 120,
-            render: (_, record) => getKindBadge(record.kind),
+            render: (_, record) => renderKindChip(record.kind),
             filters: kindFilters,
             onFilter: (value, record) => record.kind === value,
         },
@@ -242,13 +287,10 @@ function Worklist() {
             dataIndex: "item_status",
             key: "item_status",
             width: 120,
-            render: (status) => (
-                <Tag color={getStatusColor(status)}>
-                    {getStatusLabel(status)}
-                </Tag>
-            ),
+            render: (status, record) => renderWorklistStatusChip(status, record.item_type),
             filters: statusFilters,
             onFilter: (value, record) => record.item_status === value,
+            filteredValue: statusFilteredValue as React.Key[] | undefined,
         },
     ];
 
@@ -262,26 +304,17 @@ function Worklist() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
-                        title={<span style={cardTitleStyle}>Mi Worklist</span>}
+                        title={<span style={cardTitleStyle}>Mi Lista de Trabajo</span>}
                         style={cardStyle}
                         extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar por código, paciente, orden" 
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 320 }}
-                                />
-                                <Tag 
-                                    color={hideCompleted ? "blue" : "default"}
-                                    style={{ cursor: "pointer", userSelect: "none" }}
-                                    onClick={() => setHideCompleted(!hideCompleted)}
-                                >
-                                    {hideCompleted ? "Ocultar completadas" : "Mostrar todas"}
-                                </Tag>
-                            </Space>
+                            <Input.Search
+                                allowClear
+                                placeholder="Buscar en lista de trabajo"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onSearch={(v) => setSearch(v)}
+                                style={{ width: 320 }}
+                            />
                         }
                     >
                         <CelumaTable
@@ -290,6 +323,12 @@ function Worklist() {
                             rowKey="id"
                             loading={loading}
                             onRowClick={(record) => navigate(record.link as string)}
+                            onChange={(_pagination, filters) => {
+                                // Handle filter changes
+                                if (filters.item_status !== undefined) {
+                                    setStatusFilteredValue(filters.item_status as React.Key[] | null);
+                                }
+                            }}
                             pagination={{
                                 pageSize: 20,
                                 showTotal: (t) => `Total: ${t} elementos`,

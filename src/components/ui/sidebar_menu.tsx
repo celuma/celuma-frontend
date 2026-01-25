@@ -22,7 +22,7 @@ export type CelumaKey =
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
-    { key: "/worklist", icon: <CheckSquareOutlined />, label: "Worklist", title: "Worklist" },
+    { key: "/worklist", icon: <CheckSquareOutlined />, label: "Lista de Trabajo", title: "Lista de Trabajo" },
     { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
     { key: "/orders", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },

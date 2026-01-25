@@ -14,6 +14,7 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { RcFile } from "antd/es/upload/interface";
+import { usePageTitle } from "../hooks/use_page_title";
 
 interface UserProfile {
     id: string;
@@ -75,6 +76,7 @@ const getRoleDisplayName = (role: string): string => {
 };
 
 const Profile: React.FC = () => {
+    usePageTitle();
     const nav = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
