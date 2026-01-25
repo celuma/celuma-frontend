@@ -28,6 +28,9 @@ export const REPORT_STATUS_CONFIG: Record<string, { color: string; bg: string; l
     APPROVED: { color: "#10b981", bg: "#ecfdf5", label: "Aprobado" },
     PUBLISHED: { color: "#22c55e", bg: "#f0fdf4", label: "Publicado" },
     RETRACTED: { color: "#ef4444", bg: "#fef2f2", label: "Retractado" },
+    // Review statuses (for report reviews in worklist)
+    PENDING: { color: "#f59e0b", bg: "#fffbeb", label: "Pendiente" },
+    REJECTED: { color: "#ef4444", bg: "#fef2f2", label: "Rechazado" },
 };
 
 // Predefined label colors (same as in LabelsSection)
@@ -48,10 +51,10 @@ export const LABEL_COLORS = [
 
 // Sex configuration for consistent badges
 export const SEX_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    "MALE": { color: "#3b82f6", bg: "#eff6ff", label: "M" },
-    "M": { color: "#3b82f6", bg: "#eff6ff", label: "M" },
-    "FEMALE": { color: "#ec4899", bg: "#fdf2f8", label: "F" },
-    "F": { color: "#ec4899", bg: "#fdf2f8", label: "F" },
+    "MALE": { color: "#3b82f6", bg: "#eff6ff", label: "Masculino" },
+    "M": { color: "#3b82f6", bg: "#eff6ff", label: "Masculino" },
+    "FEMALE": { color: "#ec4899", bg: "#fdf2f8", label: "Femenino" },
+    "F": { color: "#ec4899", bg: "#fdf2f8", label: "Femenino" },
     "OTHER": { color: "#8b5cf6", bg: "#f5f3ff", label: "Otro" },
     "O": { color: "#8b5cf6", bg: "#f5f3ff", label: "Otro" },
     "DEFAULT": { color: "#6b7280", bg: "#f3f4f6", label: "N/A" },

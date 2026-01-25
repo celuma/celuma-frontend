@@ -7,6 +7,8 @@ import {
     SkinOutlined,
     HeartOutlined,
     EyeOutlined,
+    InboxOutlined,
+    FileTextOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
@@ -43,6 +45,43 @@ export const getSampleTypeConfig = (type: string) => {
  */
 export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
     const config = getSampleTypeConfig(type);
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Avatar
+                size={24}
+                icon={config.icon}
+                style={{ 
+                    backgroundColor: config.color, 
+                    fontSize: 12,
+                    flexShrink: 0
+                }}
+            />
+            <span style={{ fontWeight: 500 }}>{config.label}</span>
+        </div>
+    );
+};
+
+// Item type configuration for worklist items
+export const ITEM_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+    "lab_order": { icon: <InboxOutlined />, color: "#0f8b8d", label: "Orden" },
+    "sample": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Muestra" },
+    "report": { icon: <FileTextOutlined />, color: "#8b5cf6", label: "Reporte" },
+    "DEFAULT": { icon: <FileTextOutlined />, color: "#6b7280", label: "Item" },
+};
+
+/**
+ * Gets the item type configuration based on the type string
+ */
+export const getItemTypeConfig = (type: string) => {
+    const lowerType = type?.toLowerCase() || "";
+    return ITEM_TYPE_CONFIG[lowerType] || ITEM_TYPE_CONFIG.DEFAULT;
+};
+
+/**
+ * Component for rendering item type badge with icon and label (for worklist)
+ */
+export const ItemTypeBadge: React.FC<{ type: string }> = ({ type }) => {
+    const config = getItemTypeConfig(type);
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Avatar

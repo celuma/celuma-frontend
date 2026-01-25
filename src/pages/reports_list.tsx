@@ -124,6 +124,22 @@ export default function ReportsList() {
         }));
     }, [rows]);
 
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.order.patient?.id && r.order.patient?.full_name) {
+                patients.set(r.order.patient.id, r.order.patient.full_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     // Published filter -> PDF filter
     const pdfFilters = [
         { text: "Con PDF", value: true },
@@ -132,12 +148,18 @@ export default function ReportsList() {
 
     const columns: ColumnsType<ReportsListResponse["reports"][number]> = [
         { 
-            title: "Código de Orden", 
+            title: "Código", 
             key: "order", 
             width: 140,
             render: (_, r) => (
                 <span 
-                    style={{ color: "#0f8b8d", cursor: "pointer", fontWeight: 500 }}
+                style={{ 
+                    color: "#0f8b8d", 
+                    cursor: "pointer", 
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    borderBottom: "1px dashed #0f8b8d"
+                }}
                     onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/orders/${r.order.id}`);
@@ -159,7 +181,14 @@ export default function ReportsList() {
         },
         { 
             title: "Paciente", 
-            key: "patient", 
+            key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.order.patient?.full_name || a.order.patient?.patient_code || "";
+                const nameB = b.order.patient?.full_name || b.order.patient?.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.order.patient?.id === value,
             render: (_, r) => {
                 const patientName = r.order.patient?.full_name || r.order.patient?.patient_code;
                 if (!patientName || !r.order.patient) return "—";
@@ -243,7 +272,7 @@ export default function ReportsList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por título, diagnóstico, orden o paciente" 
+                                    placeholder="Buscar en reportes" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

@@ -84,10 +84,14 @@ export default function PatientsList() {
     // Sex filter
     const sexFilters = useMemo(() => {
         const sexes = new Set(rows.filter(r => r.sex).map(r => r.sex));
-        return Array.from(sexes).filter((sex): sex is string => sex !== null && sex !== undefined).map(sex => ({
-            text: sex,
-            value: sex,
-        }));
+        return Array.from(sexes).filter((sex): sex is string => sex !== null && sex !== undefined).map(sex => {
+            const upperSex = sex.toUpperCase();
+            const config = SEX_CONFIG[upperSex] || SEX_CONFIG.DEFAULT;
+            return {
+                text: config.label,
+                value: sex,
+            };
+        });
     }, [rows]);
 
     const columns: ColumnsType<PatientRow> = [
@@ -186,7 +190,7 @@ export default function PatientsList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por código, nombre, email o teléfono"
+                                    placeholder="Buscar en pacientes"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

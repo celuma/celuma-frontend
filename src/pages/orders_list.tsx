@@ -139,6 +139,22 @@ export default function OrdersList() {
             }));
     }, [rows]);
 
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.patient?.id && r.patient?.full_name) {
+                patients.set(r.patient.id, r.patient.full_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
         { 
             title: "Código", 
@@ -150,14 +166,24 @@ export default function OrdersList() {
         },
         { 
             title: "Paciente", 
-            key: "patient", 
-            render: (_, r) => (
-                <PatientCell
-                    patientId={r.patient.id}
-                    patientName={r.patient.full_name || r.patient.patient_code}
-                    patientCode={r.patient.patient_code}
-                />
-            ),
+            key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.patient?.full_name || a.patient?.patient_code || "";
+                const nameB = b.patient?.full_name || b.patient?.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.patient?.id === value,
+            render: (_, r) => {
+                if (!r.patient?.full_name || !r.patient?.id) return "—";
+                return (
+                    <PatientCell
+                        patientId={r.patient.id}
+                        patientName={r.patient.full_name}
+                        patientCode={r.patient.patient_code}
+                    />
+                );
+            },
         },
         { 
             title: "Estado", 
@@ -244,7 +270,7 @@ export default function OrdersList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por orden, paciente" 
+                                    placeholder="Buscar en órdenes" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

@@ -221,7 +221,7 @@ export default function SamplesList() {
             defaultSortOrder: "ascend",
         },
         { 
-            title: "Código de orden", 
+            title: "Orden", 
             key: "order", 
             width: 160,
             sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
