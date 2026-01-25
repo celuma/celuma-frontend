@@ -27,25 +27,20 @@ function Worklist() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(20);
     const [search, setSearch] = useState("");
     const [hideCompleted, setHideCompleted] = useState(true);
 
     const loadWorklist = useCallback(async () => {
         setLoading(true);
         try {
-            const data: WorklistResponse = await getMyWorklist({
-                page,
-                page_size: pageSize,
-            });
+            const data: WorklistResponse = await getMyWorklist();
             setItems(data.items);
         } catch (error) {
             console.error("Error loading worklist:", error);
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize]);
+    }, []);
 
     useEffect(() => {
         loadWorklist();
@@ -289,22 +284,15 @@ function Worklist() {
                             </Space>
                         }
                     >
-                        <CelumaTable<WorklistItem>
+                        <CelumaTable
                             dataSource={filteredItems}
                             columns={columns}
                             rowKey="id"
                             loading={loading}
                             onRowClick={(record) => navigate(record.link as string)}
-                            defaultSort={{ field: "assigned_at", order: "descend" }}
                             pagination={{
-                                current: page,
-                                pageSize: pageSize,
-                                total: filteredItems.length,
+                                pageSize: 20,
                                 showTotal: (t) => `Total: ${t} elementos`,
-                                onChange: (p, ps) => {
-                                    setPage(p);
-                                    if (ps !== pageSize) setPageSize(ps);
-                                },
                             }}
                             emptyText="No tienes elementos pendientes"
                             locale={{
