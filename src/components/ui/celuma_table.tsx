@@ -42,8 +42,8 @@ export function CelumaTable<T>({
         if (!defaultSort || !dataSource) return dataSource;
         
         const sorted = [...dataSource].sort((a, b) => {
-            const aValue = a[defaultSort.field];
-            const bValue = b[defaultSort.field];
+            const aValue = (a as Record<string, unknown>)[defaultSort.field];
+            const bValue = (b as Record<string, unknown>)[defaultSort.field];
             
             // Handle null/undefined values
             if (!aValue && !bValue) return 0;
