@@ -7,8 +7,8 @@ import * as z from "zod";
 import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined, IdcardOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
-import TextField from "../components/ui/text_field";
-import PasswordField from "../components/ui/password_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionPassword from "../components/ui/floating_caption_password";
 import Button from "../components/ui/button";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -359,19 +359,19 @@ const Profile: React.FC = () => {
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre completo *</label>
                                     <FormField control={profileForm.control} name="full_name" render={({ value, onChange, error }) => (
-                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="Tu nombre" disabled={loading} />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre completo" disabled={loading} />
                                     )} />
                                                 </div>
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre de usuario</label>
                                     <FormField control={profileForm.control} name="username" render={({ value, onChange, error }) => (
-                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} placeholder="username (opcional)" disabled={loading} />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre de usuario (opcional)" disabled={loading} />
                                     )} />
                                                 </div>
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Correo electrónico *</label>
                                     <FormField control={profileForm.control} name="email" render={({ value, onChange, error }) => (
-                                        <TextField value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} placeholder="tu@correo.com" disabled={loading} type="email" />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} label="Correo electrónico" disabled={loading} type="email" />
                                     )} />
                                 </div>
                                                 </div>

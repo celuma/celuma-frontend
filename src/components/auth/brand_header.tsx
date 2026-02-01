@@ -1,4 +1,8 @@
+import { Typography } from "antd";
 import celuma from "../../images/celuma-isotipo.png";
+import { pageTitleStyle } from "../design/tokens";
+
+const { Title } = Typography;
 
 type Props = {
     title?: string;
@@ -11,13 +15,13 @@ export default function BrandHeader({title = "Céluma", logoSrc = celuma,}: Prop
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: "-4px",
-            marginBottom: "28px",
+            gap: "8px",
+            marginBottom: "20px",
             position: "relative" as const,
         },
         logoWrap: {
             position: "relative" as const,
-            width: "100px",
+            width: "60px",
             height: "auto",
             display: "inline-block",
         },
@@ -27,13 +31,6 @@ export default function BrandHeader({title = "Céluma", logoSrc = celuma,}: Prop
             objectFit: "contain" as const,
             display: "block",
         },
-        brandName: {
-            fontSize: "56px",
-            fontWeight: 900,
-            color: "#0d1b2a",
-            margin: 0,
-            lineHeight: 1,
-        },
     };
 
     return (
@@ -41,7 +38,7 @@ export default function BrandHeader({title = "Céluma", logoSrc = celuma,}: Prop
             <div style={styles.logoWrap}>
                 <img src={logoSrc} alt="Logo" style={styles.logo} />
             </div>
-            <h1 style={styles.brandName}>{title}</h1>
+            <Title level={2} style={{ ...pageTitleStyle, margin: 0, fontSize: 36 }}>{title}</Title>
         </div>
     );
 }

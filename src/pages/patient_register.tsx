@@ -10,7 +10,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
-import TextField from "../components/ui/text_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle } from "../components/design/tokens";
@@ -195,7 +195,7 @@ export default function PatientRegister() {
                                             control={control}
                                             name="tenant_id"
                                             render={(p) => (
-                                                <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
+                                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Tenant ID" />
                                             )}
                                         />
                                     </div>
@@ -228,21 +228,21 @@ export default function PatientRegister() {
                                         control={control}
                                         name="patient_code"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Código" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código" />
                                         )}
                                     />
                                     <FormField
                                         control={control}
                                         name="first_name"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" />
                                         )}
                                     />
                                     <FormField
                                         control={control}
                                         name="last_name"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Apellido" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Apellido" />
                                         )}
                                     />
                                 </div>
@@ -278,14 +278,14 @@ export default function PatientRegister() {
                                         control={control}
                                         name="phone"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Teléfono" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Teléfono" />
                                         )}
                                     />
                                     <FormField
                                         control={control}
                                         name="email"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Email" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" />
                                         )}
                                     />
                                 </div>
