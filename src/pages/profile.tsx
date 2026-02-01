@@ -8,7 +8,6 @@ import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
-import FloatingCaptionPassword from "../components/ui/floating_caption_password";
 import Button from "../components/ui/button";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
