@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -49,6 +50,7 @@ type OrdersListResponse = {
 };
 
 export default function OrdersList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -139,25 +141,68 @@ export default function OrdersList() {
             }));
     }, [rows]);
 
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.patient?.id && r.patient?.full_name) {
+                patients.set(r.patient.id, r.patient.full_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
         { 
             title: "Código", 
             dataIndex: "order_code", 
             key: "order_code", 
-            width: 140,
+            width: 120,
             sorter: stringSorter("order_code"),
             defaultSortOrder: "ascend",
         },
         { 
             title: "Paciente", 
-            key: "patient", 
-            render: (_, r) => (
-                <PatientCell
-                    patientId={r.patient.id}
-                    patientName={r.patient.full_name || r.patient.patient_code}
-                    patientCode={r.patient.patient_code}
-                />
+            key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.patient?.full_name || a.patient?.patient_code || "";
+                const nameB = b.patient?.full_name || b.patient?.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.patient?.id === value,
+            render: (_, r) => {
+                if (!r.patient?.full_name || !r.patient?.id) return "—";
+                return (
+                    <PatientCell
+                        patientId={r.patient.id}
+                        patientName={r.patient.full_name}
+                        patientCode={r.patient.patient_code}
+                    />
+                );
+            },
+        },
+        { 
+            title: "Reporte", 
+            dataIndex: "has_report", 
+            key: "has_report", 
+            width: 40,
+            align: "center" as const,
+            render: (v: boolean) => v ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
             ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
         },
         { 
             title: "Estado", 
@@ -180,27 +225,10 @@ export default function OrdersList() {
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        { 
-            title: "Reporte", 
-            dataIndex: "has_report", 
-            key: "has_report", 
-            width: 110,
-            align: "center" as const,
-            render: (v: boolean) => v ? (
-                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
-            ) : (
-                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
-            ),
-            filters: [
-                { text: "Con Reporte", value: true },
-                { text: "Sin Reporte", value: false },
-            ],
-            onFilter: (value, record) => record.has_report === value,
-        },
         ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
-            width: 140,
+            width: 80,
             filters: assigneeFilters,
             onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
                 return record.assignees?.some(user => user.id === value) || false;
@@ -244,7 +272,7 @@ export default function OrdersList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por orden, paciente" 
+                                    placeholder="Buscar en órdenes" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

@@ -8,7 +8,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
-import TextField from "../components/ui/text_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import SelectField from "../components/ui/select_field";
 import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
@@ -227,7 +227,7 @@ export default function SampleRegister() {
                                             control={control}
                                             name="tenant_id"
                                             render={(p) => (
-                                                <TextField {...p} value={String(p.value ?? "")} placeholder="Tenant ID" />
+                                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Tenant ID" />
                                             )}
                                         />
                                     </div>
@@ -280,7 +280,7 @@ export default function SampleRegister() {
                                         control={control}
                                         name="sample_code"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Código de Muestra" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Muestra" />
                                         )}
                                     />
                                     <FormField
@@ -305,7 +305,7 @@ export default function SampleRegister() {
                                         control={control}
                                         name="notes"
                                         render={(p) => (
-                                            <TextField {...p} value={String(p.value ?? "")} placeholder="Notas (opcional)" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Notas (opcional)" />
                                         )}
                                     />
                                 </div>

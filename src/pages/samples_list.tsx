@@ -17,6 +17,7 @@ import {
     getAvatarColor,
     SampleTypeBadge 
 } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -68,6 +69,7 @@ type OrdersListResponse = {
 };
 
 export default function SamplesList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -216,14 +218,14 @@ export default function SamplesList() {
             title: "Código", 
             dataIndex: "sample_code", 
             key: "sample_code", 
-            width: 140,
+            width: 120,
             sorter: stringSorter("sample_code"),
             defaultSortOrder: "ascend",
         },
         { 
-            title: "Código de orden", 
+            title: "Orden", 
             key: "order", 
-            width: 160,
+            width: 120,
             sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
             filters: orderFilters,
             onFilter: (value, record) => record.order.order_code === value,
@@ -300,7 +302,7 @@ export default function SamplesList() {
         ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
-            width: 140,
+            width: 80,
             filters: assigneeFilters,
             onFilter: (value: boolean | React.Key, record: Row) => {
                 return record.assignees?.some(user => user.id === value) || false;

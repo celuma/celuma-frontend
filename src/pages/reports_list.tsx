@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -57,6 +58,7 @@ type ReportsListResponse = {
 };
 
 export default function ReportsList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -124,6 +126,22 @@ export default function ReportsList() {
         }));
     }, [rows]);
 
+    // Get unique patients for filters
+    const patientFilters = useMemo(() => {
+        const patients = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.order.patient?.id && r.order.patient?.full_name) {
+                patients.set(r.order.patient.id, r.order.patient.full_name);
+            }
+        });
+        return Array.from(patients.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     // Published filter -> PDF filter
     const pdfFilters = [
         { text: "Con PDF", value: true },
@@ -132,12 +150,18 @@ export default function ReportsList() {
 
     const columns: ColumnsType<ReportsListResponse["reports"][number]> = [
         { 
-            title: "Código de Orden", 
+            title: "Código", 
             key: "order", 
-            width: 140,
+            width: 120,
             render: (_, r) => (
                 <span 
-                    style={{ color: "#0f8b8d", cursor: "pointer", fontWeight: 500 }}
+                style={{ 
+                    color: "#0f8b8d", 
+                    cursor: "pointer", 
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    borderBottom: "1px dashed #0f8b8d"
+                }}
                     onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/orders/${r.order.id}`);
@@ -150,16 +174,15 @@ export default function ReportsList() {
             defaultSortOrder: "ascend",
         },
         { 
-            title: "Título", 
-            dataIndex: "title", 
-            key: "title", 
-            width: 200,
-            render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
-            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
-        },
-        { 
             title: "Paciente", 
-            key: "patient", 
+            key: "patient",
+            sorter: (a, b) => {
+                const nameA = a.order.patient?.full_name || a.order.patient?.patient_code || "";
+                const nameB = b.order.patient?.full_name || b.order.patient?.patient_code || "";
+                return nameA.localeCompare(nameB);
+            },
+            filters: patientFilters,
+            onFilter: (value, record) => record.order.patient?.id === value,
             render: (_, r) => {
                 const patientName = r.order.patient?.full_name || r.order.patient?.patient_code;
                 if (!patientName || !r.order.patient) return "—";
@@ -173,20 +196,17 @@ export default function ReportsList() {
             },
         },
         { 
-            title: "Estado", 
-            dataIndex: "status", 
-            key: "status", 
-            width: 120,
-            render: (status: string) => renderStatusChip(status, "report"),
-            filters: statusFilters,
-            onFilter: (value, record) => record.status === value,
-            sorter: stringSorter("status"),
+            title: "Título", 
+            dataIndex: "title", 
+            key: "title",
+            render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
+            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
         },
         { 
             title: "PDF", 
             dataIndex: "has_pdf", 
             key: "has_pdf", 
-            width: 80,
+            width: 40,
             align: "center" as const,
             render: (v: boolean) => v ? (
                 <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
@@ -196,10 +216,20 @@ export default function ReportsList() {
             filters: pdfFilters,
             onFilter: (value, record) => record.has_pdf === value,
         },
+        { 
+            title: "Estado", 
+            dataIndex: "status", 
+            key: "status", 
+            width: 120,
+            render: (status: string) => renderStatusChip(status, "report"),
+            filters: statusFilters,
+            onFilter: (value, record) => record.status === value,
+            sorter: stringSorter("status"),
+        },
         ...(rows.some(r => r.reviewers && r.reviewers.length > 0) ? [{
             title: "Revisores",
             key: "reviewers",
-            width: 140,
+            width: 80,
             filters: reviewerFilters,
             onFilter: (value: boolean | React.Key, record: ReportsListResponse["reports"][number]) => {
                 return record.reviewers?.some(reviewer => reviewer.id === value) || false;
@@ -243,7 +273,7 @@ export default function ReportsList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por título, diagnóstico, orden o paciente" 
+                                    placeholder="Buscar en reportes" 
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}

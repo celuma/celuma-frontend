@@ -2,14 +2,15 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
-import AuthCard from "../components/auth/auth_card";
-import BrandHeader from "../components/auth/brand_header";
+import { useNavigate } from "react-router-dom";
+import { Card, Divider } from "antd";
+import AuthLayout from "../components/auth/auth_layout";
 import FormField from "../components/ui/form_field";
-import TextField from "../components/ui/text_field";
-import PasswordField from "../components/ui/password_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionPassword from "../components/ui/floating_caption_password";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
+import { cardTitleStyle, cardStyle, tokens } from "../components/design/tokens";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -149,128 +150,147 @@ export default function RegisterAllOneClick() {
     const onlyDigits = (s: string) => s.replace(/\D+/g, "");
 
     return (
-        <AuthCard header = {<BrandHeader title = "¡Regístrate!" />} footer={
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", fontSize: 14 }}>
-                <span>¿Ya tienes cuenta?</span>
-                <Link to="/login" style={{ color: "#0f8b8d" }}>Inicia sesión</Link>
+        <AuthLayout activeLink="register">
+            <div style={{ 
+                maxWidth: 900, 
+                width: "100%",
+                overflowY: "auto",
+                padding: "24px 16px",
+                display: "grid",
+                gap: tokens.gap,
+            }}>
+                <Card 
+                    title={<span style={cardTitleStyle}>Registro</span>}
+                    style={cardStyle}
+                >
+                    <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
+                        {/* Sección Empresa */}
+                        <section>
+                            <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Empresa</h3>
+                            <div style={{ display: "grid", gap: 12 }}>
+                                <FormField
+                                    control={control}
+                                    name="tenant.name"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="tenant.legal_name"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Razón social" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="tenant.tax_id"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="RFC" />}
+                                />
+                            </div>
+                        </section>
+
+                        <Divider style={{ margin: "8px 0" }} />
+
+                        {/* Sección Sucursal */}
+                        <section>
+                            <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Sucursal</h3>
+                            <p style={{ margin: "0 0 12px 0", color: "#6b7280", fontSize: 13 }}>
+                                Zona horaria detectada: <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: 4 }}>{timezone}</code>
+                            </p>
+                            <div style={{ display: "grid", gap: 12 }}>
+                                <FormField
+                                    control={control}
+                                    name="branch.code"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Identificador" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.name"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.address_line1"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Dirección" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.address_line2"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Dirección 2 (opcional)" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.postal_code"
+                                    render={(p) => (
+                                        <FloatingCaptionInput
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            onChange={(e) => p.onChange(onlyDigits(e.target.value))}
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            label="Código postal"
+                                        />
+                                    )}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.city"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Ciudad" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.state"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Estado" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="branch.country"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="País (ej. MX)" />}
+                                />
+                            </div>
+                        </section>
+
+                        <Divider style={{ margin: "8px 0" }} />
+
+                        {/* Sección Usuario */}
+                        <section>
+                            <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Usuario</h3>
+                            <div style={{ display: "grid", gap: 12 }}>
+                                <FormField
+                                    control={control}
+                                    name="user.full_name"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre completo" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="user.email"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Correo electrónico" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="user.username"
+                                    render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre de usuario (opcional)" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="user.password"
+                                    render={(p) => <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Contraseña" />}
+                                />
+                                <FormField
+                                    control={control}
+                                    name="user.confirmPassword"
+                                    render={(p) => <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Repetir contraseña" />}
+                                />
+                            </div>
+                        </section>
+
+                        {/* Submit */}
+                        <Button htmlType="submit" type="primary" fullWidth loading={loading}>
+                            Registrarse
+                        </Button>
+
+                        {/* Global error */}
+                        {error && <ErrorText>{error}</ErrorText>}
+                    </form>
+                </Card>
             </div>
-        }>
-            <form onSubmit = {onSubmit} style = {{ display: "grid", gap: 16 }}>
-                {/* Company */}
-                <section style = {{ display: "grid", gap: 12 }}>
-                    <h3 style = {{ margin: 0 }}> Empresa </h3>
-                    <div style = {{ display: "grid", gap: 12 }}>
-                        <FormField
-                            control = {control}
-                            name = "tenant.name"
-                            render = {(p) => <TextField {...p} value = {String(p.value ?? "")} placeholder="Nombre" />}
-                        />
-                        <FormField
-                            control={control}
-                            name="tenant.legal_name"
-                            render={(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Razón social" />}
-                        />
-                        <FormField
-                            control={control}
-                            name="tenant.tax_id"
-                            render={(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="RFC" />}
-                        />
-                    </div>
-                </section>
-
-                {/* Branch */}
-                <section style = {{ display: "grid", gap: 12 }}>
-                    <h3 style = {{ margin: 0 }}> Sucursal </h3>
-                    <h6 style = {{ margin: 0, color: "#6b7280", opacity: 0.9 }}> Zona horaria detectada: <code>{timezone}</code> </h6>
-                    <FormField
-                        control = {control}
-                        name = "branch.code"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Identificador" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name ="branch.name"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.address_line1"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Dirección" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.address_line2"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Dirección 2 (opcional)" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.postal_code"
-                        render = {(p) => (
-                            <TextField
-                                {...p}
-                                value = {String(p.value ?? "")}
-                                onChange = {(e) => p.onChange(onlyDigits(e.target.value))}
-                                inputMode = "numeric"
-                                pattern = "[0-9]*"
-                                placeholder = "Código postal"
-                            />
-                        )}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.city"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Ciudad" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.state"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Estado" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "branch.country"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="País (ej. MX)" />}
-                    />
-                </section>
-
-                {/* User */}
-                <section style = {{ display: "grid", gap: 12 }}>
-                    <h3 style = {{ margin: 0 }}> Usuario </h3>
-                    <FormField
-                        control = {control}
-                        name = "user.full_name"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre completo" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "user.email"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Correo electrónico" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "user.username"
-                        render = {(p) => <TextField {...p} value={String(p.value ?? "")} placeholder="Nombre de usuario (opcional)" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "user.password"
-                        render = {(p) => <PasswordField {...p} value={String(p.value ?? "")} placeholder="Contraseña" />}
-                    />
-                    <FormField
-                        control = {control}
-                        name = "user.confirmPassword"
-                        render = {(p) => <PasswordField {...p} value={String(p.value ?? "")} placeholder="Repetir contraseña" />}
-                    />
-                </section>
-
-                {/* Submit */}
-                <Button htmlType = "submit" type = "primary" fullWidth loading = {loading}>
-                    Registrarse
-                </Button>
-            </form>
-
-            {/* Global error */}
-            <ErrorText>{error}</ErrorText>
-        </AuthCard>
+        </AuthLayout>
     );
 }

@@ -10,6 +10,7 @@ import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { SEX_CONFIG } from "../components/ui/status_configs";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -49,6 +50,7 @@ type PatientRow = {
 };
 
 export default function PatientsList() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -84,10 +86,14 @@ export default function PatientsList() {
     // Sex filter
     const sexFilters = useMemo(() => {
         const sexes = new Set(rows.filter(r => r.sex).map(r => r.sex));
-        return Array.from(sexes).filter((sex): sex is string => sex !== null && sex !== undefined).map(sex => ({
-            text: sex,
-            value: sex,
-        }));
+        return Array.from(sexes).filter((sex): sex is string => sex !== null && sex !== undefined).map(sex => {
+            const upperSex = sex.toUpperCase();
+            const config = SEX_CONFIG[upperSex] || SEX_CONFIG.DEFAULT;
+            return {
+                text: config.label,
+                value: sex,
+            };
+        });
     }, [rows]);
 
     const columns: ColumnsType<PatientRow> = [
@@ -133,7 +139,7 @@ export default function PatientsList() {
             title: "Sexo", 
             dataIndex: "sex", 
             key: "sex", 
-            width: 100,
+            width: 80,
             render: (v: string | null) => {
                 if (!v) return "";
                 const upperSex = v.toUpperCase();
@@ -160,13 +166,14 @@ export default function PatientsList() {
             title: "Teléfono", 
             dataIndex: "phone", 
             key: "phone", 
-            width: 160,
+            width: 120,
             sorter: stringSorter("phone"),
         },
         { 
             title: "Email", 
             dataIndex: "email", 
             key: "email",
+            width: 200,
             sorter: stringSorter("email"),
         },
     ];
@@ -186,7 +193,7 @@ export default function PatientsList() {
                             <Space>
                                 <Input.Search
                                     allowClear
-                                    placeholder="Buscar por código, nombre, email o teléfono"
+                                    placeholder="Buscar en pacientes"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     onSearch={(v) => setSearch(v)}
