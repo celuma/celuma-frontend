@@ -63,6 +63,7 @@ type OrdersListResponse = {
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
+        report_id?: string | null;
         sample_count: number;
         has_report: boolean;
     }>;

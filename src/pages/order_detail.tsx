@@ -87,6 +87,7 @@ type OrderFullResponse = {
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
+        report_id?: string | null;
         created_at?: string | null;
         assignees?: UserRef[] | null;
         reviewers?: ReviewerWithStatus[] | null;
@@ -285,7 +286,7 @@ export default function OrderDetail() {
                 }
 
                 // Get report id from the order full response
-                foundReportId = full.report?.id ?? null;
+                foundReportId = full.order.report_id ?? full.report?.id ?? null;
                     setReportId(foundReportId);
 
                 // Load latest report for preview if reportId exists

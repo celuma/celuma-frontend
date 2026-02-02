@@ -19,6 +19,7 @@ import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
 import Worklist from "./pages/worklist";
 import BillingDetail from "./pages/billing_detail";
+import BillingList from "./pages/billing_list";
 import PriceCatalog from "./pages/price_catalog";
 import UsersManagement from "./pages/users_management";
 import PasswordResetRequest from "./pages/password_reset_request";
@@ -49,6 +50,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
             <Route path="/worklist" element={<Worklist />} />
+            <Route path="/billing" element={<BillingList />} />
             <Route path="/billing/:orderId" element={<BillingDetail />} />
             <Route path="/catalog" element={<PriceCatalog />} />
             <Route path="/users" element={<UsersManagement />} />

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Layout, Card, Table, Tag, Button, Form, InputNumber, Select, message, Divider, Descriptions } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";

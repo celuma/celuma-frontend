@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined, ContainerOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined, ContainerOutlined, DollarOutlined, CreditCardOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
 
@@ -18,7 +18,9 @@ export type CelumaKey =
     | "/samples/register"
     | "/profile" 
     | "/logout"
-    | "/users";
+    | "/users"
+    | "/catalog"
+    | "/billing";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
@@ -27,6 +29,8 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
     { key: "/orders", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
+    { key: "/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios", title: "Catálogo de Precios" },
+    { key: "/billing", icon: <CreditCardOutlined />, label: "Facturación", title: "Facturación" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [

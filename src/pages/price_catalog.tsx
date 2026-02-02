@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Layout, Card, Table, Button, Form, Input, InputNumber, Modal, message, Tag, Space, Popconfirm } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
@@ -89,6 +90,7 @@ interface Service {
 
 function PriceCatalog() {
     const navigate = useNavigate();
+    const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
     const [services, setServices] = useState<Service[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
@@ -202,7 +204,7 @@ function PriceCatalog() {
 
     return (
         <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/catalog"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card

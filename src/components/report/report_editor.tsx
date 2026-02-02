@@ -157,6 +157,7 @@ type OrderFullResponse = {
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
+        report_id?: string | null;
     };
     patient: {
         id: string;
