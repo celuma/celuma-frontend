@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Modal, message, Tag, Space, Popconfirm, Switch, Select } from "antd";
+import { Layout, Card, Table, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -8,7 +8,6 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
-const { Content } = Layout;
 const { TextArea } = Input;
 
 function getApiBase(): string {
@@ -165,10 +164,8 @@ function StudyTypes() {
         setModalVisible(true);
     };
 
-    const handleSave = async () => {
+    const handleSave = async (values: Partial<StudyType>) => {
         try {
-            const values = await form.validateFields();
-            
             if (editingId) {
                 // Update
                 await putJSON(`/v1/study-types/${editingId}`, values);
@@ -203,68 +200,104 @@ function StudyTypes() {
             title: "Código",
             dataIndex: "code",
             key: "code",
-            width: 120,
-            render: (code: string) => <strong>{code}</strong>,
+            width: 150,
+            render: (code: string) => <span style={{ fontWeight: 600, color: "#0f8b8d" }}>{code}</span>,
         },
         {
             title: "Nombre",
             dataIndex: "name",
             key: "name",
+            render: (name: string) => <span style={{ fontWeight: 500 }}>{name}</span>,
         },
         {
             title: "Descripción",
             dataIndex: "description",
             key: "description",
             ellipsis: true,
+            render: (text) => text || <span style={{ color: "#888" }}>—</span>,
         },
         {
-            title: "Template por defecto",
+            title: "Plantilla por defecto",
             dataIndex: "default_template",
             key: "default_template",
             width: 200,
             render: (template?: { id: string; name: string }) => 
-                template ? <Tag color="blue">{template.name}</Tag> : <Tag>Sin template</Tag>,
+                template ? (
+                    <div style={{
+                        backgroundColor: "#eff6ff",
+                        color: "#3b82f6",
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: "4px 10px",
+                        display: "inline-block",
+                    }}>
+                        {template.name}
+                    </div>
+                ) : (
+                    <span style={{ color: "#888", fontSize: 12 }}>—</span>
+                ),
         },
         {
             title: "Estado",
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
+            filters: [
+                { text: "Activo", value: true },
+                { text: "Inactivo", value: false },
+            ],
+            onFilter: (value, record) => record.is_active === value,
             render: (is_active: boolean) => (
-                <Tag color={is_active ? "green" : "red"}>
+                <div style={{
+                    backgroundColor: is_active ? "#ecfdf5" : "#fef2f2",
+                    color: is_active ? "#10b981" : "#ef4444",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "4px 10px",
+                    display: "inline-block",
+                }}>
                     {is_active ? "Activo" : "Inactivo"}
-                </Tag>
+                </div>
             ),
         },
         {
             title: "Fecha de creación",
             dataIndex: "created_at",
             key: "created_at",
-            width: 180,
-            render: (date: string) => new Date(date).toLocaleDateString("es-MX"),
+            width: 150,
+            render: (date: string) => {
+                const d = new Date(date);
+                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+            },
         },
         {
             title: "Acciones",
             key: "actions",
-            width: 150,
+            width: 120,
             render: (_, record) => (
-                <Space size="small">
+                <Space>
                     <Button
-                        type="link"
+                        type="text"
                         icon={<EditOutlined />}
                         onClick={() => handleEdit(record)}
-                    >
-                        Editar
-                    </Button>
+                        size="small"
+                        title="Editar"
+                    />
                     <Popconfirm
-                        title="¿Eliminar este tipo de estudio?"
+                        title="¿Desactivar este tipo de estudio?"
                         onConfirm={() => handleDelete(record.id)}
                         okText="Sí"
                         cancelText="No"
                     >
-                        <Button type="link" danger icon={<DeleteOutlined />}>
-                            Eliminar
-                        </Button>
+                        <Button 
+                            type="text" 
+                            danger 
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            title="Desactivar"
+                        />
                     </Popconfirm>
                 </Space>
             ),
@@ -272,10 +305,10 @@ function StudyTypes() {
     ];
 
     return (
-        <Layout style={{ minHeight: "100vh", backgroundColor: tokens.colorBgLayout }}>
+        <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/study-types"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout>
-                <Content style={{ margin: "24px 24px 0" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
                         title={<span style={cardTitleStyle}>Tipos de Estudio</span>}
                         style={cardStyle}
@@ -294,45 +327,43 @@ function StudyTypes() {
                             dataSource={studyTypes}
                             rowKey="id"
                             loading={loading}
-                            pagination={{ pageSize: 20 }}
+                            pagination={{ pageSize: 10 }}
                         />
                     </Card>
-                </Content>
-            </Layout>
+                </div>
+            </Layout.Content>
 
             <Modal
                 title={editingId ? "Editar Tipo de Estudio" : "Nuevo Tipo de Estudio"}
                 open={modalVisible}
-                onOk={handleSave}
                 onCancel={() => {
                     setModalVisible(false);
                     form.resetFields();
                 }}
-                okText="Guardar"
-                cancelText="Cancelar"
+                footer={null}
                 width={600}
             >
-                <Form form={form} layout="vertical">
+                <Form form={form} layout="vertical" onFinish={handleSave}>
                     <Form.Item
                         name="code"
                         label="Código"
                         rules={[
-                            { required: true, message: "El código es requerido" },
-                            { max: 50, message: "El código no puede exceder 50 caracteres" },
+                            { required: true, message: "Requerido" },
+                            { max: 50, message: "Máximo 50 caracteres" },
                         ]}
                     >
-                        <Input placeholder="Ej: BIOPSIA, CITOLOGIA" maxLength={50} />
+                        <Input placeholder="ej: BIOPSIA, CITOLOGIA" maxLength={50} />
                     </Form.Item>
 
                     <Form.Item
                         name="name"
                         label="Nombre"
                         rules={[
-                            { required: true, message: "El nombre es requerido" },
-                            { max: 255, message: "El nombre no puede exceder 255 caracteres" },
+                            { required: true, message: "Requerido" },
+                            { max: 255, message: "Máximo 255 caracteres" },
                         ]}
                     >
-                        <Input placeholder="Ej: Biopsia de tejido" maxLength={255} />
+                        <Input placeholder="ej: Biopsia de tejido" maxLength={255} />
                     </Form.Item>
 
                     <Form.Item name="description" label="Descripción">
@@ -343,7 +374,7 @@ function StudyTypes() {
                         />
                     </Form.Item>
 
-                    <Form.Item name="default_report_template_id" label="Template por defecto (opcional)">
+                    <Form.Item name="default_report_template_id" label="Plantilla de reporte por defecto (opcional)">
                         <Select
                             placeholder="Seleccionar template de reporte"
                             allowClear
@@ -358,8 +389,17 @@ function StudyTypes() {
                         </Select>
                     </Form.Item>
 
-                    <Form.Item name="is_active" label="Activo" valuePropName="checked">
-                        <Switch />
+                    <Form.Item name="is_active" label="Estado" valuePropName="checked">
+                        <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
+                    </Form.Item>
+
+                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+                        <Space>
+                            <Button onClick={() => setModalVisible(false)}>Cancelar</Button>
+                            <Button type="primary" htmlType="submit">
+                                {editingId ? "Guardar Cambios" : "Crear"}
+                            </Button>
+                        </Space>
                     </Form.Item>
                 </Form>
             </Modal>

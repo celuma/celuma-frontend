@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Modal, message, Tag, Space, Popconfirm, Switch, Alert } from "antd";
+import { Layout, Card, Table, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Alert } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, FileTextOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -8,7 +8,6 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 
-const { Content } = Layout;
 const { TextArea } = Input;
 
 function getApiBase(): string {
@@ -136,10 +135,8 @@ function ReportTemplates() {
         setModalVisible(true);
     };
 
-    const handleSave = async () => {
+    const handleSave = async (values: Partial<ReportTemplate>) => {
         try {
-            const values = await form.validateFields();
-            
             // Add empty template_json for creation (required by backend)
             const payload = {
                 ...values,
@@ -180,54 +177,75 @@ function ReportTemplates() {
             title: "Nombre",
             dataIndex: "name",
             key: "name",
-            render: (name: string) => <strong>{name}</strong>,
+            render: (name: string) => <span style={{ fontWeight: 600, color: "#0f8b8d" }}>{name}</span>,
         },
         {
             title: "Descripción",
             dataIndex: "description",
             key: "description",
             ellipsis: true,
+            render: (text) => text || <span style={{ color: "#888" }}>—</span>,
         },
         {
             title: "Estado",
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
+            filters: [
+                { text: "Activo", value: true },
+                { text: "Inactivo", value: false },
+            ],
+            onFilter: (value, record) => record.is_active === value,
             render: (is_active: boolean) => (
-                <Tag color={is_active ? "green" : "red"}>
+                <div style={{
+                    backgroundColor: is_active ? "#ecfdf5" : "#fef2f2",
+                    color: is_active ? "#10b981" : "#ef4444",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "4px 10px",
+                    display: "inline-block",
+                }}>
                     {is_active ? "Activo" : "Inactivo"}
-                </Tag>
+                </div>
             ),
         },
         {
             title: "Fecha de creación",
             dataIndex: "created_at",
             key: "created_at",
-            width: 180,
-            render: (date: string) => new Date(date).toLocaleDateString("es-MX"),
+            width: 150,
+            render: (date: string) => {
+                const d = new Date(date);
+                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+            },
         },
         {
             title: "Acciones",
             key: "actions",
-            width: 150,
+            width: 120,
             render: (_, record) => (
-                <Space size="small">
+                <Space>
                     <Button
-                        type="link"
+                        type="text"
                         icon={<EditOutlined />}
                         onClick={() => handleEdit(record)}
-                    >
-                        Editar
-                    </Button>
+                        size="small"
+                        title="Editar"
+                    />
                     <Popconfirm
-                        title="¿Eliminar esta plantilla?"
+                        title="¿Desactivar esta plantilla?"
                         onConfirm={() => handleDelete(record.id)}
                         okText="Sí"
                         cancelText="No"
                     >
-                        <Button type="link" danger icon={<DeleteOutlined />}>
-                            Eliminar
-                        </Button>
+                        <Button 
+                            type="text" 
+                            danger 
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            title="Desactivar"
+                        />
                     </Popconfirm>
                 </Space>
             ),
@@ -235,10 +253,10 @@ function ReportTemplates() {
     ];
 
     return (
-        <Layout style={{ minHeight: "100vh", backgroundColor: tokens.colorBgLayout }}>
+        <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/report-templates"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout>
-                <Content style={{ margin: "24px 24px 0" }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
                         title={<span style={cardTitleStyle}>Plantillas de Reporte</span>}
                         style={cardStyle}
@@ -266,25 +284,23 @@ function ReportTemplates() {
                             dataSource={templates}
                             rowKey="id"
                             loading={loading}
-                            pagination={{ pageSize: 20 }}
+                            pagination={{ pageSize: 10 }}
                         />
                     </Card>
-                </Content>
-            </Layout>
+                </div>
+            </Layout.Content>
 
             <Modal
                 title={editingId ? "Editar Plantilla" : "Nueva Plantilla"}
                 open={modalVisible}
-                onOk={handleSave}
                 onCancel={() => {
                     setModalVisible(false);
                     form.resetFields();
                 }}
-                okText="Guardar"
-                cancelText="Cancelar"
+                footer={null}
                 width={600}
             >
-                <Form form={form} layout="vertical">
+                <Form form={form} layout="vertical" onFinish={handleSave}>
                     <Form.Item
                         name="name"
                         label="Nombre"
@@ -315,10 +331,19 @@ function ReportTemplates() {
                     )}
 
                     {editingId && (
-                        <Form.Item name="is_active" label="Activo" valuePropName="checked">
-                            <Switch />
+                        <Form.Item name="is_active" label="Estado" valuePropName="checked">
+                            <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
                         </Form.Item>
                     )}
+
+                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+                        <Space>
+                            <Button onClick={() => setModalVisible(false)}>Cancelar</Button>
+                            <Button type="primary" htmlType="submit">
+                                {editingId ? "Guardar Cambios" : "Crear"}
+                            </Button>
+                        </Space>
+                    </Form.Item>
                 </Form>
             </Modal>
         </Layout>

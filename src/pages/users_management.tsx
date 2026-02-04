@@ -239,16 +239,38 @@ function UsersManagement() {
             title: "Rol", 
             dataIndex: "role", 
             key: "role",
+            filters: [
+                { text: "Administrador", value: "admin" },
+                { text: "Patólogo", value: "pathologist" },
+                { text: "Técnico", value: "lab_tech" },
+                { text: "Facturación", value: "billing" },
+                { text: "Asistente", value: "assistant" },
+                { text: "Visor", value: "viewer" },
+            ],
+            onFilter: (value, record) => record.role === value,
             render: (role) => {
-                const colors: Record<string, string> = {
-                    admin: "purple",
-                    pathologist: "blue",
-                    lab_tech: "green",
-                    billing: "orange",
-                    assistant: "cyan",
-                    viewer: "default"
+                const roleConfig: Record<string, { color: string; bg: string; label: string }> = {
+                    admin: { color: "#8b5cf6", bg: "#f5f3ff", label: "Admin" },
+                    pathologist: { color: "#3b82f6", bg: "#eff6ff", label: "Patólogo" },
+                    lab_tech: { color: "#10b981", bg: "#ecfdf5", label: "Técnico" },
+                    billing: { color: "#f59e0b", bg: "#fffbeb", label: "Facturación" },
+                    assistant: { color: "#06b6d4", bg: "#ecfeff", label: "Asistente" },
+                    viewer: { color: "#6b7280", bg: "#f3f4f6", label: "Visor" }
                 };
-                return <Tag color={colors[role] || "default"}>{role}</Tag>;
+                const config = roleConfig[role] || { color: "#6b7280", bg: "#f3f4f6", label: role };
+                return (
+                    <div style={{
+                        backgroundColor: config.bg,
+                        color: config.color,
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: "4px 10px",
+                        display: "inline-block",
+                    }}>
+                        {config.label}
+                    </div>
+                );
             }
         },
         {
@@ -256,17 +278,63 @@ function UsersManagement() {
             dataIndex: "branch_ids",
             key: "branches",
             render: (ids: string[], record) => {
-                if (record.role === 'admin') return <Tag color="gold">Todas (Admin)</Tag>;
-                if (!ids || ids.length === 0) return <Tag>Ninguna</Tag>;
+                if (record.role === 'admin') {
+                    return (
+                        <div style={{
+                            backgroundColor: "#fffbeb",
+                            color: "#f59e0b",
+                            borderRadius: 12,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            padding: "4px 10px",
+                            display: "inline-block",
+                        }}>
+                            Todas (Admin)
+                        </div>
+                    );
+                }
+                if (!ids || ids.length === 0) {
+                    return <span style={{ color: "#888", fontSize: 12 }}>—</span>;
+                }
                 
                 // Show count if many, or names if few
                 const branchNames = ids.map(id => branches.find(b => b.id === id)?.name || id);
                 if (branchNames.length > 2) {
-                    return <Tag title={branchNames.join(', ')}>{branchNames.length} Sucursales</Tag>;
+                    return (
+                        <div 
+                            style={{
+                                backgroundColor: "#eff6ff",
+                                color: "#3b82f6",
+                                borderRadius: 12,
+                                fontSize: 11,
+                                fontWeight: 500,
+                                padding: "4px 10px",
+                                display: "inline-block",
+                            }}
+                            title={branchNames.join(', ')}
+                        >
+                            {branchNames.length} Sucursales
+                        </div>
+                    );
                 }
                 return (
-                    <Space size={[0, 4]} wrap>
-                        {branchNames.map((name, i) => <Tag key={i}>{name}</Tag>)}
+                    <Space size={4} wrap>
+                        {branchNames.map((name, i) => (
+                            <div 
+                                key={i}
+                                style={{
+                                    backgroundColor: "#eff6ff",
+                                    color: "#3b82f6",
+                                    borderRadius: 12,
+                                    fontSize: 11,
+                                    fontWeight: 500,
+                                    padding: "4px 10px",
+                                    display: "inline-block",
+                                }}
+                            >
+                                {name}
+                            </div>
+                        ))}
                     </Space>
                 );
             }
@@ -291,9 +359,24 @@ function UsersManagement() {
         {
             title: "Acciones",
             key: "actions",
+            width: 120,
             render: (_, record) => {
                 const isSelf = record.id === profile?.id;
-                if (isSelf) return <Tag>Tú</Tag>;
+                if (isSelf) {
+                    return (
+                        <div style={{
+                            backgroundColor: "#f5f3ff",
+                            color: "#8b5cf6",
+                            borderRadius: 12,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            padding: "4px 10px",
+                            display: "inline-block",
+                        }}>
+                            Tú
+                        </div>
+                    );
+                }
                 
                 return (
                     <Space>
@@ -301,6 +384,7 @@ function UsersManagement() {
                             type="text" 
                             icon={<EditOutlined />} 
                             onClick={() => openEditModal(record)} 
+                            size="small"
                             title="Editar"
                         />
                         <Popconfirm
@@ -309,7 +393,13 @@ function UsersManagement() {
                             okText="Sí"
                             cancelText="No"
                         >
-                            <Button type="text" danger icon={<DeleteOutlined />} title="Desactivar" />
+                            <Button 
+                                type="text" 
+                                danger 
+                                icon={<DeleteOutlined />} 
+                                size="small"
+                                title="Desactivar" 
+                            />
                         </Popconfirm>
                     </Space>
                 );
