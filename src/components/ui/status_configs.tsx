@@ -49,6 +49,16 @@ export const LABEL_COLORS = [
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
 
+// Invoice/Payment status configuration
+export const INVOICE_STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    PAID: { color: "#10b981", bg: "#ecfdf5", label: "Pagado" },
+    PARTIAL: { color: "#f59e0b", bg: "#fffbeb", label: "Pago Parcial" },
+    PENDING: { color: "#ef4444", bg: "#fef2f2", label: "Pendiente" },
+    VOID: { color: "#6b7280", bg: "#f3f4f6", label: "Anulada" },
+    FAILED: { color: "#dc2626", bg: "#fef2f2", label: "Fallido" },
+    REFUNDED: { color: "#8b5cf6", bg: "#f5f3ff", label: "Reembolsado" },
+};
+
 // Sex configuration for consistent badges
 export const SEX_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
     "MALE": { color: "#3b82f6", bg: "#eff6ff", label: "Masculino" },

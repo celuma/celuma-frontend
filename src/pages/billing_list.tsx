@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Button, message, Tag, Space } from "antd";
+import { Layout, Card, Button, message, Space } from "antd";
 import { EyeOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -9,6 +9,7 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { usePageTitle } from "../hooks/use_page_title";
+import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -31,12 +32,17 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 interface Invoice {
     id: string;
     invoice_number: string;
-    amount_total: number;
+    subtotal: number;
+    discount_total: number;
+    tax_total: number;
+    total: number;
+    amount_paid: number;
     currency: string;
     status: string;
     order_id: string;
     tenant_id: string;
     branch_id: string;
+    paid_at?: string;
 }
 
 function BillingList() {
@@ -60,32 +66,6 @@ function BillingList() {
             console.error(error);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case "PAID":
-                return "green";
-            case "PARTIAL":
-                return "orange";
-            case "PENDING":
-                return "red";
-            default:
-                return "default";
-        }
-    };
-
-    const getStatusLabel = (status: string) => {
-        switch (status) {
-            case "PAID":
-                return "Pagado";
-            case "PARTIAL":
-                return "Pago Parcial";
-            case "PENDING":
-                return "Pendiente";
-            default:
-                return status;
         }
     };
 
@@ -117,19 +97,33 @@ function BillingList() {
         },
         {
             title: "Total",
-            dataIndex: "amount_total",
-            key: "amount_total",
+            dataIndex: "total",
+            key: "total",
+            width: 120,
+            render: (total: number, record: Invoice) => `$${total.toFixed(2)} ${record.currency}`,
+        },
+        {
+            title: "Pagado",
+            dataIndex: "amount_paid",
+            key: "amount_paid",
             width: 120,
             render: (amount: number, record: Invoice) => `$${amount.toFixed(2)} ${record.currency}`,
+        },
+        {
+            title: "Balance",
+            key: "balance",
+            width: 120,
+            render: (_: unknown, record: Invoice) => {
+                const balance = record.total - record.amount_paid;
+                return `$${balance.toFixed(2)} ${record.currency}`;
+            },
         },
         {
             title: "Estado",
             dataIndex: "status",
             key: "status",
             width: 120,
-            render: (status: string) => (
-                <Tag color={getStatusColor(status)}>{getStatusLabel(status)}</Tag>
-            ),
+            render: (status: string) => renderInvoiceStatusChip(status),
             filters: [
                 { text: "Pagado", value: "PAID" },
                 { text: "Pago Parcial", value: "PARTIAL" },
@@ -166,7 +160,7 @@ function BillingList() {
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     <Card
                         title={<span style={cardTitleStyle}>Facturación</span>}
@@ -185,8 +179,19 @@ function BillingList() {
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
+                                filterCheckall: 'Seleccionar todo',
+                                filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin facturas',
+                                selectAll: 'Seleccionar todo',
+                                selectInvert: 'Invertir selección',
+                                selectNone: 'Limpiar selección',
+                                selectionAll: 'Seleccionar todos',
                                 sortTitle: 'Ordenar',
+                                expand: 'Expandir fila',
+                                collapse: 'Colapsar fila',
+                                triggerDesc: 'Clic para ordenar descendente',
+                                triggerAsc: 'Clic para ordenar ascendente',
+                                cancelSort: 'Clic para cancelar ordenamiento',
                             }}
                         />
                     </Card>

@@ -11,7 +11,7 @@ import {
     FileTextOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
+import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, INVOICE_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
 
 // Re-export utility functions from comment_utils for consistency
 export { getInitials, getAvatarColor } from "../comments/comment_utils";
@@ -263,6 +263,27 @@ export const renderStatusChip = (
             config = { color: "#6b7280", bg: "#f3f4f6", label: status };
     }
 
+    return (
+        <div style={{
+            backgroundColor: config.bg,
+            color: config.color,
+            borderRadius: 12,
+            fontSize: 11,
+            fontWeight: 500,
+            padding: "4px 10px",
+            display: "inline-block",
+        }}>
+            {config.label}
+        </div>
+    );
+};
+
+/**
+ * Renders an invoice status chip with consistent styling
+ */
+export const renderInvoiceStatusChip = (status: string) => {
+    const config = INVOICE_STATUS_CONFIG[status] || { color: "#6b7280", bg: "#f3f4f6", label: status };
+    
     return (
         <div style={{
             backgroundColor: config.bg,
