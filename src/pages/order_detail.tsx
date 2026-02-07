@@ -1025,6 +1025,17 @@ export default function OrderDetail() {
                     >
                         Agregar Muestra
                     </AntButton>
+                    {data?.order?.invoice_id && (
+                        <AntButton 
+                            block 
+                            size="small"
+                            icon={<DollarOutlined />}
+                            onClick={() => data && navigate(`/billing/${data.order.id}`)}
+                            style={{ borderColor: tokens.primary, color: tokens.primary }}
+                        >
+                            Ver Factura
+                        </AntButton>
+                    )}
                     {!reportId && (
                         <AntButton 
                             block 
