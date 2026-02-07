@@ -42,8 +42,11 @@ type OrdersListResponse = {
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
+        report_id?: string | null;
+        invoice_id?: string | null;
         sample_count: number;
         has_report: boolean;
+        has_invoice: boolean;
         labels?: Array<{ id: string; name: string; color: string }>;
         assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
     }>;
@@ -203,6 +206,41 @@ export default function OrdersList() {
                 { text: "Sin Reporte", value: false },
             ],
             onFilter: (value, record) => record.has_report === value,
+        },
+        { 
+            title: "Factura", 
+            dataIndex: "has_invoice", 
+            key: "has_invoice", 
+            width: 40,
+            align: "center" as const,
+            render: (v: boolean, record) => {
+                const icon = v ? (
+                    <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+                ) : (
+                    <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+                );
+                
+                if (v) {
+                    return (
+                        <div 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/billing/${record.id}`);
+                            }}
+                            style={{ cursor: "pointer" }}
+                        >
+                            {icon}
+                        </div>
+                    );
+                }
+                
+                return icon;
+            },
+            filters: [
+                { text: "Con Factura", value: true },
+                { text: "Sin Factura", value: false },
+            ],
+            onFilter: (value, record) => record.has_invoice === value,
         },
         { 
             title: "Estado", 

@@ -61,7 +61,7 @@ export default function FloatingCaptionPassword({
         const active = hovered || focused;
         return {
             borderColor: active ? colors.baseHover : colors.base,
-            boxShadow: active ? `0 0 8px 2px rgba(15, 139, 141, 0.2)` : "none",
+            boxShadow: active ? `0 0 0 3px ${colors.ringBase}` : "none",
         };
     })();
 
@@ -83,7 +83,7 @@ export default function FloatingCaptionPassword({
         left: prefixNode ? 38 : 12,
         top: "50%",
         transform: isFloating
-            ? "translateY(-32px) scale(0.85)"
+            ? "translateY(-36px) scale(0.85)"
             : "translateY(-50%)",
         transformOrigin: "left center",
         fontSize: isFloating ? 12 : 15,

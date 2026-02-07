@@ -29,6 +29,7 @@ interface PhysicianOrder {
     patient_name: string;
     patient_code: string;
     status: string;
+    report_id?: string | null;
     has_report: boolean;
     report_status?: string;
 }

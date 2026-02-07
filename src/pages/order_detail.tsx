@@ -5,7 +5,8 @@ import {
     FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
-    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined
+    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
+    DollarOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -87,6 +88,8 @@ type OrderFullResponse = {
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
+        report_id?: string | null;
+        invoice_id?: string | null;
         created_at?: string | null;
         assignees?: UserRef[] | null;
         reviewers?: ReviewerWithStatus[] | null;
@@ -285,7 +288,7 @@ export default function OrderDetail() {
                 }
 
                 // Get report id from the order full response
-                foundReportId = full.report?.id ?? null;
+                foundReportId = full.order.report_id ?? full.report?.id ?? null;
                     setReportId(foundReportId);
 
                 // Load latest report for preview if reportId exists
@@ -1022,6 +1025,17 @@ export default function OrderDetail() {
                     >
                         Agregar Muestra
                     </AntButton>
+                    {data?.order?.invoice_id && (
+                        <AntButton 
+                            block 
+                            size="small"
+                            icon={<DollarOutlined />}
+                            onClick={() => data && navigate(`/billing/${data.order.id}`)}
+                            style={{ borderColor: tokens.primary, color: tokens.primary }}
+                        >
+                            Ver Factura
+                        </AntButton>
+                    )}
                     {!reportId && (
                         <AntButton 
                             block 
@@ -1197,6 +1211,24 @@ export default function OrderDetail() {
                                                 </div>
                                             </div>
                                         </Tooltip>
+
+                                        {/* Invoice Link */}
+                                        {data.order.invoice_id && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <AntButton 
+                                                    type="default" 
+                                                    size="small"
+                                                    icon={<DollarOutlined />}
+                                                    onClick={() => navigate(`/billing/${data.order.id}`)}
+                                                    style={{ 
+                                                        borderColor: tokens.primary,
+                                                        color: tokens.primary
+                                                    }}
+                                                >
+                                                    Ver Factura
+                                                </AntButton>
+                                            </div>
+                                        )}
 
                                         {/* Meta Info Row */}
                                         <div style={{ 

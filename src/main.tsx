@@ -19,6 +19,7 @@ import Reports from "./pages/reports";
 import ReportsList from "./pages/reports_list";
 import Worklist from "./pages/worklist";
 import BillingDetail from "./pages/billing_detail";
+import BillingList from "./pages/billing_list";
 import PriceCatalog from "./pages/price_catalog";
 import UsersManagement from "./pages/users_management";
 import PasswordResetRequest from "./pages/password_reset_request";
@@ -27,6 +28,8 @@ import TenantSettings from "./pages/tenant_settings";
 import PhysicianPortal from "./pages/physician_portal";
 import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
+import StudyTypes from "./pages/study_types";
+import ReportTemplates from "./pages/report_templates";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -49,8 +52,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reports/editor" element={<Reports />} />
             <Route path="/reports/:reportId" element={<Reports />} />
             <Route path="/worklist" element={<Worklist />} />
+            <Route path="/billing" element={<BillingList />} />
             <Route path="/billing/:orderId" element={<BillingDetail />} />
             <Route path="/catalog" element={<PriceCatalog />} />
+            <Route path="/study-types" element={<StudyTypes />} />
+            <Route path="/report-templates" element={<ReportTemplates />} />
             <Route path="/users" element={<UsersManagement />} />
             <Route path="/password-reset" element={<PasswordResetRequest />} />
             <Route path="/reset-password" element={<PasswordResetConfirm />} />
