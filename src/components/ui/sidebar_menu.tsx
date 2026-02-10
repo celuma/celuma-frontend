@@ -121,6 +121,15 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                 #root {
                     min-height: 100vh;
                 }
+                /* Dark hover */
+                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-item:hover,
+                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-submenu-title:hover {
+                    background: rgba(0, 0, 0, 0.14) !important;
+                }
+                /* Dark selected */
+                .ant-layout-sider .ant-menu-dark .ant-menu-item-selected {
+                    background: rgba(0, 0, 0, 0.30) !important;
+                }
             `}</style>
             <Sider
                 width = {260}
