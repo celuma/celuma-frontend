@@ -317,7 +317,7 @@ export default function OrdersList() {
                                     style={{ width: 320 }}
                                 />
                                 <Button type="primary" onClick={() => navigate("/orders/register")}>
-                                    Registrar Orden
+                                    Nueva Orden
                                 </Button>
                             </Space>
                         }

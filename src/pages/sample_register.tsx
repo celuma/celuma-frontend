@@ -203,7 +203,7 @@ export default function SampleRegister() {
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma
-                selectedKey={(pathname as CelumaKey) ?? "/home"}
+                selectedKey="/samples"
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />

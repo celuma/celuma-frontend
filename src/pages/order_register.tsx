@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
-import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -14,6 +13,7 @@ import DateField from "../components/ui/date_field";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle } from "../components/design/tokens";
+import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -82,7 +82,7 @@ const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
     branch_id: z.string().trim().nonempty("La sucursal es requerida."),
     patient_id: z.string().trim().nonempty("El paciente es requerido."),
-    order_code: z.string().trim().nonempty("El código de orden es requerido."),
+    study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
     requested_by: z.string().trim().optional(),
     notes: z.string().trim().optional(),
     created_by: z.string().trim().optional(),
@@ -110,8 +110,9 @@ const FormCard: React.FC<{ title: string; description?: string; children: React.
 );
 
 export default function OrderRegister() {
+    usePageTitle();
     const navigate = useNavigate();
-    const { pathname, search } = useLocation();
+    const { search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -119,6 +120,7 @@ export default function OrderRegister() {
     const [loadingPatients, setLoadingPatients] = useState(false);
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
+    const [studyTypes, setStudyTypes] = useState<Array<{ id: string; code: string; name: string; is_active: boolean }>>([]);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
     const prefilledPatientId = useMemo(() => {
@@ -132,11 +134,11 @@ export default function OrderRegister() {
             tenant_id: session.tenantId,
             branch_id: "",
             patient_id: prefilledPatientId,
-            order_code: "",
+            study_type_id: "",
             requested_by: "",
             notes: "",
             samples: [
-                { sample_code: "", type: undefined as unknown as OrderFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" },
+                { sample_code: "", type: "OTRO", notes: "", collected_date: "", received_date: "" },
             ],
         },
         mode: "onTouched",
@@ -172,6 +174,17 @@ export default function OrderRegister() {
             }
         })();
     }, [session.tenantId]);
+    
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await getJSON<{ study_types: Array<{ id: string; code: string; name: string; is_active: boolean }> }>("/v1/study-types/");
+                setStudyTypes(data.study_types.filter(st => st.is_active));
+            } catch (err) {
+                console.error("Error loading study types:", err);
+            }
+        })();
+    }, []);
 
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
@@ -186,10 +199,10 @@ export default function OrderRegister() {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
                 patient_id: data.patient_id,
-                order_code: data.order_code,
+                study_type_id: data.study_type_id,
                 requested_by: data.requested_by || undefined,
                 notes: data.notes || undefined,
-                created_by: (currentUserId || data.created_by || undefined),
+                created_by: (currentUserId || undefined),
                 samples: data.samples.map((s) => ({
                     sample_code: s.sample_code,
                     type: s.type,
@@ -211,7 +224,7 @@ export default function OrderRegister() {
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma
-                selectedKey={(pathname as CelumaKey) ?? "/home"}
+                selectedKey="/orders"
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />
@@ -287,9 +300,15 @@ export default function OrderRegister() {
                                 <div className="cr-grid-2">
                                     <FormField
                                         control={control}
-                                        name="order_code"
+                                        name="study_type_id"
                                         render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Orden" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder="Seleccionar tipo de estudio"
+                                                options={studyTypes.map((st) => ({ value: st.id, label: `${st.name} (${st.code})` }))}
+                                                error={p.error}
+                                            />
                                         )}
                                     />
                                     <FormField
@@ -299,6 +318,10 @@ export default function OrderRegister() {
                                             <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Solicitante (opcional)" />
                                         )}
                                     />
+                                </div>
+                                
+                                <div style={{ marginBottom: 16, padding: 12, background: "#f0f9ff", borderRadius: 8, color: "#0369a1", fontSize: 13 }}>
+                                    ℹ️ El código de orden se asignará automáticamente según el tipo de estudio (ej. IHQ-1)
                                 </div>
 
                                 <div className="cr-grid-2">
@@ -389,7 +412,7 @@ export default function OrderRegister() {
                                         <Button
                                             type="default"
                                             onClick={() =>
-                                                append({ sample_code: "", type: undefined as unknown as OrderFormData["samples"][number]["type"], notes: "", collected_date: "", received_date: "" })
+                                                append({ sample_code: "", type: "OTRO", notes: "", collected_date: "", received_date: "" })
                                             }
                                         >
                                             Agregar otra muestra
