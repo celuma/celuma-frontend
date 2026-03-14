@@ -109,7 +109,11 @@ interface ReportTemplatesListResponse {
     templates: ReportTemplate[];
 }
 
-function StudyTypes() {
+interface StudyTypesProps {
+    embedded?: boolean;
+}
+
+function StudyTypes({ embedded = false }: StudyTypesProps) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -304,12 +308,9 @@ function StudyTypes() {
         },
     ];
 
-    return (
-        <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/study-types"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
+    const content = (
+        <>
+            <Card
                         title={<span style={cardTitleStyle}>Tipos de Estudio</span>}
                         style={cardStyle}
                         extra={
@@ -330,9 +331,6 @@ function StudyTypes() {
                             pagination={{ pageSize: 10 }}
                         />
                     </Card>
-                </div>
-            </Layout.Content>
-
             <Modal
                 title={editingId ? "Editar Tipo de Estudio" : "Nuevo Tipo de Estudio"}
                 open={modalVisible}
@@ -403,6 +401,21 @@ function StudyTypes() {
                     </Form.Item>
                 </Form>
             </Modal>
+        </>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <Layout style={{ minHeight: "100vh" }}>
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/study-types"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    {content}
+                </div>
+            </Layout.Content>
         </Layout>
     );
 }
