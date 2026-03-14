@@ -9,6 +9,7 @@ import {
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { tokens } from "../design/tokens";
+import { useUserProfile } from "../../hooks/use_user_profile";
 
 export type ConfigKey =
     | "/config/profile"
@@ -17,17 +18,25 @@ export type ConfigKey =
     | "/config/study-types"
     | "/config/users";
 
-const menuItems: Required<MenuProps>["items"] = [
+const baseMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/profile", icon: <UserOutlined />, label: "Mi Perfil" },
-    { key: "/config/users", icon: <TeamOutlined />, label: "Gestión de Usuarios" },
     { key: "/config/report-templates", icon: <FileTextOutlined />, label: "Plantillas de Reporte" },
     { key: "/config/study-types", icon: <ExperimentOutlined />, label: "Tipos de Estudio" },
     { key: "/config/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios" },
 ];
 
+const adminMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/users",
+    icon: <TeamOutlined />,
+    label: "Gestión de Usuarios",
+};
+
 const SidebarConfig: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
+    const { isAdmin } = useUserProfile();
+
+    const menuItems = isAdmin ? [...baseMenuItems, adminMenuItem] : baseMenuItems;
 
     const selectedKey = menuItems
         .map((item) => item!.key as string)
