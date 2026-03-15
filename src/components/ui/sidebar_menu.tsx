@@ -1,9 +1,8 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, TeamOutlined, ContainerOutlined, DollarOutlined, CreditCardOutlined, AppstoreOutlined, FormOutlined } from "@ant-design/icons";
+import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, ContainerOutlined, CreditCardOutlined, SettingOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { useUserProfile } from "../../hooks/use_user_profile";
 
 const { Sider } = Layout;
 
@@ -16,13 +15,9 @@ export type CelumaKey =
     | "/samples"
     | "/orders/register"
     | "/samples/register"
-    | "/profile" 
     | "/logout"
-    | "/users"
-    | "/catalog"
     | "/billing"
-    | "/study-types"
-    | "/report-templates";
+    | "/config";
 
 const itemsTop: Required<MenuProps>["items"] = [
     { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
@@ -31,27 +26,12 @@ const itemsTop: Required<MenuProps>["items"] = [
     { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
     { key: "/orders", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
     { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
-    { key: "/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios", title: "Catálogo de Precios" },
     { key: "/billing", icon: <CreditCardOutlined />, label: "Facturación", title: "Facturación" },
-    { key: "/study-types", icon: <AppstoreOutlined />, label: "Tipos de Estudio", title: "Tipos de Estudio" },
-    { key: "/report-templates", icon: <FormOutlined />, label: "Plantillas de Reporte", title: "Plantillas de Reporte" },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
-    {
-        key: "/profile",
-        icon: <UserOutlined />,
-        label: "Mi Perfil",
-        style: { margin: 0 },
-        title: "Mi Perfil", // Tooltip when collapsed
-    },
-    {
-        key: "/logout",
-        icon: <LogoutOutlined />,
-        label: "Cerrar Sesión",
-        style: { margin: 0 },
-        title: "Cerrar Sesión", // Tooltip when collapsed
-    },
+    { key: "/config", icon: <SettingOutlined />, label: "Configuración", style: { margin: 0 }, title: "Configuración" },
+    { key: "/logout", icon: <LogoutOutlined />, label: "Cerrar Sesión", style: { margin: 0 }, title: "Cerrar Sesión" },
 ];
 
 export interface SidebarCelumaProps {
@@ -61,23 +41,20 @@ export interface SidebarCelumaProps {
     title?: string;
 }
 
-const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onNavigate, logoSrc, title = "Céluma" }) => {
+const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
+    selectedKey = "/home", onNavigate, logoSrc, title = "Céluma" }) => {
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("sidebar_collapsed");
         return saved ? JSON.parse(saved) : false;
     });
     const navigate = useNavigate();
-    const { isAdmin } = useUserProfile();
-
     const menuItems = [...itemsTop];
-    if (isAdmin) {
-        menuItems.push({ key: "/users", icon: <TeamOutlined />, label: "Usuarios", title: "Gestión de Usuarios" });
-    }
-
-    const selectedTop =
-        selectedKey === "/logout" || selectedKey === "/profile" ? [] : ([selectedKey] as string[]);
-    const selectedBottom =
-        selectedKey === "/logout" || selectedKey === "/profile" ? ([selectedKey] as string[]) : [];
+    const selectedTop = selectedKey !== "/logout" && selectedKey !== "/config"
+        ? ([selectedKey] as string[])
+        : [];
+    const selectedBottom = selectedKey === "/logout" || selectedKey === "/config"
+        ? ([selectedKey] as string[])
+        : [];
 
     const handleNavigate = (key: CelumaKey) => {
         if (key === "/logout") {
@@ -120,6 +97,15 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({selectedKey = "/home", onN
                 }
                 #root {
                     min-height: 100vh;
+                }
+                /* Dark hover */
+                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-item:hover,
+                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-submenu-title:hover {
+                    background: rgba(0, 0, 0, 0.14) !important;
+                }
+                /* Dark selected */
+                .ant-layout-sider .ant-menu-dark .ant-menu-item-selected {
+                    background: rgba(0, 0, 0, 0.30) !important;
                 }
             `}</style>
             <Sider

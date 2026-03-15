@@ -93,7 +93,11 @@ interface ReportTemplatesListResponse {
     templates: ReportTemplate[];
 }
 
-function ReportTemplates() {
+interface ReportTemplatesProps {
+    embedded?: boolean;
+}
+
+function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -252,12 +256,9 @@ function ReportTemplates() {
         },
     ];
 
-    return (
-        <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/report-templates"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
+    const content = (
+        <>
+            <Card
                         title={<span style={cardTitleStyle}>Plantillas de Reporte</span>}
                         style={cardStyle}
                         extra={
@@ -287,9 +288,6 @@ function ReportTemplates() {
                             pagination={{ pageSize: 10 }}
                         />
                     </Card>
-                </div>
-            </Layout.Content>
-
             <Modal
                 title={editingId ? "Editar Plantilla" : "Nueva Plantilla"}
                 open={modalVisible}
@@ -346,6 +344,21 @@ function ReportTemplates() {
                     </Form.Item>
                 </Form>
             </Modal>
+        </>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <Layout style={{ minHeight: "100vh" }}>
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/report-templates"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    {content}
+                </div>
+            </Layout.Content>
         </Layout>
     );
 }

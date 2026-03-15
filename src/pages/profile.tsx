@@ -75,7 +75,11 @@ const getRoleDisplayName = (role: string): string => {
     return roleNames[role.toLowerCase()] || role;
 };
 
-const Profile: React.FC = () => {
+interface ProfileProps {
+    embedded?: boolean;
+}
+
+const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
     usePageTitle();
     const nav = useNavigate();
     const { pathname } = useLocation();
@@ -247,28 +251,23 @@ const Profile: React.FC = () => {
     const initials = getInitials(profileData?.full_name);
     const avatarColor = getAvatarColor(profileData?.full_name || "User");
 
-    return (
-        <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
-            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/profile"} onNavigate={(k) => nav(k)} logoSrc={logo} />
-
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <style>{`
-                    input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset !important; -webkit-text-fill-color: #0d1b2a !important; }
-                    .profile-header { display: flex; align-items: flex-start; gap: 32px; }
-                    .profile-avatar-section { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-                    .profile-info-section { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-                    .profile-details { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
-                    @media (max-width: 640px) {
-                        .profile-header { flex-direction: column; align-items: center; text-align: center; }
-                        .profile-info-section { align-items: center; }
-                        .profile-details { justify-content: center; }
-                    }
-                    .avatar-container { position: relative; cursor: pointer; }
-                    .avatar-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
-                    .avatar-container:hover .avatar-overlay { opacity: 1; }
-                `}</style>
-
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+    const content = (
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <style>{`
+                input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset !important; -webkit-text-fill-color: #0d1b2a !important; }
+                .profile-header { display: flex; align-items: flex-start; gap: 32px; }
+                .profile-avatar-section { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+                .profile-info-section { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+                .profile-details { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
+                @media (max-width: 640px) {
+                    .profile-header { flex-direction: column; align-items: center; text-align: center; }
+                    .profile-info-section { align-items: center; }
+                    .profile-details { justify-content: center; }
+                }
+                .avatar-container { position: relative; cursor: pointer; }
+                .avatar-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+                .avatar-container:hover .avatar-overlay { opacity: 1; }
+            `}</style>
                     {/* Profile Header Card */}
                     <Card style={cardStyle} loading={profileLoading}>
                         {!profileLoading && profileData && (
@@ -432,6 +431,19 @@ const Profile: React.FC = () => {
                                         </form>
                         </div>
                                     </Card>
+        </div>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/profile"} onNavigate={(k) => nav(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    {content}
                 </div>
             </Layout.Content>
         </Layout>
