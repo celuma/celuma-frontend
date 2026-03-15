@@ -24,6 +24,12 @@ const routeTitleMap: Record<string, string> = {
     "/physician-portal": "Portal del Médico - Céluma",
     "/patient-portal": "Portal del Paciente - Céluma",
     "/accept-invitation": "Aceptar Invitación - Céluma",
+    "/config": "Configuración - Céluma",
+    "/config/profile": "Mi Perfil - Céluma",
+    "/config/catalog": "Catálogo de Precios - Céluma",
+    "/config/report-templates": "Plantillas de Reporte - Céluma",
+    "/config/study-types": "Tipos de Estudio - Céluma",
+    "/config/users": "Gestión de Usuarios - Céluma",
 };
 
 /**

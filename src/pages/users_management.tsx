@@ -94,7 +94,11 @@ interface Branch {
     code: string;
 }
 
-function UsersManagement() {
+interface UsersManagementProps {
+    embedded?: boolean;
+}
+
+function UsersManagement({ embedded = false }: UsersManagementProps) {
     usePageTitle();
     const navigate = useNavigate();
     const { profile, loading: profileLoading, isAdmin } = useUserProfile();
@@ -408,6 +412,9 @@ function UsersManagement() {
     ];
 
     if (profileLoading) {
+        if (embedded) {
+            return <div style={{ display: "flex", justifyContent: "center", padding: 48 }}><Spin size="large" /></div>;
+        }
         return (
             <Layout style={{ minHeight: "100vh", justifyContent: "center", alignItems: "center" }}>
                 <Spin size="large" />
@@ -415,11 +422,8 @@ function UsersManagement() {
         );
     }
 
-    return (
-        <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey="/users" onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+    const content = (
+        <div>
                     <Card
                         title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
                         extra={
@@ -628,6 +632,19 @@ function UsersManagement() {
                             </Form.Item>
                         </Form>
                     </Modal>
+        </div>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <Layout style={{ minHeight: "100vh" }}>
+            <SidebarCeluma selectedKey={"/config" as import("../components/ui/sidebar_menu").CelumaKey} onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    {content}
                 </div>
             </Layout.Content>
         </Layout>

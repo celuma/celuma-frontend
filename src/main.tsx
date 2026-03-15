@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import Login from "./pages/login";
@@ -30,6 +30,7 @@ import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
+import Config from "./pages/config";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -64,6 +65,14 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/physician-portal" element={<PhysicianPortal />} />
             <Route path="/patient-portal" element={<PatientPortal />} />
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
+            <Route path="/config" element={<Config />}>
+                <Route index element={<Navigate to="/config/profile" replace />} />
+                <Route path="profile" element={<Profile embedded />} />
+                <Route path="catalog" element={<PriceCatalog embedded />} />
+                <Route path="report-templates" element={<ReportTemplates embedded />} />
+                <Route path="study-types" element={<StudyTypes embedded />} />
+                <Route path="users" element={<UsersManagement embedded />} />
+            </Route>
         </Routes>
     </BrowserRouter>
 );

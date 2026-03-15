@@ -105,7 +105,11 @@ interface StudyTypesListResponse {
     study_types: StudyType[];
 }
 
-function PriceCatalog() {
+interface PriceCatalogProps {
+    embedded?: boolean;
+}
+
+function PriceCatalog({ embedded = false }: PriceCatalogProps) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [loading, setLoading] = useState(false);
@@ -306,30 +310,27 @@ function PriceCatalog() {
         },
     ];
 
-    return (
-        <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/catalog"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Catálogo de Precios</span>}
-                        extra={
-                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                                Nuevo Precio
-                            </Button>
-                        }
-                        style={cardStyle}
-                    >
-                        <Table
-                            columns={columns}
-                            dataSource={prices}
-                            loading={loading}
-                            rowKey="id"
-                            pagination={{ pageSize: 10 }}
-                        />
-                    </Card>
+    const content = (
+        <div>
+            <Card
+                title={<span style={cardTitleStyle}>Catálogo de Precios</span>}
+                extra={
+                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                        Nuevo Precio
+                    </Button>
+                }
+                style={cardStyle}
+            >
+                <Table
+                    columns={columns}
+                    dataSource={prices}
+                    loading={loading}
+                    rowKey="id"
+                    pagination={{ pageSize: 10 }}
+                />
+            </Card>
 
-                    <Modal
+            <Modal
                         title={editingId ? "Editar Precio" : "Nuevo Precio"}
                         open={modalVisible}
                         onCancel={() => {
@@ -399,6 +400,19 @@ function PriceCatalog() {
                             </Form.Item>
                         </Form>
                     </Modal>
+        </div>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <Layout style={{ minHeight: "100vh" }}>
+            <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/catalog"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
+                    {content}
                 </div>
             </Layout.Content>
         </Layout>
