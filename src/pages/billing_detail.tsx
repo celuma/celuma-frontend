@@ -374,13 +374,13 @@ function BillingDetail() {
                             { type: "number", min: 0, message: "El precio debe ser mayor o igual a 0" }
                         ]}
                     >
-                        <InputNumber
+                        <InputNumber<number>
                             style={{ width: "100%" }}
                             min={0}
                             step={0.01}
                             precision={2}
-                            formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            parser={value => value!.replace(/\$\s?|(,*)/g, '')}
+                            formatter={(value) => (value != null ? `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '')}
+                            parser={(displayValue) => Number(displayValue?.replace(/\$\s?|(,*)/g, '') ?? 0)}
                         />
                     </Form.Item>
                     
