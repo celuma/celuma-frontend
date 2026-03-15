@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, InputNumber, Select, message, Divider, Descriptions, Modal, Input } from "antd";
+import { Layout, Card, Table, Button, Form, InputNumber, Select, message, Divider, Descriptions, Input } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -191,7 +191,7 @@ function BillingDetail() {
             title: "Acciones",
             key: "actions",
             width: 100,
-            render: (_: any, record: InvoiceItem) => (
+            render: (_: unknown, record: InvoiceItem) => (
                 <Button
                     type="link"
                     size="small"

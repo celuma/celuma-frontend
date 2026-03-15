@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
-import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -116,7 +115,7 @@ const FormCard: React.FC<{ title: string; description?: string; children: React.
 
 export default function SampleRegister() {
     const navigate = useNavigate();
-    const { pathname, search } = useLocation();
+    const { search } = useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
