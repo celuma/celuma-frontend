@@ -1,4 +1,10 @@
-import type { ReportEnvelope } from "../models/report";
+import type {
+    ReportEnvelope,
+    ReportTemplateListItem,
+    ReportTemplateDetail,
+    CreateReportTemplatePayload,
+    UpdateReportTemplatePayload,
+} from "../models/report";
 
 // Config base URL API
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -378,4 +384,92 @@ export async function getWorklist(branchId?: string): Promise<WorklistResponse> 
         throw new Error(`Error al obtener worklist: ${res.status} - ${errText}`);
     }
     return await res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Report Templates CRUD
+// ---------------------------------------------------------------------------
+
+export async function getReportTemplates(activeOnly = false): Promise<{ templates: ReportTemplateListItem[] }> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const url = `${base}/v1/reports/templates/?active_only=${activeOnly}`;
+    const res = await fetch(url, { method: "GET", headers });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener plantillas: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function getReportTemplateById(templateId: string): Promise<ReportTemplateDetail> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/templates/${templateId}`, { method: "GET", headers });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener plantilla: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function createReportTemplate(payload: CreateReportTemplatePayload): Promise<ReportTemplateDetail> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/templates/`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al crear plantilla: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function updateReportTemplate(
+    templateId: string,
+    payload: UpdateReportTemplatePayload
+): Promise<ReportTemplateDetail> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/templates/${templateId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al actualizar plantilla: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+export async function deleteReportTemplate(templateId: string): Promise<void> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = token;
+
+    const res = await fetch(`${base}/v1/reports/templates/${templateId}`, {
+        method: "DELETE",
+        headers,
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al eliminar plantilla: ${res.status} - ${errText}`);
+    }
 }
