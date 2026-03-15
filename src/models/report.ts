@@ -72,40 +72,70 @@ export interface ReportEnvelope {
 // Template JSON types
 // ---------------------------------------------------------------------------
 
-/** Field types available for custom base fields and custom sections */
-export type TemplateFieldType = "numeric" | "text" | "richtext" | "table";
+/** Field types available for custom base fields and sections */
+export type TemplateFieldType = "numeric" | "text" | "richtext" | "table" | "images";
 
-/** Config for a predefined base field (e.g. order_code, patient_code) */
+// ---------------------------------------------------------------------------
+// Base fields — each field has visibility, a label, type, and a value
+// (value is empty string in the template; filled when creating a report)
+// ---------------------------------------------------------------------------
+
+/** A predefined base field (e.g. order_code, patient_code) */
 export interface ReportBaseFieldPredefined {
     is_visible: boolean;
-    label?: string;
+    label: string;
+    value: string;           // empty in template, filled in report
 }
 
-/** Config for a custom base field created by the user */
-export interface ReportBaseFieldCustom {
-    is_visible: boolean;
-    label: string;
-    type: TemplateFieldType;
+/** A custom base field created by the user — only text/numeric */
+export interface ReportBaseFieldCustom extends ReportBaseFieldPredefined {
+    type: "text" | "numeric";
     is_custom: true;
 }
 
 export type ReportBaseFieldConfig = ReportBaseFieldPredefined | ReportBaseFieldCustom;
 
-/** Config for a predefined section (section_macroscopic, section_microscopic) */
-export interface ReportSectionPredefined {
-    is_visible: boolean;
-    label?: string;
+// ---------------------------------------------------------------------------
+// Sections — each section has visibility, a label, type, and content.
+// For text/richtext/table/numeric sections: content is a string (markdown).
+// For the images section: content is an array of TemplateImageItem.
+// ---------------------------------------------------------------------------
+
+export interface TemplateImageItem {
+    id: string;
+    url: string;
+    caption: string;
 }
 
-/** Config for a custom section created by the user */
-export interface ReportSectionCustom {
+/** A text-based section (text, richtext, table, numeric) */
+export interface ReportSectionText {
     is_visible: boolean;
     label: string;
-    type: TemplateFieldType;
+    type: "text" | "richtext" | "table" | "numeric";
+    content: string;          // empty in template, markdown/text in report
+}
+
+/** A custom text-based section created by the user */
+export interface ReportSectionTextCustom extends ReportSectionText {
     is_custom: true;
 }
 
-export type ReportSectionConfig = ReportSectionPredefined | ReportSectionCustom;
+/** The images section — content is an array of image items */
+export interface ReportSectionImages {
+    is_visible: boolean;
+    label: string;
+    type: "images";
+    content: TemplateImageItem[];  // empty array in template, filled in report
+}
+
+export type ReportSectionConfig =
+    | ReportSectionText
+    | ReportSectionTextCustom
+    | ReportSectionImages;
+
+// ---------------------------------------------------------------------------
+// Full template_json structure saved in the backend
+// ---------------------------------------------------------------------------
 
 /** The structure saved in template_json on the backend */
 export interface ReportTemplateJSON {
@@ -144,28 +174,39 @@ export interface UpdateReportTemplatePayload {
     is_active?: boolean;
 }
 
-/** The predefined base fields present in every new template */
+// ---------------------------------------------------------------------------
+// Defaults — all content/value fields empty (template skeleton)
+// ---------------------------------------------------------------------------
+
+/** Predefined base fields with empty value (template skeleton) */
 export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
-    order_code:           { is_visible: true,  label: "Código de orden" },
-    patient_code:         { is_visible: true,  label: "Código de paciente" },
-    study_type_name:      { is_visible: true,  label: "Tipo de estudio" },
-    samples_description:  { is_visible: true,  label: "Descripción de muestra" },
-    diagnosis_text:       { is_visible: true,  label: "Diagnóstico de envío" },
-    patient_age:          { is_visible: true,  label: "Edad" },
-    received_at_sample:   { is_visible: true,  label: "Fecha de recepción" },
+    order_code:          { is_visible: true, label: "Código de orden",        value: "" },
+    patient_code:        { is_visible: true, label: "Código de paciente",     value: "" },
+    study_type_name:     { is_visible: true, label: "Tipo de estudio",        value: "" },
+    samples_description: { is_visible: true, label: "Descripción de muestra", value: "" },
+    diagnosis_text:      { is_visible: true, label: "Diagnóstico de envío",   value: "" },
+    patient_age:         { is_visible: true, label: "Edad",                   value: "" },
+    received_at_sample:  { is_visible: true, label: "Fecha de recepción",     value: "" },
 };
 
-/** The predefined sections present in every new template */
-export const DEFAULT_SECTIONS: Record<string, ReportSectionPredefined> = {
-    section_macroscopic: { is_visible: true,  label: "Macroscópica" },
-    section_microscopic: { is_visible: true,  label: "Microscópica" },
-    images:              { is_visible: true,  label: "Imágenes" },
+/** Predefined sections with empty content (template skeleton).
+ *  images is the 3rd section by default. */
+export const DEFAULT_SECTIONS: Record<string, ReportSectionConfig> = {
+    section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: "" },
+    section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
+    images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
 };
 
-/** Builds the default template_json used when creating a new template */
+/** Builds the default template_json skeleton used when creating a new template */
 export function buildDefaultTemplateJSON(): ReportTemplateJSON {
     return {
-        base: { ...DEFAULT_BASE_FIELDS },
-        sections: { ...DEFAULT_SECTIONS },
+        base: Object.fromEntries(
+            Object.entries(DEFAULT_BASE_FIELDS).map(([k, v]) => [k, { ...v }])
+        ) as Record<string, ReportBaseFieldConfig>,
+        sections: {
+            section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: "" },
+            section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
+            images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
+        },
     };
 }

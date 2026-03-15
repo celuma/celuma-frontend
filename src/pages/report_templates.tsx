@@ -46,11 +46,10 @@ import type {
     ReportBaseFieldConfig,
     ReportBaseFieldCustom,
     ReportSectionConfig,
-    ReportSectionCustom,
+    ReportSectionTextCustom,
     TemplateFieldType,
 } from "../models/report";
 import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS } from "../models/report";
-
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
@@ -211,7 +210,12 @@ function EditableRow({
                 </Text>
             )}
 
-            {/* Type badge / select for custom */}
+            {/* Type badge / select */}
+            {isPredefined && type && (
+                <Tag color={type === "images" ? "cyan" : "default"} style={{ fontSize: 10, margin: 0 }}>
+                    {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type}
+                </Tag>
+            )}
             {!isPredefined && type && onChangeType && (
                 <Select
                     size="small"
@@ -292,12 +296,14 @@ function DraggableList({
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {items.map((item, idx) => {
                 const cfg = item.cfg;
-                const custom = cfg as ReportBaseFieldCustom & ReportSectionCustom;
+                const custom = cfg as ReportBaseFieldCustom & ReportSectionTextCustom;
                 const predefined = isPredefined(item.key);
                 const label = predefined
                     ? (isSection ? SECTION_LABELS[item.key] : BASE_FIELD_LABELS[item.key]) ?? item.key
                     : custom.label;
-                const type: TemplateFieldType | undefined = !predefined ? custom.type : undefined;
+                // For predefined sections show their type as a read-only tag; for custom show editable select
+                const cfgType = (cfg as { type?: TemplateFieldType }).type;
+                const type: TemplateFieldType | undefined = isSection ? cfgType : (!predefined ? custom.type : undefined);
 
                 return (
                     <div
@@ -375,7 +381,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             Object.entries(json.base).map(([key, cfg]) => ({ key, cfg: cfg as ReportBaseFieldConfig }))
         );
         setSectionItems(
-            Object.entries(json.sections).map(([key, cfg]) => ({ key, cfg: cfg as ReportSectionConfig }))
+            Object.entries(json.sections ?? {}).map(([key, cfg]) => ({ key, cfg: cfg as ReportSectionConfig }))
         );
     };
 
@@ -429,12 +435,21 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             const defaults = buildDefaultTemplateJSON();
 
             // Merge: start from stored order but ensure all predefined keys exist
+            // and all fields have the required value/content properties
             const mergedBase: ReportTemplateJSON["base"] = {};
             const mergedSections: ReportTemplateJSON["sections"] = {};
 
-            // Keep stored order first
-            if (stored.base) Object.entries(stored.base).forEach(([k, v]) => { mergedBase[k] = v; });
-            if (stored.sections) Object.entries(stored.sections).forEach(([k, v]) => { mergedSections[k] = v; });
+            // Keep stored order, filling in missing fields from defaults
+            if (stored.base) {
+                Object.entries(stored.base).forEach(([k, v]) => {
+                    mergedBase[k] = { ...v, value: (v as ReportBaseFieldConfig & { value?: string }).value ?? "" } as ReportBaseFieldConfig;
+                });
+            }
+            if (stored.sections) {
+                Object.entries(stored.sections).forEach(([k, v]) => {
+                    mergedSections[k] = { ...v, content: (v as ReportSectionConfig & { content?: string }).content ?? "" } as ReportSectionConfig;
+                });
+            }
 
             // Add missing predefined keys at the end
             Object.entries(defaults.base).forEach(([k, v]) => { if (!mergedBase[k]) mergedBase[k] = v; });
@@ -526,7 +541,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const changeBaseFieldType = (key: string, newType: TemplateFieldType) => {
         setBaseItems((prev) =>
             prev.map((item) =>
-                item.key === key ? { ...item, cfg: { ...item.cfg, type: newType } } : item
+                item.key === key
+                    ? { ...item, cfg: { ...item.cfg, type: newType } as ReportBaseFieldConfig }
+                    : item
             )
         );
     };
@@ -545,7 +562,8 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             const newField: ReportBaseFieldCustom = {
                 is_visible: true,
                 label: values.label.trim(),
-                type: values.type,
+                type: values.type as "text" | "numeric",
+                value: "",
                 is_custom: true,
             };
             setBaseItems((prev) => [...prev, { key, cfg: newField }]);
@@ -576,7 +594,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const changeSectionType = (key: string, newType: TemplateFieldType) => {
         setSectionItems((prev) =>
             prev.map((item) =>
-                item.key === key ? { ...item, cfg: { ...item.cfg, type: newType } } : item
+                item.key === key
+                    ? { ...item, cfg: { ...item.cfg, type: newType } as ReportSectionConfig }
+                    : item
             )
         );
     };
@@ -592,10 +612,11 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             if (!key) { message.warning("Nombre inválido"); return; }
             if (sectionItems.some((i) => i.key === key)) { message.warning("Ya existe una sección con ese nombre"); return; }
 
-            const newSection: ReportSectionCustom = {
+            const newSection: ReportSectionTextCustom = {
                 is_visible: true,
                 label: values.label.trim(),
                 type: values.type,
+                content: "",
                 is_custom: true,
             };
             setSectionItems((prev) => [...prev, { key, cfg: newSection }]);
