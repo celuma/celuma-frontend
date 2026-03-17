@@ -7,7 +7,6 @@ import DateField from "../components/ui/date_field";
 import SelectField from "../components/ui/select_field";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
-import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -102,7 +101,7 @@ const FormCard: React.FC<{ title: string; description?: string; children: React.
 
 export default function PatientRegister() {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    useLocation();
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
@@ -171,7 +170,7 @@ export default function PatientRegister() {
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma
-                selectedKey={(pathname as CelumaKey) ?? "/home"}
+                selectedKey="/patients"
                 onNavigate={(k) => navigate(k)}
                 logoSrc={logo}
             />

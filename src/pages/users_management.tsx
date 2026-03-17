@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Space, Popconfirm, Switch, Spin, Avatar } from "antd";
 import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import FormField from "../components/ui/form_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionPassword from "../components/ui/floating_caption_password";
+import CelumaButton from "../components/ui/button";
+import ErrorText from "../components/ui/error_text";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
@@ -33,6 +41,28 @@ const getAvatarColor = (name: string): string => {
     }
     return colors[Math.abs(hash) % colors.length];
 };
+
+const createUserSchema = z.object({
+    email: z.string().nonempty("El email es obligatorio.").email("Email inválido."),
+    username: z.string().optional(),
+    first_name: z.string().nonempty("El nombre es obligatorio."),
+    last_name: z.string().nonempty("El apellido es obligatorio."),
+    role: z.string().nonempty("El rol es obligatorio."),
+    password: z.string()
+        .nonempty("La contraseña es obligatoria.")
+        .min(8, "Mínimo 8 caracteres.")
+        .regex(
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
+            "La contraseña debe contener al menos una minúscula, una mayúscula, un número y un carácter especial."
+        ),
+    confirmPassword: z.string().nonempty("Confirmar contraseña es obligatorio."),
+    branch_ids: z.array(z.string()).optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden.",
+    path: ["confirmPassword"],
+});
+
+type CreateUserFormData = z.infer<typeof createUserSchema>;
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -110,9 +140,26 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const [createModalVisible, setCreateModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [inviteModalVisible, setInviteModalVisible] = useState(false);
-    
-    // Forms
-    const [createForm] = Form.useForm();
+
+    // Create user form (react-hook-form + zod)
+    const createUserForm = useForm<CreateUserFormData>({
+        resolver: zodResolver(createUserSchema),
+        defaultValues: {
+            email: "",
+            username: "",
+            first_name: "",
+            last_name: "",
+            role: "",
+            password: "",
+            confirmPassword: "",
+            branch_ids: [],
+        },
+        mode: "onTouched",
+    });
+    const [createError, setCreateError] = useState<string | null>(null);
+    const watchedRole = createUserForm.watch("role");
+
+    // Edit and invite forms (antd)
     const [editForm] = Form.useForm();
     const [inviteForm] = Form.useForm();
     
@@ -145,17 +192,23 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         }
     };
 
-    const handleCreate = async (values: Record<string, unknown>) => {
+    const handleCreate = createUserForm.handleSubmit(async (data) => {
+        setCreateError(null);
         try {
-            await postJSON("/v1/users/", values);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { confirmPassword, ...rest } = data;
+            await postJSON("/v1/users/", {
+                ...rest,
+                branch_ids: rest.branch_ids ?? [],
+            });
             message.success("Usuario creado");
             setCreateModalVisible(false);
-            createForm.resetFields();
+            createUserForm.reset();
             await loadData();
-        } catch {
-            message.error("Error al crear usuario");
+        } catch (e) {
+            setCreateError(e instanceof Error ? e.message : "Error al crear usuario");
         }
-    };
+    });
 
     const handleEdit = async (values: Record<string, unknown>) => {
         if (!editingUser) return;
@@ -453,70 +506,186 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                         open={createModalVisible}
                         onCancel={() => {
                             setCreateModalVisible(false);
-                            createForm.resetFields();
+                            createUserForm.reset();
+                            setCreateError(null);
                         }}
                         footer={null}
                         width={600}
                     >
-                        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+                        <form
+                            onSubmit={handleCreate}
+                            noValidate
+                            style={{ display: "grid", gap: 16, paddingTop: 8 }}
+                        >
+                            {/* Names row */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                                    <Input />
-                                </Form.Item>
-                                <Form.Item name="username" label="Usuario (opcional)">
-                                    <Input />
-                                </Form.Item>
+                                <FormField
+                                    control={createUserForm.control}
+                                    name="first_name"
+                                    render={(p) => (
+                                        <FloatingCaptionInput
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            label="Nombre(s)"
+                                        />
+                                    )}
+                                />
+                                <FormField
+                                    control={createUserForm.control}
+                                    name="last_name"
+                                    render={(p) => (
+                                        <FloatingCaptionInput
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            label="Apellidos"
+                                        />
+                                    )}
+                                />
                             </div>
-                            <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
-                                <Input />
-                            </Form.Item>
+
+                            {/* Email and username row */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                                    <Select>
-                                        <Select.Option value="admin">Administrador</Select.Option>
-                                        <Select.Option value="pathologist">Patólogo</Select.Option>
-                                        <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
-                                        <Select.Option value="billing">Facturación</Select.Option>
-                                        <Select.Option value="assistant">Asistente</Select.Option>
-                                        <Select.Option value="viewer">Visor</Select.Option>
-                                    </Select>
-                                </Form.Item>
-                                <Form.Item name="password" label="Contraseña" rules={[{ required: true, min: 8 }]}>
-                                    <Input.Password />
-                                </Form.Item>
+                                <FormField
+                                    control={createUserForm.control}
+                                    name="email"
+                                    render={(p) => (
+                                        <FloatingCaptionInput
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            label="Email"
+                                        />
+                                    )}
+                                />
+                                <FormField
+                                    control={createUserForm.control}
+                                    name="username"
+                                    render={(p) => (
+                                        <FloatingCaptionInput
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            label="Usuario (opcional)"
+                                        />
+                                    )}
+                                />
                             </div>
-                            
-                            <Form.Item 
-                                noStyle 
-                                shouldUpdate={(prev, current) => prev.role !== current.role}
-                            >
-                                {({ getFieldValue }) => {
-                                    const role = getFieldValue('role');
-                                    return role !== 'admin' ? (
-                                        <Form.Item name="branch_ids" label="Sucursales asignadas">
-                                            <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
-                                                {branches.map(b => (
+
+                            {/* Role and password row */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <div style={{ display: "grid", gap: 6 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                                        Rol <span style={{ color: "#b91c1c" }}>*</span>
+                                    </span>
+                                    <Controller
+                                        control={createUserForm.control}
+                                        name="role"
+                                        render={({ field, fieldState }) => (
+                                            <>
+                                                <Select
+                                                    value={field.value || undefined}
+                                                    onChange={field.onChange}
+                                                    onBlur={field.onBlur}
+                                                    placeholder="Seleccionar rol"
+                                                    status={fieldState.error ? "error" : undefined}
+                                                    style={{ width: "100%", height: 44 }}
+                                                >
+                                                    <Select.Option value="admin">Administrador</Select.Option>
+                                                    <Select.Option value="pathologist">Patólogo</Select.Option>
+                                                    <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
+                                                    <Select.Option value="billing">Facturación</Select.Option>
+                                                    <Select.Option value="assistant">Asistente</Select.Option>
+                                                    <Select.Option value="viewer">Visor</Select.Option>
+                                                </Select>
+                                                {fieldState.error && (
+                                                    <ErrorText>{fieldState.error.message}</ErrorText>
+                                                )}
+                                            </>
+                                        )}
+                                    />
+                                </div>
+                                <FormField
+                                    control={createUserForm.control}
+                                    name="password"
+                                    render={(p) => (
+                                        <FloatingCaptionPassword
+                                            {...p}
+                                            value={String(p.value ?? "")}
+                                            label="Contraseña"
+                                        />
+                                    )}
+                                />
+                            </div>
+
+                            {/* Confirm password */}
+                            <FormField
+                                control={createUserForm.control}
+                                name="confirmPassword"
+                                render={(p) => (
+                                    <FloatingCaptionPassword
+                                        {...p}
+                                        value={String(p.value ?? "")}
+                                        label="Confirmar contraseña"
+                                    />
+                                )}
+                            />
+
+                            {/* Branch IDs (conditional) */}
+                            {watchedRole !== "admin" ? (
+                                <div style={{ display: "grid", gap: 6 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                                        Sucursales asignadas
+                                    </span>
+                                    <Controller
+                                        control={createUserForm.control}
+                                        name="branch_ids"
+                                        render={({ field }) => (
+                                            <Select
+                                                mode="multiple"
+                                                value={field.value ?? []}
+                                                onChange={field.onChange}
+                                                onBlur={field.onBlur}
+                                                placeholder="Seleccione sucursales"
+                                                allowClear
+                                                style={{ width: "100%" }}
+                                            >
+                                                {branches.map((b) => (
                                                     <Select.Option key={b.id} value={b.id}>
                                                         {b.name} ({b.code})
                                                     </Select.Option>
                                                 ))}
                                             </Select>
-                                        </Form.Item>
-                                    ) : (
-                                        <div style={{ marginBottom: 24, color: '#888', fontStyle: 'italic' }}>
-                                            * Los administradores tienen acceso a todas las sucursales automáticamente.
-                                        </div>
-                                    );
-                                }}
-                            </Form.Item>
+                                        )}
+                                    />
+                                </div>
+                            ) : (
+                                <div style={{ color: "#888", fontStyle: "italic", fontSize: 13 }}>
+                                    * Los administradores tienen acceso a todas las sucursales automáticamente.
+                                </div>
+                            )}
 
-                            <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                                <Space>
-                                    <Button onClick={() => setCreateModalVisible(false)}>Cancelar</Button>
-                                    <Button type="primary" htmlType="submit">Crear</Button>
-                                </Space>
-                            </Form.Item>
-                        </Form>
+                            {/* Server error */}
+                            {createError && <ErrorText>{createError}</ErrorText>}
+
+                            {/* Actions */}
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                                <Button
+                                    onClick={() => {
+                                        setCreateModalVisible(false);
+                                        createUserForm.reset();
+                                        setCreateError(null);
+                                    }}
+                                >
+                                    Cancelar
+                                </Button>
+                                <CelumaButton
+                                    type="primary"
+                                    htmlType="submit"
+                                    loading={createUserForm.formState.isSubmitting}
+                                    style={{ margin: 0 }}
+                                >
+                                    Crear
+                                </CelumaButton>
+                            </div>
+                        </form>
                     </Modal>
 
                     {/* Edit User Modal */}
