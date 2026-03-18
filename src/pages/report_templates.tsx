@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Layout,
     Card,
     Button,
+    DatePicker,
     Form,
     Input,
+    InputNumber,
     Modal,
     message,
     Space,
@@ -26,8 +28,12 @@ import {
     CloseOutlined,
     SaveOutlined,
     FileTextOutlined,
+    FormOutlined,
     HolderOutlined,
 } from "@ant-design/icons";
+import ReactQuill from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
+import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -86,6 +92,206 @@ const SECTION_LABELS: Record<string, string> = {
     images:              "Imágenes",
 };
 
+/** Tipo efectivo de cada campo base predefinido (para la UI de valor por defecto) */
+const BASE_FIELD_PREDEFINED_TYPES: Record<string, "text" | "numeric" | "date"> = {
+    order_code:          "text",
+    patient_code:        "text",
+    study_type_name:     "text",
+    samples_description: "text",
+    diagnosis_text:      "text",
+    patient_age:         "numeric",
+    received_at_sample:  "date",
+};
+
+// ---------------------------------------------------------------------------
+// Markdown table utilities
+// ---------------------------------------------------------------------------
+
+function parseMarkdownTable(md: string): { headers: string[]; rows: string[][] } {
+    const lines = (md || "").trim().split("\n");
+    const isSep = (l: string) => /^\|[\s|:_-]+\|$/.test(l.trim());
+    const parseCells = (l: string) => l.split("|").slice(1, -1).map((c) => c.trim());
+    const dataLines = lines.filter((l) => l.trim() && !isSep(l));
+    if (dataLines.length === 0) return { headers: ["Col 1"], rows: [[""]] };
+    const headers = parseCells(dataLines[0]);
+    const rows = dataLines.slice(1).map(parseCells);
+    return {
+        headers: headers.length > 0 ? headers : ["Col 1"],
+        rows:    rows.length > 0    ? rows    : [headers.map(() => "")],
+    };
+}
+
+function serializeMarkdownTable(headers: string[], rows: string[][]): string {
+    const cell  = (s: string) => ` ${s || " "} `;
+    const hRow  = `|${headers.map(cell).join("|")}|`;
+    const sep   = `|${headers.map(() => " --- ").join("|")}|`;
+    const dRows = rows.map(
+        (row) => `|${headers.map((_, i) => cell(row[i] ?? "")).join("|")}|`
+    );
+    return [hRow, sep, ...dRows].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// TableEditor component
+// ---------------------------------------------------------------------------
+
+interface TableEditorProps {
+    value: string;
+    onChange: (md: string) => void;
+}
+
+function TableEditor({ value, onChange }: TableEditorProps) {
+    const initial = useMemo(() => parseMarkdownTable(value), []);
+    const [headers, setHeaders] = useState<string[]>(initial.headers);
+    const [rows, setRows] = useState<string[][]>(
+        initial.rows.map((r) => {
+            const padded = [...r];
+            while (padded.length < initial.headers.length) padded.push("");
+            return padded;
+        })
+    );
+
+    const emit = useCallback(
+        (h: string[], r: string[][]) => onChange(serializeMarkdownTable(h, r)),
+        [onChange]
+    );
+
+    const setHeader = (ci: number, val: string) => {
+        const next = headers.map((h, i) => (i === ci ? val : h));
+        setHeaders(next);
+        emit(next, rows);
+    };
+    const setCell = (ri: number, ci: number, val: string) => {
+        const next = rows.map((row, r) =>
+            r === ri ? row.map((c, i) => (i === ci ? val : c)) : row
+        );
+        setRows(next);
+        emit(headers, next);
+    };
+    const addCol = () => {
+        const h = [...headers, `Col ${headers.length + 1}`];
+        const r = rows.map((row) => [...row, ""]);
+        setHeaders(h); setRows(r); emit(h, r);
+    };
+    const delCol = (ci: number) => {
+        if (headers.length <= 1) return;
+        const h = headers.filter((_, i) => i !== ci);
+        const r = rows.map((row) => row.filter((_, i) => i !== ci));
+        setHeaders(h); setRows(r); emit(h, r);
+    };
+    const addRow = () => {
+        const r = [...rows, headers.map(() => "")];
+        setRows(r); emit(headers, r);
+    };
+    const delRow = (ri: number) => {
+        if (rows.length <= 1) return;
+        const r = rows.filter((_, i) => i !== ri);
+        setRows(r); emit(headers, r);
+    };
+
+    const borderCell: React.CSSProperties = { border: "1px solid #e8e8e8", padding: "2px 4px" };
+    const headerCell: React.CSSProperties = { ...borderCell, background: "#f5f5f5", minWidth: 90 };
+
+    return (
+        <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+                <thead>
+                    <tr>
+                        {headers.map((h, ci) => (
+                            <th key={ci} style={headerCell}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                    <Input
+                                        size="small"
+                                        value={h}
+                                        onChange={(e) => setHeader(ci, e.target.value)}
+                                        placeholder={`Col ${ci + 1}`}
+                                        style={{
+                                            fontWeight: 600,
+                                            flex: 1,
+                                            borderColor: "transparent",
+                                            boxShadow: "none",
+                                            background: "transparent",
+                                        }}
+                                    />
+                                    {headers.length > 1 && (
+                                        <Tooltip title="Eliminar columna">
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                danger
+                                                icon={<DeleteOutlined />}
+                                                onClick={() => delCol(ci)}
+                                                style={{ flexShrink: 0, fontSize: 11 }}
+                                            />
+                                        </Tooltip>
+                                    )}
+                                </div>
+                            </th>
+                        ))}
+                        <th style={{ ...borderCell, background: "#f5f5f5", width: 36, textAlign: "center" }}>
+                            <Tooltip title="Añadir columna">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<PlusOutlined />}
+                                    onClick={addCol}
+                                    style={{ color: tokens.primary }}
+                                />
+                            </Tooltip>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((row, ri) => (
+                        <tr key={ri}>
+                            {headers.map((_, ci) => (
+                                <td key={ci} style={borderCell}>
+                                    <Input
+                                        size="small"
+                                        value={row[ci] ?? ""}
+                                        onChange={(e) => setCell(ri, ci, e.target.value)}
+                                        style={{
+                                            borderColor: "transparent",
+                                            boxShadow: "none",
+                                            background: "transparent",
+                                        }}
+                                    />
+                                </td>
+                            ))}
+                            <td style={{ ...borderCell, width: 36, textAlign: "center" }}>
+                                {rows.length > 1 && (
+                                    <Tooltip title="Eliminar fila">
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            danger
+                                            icon={<DeleteOutlined />}
+                                            onClick={() => delRow(ri)}
+                                        />
+                                    </Tooltip>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                    <tr>
+                        <td colSpan={headers.length + 1} style={{ padding: 6 }}>
+                            <Button
+                                type="dashed"
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={addRow}
+                                style={{ width: "100%" }}
+                            >
+                                Añadir fila
+                            </Button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 interface DraggableItem {
@@ -109,12 +315,15 @@ interface EditableRowProps {
     isVisible: boolean;
     isPredefined: boolean;
     type?: TemplateFieldType;
+    effectiveType?: TemplateFieldType | "date";
+    currentValue?: string;
     isSection?: boolean;
     dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
     onToggleVisible: (key: string, checked: boolean) => void;
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
     onRemove: (key: string) => void;
+    onEditDefaultValue?: (key: string, label: string, type: TemplateFieldType | "date", value: string) => void;
 }
 
 function EditableRow({
@@ -123,12 +332,15 @@ function EditableRow({
     isVisible,
     isPredefined,
     type,
+    effectiveType,
+    currentValue,
     isSection = false,
     dragHandleProps,
     onToggleVisible,
     onRename,
     onChangeType,
     onRemove,
+    onEditDefaultValue,
 }: EditableRowProps) {
     const [editing, setEditing] = useState(false);
     const [draftLabel, setDraftLabel] = useState(label);
@@ -233,6 +445,19 @@ function EditableRow({
                 </Tag>
             )}
 
+            {/* Default value button — hidden for images sections */}
+            {effectiveType !== undefined && onEditDefaultValue && (
+                <Tooltip title={`${isSection ? "Contenido" : "Valor"} por defecto`}>
+                    <Button
+                        type="text"
+                        size="small"
+                        icon={<FormOutlined />}
+                        onClick={() => onEditDefaultValue(itemKey, label, effectiveType, currentValue ?? "")}
+                        style={{ color: currentValue ? tokens.primary : "#bbb", flexShrink: 0 }}
+                    />
+                </Tooltip>
+            )}
+
             {/* Remove (custom only) */}
             {!isPredefined && (
                 <Tooltip title="Eliminar">
@@ -261,6 +486,7 @@ interface DraggableListProps {
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
     onRemove: (key: string) => void;
+    onEditDefaultValue?: (key: string, label: string, type: TemplateFieldType | "date", value: string) => void;
 }
 
 function DraggableList({
@@ -272,6 +498,7 @@ function DraggableList({
     onRename,
     onChangeType,
     onRemove,
+    onEditDefaultValue,
 }: DraggableListProps) {
     const dragIndex = useRef<number | null>(null);
     const dragOverIndex = useRef<number | null>(null);
@@ -301,9 +528,23 @@ function DraggableList({
                 const label = predefined
                     ? (isSection ? SECTION_LABELS[item.key] : BASE_FIELD_LABELS[item.key]) ?? item.key
                     : custom.label;
-                // For predefined sections show their type as a read-only tag; for custom show editable select
                 const cfgType = (cfg as { type?: TemplateFieldType }).type;
                 const type: TemplateFieldType | undefined = isSection ? cfgType : (!predefined ? custom.type : undefined);
+
+                // Effective type for the default value button
+                let effectiveType: TemplateFieldType | "date" | undefined;
+                if (isSection) {
+                    effectiveType = cfgType !== "images" ? cfgType : undefined;
+                } else {
+                    effectiveType = predefined
+                        ? BASE_FIELD_PREDEFINED_TYPES[item.key]
+                        : (custom.type as "text" | "numeric");
+                }
+
+                // Current default value string
+                const currentValue: string = isSection
+                    ? ((cfgType !== "images" ? (cfg as { content?: string }).content : undefined) ?? "")
+                    : ((cfg as { value?: string }).value ?? "");
 
                 return (
                     <div
@@ -321,11 +562,14 @@ function DraggableList({
                             isVisible={cfg.is_visible}
                             isPredefined={predefined}
                             type={type}
+                            effectiveType={effectiveType}
+                            currentValue={currentValue}
                             isSection={isSection}
                             onToggleVisible={onToggleVisible}
                             onRename={onRename}
                             onChangeType={onChangeType}
                             onRemove={onRemove}
+                            onEditDefaultValue={onEditDefaultValue}
                         />
                     </div>
                 );
@@ -367,6 +611,16 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const [baseFieldForm] = Form.useForm();
     const [sectionModalOpen, setSectionModalOpen] = useState(false);
     const [sectionForm] = Form.useForm();
+
+    // ---- Default value modal ----
+    const [defaultValueModal, setDefaultValueModal] = useState<{
+        key: string;
+        isSection: boolean;
+        label: string;
+        type: TemplateFieldType | "date";
+        currentValue: string;
+    } | null>(null);
+    const [defaultDraftValue, setDefaultDraftValue] = useState<string>("");
 
     // ---------------------------------------------------------------------------
     // Convert template_json ↔ ordered arrays
@@ -626,6 +880,47 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     };
 
     // ---------------------------------------------------------------------------
+    // Default value handlers
+    // ---------------------------------------------------------------------------
+    const openDefaultValueModal = useCallback(
+        (key: string, isSection: boolean, label: string, type: TemplateFieldType | "date", value: string) => {
+            setDefaultValueModal({ key, isSection, label, type, currentValue: value });
+            setDefaultDraftValue(value);
+        },
+        []
+    );
+
+    const applyBaseDefaultValue = useCallback((key: string, value: string) => {
+        setBaseItems((prev) =>
+            prev.map((item) =>
+                item.key === key
+                    ? { ...item, cfg: { ...item.cfg, value } as ReportBaseFieldConfig }
+                    : item
+            )
+        );
+    }, []);
+
+    const applySectionDefaultValue = useCallback((key: string, value: string) => {
+        setSectionItems((prev) =>
+            prev.map((item) =>
+                item.key === key
+                    ? { ...item, cfg: { ...item.cfg, content: value } as ReportSectionConfig }
+                    : item
+            )
+        );
+    }, []);
+
+    const saveDefaultValue = useCallback(() => {
+        if (!defaultValueModal) return;
+        if (defaultValueModal.isSection) {
+            applySectionDefaultValue(defaultValueModal.key, defaultDraftValue);
+        } else {
+            applyBaseDefaultValue(defaultValueModal.key, defaultDraftValue);
+        }
+        setDefaultValueModal(null);
+    }, [defaultValueModal, defaultDraftValue, applyBaseDefaultValue, applySectionDefaultValue]);
+
+    // ---------------------------------------------------------------------------
     // Left panel — list
     // ---------------------------------------------------------------------------
     const listPanel = (
@@ -785,6 +1080,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             onRename={renameBaseField}
                             onChangeType={changeBaseFieldType}
                             onRemove={removeBaseField}
+                            onEditDefaultValue={(key, label, type, value) =>
+                                openDefaultValueModal(key, false, label, type, value)
+                            }
                         />
 
                         <Divider />
@@ -812,6 +1110,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             onRename={renameSection}
                             onChangeType={changeSectionType}
                             onRemove={removeSection}
+                            onEditDefaultValue={(key, label, type, value) =>
+                                openDefaultValueModal(key, true, label, type, value)
+                            }
                         />
 
                         <Divider />
@@ -906,6 +1207,86 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         <Select placeholder="Seleccionar tipo" options={SECTION_TYPE_OPTIONS} />
                     </Form.Item>
                 </Form>
+            </Modal>
+
+            {/* ---- Modal: valor / contenido por defecto ---- */}
+            <Modal
+                title={
+                    defaultValueModal
+                        ? `${defaultValueModal.isSection ? "Contenido" : "Valor"} por defecto — ${defaultValueModal.label}`
+                        : "Valor por defecto"
+                }
+                open={defaultValueModal !== null}
+                onCancel={() => setDefaultValueModal(null)}
+                onOk={saveDefaultValue}
+                okText="Guardar"
+                cancelText="Cancelar"
+                width={
+                    defaultValueModal?.type === "richtext" || defaultValueModal?.type === "table"
+                        ? 700
+                        : 480
+                }
+                destroyOnClose
+            >
+                {defaultValueModal && (
+                    <div style={{ marginTop: 16 }}>
+                        {defaultValueModal.type === "text" && (
+                            <TextArea
+                                value={defaultDraftValue}
+                                onChange={(e) => setDefaultDraftValue(e.target.value)}
+                                rows={4}
+                                placeholder="Texto por defecto..."
+                                autoFocus
+                            />
+                        )}
+                        {defaultValueModal.type === "numeric" && (
+                            <InputNumber
+                                value={defaultDraftValue !== "" ? Number(defaultDraftValue) : undefined}
+                                onChange={(val) =>
+                                    setDefaultDraftValue(val !== null && val !== undefined ? String(val) : "")
+                                }
+                                style={{ width: "100%" }}
+                                placeholder="Valor numérico por defecto..."
+                            />
+                        )}
+                        {defaultValueModal.type === "date" && (
+                            <DatePicker
+                                value={defaultDraftValue ? dayjs(defaultDraftValue, "YYYY-MM-DD") : null}
+                                onChange={(_, dateStr) =>
+                                    setDefaultDraftValue(Array.isArray(dateStr) ? dateStr[0] : dateStr)
+                                }
+                                style={{ width: "100%" }}
+                                format="DD/MM/YYYY"
+                                placeholder="Fecha por defecto..."
+                            />
+                        )}
+                        {defaultValueModal.type === "richtext" && (
+                            <ReactQuill
+                                theme="snow"
+                                value={defaultDraftValue}
+                                onChange={setDefaultDraftValue}
+                                modules={{
+                                    toolbar: {
+                                        container: [
+                                            [{ header: [1, 2, false] }],
+                                            ["bold", "italic", "underline"],
+                                            [{ list: "ordered" }, { list: "bullet" }],
+                                            ["link"],
+                                            ["clean"],
+                                        ],
+                                    },
+                                }}
+                                style={{ minHeight: 180 }}
+                            />
+                        )}
+                        {defaultValueModal.type === "table" && (
+                            <TableEditor
+                                value={defaultDraftValue}
+                                onChange={setDefaultDraftValue}
+                            />
+                        )}
+                    </div>
+                )}
             </Modal>
         </>
     );
