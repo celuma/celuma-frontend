@@ -1,36 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-    Layout,
-    Card,
-    Button,
-    DatePicker,
-    Form,
-    Input,
-    InputNumber,
-    Modal,
-    message,
-    Space,
-    Popconfirm,
-    Switch,
-    Checkbox,
-    Select,
-    Divider,
-    Typography,
-    Tag,
-    Empty,
-    Spin,
-    Tooltip,
-} from "antd";
-import {
-    PlusOutlined,
-    EditOutlined,
-    DeleteOutlined,
-    CloseOutlined,
-    SaveOutlined,
-    FileTextOutlined,
-    FormOutlined,
-    HolderOutlined,
-} from "@ant-design/icons";
+import { Layout, Card, Button, DatePicker, Form, Input, Modal, message, Space, Popconfirm, Switch, Checkbox, Select, Divider, Typography, Tag, Empty, Spin, Tooltip } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined } from "@ant-design/icons";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import dayjs from "dayjs";
@@ -39,26 +9,12 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
-import {
-    getReportTemplates,
-    getReportTemplateById,
-    createReportTemplate,
-    updateReportTemplate,
-    deleteReportTemplate,
-} from "../services/report_service";
-import type {
-    ReportTemplateListItem,
-    ReportTemplateJSON,
-    ReportBaseFieldConfig,
-    ReportBaseFieldCustom,
-    ReportSectionConfig,
-    ReportSectionTextCustom,
-    TemplateFieldType,
-} from "../models/report";
+import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
+import type { ReportTemplateListItem, ReportTemplateJSON, ReportBaseFieldConfig, ReportBaseFieldCustom, ReportSectionConfig, ReportSectionTextCustom, TemplateFieldType } from "../models/report";
 import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS } from "../models/report";
+
 const { TextArea } = Input;
 const { Text, Title } = Typography;
-
 const PREDEFINED_BASE_KEYS = Object.keys(DEFAULT_BASE_FIELDS);
 const PREDEFINED_SECTION_KEYS = Object.keys(DEFAULT_SECTIONS);
 
@@ -77,13 +33,11 @@ const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
 ];
 
 const BASE_FIELD_LABELS: Record<string, string> = {
-    order_code:          "Código de orden",
-    patient_code:        "Código de paciente",
-    study_type_name:     "Tipo de estudio",
-    samples_description: "Descripción de muestra",
-    diagnosis_text:      "Diagnóstico de envío",
-    patient_age:         "Edad",
-    received_at_sample:  "Fecha de recepción",
+    order_code:         "Código de orden",
+    patient:            "Paciente",
+    study_type:         "Tipo de estudio",
+    patient_age:        "Edad",
+    sample_received_at: "Fecha de recepción",
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -92,21 +46,7 @@ const SECTION_LABELS: Record<string, string> = {
     images:              "Imágenes",
 };
 
-/** Tipo efectivo de cada campo base predefinido (para la UI de valor por defecto) */
-const BASE_FIELD_PREDEFINED_TYPES: Record<string, "text" | "numeric" | "date"> = {
-    order_code:          "text",
-    patient_code:        "text",
-    study_type_name:     "text",
-    samples_description: "text",
-    diagnosis_text:      "text",
-    patient_age:         "numeric",
-    received_at_sample:  "date",
-};
-
-// ---------------------------------------------------------------------------
 // Markdown table utilities
-// ---------------------------------------------------------------------------
-
 function parseMarkdownTable(md: string): { headers: string[]; rows: string[][] } {
     const lines = (md || "").trim().split("\n");
     const isSep = (l: string) => /^\|[\s|:_-]+\|$/.test(l.trim());
@@ -131,10 +71,7 @@ function serializeMarkdownTable(headers: string[], rows: string[][]): string {
     return [hRow, sep, ...dRows].join("\n");
 }
 
-// ---------------------------------------------------------------------------
 // TableEditor component
-// ---------------------------------------------------------------------------
-
 interface TableEditorProps {
     value: string;
     onChange: (md: string) => void;
@@ -161,6 +98,7 @@ function TableEditor({ value, onChange }: TableEditorProps) {
         setHeaders(next);
         emit(next, rows);
     };
+
     const setCell = (ri: number, ci: number, val: string) => {
         const next = rows.map((row, r) =>
             r === ri ? row.map((c, i) => (i === ci ? val : c)) : row
@@ -168,21 +106,25 @@ function TableEditor({ value, onChange }: TableEditorProps) {
         setRows(next);
         emit(headers, next);
     };
+
     const addCol = () => {
         const h = [...headers, `Col ${headers.length + 1}`];
         const r = rows.map((row) => [...row, ""]);
         setHeaders(h); setRows(r); emit(h, r);
     };
+
     const delCol = (ci: number) => {
         if (headers.length <= 1) return;
         const h = headers.filter((_, i) => i !== ci);
         const r = rows.map((row) => row.filter((_, i) => i !== ci));
         setHeaders(h); setRows(r); emit(h, r);
     };
+
     const addRow = () => {
         const r = [...rows, headers.map(() => "")];
         setRows(r); emit(headers, r);
     };
+
     const delRow = (ri: number) => {
         if (rows.length <= 1) return;
         const r = rows.filter((_, i) => i !== ri);
@@ -292,8 +234,6 @@ function TableEditor({ value, onChange }: TableEditorProps) {
     );
 }
 
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
 interface DraggableItem {
     key: string;
     cfg: ReportBaseFieldConfig | ReportSectionConfig;
@@ -306,9 +246,7 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
     return result;
 }
 
-// ---------------------------------------------------------------------------
 // Inline-edit row component
-// ---------------------------------------------------------------------------
 interface EditableRowProps {
     itemKey: string;
     label: string;
@@ -474,9 +412,7 @@ function EditableRow({
     );
 }
 
-// ---------------------------------------------------------------------------
 // DraggableList component
-// ---------------------------------------------------------------------------
 interface DraggableListProps {
     items: DraggableItem[];
     isPredefined: (key: string) => boolean;
@@ -506,9 +442,11 @@ function DraggableList({
     const handleDragStart = (idx: number) => {
         dragIndex.current = idx;
     };
+
     const handleDragEnter = (idx: number) => {
         dragOverIndex.current = idx;
     };
+
     const handleDragEnd = () => {
         const from = dragIndex.current;
         const to = dragOverIndex.current;
@@ -531,13 +469,15 @@ function DraggableList({
                 const cfgType = (cfg as { type?: TemplateFieldType }).type;
                 const type: TemplateFieldType | undefined = isSection ? cfgType : (!predefined ? custom.type : undefined);
 
-                // Effective type for the default value button
+                // Effective type for the default value button.
+                // Predefined base fields are filled from the DB at report time, so no default allowed.
                 let effectiveType: TemplateFieldType | "date" | undefined;
                 if (isSection) {
                     effectiveType = cfgType !== "images" ? cfgType : undefined;
                 } else {
+                    // Only custom base fields can have a predefined default value
                     effectiveType = predefined
-                        ? BASE_FIELD_PREDEFINED_TYPES[item.key]
+                        ? undefined
                         : (custom.type as "text" | "numeric");
                 }
 
@@ -578,9 +518,7 @@ function DraggableList({
     );
 }
 
-// ---------------------------------------------------------------------------
 // Main component
-// ---------------------------------------------------------------------------
 interface ReportTemplatesProps {
     embedded?: boolean;
 }
@@ -622,9 +560,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     } | null>(null);
     const [defaultDraftValue, setDefaultDraftValue] = useState<string>("");
 
-    // ---------------------------------------------------------------------------
     // Convert template_json ↔ ordered arrays
-    // ---------------------------------------------------------------------------
     const templateJSONFromArrays = (): ReportTemplateJSON => ({
         base: Object.fromEntries(baseItems.map(({ key, cfg }) => [key, cfg])) as ReportTemplateJSON["base"],
         sections: Object.fromEntries(sectionItems.map(({ key, cfg }) => [key, cfg])) as ReportTemplateJSON["sections"],
@@ -639,9 +575,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         );
     };
 
-    // ---------------------------------------------------------------------------
     // Load list
-    // ---------------------------------------------------------------------------
     const loadTemplates = async () => {
         setLoadingList(true);
         try {
@@ -663,9 +597,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
     }, []);
 
-    // ---------------------------------------------------------------------------
     // Panel helpers
-    // ---------------------------------------------------------------------------
     const openNewPanel = () => {
         setEditingId(null);
         form.resetFields();
@@ -724,9 +656,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         form.resetFields();
     };
 
-    // ---------------------------------------------------------------------------
     // Save
-    // ---------------------------------------------------------------------------
     const handleSave = async () => {
         try {
             const values = await form.validateFields();
@@ -759,9 +689,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         }
     };
 
-    // ---------------------------------------------------------------------------
     // Delete template
-    // ---------------------------------------------------------------------------
     const handleDelete = async (id: string) => {
         try {
             await deleteReportTemplate(id);
@@ -773,9 +701,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         }
     };
 
-    // ---------------------------------------------------------------------------
     // Base field mutations
-    // ---------------------------------------------------------------------------
     const toggleBaseVisible = (key: string, checked: boolean) => {
         setBaseItems((prev) =>
             prev.map((item) =>
@@ -826,9 +752,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         } catch { /* validation */ }
     };
 
-    // ---------------------------------------------------------------------------
     // Section mutations
-    // ---------------------------------------------------------------------------
     const toggleSectionVisible = (key: string, checked: boolean) => {
         setSectionItems((prev) =>
             prev.map((item) =>
@@ -879,9 +803,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         } catch { /* validation */ }
     };
 
-    // ---------------------------------------------------------------------------
     // Default value handlers
-    // ---------------------------------------------------------------------------
     const openDefaultValueModal = useCallback(
         (key: string, isSection: boolean, label: string, type: TemplateFieldType | "date", value: string) => {
             setDefaultValueModal({ key, isSection, label, type, currentValue: value });
@@ -920,9 +842,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         setDefaultValueModal(null);
     }, [defaultValueModal, defaultDraftValue, applyBaseDefaultValue, applySectionDefaultValue]);
 
-    // ---------------------------------------------------------------------------
     // Left panel — list
-    // ---------------------------------------------------------------------------
     const listPanel = (
         <Card
             title={<span style={cardTitleStyle}>Plantillas de Reporte</span>}
@@ -1014,9 +934,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         </Card>
     );
 
-    // ---------------------------------------------------------------------------
     // Right panel — editor
-    // ---------------------------------------------------------------------------
     const editorPanel = panelVisible ? (
         <Card
             title={
@@ -1136,9 +1054,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             </Card>
     ) : null;
 
-    // ---------------------------------------------------------------------------
     // Content
-    // ---------------------------------------------------------------------------
     const content = (
         <>
             <div
@@ -1240,11 +1156,14 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             />
                         )}
                         {defaultValueModal.type === "numeric" && (
-                            <InputNumber
-                                value={defaultDraftValue !== "" ? Number(defaultDraftValue) : undefined}
-                                onChange={(val) =>
-                                    setDefaultDraftValue(val !== null && val !== undefined ? String(val) : "")
-                                }
+                            <Input
+                                value={defaultDraftValue}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
+                                        setDefaultDraftValue(val);
+                                    }
+                                }}
                                 style={{ width: "100%" }}
                                 placeholder="Valor numérico por defecto..."
                             />

@@ -180,13 +180,11 @@ export interface UpdateReportTemplatePayload {
 
 /** Predefined base fields with empty value (template skeleton) */
 export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
-    order_code:          { is_visible: true, label: "Código de orden",        value: "" },
-    patient_code:        { is_visible: true, label: "Código de paciente",     value: "" },
-    study_type_name:     { is_visible: true, label: "Tipo de estudio",        value: "" },
-    samples_description: { is_visible: true, label: "Descripción de muestra", value: "" },
-    diagnosis_text:      { is_visible: true, label: "Diagnóstico de envío",   value: "" },
-    patient_age:         { is_visible: true, label: "Edad",                   value: "" },
-    received_at_sample:  { is_visible: true, label: "Fecha de recepción",     value: "" },
+    order_code:         { is_visible: true, label: "Código de orden",   value: "" },
+    patient:            { is_visible: true, label: "Paciente",          value: "" },
+    study_type:         { is_visible: true, label: "Tipo de estudio",   value: "" },
+    patient_age:        { is_visible: true, label: "Edad",              value: "" },
+    sample_received_at: { is_visible: true, label: "Fecha de recepción", value: "" },
 };
 
 /** Predefined sections with empty content (template skeleton).
