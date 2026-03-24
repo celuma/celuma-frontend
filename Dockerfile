@@ -13,6 +13,10 @@ COPY . .
 ARG VITE_API_BASE_URL=/api
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
+# Céluma version string (tag / SHA / pr-N-sha) injected by CI
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=${VITE_APP_VERSION}
+
 RUN npm run build
 
 # Production image

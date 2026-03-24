@@ -31,6 +31,7 @@ import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
 import Config from "./pages/config";
+import ConfigAbout from "./pages/config_about";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -72,6 +73,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="report-templates" element={<ReportTemplates embedded />} />
                 <Route path="study-types" element={<StudyTypes embedded />} />
                 <Route path="users" element={<UsersManagement embedded />} />
+                <Route path="about" element={<ConfigAbout />} />
             </Route>
         </Routes>
     </BrowserRouter>

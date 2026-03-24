@@ -30,6 +30,7 @@ const routeTitleMap: Record<string, string> = {
     "/config/report-templates": "Plantillas de Reporte - Céluma",
     "/config/study-types": "Tipos de Estudio - Céluma",
     "/config/users": "Gestión de Usuarios - Céluma",
+    "/config/about": "Acerca de - Céluma",
 };
 
 /**
