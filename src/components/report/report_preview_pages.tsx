@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
-import { markdownTableToHtml } from "./table_editor";
+import { markdownTableToHtml } from "./table_utils";
 import logo from "../../images/report_logo.png";
 
 // Page layout constants (Letter size)

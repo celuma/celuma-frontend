@@ -27,7 +27,8 @@ import type {
 import { buildEmptyReportContent } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import StatsCard from "../ui/stats_card";
-import { TableEditor, markdownTableToHtml } from "./table_editor";
+import { TableEditor } from "./table_editor";
+import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
 import { renderStatusChip } from "../ui/table_helpers";
 import CommentInput from "../comments/comment_input";
