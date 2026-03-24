@@ -6,6 +6,7 @@ import {
     FileTextOutlined,
     ExperimentOutlined,
     TeamOutlined,
+    InfoCircleOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { tokens } from "../design/tokens";
@@ -16,7 +17,8 @@ export type ConfigKey =
     | "/config/catalog"
     | "/config/report-templates"
     | "/config/study-types"
-    | "/config/users";
+    | "/config/users"
+    | "/config/about";
 
 const baseMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/profile", icon: <UserOutlined />, label: "Mi Perfil" },
@@ -31,12 +33,20 @@ const adminMenuItem: Required<MenuProps>["items"][number] = {
     label: "Gestión de Usuarios",
 };
 
+const aboutMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/about",
+    icon: <InfoCircleOutlined />,
+    label: "Acerca de",
+};
+
 const SidebarConfig: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
     const { isAdmin } = useUserProfile();
 
-    const menuItems = isAdmin ? [...baseMenuItems, adminMenuItem] : baseMenuItems;
+    const menuItems = isAdmin
+        ? [...baseMenuItems, adminMenuItem, aboutMenuItem]
+        : [...baseMenuItems, aboutMenuItem];
 
     const selectedKey = menuItems
         .map((item) => item!.key as string)

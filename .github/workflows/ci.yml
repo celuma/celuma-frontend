@@ -55,6 +55,7 @@ jobs:
           context: .
           build-args: |
             VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || '/api' }}
+            VITE_APP_VERSION=${{ github.sha }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -141,6 +142,7 @@ jobs:
           context: .
           build-args: |
             VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || '/api' }}
+            VITE_APP_VERSION=${{ github.ref_name }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
