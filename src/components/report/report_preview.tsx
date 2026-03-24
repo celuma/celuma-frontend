@@ -21,7 +21,7 @@ const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report
     const { exportToPDF } = usePdfExport();
 
     const handleExportPDF = async () => {
-        await exportToPDF(previewPagesRef);
+        await exportToPDF(previewPagesRef, report.title ?? undefined);
     };
 
     useImperativeHandle(ref, () => ({

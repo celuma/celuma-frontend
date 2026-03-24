@@ -1,31 +1,36 @@
 import type {
     ReportEnvelope,
+    ReportFullResponse,
+    StudyTypeDetail,
     ReportTemplateListItem,
     ReportTemplateDetail,
     CreateReportTemplatePayload,
     UpdateReportTemplatePayload,
 } from "../models/report";
 
-// Config base URL API
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
-// Helper function to get auth token
 function getAuthToken(): string | null {
     return localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
 }
 
-// Save report
-export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
     const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = { ...extra };
     if (token) headers["Authorization"] = token;
+    return headers;
+}
 
+// ---------------------------------------------------------------------------
+// Report CRUD
+// ---------------------------------------------------------------------------
+
+export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
     const res = await fetch(`${base}/v1/reports/`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(report),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al guardar reporte: ${res.status} - ${errText}`);
@@ -33,34 +38,22 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
     return await res.json();
 }
 
-// Save new version of report
 export async function saveReportVersion(report: ReportEnvelope): Promise<void> {
-    const report_id = report.id;
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
-    const res = await fetch(`${base}/v1/reports/${report_id}/new_version`, {
+    const res = await fetch(`${base}/v1/reports/${report.id}/new_version`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(report),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al guardar nueva versión del reporte: ${res.status} - ${errText}`);
     }
 }
 
-// Get report by id
 export async function getReport(reportId: string): Promise<ReportEnvelope> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}`, {
         method: "GET",
-        headers,
+        headers: authHeaders({ Accept: "application/json" }),
     });
     if (!res.ok) {
         const errText = await res.text();
@@ -69,39 +62,45 @@ export async function getReport(reportId: string): Promise<ReportEnvelope> {
     return (await res.json()) as ReportEnvelope;
 }
 
-// Get latest report by order id (using existing report ID)
-export async function getLatestReportByOrderId(reportId: string): Promise<ReportEnvelope | null> {
-    if (!reportId) return null;
-    
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
-    const res = await fetch(`${base}/v1/reports/${reportId}`, {
+/** Returns all data needed to render the report editor: order, patient, samples, report, template */
+export async function getReportFull(reportId: string): Promise<ReportFullResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/full`, {
         method: "GET",
-        headers,
+        headers: authHeaders({ Accept: "application/json" }),
     });
-    
-    if (res.status === 404) {
-        return null; // No report found
-    }
-    
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Error al obtener reporte: ${res.status} - ${errText}`);
+        throw new Error(`Error al obtener reporte completo: ${res.status} - ${errText}`);
     }
-    
-    return (await res.json()) as ReportEnvelope;
+    return (await res.json()) as ReportFullResponse;
 }
 
-// Upload image to report
+// ---------------------------------------------------------------------------
+// Study Types
+// ---------------------------------------------------------------------------
+
+export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail> {
+    const res = await fetch(`${base}/v1/study-types/${studyTypeId}`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al obtener tipo de estudio: ${res.status} - ${errText}`);
+    }
+    return (await res.json()) as StudyTypeDetail;
+}
+
+// ---------------------------------------------------------------------------
+// Images
+// ---------------------------------------------------------------------------
+
 export interface UploadImageResponse {
     id: string;
     url: string;
     caption?: string;
 }
 
-// Upload image with sampleId
 export async function uploadReportImage(
     sampleId: string,
     file: File,
@@ -111,63 +110,36 @@ export async function uploadReportImage(
     form.append("file", file);
     if (caption) form.append("caption", caption);
 
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/laboratory/samples/${sampleId}/images`, {
         method: "POST",
-        headers,
+        headers: authHeaders(),
         body: form,
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al subir imagen: ${res.status} - ${errText}`);
     }
-
     return (await res.json()) as UploadImageResponse;
 }
 
-// Delete image by sampleId and imageId
-export async function deleteReportImage(
-    sampleId: string,
-    imageId: string
-): Promise<void> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = token;
-
-    const res = await fetch(
-        `${base}/v1/laboratory/samples/${sampleId}/images/${imageId}`,
-        {
-            method: "DELETE",
-            headers,
-        }
-    );
-
+export async function deleteReportImage(sampleId: string, imageId: string): Promise<void> {
+    const res = await fetch(`${base}/v1/laboratory/samples/${sampleId}/images/${imageId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+    });
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al eliminar imagen: ${res.status} - ${errText}`);
     }
 }
 
-// Fetch images by sampleId
 export async function fetchReportImages(
     sampleId: string
 ): Promise<{ id: string; url: string; thumbnailUrl?: string; caption?: string }[]> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
-    const res = await fetch(
-        `${base}/v1/laboratory/samples/${sampleId}/images`,
-        {
-            method: "GET",
-            headers,
-        }
-    );
-
+    const res = await fetch(`${base}/v1/laboratory/samples/${sampleId}/images`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al obtener imágenes: ${res.status} - ${errText}`);
@@ -185,12 +157,8 @@ export async function fetchReportImages(
     };
 
     const extractRawList = (value: unknown): Record<string, unknown>[] => {
-        if (Array.isArray(value)) {
-            return value.filter(isRecord);
-        }
-        if (isRecord(value) && Array.isArray(value.images)) {
-            return value.images.filter(isRecord);
-        }
+        if (Array.isArray(value)) return value.filter(isRecord);
+        if (isRecord(value) && Array.isArray(value.images)) return value.images.filter(isRecord);
         return [];
     };
 
@@ -207,9 +175,7 @@ export async function fetchReportImages(
             undefined;
         if (!processed) return null;
 
-        const id =
-            readString(record["id"]) ??
-            readString(record["sample_image_id"]);
+        const id = readString(record["id"]) ?? readString(record["sample_image_id"]);
         if (!id) return null;
 
         const thumbnail =
@@ -218,18 +184,9 @@ export async function fetchReportImages(
             processed;
 
         const caption =
-            readString(record["label"]) ??
-            readString(record["caption"]) ??
-            "";
+            readString(record["label"]) ?? readString(record["caption"]) ?? "";
 
-        const normalized = {
-            id,
-            url: processed,
-            thumbnailUrl: thumbnail,
-            caption,
-        } satisfies NormalizedImage;
-
-        return normalized;
+        return { id, url: processed, thumbnailUrl: thumbnail, caption } satisfies NormalizedImage;
     };
 
     return extractRawList(payload)
@@ -237,7 +194,10 @@ export async function fetchReportImages(
         .filter((img): img is NormalizedImage => img !== null);
 }
 
+// ---------------------------------------------------------------------------
 // Report state transitions
+// ---------------------------------------------------------------------------
+
 export interface ReportActionResponse {
     id: string;
     status: string;
@@ -245,16 +205,11 @@ export interface ReportActionResponse {
 }
 
 export async function submitReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}/submit`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ changelog }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al enviar reporte: ${res.status} - ${errText}`);
@@ -263,16 +218,11 @@ export async function submitReport(reportId: string, changelog?: string): Promis
 }
 
 export async function approveReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}/approve`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ changelog }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al aprobar reporte: ${res.status} - ${errText}`);
@@ -281,16 +231,11 @@ export async function approveReport(reportId: string, changelog?: string): Promi
 }
 
 export async function requestChanges(reportId: string, comment: string): Promise<ReportActionResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}/request-changes`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ comment, request_changes: true }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al solicitar cambios: ${res.status} - ${errText}`);
@@ -299,16 +244,11 @@ export async function requestChanges(reportId: string, comment: string): Promise
 }
 
 export async function signReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}/sign`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ changelog }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al firmar reporte: ${res.status} - ${errText}`);
@@ -317,16 +257,11 @@ export async function signReport(reportId: string, changelog?: string): Promise<
 }
 
 export async function retractReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/${reportId}/retract`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ changelog }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al retirar reporte: ${res.status} - ${errText}`);
@@ -334,27 +269,22 @@ export async function retractReport(reportId: string, changelog?: string): Promi
     return await res.json();
 }
 
-// Get worklist
+// ---------------------------------------------------------------------------
+// Worklist
+// ---------------------------------------------------------------------------
+
 export interface WorklistResponse {
     reports: Array<{
         id: string;
         status: string;
         tenant_id: string;
-        branch: {
-            id: string;
-            name: string;
-            code?: string | null;
-        };
+        branch: { id: string; name: string; code?: string | null };
         order: {
             id: string;
             order_code: string;
             status: string;
             requested_by?: string | null;
-            patient?: {
-                id: string;
-                full_name: string;
-                patient_code: string;
-            };
+            patient?: { id: string; full_name: string; patient_code: string };
         };
         title?: string | null;
         diagnosis_text?: string | null;
@@ -369,16 +299,13 @@ export interface WorklistResponse {
 }
 
 export async function getWorklist(branchId?: string): Promise<WorklistResponse> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
-    const url = branchId ? `${base}/v1/reports/worklist?branch_id=${branchId}` : `${base}/v1/reports/worklist`;
+    const url = branchId
+        ? `${base}/v1/reports/worklist?branch_id=${branchId}`
+        : `${base}/v1/reports/worklist`;
     const res = await fetch(url, {
         method: "GET",
-        headers,
+        headers: authHeaders({ Accept: "application/json" }),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al obtener worklist: ${res.status} - ${errText}`);
@@ -391,13 +318,11 @@ export async function getWorklist(branchId?: string): Promise<WorklistResponse> 
 // ---------------------------------------------------------------------------
 
 export async function getReportTemplates(activeOnly = false): Promise<{ templates: ReportTemplateListItem[] }> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const url = `${base}/v1/reports/templates/?active_only=${activeOnly}`;
-    const res = await fetch(url, { method: "GET", headers });
-
+    const res = await fetch(url, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al obtener plantillas: ${res.status} - ${errText}`);
@@ -406,12 +331,10 @@ export async function getReportTemplates(activeOnly = false): Promise<{ template
 }
 
 export async function getReportTemplateById(templateId: string): Promise<ReportTemplateDetail> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-
-    const res = await fetch(`${base}/v1/reports/templates/${templateId}`, { method: "GET", headers });
-
+    const res = await fetch(`${base}/v1/reports/templates/${templateId}`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al obtener plantilla: ${res.status} - ${errText}`);
@@ -420,16 +343,11 @@ export async function getReportTemplateById(templateId: string): Promise<ReportT
 }
 
 export async function createReportTemplate(payload: CreateReportTemplatePayload): Promise<ReportTemplateDetail> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/templates/`, {
         method: "POST",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al crear plantilla: ${res.status} - ${errText}`);
@@ -441,16 +359,11 @@ export async function updateReportTemplate(
     templateId: string,
     payload: UpdateReportTemplatePayload
 ): Promise<ReportTemplateDetail> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/templates/${templateId}`, {
         method: "PUT",
-        headers,
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al actualizar plantilla: ${res.status} - ${errText}`);
@@ -459,15 +372,10 @@ export async function updateReportTemplate(
 }
 
 export async function deleteReportTemplate(templateId: string): Promise<void> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = token;
-
     const res = await fetch(`${base}/v1/reports/templates/${templateId}`, {
         method: "DELETE",
-        headers,
+        headers: authHeaders(),
     });
-
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al eliminar plantilla: ${res.status} - ${errText}`);

@@ -14,8 +14,8 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
-import { saveReport, getLatestReportByOrderId } from "../services/report_service";
-import type { ReportEnvelope, ReportFlags } from "../models/report";
+import { getReport } from "../services/report_service";
+import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 import { useUserProfile } from "../hooks/use_user_profile";
 import AssigneesSection from "../components/collaboration/AssigneesSection";
@@ -229,26 +229,11 @@ export default function OrderDetail() {
         });
     }, []);
 
-    // Default flags for initial report when creating
-    const DEFAULT_FLAGS: ReportFlags = {
-        incluirMacroscopia: true,
-        incluirMicroscopia: true,
-        incluirCitomorfologia: true,
-        incluirInterpretacion: true,
-        incluirDiagnostico: true,
-        incluirComentario: true,
-        incluirIF: false,
-        incluirME: false,
-        incluirEdad: false,
-        incluirCU: false,
-        incluirInmunotinciones: false,
-    };
-
     // Function to load the latest report by report ID
-    const loadLatestReport = async (reportId: string) => {
+    const loadLatestReport = async (rId: string) => {
         setReportLoading(true);
         try {
-            const report = await getLatestReportByOrderId(reportId);
+            const report = await getReport(rId);
             setLatestReport(report);
         } catch (err) {
             console.error("Error loading latest report:", err);
@@ -595,61 +580,9 @@ export default function OrderDetail() {
         return "wait";
     };
 
-    const handleCreateReport = async () => {
+    const handleCreateReport = () => {
         if (!data) return;
-        try {
-            const userId = localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "";
-            const envelope: ReportEnvelope = {
-                id: "",
-                tenant_id: data.order.tenant_id,
-                branch_id: data.order.branch_id,
-                order_id: data.order.id,
-                version_no: 1,
-                status: "DRAFT",
-                title: `Reporte Histopatologia - ${fullName || data.patient.patient_code}`,
-                diagnosis_text: "",
-                created_by: userId,
-                published_at: null,
-                signed_by: null,
-                signed_at: null,
-                report: {
-                    tipo: "Histopatologia",
-                    base: {
-                        paciente: fullName || data.patient.patient_code,
-                        examen: "",
-                        folio: data.order.order_code || "",
-                        fechaRecepcion: "",
-                        especimen: "",
-                        diagnosticoEnvio: null,
-                    },
-                    secciones: {
-                        descripcionMacroscopia: null,
-                        descripcionMicroscopia: null,
-                        descripcionCitomorfologica: null,
-                        interpretacion: null,
-                        diagnostico: null,
-                        comentario: null,
-                        inmunofluorescenciaHTML: null,
-                        inmunotincionesHTML: null,
-                        microscopioElectronicoHTML: null,
-                        citologiaUrinariaHTML: null,
-                        edad: null,
-                    },
-                    flags: { ...DEFAULT_FLAGS },
-                    images: [],
-                },
-            };
-            const created = await saveReport(envelope);
-            
-            localStorage.setItem("reportEnvelopeDraft", JSON.stringify(created));
-            
-            message.success("Reporte creado");
-            setReportId(created.id);
-            setLatestReport(created);
-            navigate(`/reports/${created.id}`);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : "No se pudo crear el reporte");
-        }
+        navigate(`/reports/editor?orderId=${data.order.id}`);
     };
 
     const statusConfig = STATUS_CONFIG[data?.order.status || "RECEIVED"] || STATUS_CONFIG.RECEIVED;

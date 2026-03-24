@@ -4,7 +4,7 @@ import html2canvas from "html2canvas";
 import type { ReportPreviewPagesRef } from "../components/report/report_preview_pages";
 
 export function usePdfExport() {
-    const exportToPDF = useCallback(async (previewPagesRef: React.RefObject<ReportPreviewPagesRef | null>) => {
+    const exportToPDF = useCallback(async (previewPagesRef: React.RefObject<ReportPreviewPagesRef | null>, filename?: string) => {
         const pages = previewPagesRef.current?.getPages();
         if (!pages || pages.length === 0) return;
 
@@ -74,7 +74,8 @@ export function usePdfExport() {
             doc.addImage(imgData, "JPEG", 0, 0, PAGE_W_MM, PAGE_H_MM);
         }
 
-        doc.save("reporte.pdf");
+        const safeName = (filename ?? "reporte").replace(/[^a-zA-Z0-9_\-\s]/g, "").trim() || "reporte";
+        doc.save(`${safeName}.pdf`);
     }, []);
 
     return { exportToPDF };
