@@ -1,8 +1,9 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
-import type { ReportEnvelope, ReportType, ReportFlags } from "../../models/report";
+import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
+import { markdownTableToHtml } from "./table_editor";
 import logo from "../../images/report_logo.png";
 
-// Constants for page layout (same as in report_editor.tsx)
+// Page layout constants (Letter size)
 const PX_TO_MM = 0.264583;
 const PAGE_W_MM = 215.9;
 const PAGE_H_MM = 279.4;
@@ -11,15 +12,8 @@ const MARGIN_R_MM = 18;
 const HEADER_H_MM = 28;
 const FOOTER_H_MM = 20;
 
-/* Flags by report type */
-const FLAGS_BY_TYPE: Record<ReportType, ReportFlags> = {
-    Histopatologia: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: true, incluirInterpretacion: true, incluirDiagnostico: true, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
-    Histoquimica: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: true, incluirComentario: true, incluirIF: true, incluirME: true, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
-    Citologia_mamaria: { incluirMacroscopia: false, incluirMicroscopia: false, incluirCitomorfologia: true, incluirInterpretacion: true, incluirDiagnostico: false, incluirComentario: false, incluirIF: false, incluirME: false, incluirEdad: true, incluirCU: false, incluirInmunotinciones: false },
-    Citologia_urinaria: { incluirMacroscopia: true, incluirMicroscopia: false, incluirCitomorfologia: true, incluirInterpretacion: false, incluirDiagnostico: false, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: true, incluirInmunotinciones: false },
-    Quirurgico: { incluirMacroscopia: true, incluirMicroscopia: true, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: true, incluirComentario: false, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: false },
-    Revision_laminillas: { incluirMacroscopia: true, incluirMicroscopia: false, incluirCitomorfologia: false, incluirInterpretacion: false, incluirDiagnostico: false, incluirComentario: true, incluirIF: false, incluirME: false, incluirEdad: false, incluirCU: false, incluirInmunotinciones: true },
-};
+// Keys that are pre-populated from order/patient data (not custom)
+const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age"]);
 
 interface ReportPreviewPagesProps {
     report: ReportEnvelope;
@@ -34,30 +28,25 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     const previewHostRef = useRef<HTMLDivElement>(null);
     const hiddenSourceRef = useRef<HTMLDivElement>(null);
 
-    // Expose pages for PDF export
     useImperativeHandle(ref, () => ({
         getPages: () => {
             if (!previewHostRef.current) return [];
             return Array.from(previewHostRef.current.children).filter(
                 (el) => el instanceof HTMLElement
             ) as HTMLElement[];
-        }
+        },
     }), []);
 
-    // Generate preview pages
     useEffect(() => {
         const host = previewHostRef.current;
         const sourceInDOM = hiddenSourceRef.current?.querySelector("#reporte-content") as HTMLElement | null;
         if (!host || !sourceInDOM) return;
 
-        // Clear current pages
         host.innerHTML = "";
 
-        // Useful area (mm → px)
         const contentWpx = Math.round((PAGE_W_MM - MARGIN_L_MM - MARGIN_R_MM) / PX_TO_MM);
         const contentHpx = Math.round((PAGE_H_MM - HEADER_H_MM - FOOTER_H_MM) / PX_TO_MM);
 
-        // Creates a visual "Letter" page with header/body/footer
         const makePage = () => {
             const page = document.createElement("div");
             page.style.width = "8.5in";
@@ -92,7 +81,7 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                 </div>
             `;
 
-            // Body (the content area)
+            // Body
             const body = document.createElement("div");
             body.style.position = "absolute";
             body.style.top = `${HEADER_H_MM}mm`;
@@ -104,6 +93,9 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             body.style.height = `${contentHpx}px`;
             body.style.background = "#ffffff";
             body.style.backgroundColor = "#ffffff";
+            body.style.fontFamily = "Arial, sans-serif";
+            body.style.fontSize = "10pt";
+            body.style.color = "#000000";
 
             // Footer
             const footer = document.createElement("div");
@@ -123,15 +115,9 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                 <img
                     src="${logo}"
                     alt="Logo"
-                    style="
-                      display:block;
-                      height: calc(${FOOTER_H_MM}mm - 4mm);
-                      width: auto;
-                      max-width: 35%;
-                      object-fit: contain;
-                    "
+                    style="display:block; height: calc(${FOOTER_H_MM}mm - 4mm); width: auto; max-width: 35%; object-fit: contain;"
                 />
-                <div style="max-width:65%">
+                <div style="max-width:65%; text-align: right;">
                   Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600<br/>
                   Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com
                 </div>
@@ -144,11 +130,9 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             return { page, body };
         };
 
-        // Clone source content and flow it across pages
         const work = sourceInDOM.cloneNode(true) as HTMLElement;
         const nodes = Array.from(work.childNodes);
 
-        // Try to place an element; return whether it fits in the current page body
         const fits = (container: HTMLElement, el: HTMLElement) => {
             container.appendChild(el);
             const ok = container.scrollHeight <= container.clientHeight;
@@ -158,7 +142,6 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
 
         let { body } = makePage();
 
-        // Distribute nodes across pages, splitting blocks if needed
         nodes.forEach((node) => {
             if (node.nodeType === Node.TEXT_NODE) {
                 const span = document.createElement("span");
@@ -173,22 +156,20 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             const elem = node as HTMLElement;
             if (!(elem instanceof HTMLElement)) return;
 
-            // Try whole block
             const block = elem.cloneNode(true) as HTMLElement;
             if (fits(body, block)) return;
 
-            // New page, try as a unit
             ({ body } = makePage());
             if (block.scrollHeight <= body.clientHeight) {
                 body.appendChild(block);
                 return;
             }
 
-            // Still too big: split by children
+            // Split by children
             const shell = block.cloneNode(false) as HTMLElement;
             body.appendChild(shell);
             Array.from(block.childNodes).forEach((child) => {
-                const c = (child.cloneNode(true) as HTMLElement) || document.createElement("span");
+                const c = child.cloneNode(true) as HTMLElement;
                 if (!fits(body, c)) {
                     ({ body } = makePage());
                     body.appendChild(c);
@@ -199,154 +180,183 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
         });
     }, [report]);
 
-    // Extract report data
-    const reportData = report.report;
-    const baseData = reportData.base;
-    const secciones = reportData.secciones;
-    const tipoActivo = reportData.tipo;
+    // ---------------------------------------------------------------------------
+    // Build content from new ReportTemplateJSON structure
+    // ---------------------------------------------------------------------------
+
+    const template = report.template ?? { base: {}, sections: {} };
+    const content = report.report ?? { base: {}, sections: {} };
+    // Predefined base fields visible in header area
+    const predefinedFields = Object.entries(template.base)
+        .filter(([k, v]) => PREDEFINED_BASE_KEYS.has(k) && v.is_visible)
+        .map(([k, v]) => ({
+            key: k,
+            label: v.label,
+            value: content.base[k]?.value ?? "",
+        }));
+
+    // Custom base fields
+    const customFields = Object.entries(template.base)
+        .filter(([k, v]) => !PREDEFINED_BASE_KEYS.has(k) && (v as { is_custom?: boolean }).is_custom === true && v.is_visible)
+        .map(([k, v]) => ({
+            key: k,
+            label: v.label,
+            value: content.base[k]?.value ?? "",
+        }));
+
+    // All sections in order
+    const sections = Object.entries(template.sections)
+        .filter(([, v]) => v.is_visible)
+        .map(([k, v]) => {
+            const savedSection = content.sections[k];
+            return { key: k, section: v, savedContent: savedSection };
+        });
+
+    // Collect all images across image sections
+    const allImages: { sectionLabel: string; images: TemplateImageItem[] }[] = sections
+        .filter(({ section }) => section.type === "images")
+        .map(({ section, savedContent }) => ({
+            sectionLabel: section.label,
+            images: (savedContent && Array.isArray(savedContent.content) ? savedContent.content : []) as TemplateImageItem[],
+        }))
+        .filter(({ images }) => images.length > 0);
 
     return (
         <div style={style}>
-            {/* Hidden source content: used to paginate */}
+            {/* Hidden source used for pagination */}
             <div
                 ref={hiddenSourceRef}
                 style={{ position: "fixed", left: "-10000px", top: 0, width: 0, height: 0, overflow: "hidden" }}
                 aria-hidden
             >
-                <div id="reporte-content">
-                    <p><b>Dr(a).</b> Presente.</p>
-                    <p><b>Paciente:</b> {baseData.paciente || <em>(Sin especificar)</em>}</p>
-                    <p><b>Examen:</b> {baseData.examen || <em>(Sin especificar)</em>}</p>
-                    <p><b>No.:</b> {baseData.folio || <em>(Sin especificar)</em>}</p>
+                <div id="reporte-content" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
 
-                    <p>
-                        <b>Fecha de recepción de muestra:</b>{" "}
-                        {baseData.fechaRecepcion ? baseData.fechaRecepcion : <em>(Sin especificar)</em>}
-                    </p>
+                    {/* Predefined base info */}
+                    <div style={{ marginBottom: 12 }}>
+                        {predefinedFields.map(({ key, label, value }) => (
+                            <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
+                                <b>{label}:</b>{" "}
+                                {value || <em style={{ color: "#888" }}>Sin especificar</em>}
+                            </p>
+                        ))}
+                    </div>
 
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirEdad && (
-                        <p><b>Edad:</b> {secciones.edad || <em>(Sin especificar)</em>}</p>
+                    {/* Custom base fields */}
+                    {customFields.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                            {customFields.map(({ key, label, value }) => (
+                                <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
+                                    <b>{label}:</b>{" "}
+                                    {value || <em style={{ color: "#888" }}>Sin especificar</em>}
+                                </p>
+                            ))}
+                        </div>
                     )}
 
-                    <p><b>Espécimen recibido:</b> {baseData.especimen || <em>(Sin especificar)</em>}</p>
-                    {baseData.diagnosticoEnvio && <p><b>Diagnóstico de envío:</b> {baseData.diagnosticoEnvio}</p>}
+                    <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
 
-                    <hr className="report-hr" />
+                    {/* Dynamic sections */}
+                    {sections.map(({ key, section, savedContent }) => {
+                        if (section.type === "images") {
+                            // Images sections rendered separately below
+                            return null;
+                        }
 
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirMacroscopia && (
-                        <>
-                            <h3>Descripción macroscópica</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.descripcionMacroscopia || "" }} />
-                        </>
-                    )}
+                        const rawContent = savedContent
+                            ? (savedContent as ReportSectionText).content || ""
+                            : "";
 
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirMicroscopia && (
-                        <>
-                            <h3>Descripción microscópica</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.descripcionMicroscopia || "" }} />
-                        </>
-                    )}
+                        if (!rawContent) return null;
 
-                    {reportData.images && reportData.images.length > 0 && (
-                        <>
-                            <hr className="report-hr" />
-                            <h3>Imágenes</h3>
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                    gap: 12,
-                                }}
-                            >
-                                {reportData.images.map((img, idx) => (
+                        const sectionHeader = (
+                            <h3 style={{
+                                margin: "0 0 6px 0",
+                                fontSize: "11pt",
+                                fontWeight: 700,
+                                color: "#002060",
+                                borderBottom: "1px solid #e5e7eb",
+                                paddingBottom: 3,
+                            }}>
+                                {section.label}
+                            </h3>
+                        );
+
+                        if (section.type === "table") {
+                            return (
+                                <div key={key} style={{ marginBottom: 14 }}>
+                                    {sectionHeader}
                                     <div
-                                        key={img.id || idx}
-                                        style={{
-                                            border: "1px solid #f0f0f0",
-                                            borderRadius: 8,
-                                            overflow: "hidden",
-                                            background: "#fff",
-                                        }}
-                                    >
+                                        style={{ fontSize: "10pt" }}
+                                        dangerouslySetInnerHTML={{ __html: markdownTableToHtml(rawContent) }}
+                                    />
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div key={key} style={{ marginBottom: 14 }}>
+                                {sectionHeader}
+                                <div
+                                    style={{ fontSize: "10pt", lineHeight: 1.5 }}
+                                    dangerouslySetInnerHTML={{ __html: rawContent }}
+                                />
+                            </div>
+                        );
+                    })}
+
+                    {/* Images */}
+                    {allImages.map(({ sectionLabel, images }) => (
+                        <div key={sectionLabel} style={{ marginBottom: 14 }}>
+                            <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                            <h3 style={{
+                                margin: "0 0 8px 0",
+                                fontSize: "11pt",
+                                fontWeight: 700,
+                                color: "#002060",
+                                borderBottom: "1px solid #e5e7eb",
+                                paddingBottom: 3,
+                            }}>
+                                {sectionLabel}
+                            </h3>
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                gap: 10,
+                            }}>
+                                {images.map((img, idx) => (
+                                    <div key={img.id || idx} style={{
+                                        border: "1px solid #e5e7eb",
+                                        borderRadius: 6,
+                                        overflow: "hidden",
+                                        background: "#fff",
+                                    }}>
                                         <img
                                             src={img.url}
                                             alt={img.caption || `Figura ${idx + 1}`}
-                                            style={{ width: "100%", height: 220, objectFit: "contain", background: "#fafafa" }}
+                                            style={{ width: "100%", height: 200, objectFit: "contain", background: "#fafafa", display: "block" }}
+                                            crossOrigin="anonymous"
                                         />
-                                        <div style={{ padding: "6px 8px", fontSize: 12 }}>
+                                        <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>
                                             <b>Figura {idx + 1}.</b>{" "}
-                                            {img.caption && img.caption.trim().length > 0 ? img.caption : <em> </em>}
+                                            {img.caption && img.caption.trim().length > 0
+                                                ? img.caption
+                                                : <em> </em>}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        </>
-                    )}
+                        </div>
+                    ))}
 
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirCitomorfologia && (
-                        <>
-                            <h3>Descripción citomorfológica</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.descripcionCitomorfologica || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirInterpretacion && (
-                        <>
-                            <h3>Interpretación</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.interpretacion || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirDiagnostico && (
-                        <>
-                            <h3>Diagnóstico</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.diagnostico || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirComentario && (
-                        <>
-                            <h3>Comentario</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.comentario || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirCU && (
-                        <>
-                            <h3>Citología urinaria</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.citologiaUrinariaHTML || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirIF && (
-                        <>
-                            <h3>Inmunofluorescencia</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.inmunofluorescenciaHTML || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirInmunotinciones && (
-                        <>
-                            <h3>Inmunotinciones</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.inmunotincionesHTML || "" }} />
-                        </>
-                    )}
-
-                    {FLAGS_BY_TYPE[tipoActivo]?.incluirME && (
-                        <>
-                            <h3>Microscopía electrónica</h3>
-                            <div dangerouslySetInnerHTML={{ __html: secciones.microscopioElectronicoHTML || "" }} />
-                        </>
-                    )}
                 </div>
             </div>
 
-            {/* Visible preview pages */}
+            {/* Visible preview pages (populated by the effect) */}
             <div ref={previewHostRef} />
         </div>
     );
 });
 
-ReportPreviewPages.displayName = 'ReportPreviewPages';
+ReportPreviewPages.displayName = "ReportPreviewPages";
 
 export default ReportPreviewPages;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { Layout, Input, Card, Avatar, Tooltip } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -270,19 +270,14 @@ export default function ReportsList() {
                     <Card
                         title={<span style={cardTitleStyle}>Reportes</span>}
                         extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en reportes" 
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 320 }}
-                                />
-                                <Button type="primary" onClick={() => navigate("/reports/editor")}>
-                                    Crear Reporte
-                                </Button>
-                            </Space>
+                            <Input.Search
+                                allowClear
+                                placeholder="Buscar en reportes" 
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onSearch={(v) => setSearch(v)}
+                                style={{ width: 320 }}
+                            />
                         }
                         style={cardStyle}
                     >

@@ -1,73 +1,3 @@
-export type ReportType = "Histopatologia" | "Histoquimica" | "Citologia_mamaria" | "Citologia_urinaria" | "Quirurgico" | "Revision_laminillas";
-
-export type ReportStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" | "RETRACTED";
-
-export interface ReportBase {
-    paciente: string;
-    examen: string;
-    folio: string;
-    fechaRecepcion: string;
-    especimen: string;
-    diagnosticoEnvio: string | null;
-}
-
-export interface ReportSections {
-    descripcionMacroscopia: string | null;
-    descripcionMicroscopia: string | null;
-    descripcionCitomorfologica: string | null;
-    interpretacion: string | null;
-    diagnostico: string | null;
-    comentario: string | null;
-    inmunofluorescenciaHTML: string | null;
-    inmunotincionesHTML: string | null;
-    microscopioElectronicoHTML: string | null;
-    citologiaUrinariaHTML: string | null;
-    edad: string | null;
-}
-
-export interface ReportFlags {
-    incluirMacroscopia: boolean;
-    incluirMicroscopia: boolean;
-    incluirCitomorfologia: boolean;
-    incluirInterpretacion: boolean;
-    incluirDiagnostico: boolean;
-    incluirComentario: boolean;
-    incluirIF: boolean;
-    incluirME: boolean;
-    incluirEdad: boolean;
-    incluirCU: boolean;
-    incluirInmunotinciones: boolean;
-}
-
-export interface ReportImageItem {
-    id?: string;
-    url: string;
-    caption?: string;
-}
-
-export interface ReportEnvelope {
-    id: string;
-    tenant_id: string;
-    branch_id: string;
-    order_id: string;
-    version_no: number;
-    status: ReportStatus;
-    title: string;
-    diagnosis_text: string;
-    created_by: string;
-    published_at: string | null;
-    signed_by: string | null;
-    signed_at: string | null;
-
-    report: {
-        tipo: ReportType;
-        base: ReportBase;
-        secciones: ReportSections;
-        flags: ReportFlags;
-        images: ReportImageItem[];
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Template JSON types
 // ---------------------------------------------------------------------------
@@ -97,7 +27,7 @@ export type ReportBaseFieldConfig = ReportBaseFieldPredefined | ReportBaseFieldC
 
 // ---------------------------------------------------------------------------
 // Sections — each section has visibility, a label, type, and content.
-// For text/richtext/table/numeric sections: content is a string (markdown).
+// For text/richtext/table/numeric sections: content is a string (markdown/html).
 // For the images section: content is an array of TemplateImageItem.
 // ---------------------------------------------------------------------------
 
@@ -112,7 +42,7 @@ export interface ReportSectionText {
     is_visible: boolean;
     label: string;
     type: "text" | "richtext" | "table" | "numeric";
-    content: string;          // empty in template, markdown/text in report
+    content: string;          // empty in template, html/text in report
 }
 
 /** A custom text-based section created by the user */
@@ -175,16 +105,104 @@ export interface UpdateReportTemplatePayload {
 }
 
 // ---------------------------------------------------------------------------
+// Report envelope — the full report object as stored/retrieved from the backend
+// ---------------------------------------------------------------------------
+
+export type ReportStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" | "RETRACTED";
+
+/** The content of the report: same shape as ReportTemplateJSON but with values filled in */
+export type ReportContent = ReportTemplateJSON;
+
+/** Full report envelope returned by GET /api/v1/reports/{id} and POST /api/v1/reports/ */
+export interface ReportEnvelope {
+    id: string;
+    version_no: number;
+    status: ReportStatus;
+    order_id: string;
+    tenant_id: string;
+    branch_id: string;
+    title: string;
+    published_at: string | null;
+    created_by: string;
+    signed_by: string | null;
+    signed_at: string | null;
+    /** Raw template snapshot at time of creation */
+    template: ReportTemplateJSON;
+    /** Content of the report (same shape as template but with values filled) */
+    report: ReportContent;
+}
+
+/** Full report response from GET /api/v1/reports/{id}/full */
+export interface ReportFullResponse {
+    order: {
+        id: string;
+        order_code: string;
+        status: string;
+        patient_id: string;
+        tenant_id: string;
+        branch_id: string;
+        requested_by?: string | null;
+        notes?: string | null;
+        billed_lock?: boolean;
+        report_id?: string | null;
+        study_type_id?: string | null;
+        invoice_id?: string | null;
+        assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
+        reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null }>;
+        labels?: Array<{ id: string; name: string; color: string; inherited?: boolean }>;
+    };
+    patient: {
+        id: string;
+        tenant_id: string;
+        branch_id: string;
+        patient_code: string;
+        first_name?: string;
+        last_name?: string;
+        dob?: string | null;
+        sex?: string | null;
+        phone?: string | null;
+        email?: string | null;
+    };
+    samples: Array<{
+        id: string;
+        sample_code: string;
+        type: string;
+        state: string;
+        order_id: string;
+        tenant_id: string;
+        branch_id: string;
+        received_at?: string | null;
+    }>;
+    report: ReportEnvelope;
+    template?: ReportTemplateJSON | null;
+}
+
+/** Study type as returned by GET /api/v1/study-types/{id} */
+export interface StudyTypeDetail {
+    id: string;
+    tenant_id: string;
+    code: string;
+    name: string;
+    description?: string;
+    is_active: boolean;
+    created_at: string;
+    default_report_template_id?: string | null;
+    default_template?: {
+        id: string;
+        name: string;
+    } | null;
+}
+
+// ---------------------------------------------------------------------------
 // Defaults — all content/value fields empty (template skeleton)
 // ---------------------------------------------------------------------------
 
 /** Predefined base fields with empty value (template skeleton) */
 export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
-    order_code:         { is_visible: true, label: "Código de orden",   value: "" },
-    patient:            { is_visible: true, label: "Paciente",          value: "" },
-    study_type:         { is_visible: true, label: "Tipo de estudio",   value: "" },
-    patient_age:        { is_visible: true, label: "Edad",              value: "" },
-    sample_received_at: { is_visible: true, label: "Fecha de recepción", value: "" },
+    order_code:         { is_visible: true, label: "Código de orden",    value: "" },
+    patient:            { is_visible: true, label: "Paciente",           value: "" },
+    study_type:         { is_visible: true, label: "Tipo de estudio",    value: "" },
+    patient_age:        { is_visible: true, label: "Edad",               value: "" },
 };
 
 /** Predefined sections with empty content (template skeleton).
@@ -206,5 +224,22 @@ export function buildDefaultTemplateJSON(): ReportTemplateJSON {
             section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
             images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
         },
+    };
+}
+
+/** Builds an empty ReportContent from a template (same shape, content zeroed) */
+export function buildEmptyReportContent(template: ReportTemplateJSON): ReportContent {
+    return {
+        base: Object.fromEntries(
+            Object.entries(template.base).map(([k, v]) => [k, { ...v, value: "" }])
+        ) as Record<string, ReportBaseFieldConfig>,
+        sections: Object.fromEntries(
+            Object.entries(template.sections).map(([k, v]) => {
+                if (v.type === "images") {
+                    return [k, { ...v, content: [] as TemplateImageItem[] }];
+                }
+                return [k, { ...v, content: (v as ReportSectionText).content || "" }];
+            })
+        ) as Record<string, ReportSectionConfig>,
     };
 }

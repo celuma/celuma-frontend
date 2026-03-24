@@ -4,14 +4,16 @@ import { tokens } from "../design/tokens";
 
 interface StatsCardProps {
     title: string;
-    value: string | number;
+    value?: string | number;
     icon?: React.ReactNode;
     color?: string;
     loading?: boolean;
+    extra?: React.ReactNode;
+    children?: React.ReactNode;
 }
 
-export default function StatsCard({ title, value, icon, color = "#0f8b8d", loading = false }: StatsCardProps) {
-    const cardStyle: React.CSSProperties = {
+export default function StatsCard({ title, value, icon, color = "#0f8b8d", loading = false, extra, children }: StatsCardProps) {
+    const baseCardStyle: React.CSSProperties = {
         borderRadius: tokens.radius,
         boxShadow: tokens.shadow,
         background: tokens.cardBg,
@@ -43,16 +45,30 @@ export default function StatsCard({ title, value, icon, color = "#0f8b8d", loadi
         marginBottom: 8,
     };
 
+    if (children) {
+        return (
+            <Card
+                loading={loading}
+                title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</span>}
+                extra={extra}
+                style={baseCardStyle}
+                styles={{ body: { padding: "16px 24px 20px 24px" } }}
+            >
+                {children}
+            </Card>
+        );
+    }
+
     return (
         <Card
             loading={loading}
-            style={cardStyle}
-            bodyStyle={{ padding: 20 }}
+            style={baseCardStyle}
+            styles={{ body: { padding: 20 } }}
         >
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                 {icon && <div style={iconStyle}>{icon}</div>}
                 <h3 style={headerStyle}>{title}</h3>
-                <div style={valueStyle}>{value}</div>
+                {value !== undefined && <div style={valueStyle}>{value}</div>}
             </div>
         </Card>
     );
