@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
 import { hasPermission as _hasPermission, PERMS } from "../lib/rbac";
+import { getStoredToken, clearStoredAuth } from "../lib/auth_session";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
 
-function getAuthToken(): string | null {
-    return localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-}
+export type AuthStatus = "loading" | "unauthenticated" | "authenticated" | "error";
 
 export interface UserProfile {
     id: string;
@@ -25,14 +24,15 @@ export interface UserProfile {
 
 export function useUserProfile() {
     const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+    const [sessionExpired, setSessionExpired] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchProfile = async () => {
-            const token = getAuthToken();
+            const token = getStoredToken();
             if (!token) {
-                setLoading(false);
+                setAuthStatus("unauthenticated");
                 return;
             }
 
@@ -45,15 +45,21 @@ export function useUserProfile() {
                 });
 
                 if (res.ok) {
-                    const data = await res.json();
+                    const data: UserProfile = await res.json();
                     setProfile(data);
+                    setAuthStatus("authenticated");
+                } else if (res.status === 401 || res.status === 403) {
+                    // Token expired or invalid — clear it and mark session as expired
+                    clearStoredAuth();
+                    setSessionExpired(true);
+                    setAuthStatus("unauthenticated");
                 } else {
-                    setError("Failed to load profile");
+                    setError(`Error ${res.status}: no se pudo cargar el perfil`);
+                    setAuthStatus("error");
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Unknown error");
-            } finally {
-                setLoading(false);
+                setError(err instanceof Error ? err.message : "Error de red");
+                setAuthStatus("error");
             }
         };
 
@@ -63,9 +69,14 @@ export function useUserProfile() {
     const perms = profile?.permissions ?? [];
     const roles = profile?.roles ?? [];
 
+    // Convenience boolean derived from authStatus
+    const loading = authStatus === "loading";
+
     return {
         profile,
         loading,
+        authStatus,
+        sessionExpired,
         error,
         /** True when the user has the admin:manage_users permission. Replaces the old isAdmin flag. */
         canManageUsers: _hasPermission(perms, PERMS.MANAGE_USERS),

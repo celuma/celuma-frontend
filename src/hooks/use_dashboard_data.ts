@@ -1,22 +1,8 @@
 import { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api_fetch";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
-}
-
-async function getJSON<TRes>(path: string): Promise<TRes> {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = { accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-    if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-        throw new Error(message);
-    }
-    return parsed as TRes;
 }
 
 interface DashboardStats {
@@ -54,11 +40,18 @@ export function useDashboardData() {
                 setLoading(true);
                 setError(null);
 
-                // Use the optimized dashboard endpoint
-                const dashboardData = await getJSON<DashboardData>("/v1/dashboard/");
+                const res = await apiFetch(`${getApiBase()}/v1/dashboard/`);
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(text || `Error ${res.status}`);
+                }
+                const dashboardData: DashboardData = await res.json();
                 setData(dashboardData);
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Error al cargar los datos del dashboard");
+                // apiFetch already redirects on 401; only non-auth errors reach here
+                if (err instanceof Error && err.message !== "Session expired") {
+                    setError(err.message || "Error al cargar los datos del dashboard");
+                }
             } finally {
                 setLoading(false);
             }

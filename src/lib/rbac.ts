@@ -90,6 +90,19 @@ export function roleDisplayName(code: string): string {
     return names[code] ?? code;
 }
 
+/**
+ * Returns the most appropriate landing route for a set of permissions.
+ * Used by RequirePermission when a logged-in user lacks access to the
+ * requested route, to avoid redirecting to a route they also can't access.
+ */
+export function defaultRouteForPermissions(permissions: string[]): string {
+    if (permissions.includes(PERMS.LAB_READ)) return "/home";
+    if (permissions.includes(PERMS.PHYSICIAN_ACCESS)) return "/physician-portal";
+    if (permissions.includes(PERMS.BILLING_READ)) return "/billing";
+    if (permissions.includes(PERMS.REPORTS_READ)) return "/reports";
+    return "/access-denied";
+}
+
 /** Accent colour for a role badge. */
 export function roleColor(code: string): { color: string; bg: string } {
     const palette: Record<string, { color: string; bg: string }> = {

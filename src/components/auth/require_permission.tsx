@@ -1,29 +1,28 @@
 import { type ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { Spin } from "antd";
 import { useUserProfile } from "../../hooks/use_user_profile";
+import { defaultRouteForPermissions } from "../../lib/rbac";
 
 interface RequirePermissionProps {
     /** Permission code that must be present, e.g. "lab:read" */
     permission: string;
-    /** Where to redirect if the check fails. Defaults to "/home". */
-    redirectTo?: string;
     children: ReactNode;
 }
 
 /**
  * Route guard that checks a single RBAC permission.
- * While the profile is loading it shows a centered spinner.
- * If the user lacks the permission they are redirected (default: /home).
+ *
+ * - Loading   → centered spinner.
+ * - Unauthenticated → /login (with `state.from` and optional `state.sessionExpired`).
+ * - Authenticated but missing permission → safest landing route for their
+ *   actual permissions (never loops back to a guarded route they can't access).
  */
-export default function RequirePermission({
-    permission,
-    redirectTo = "/home",
-    children,
-}: RequirePermissionProps) {
-    const { loading, hasPermission } = useUserProfile();
+export default function RequirePermission({ permission, children }: RequirePermissionProps) {
+    const { authStatus, sessionExpired, hasPermission, profile } = useUserProfile();
+    const location = useLocation();
 
-    if (loading) {
+    if (authStatus === "loading") {
         return (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
                 <Spin size="large" />
@@ -31,8 +30,22 @@ export default function RequirePermission({
         );
     }
 
+    if (authStatus === "unauthenticated") {
+        return (
+            <Navigate
+                to="/login"
+                replace
+                state={{ from: location.pathname, sessionExpired }}
+            />
+        );
+    }
+
     if (!hasPermission(permission)) {
-        return <Navigate to={redirectTo} replace />;
+        // User is authenticated but lacks this specific permission.
+        // Route them to the best landing page for their actual permissions.
+        const perms = profile?.permissions ?? [];
+        const safeRoute = defaultRouteForPermissions(perms);
+        return <Navigate to={safeRoute} replace />;
     }
 
     return <>{children}</>;

@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
+import { Alert } from "antd";
 
 /* Reutilizables */
 import AuthLayout from "../components/auth/auth_layout";
@@ -42,8 +43,16 @@ export default function Login() {
     usePageTitle();
     const [serverError, setServerError] = useState<string | null>(null);
     const [forgotOpen, setForgotOpen] = useState(false);
-    // Branch selection moved to forms
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+
+    // Determine session message from router state or query string
+    const stateFrom = (location.state as { from?: string; sessionExpired?: boolean } | null);
+    const isSessionExpired =
+        stateFrom?.sessionExpired === true ||
+        searchParams.get("reason") === "session_expired";
+    const requiresAuth = !isSessionExpired && !!stateFrom?.from;
 
     const {
         control,
@@ -178,7 +187,26 @@ export default function Login() {
                         </p>
                     </div>
                 </CelumaModal>
-                {/* Branch selection removed from login; selection happens in forms */}
+                {/* Session alerts */}
+                {isSessionExpired && (
+                    <Alert
+                        type="warning"
+                        showIcon
+                        message="Sesión expirada"
+                        description="Tu sesión no es válida o expiró. Vuelve a iniciar sesión para continuar."
+                        style={{ marginBottom: 8 }}
+                    />
+                )}
+                {requiresAuth && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="Inicio de sesión requerido"
+                        description="Debes iniciar sesión para acceder a esa sección."
+                        style={{ marginBottom: 8 }}
+                    />
+                )}
+
                 <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                     {/* Usuario / email */}
                     <FormField

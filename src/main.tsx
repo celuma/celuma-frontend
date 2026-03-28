@@ -32,7 +32,9 @@ import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
+import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
+import RequireAuth from "./components/auth/require_auth";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
@@ -45,6 +47,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/reset-password" element={<PasswordResetConfirm />} />
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route path="/patient-portal" element={<PatientPortal />} />
+            <Route path="/access-denied" element={<AccessDenied />} />
 
             {/* Lab read access */}
             <Route path="/home" element={<RequirePermission permission="lab:read"><Home /></RequirePermission>} />
@@ -73,8 +76,8 @@ createRoot(document.getElementById("root")!).render(
             {/* Physician portal */}
             <Route path="/physician-portal" element={<RequirePermission permission="portal:physician_access"><PhysicianPortal /></RequirePermission>} />
 
-            {/* Profile (any authenticated user with any permission; using lab:read as baseline) */}
-            <Route path="/profile" element={<Profile />} />
+            {/* Profile — any authenticated user, no specific permission required */}
+            <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
             {/* Settings */}
             <Route path="/settings" element={<RequirePermission permission="lab:read"><TenantSettings /></RequirePermission>} />
