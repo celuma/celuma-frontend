@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout, Card, Table, Button, Form, Input, Select, Modal, message, Space, Popconfirm, Switch, Spin, Avatar } from "antd";
+import {
+    Layout, Card, Table, Button, Form, Input, Select, Modal, message,
+    Space, Popconfirm, Switch, Spin, Avatar, Tag, Alert,
+} from "antd";
 import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import FormField from "../components/ui/form_field";
@@ -16,29 +19,19 @@ import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
+import { roleDisplayName, roleColor, hasFullBranchAccess } from "../lib/rbac";
 
-// Generate initials from full name (first letter of first name + first letter of last name)
 const getInitials = (fullName?: string | null): string => {
     if (!fullName) return "U";
     const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 1) {
-        return parts[0][0]?.toUpperCase() || "U";
-    }
-    const firstInitial = parts[0][0]?.toUpperCase() || "";
-    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || "";
-    return firstInitial + lastInitial;
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || "U";
+    return (parts[0][0]?.toUpperCase() || "") + (parts[parts.length - 1][0]?.toUpperCase() || "");
 };
 
-// Generate a consistent color based on name
 const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
+    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
     let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
 };
 
@@ -48,7 +41,8 @@ const createUserSchema = z.object({
     first_name: z.string().nonempty("El nombre es obligatorio."),
     last_name: z.string().nonempty("El apellido es obligatorio."),
     role: z.string().nonempty("El rol es obligatorio."),
-    password: z.string()
+    password: z
+        .string()
         .nonempty("La contraseña es obligatoria.")
         .min(8, "Mínimo 8 caracteres.")
         .regex(
@@ -112,7 +106,7 @@ interface User {
     email: string;
     username?: string;
     full_name: string;
-    role: string;
+    roles: string[];
     is_active: boolean;
     branch_ids: string[];
     avatar_url?: string;
@@ -124,6 +118,12 @@ interface Branch {
     code: string;
 }
 
+// Assignable system roles (superuser excluded — can only be assigned via RBAC admin endpoint)
+interface RoleOption {
+    code: string;
+    name: string;
+}
+
 interface UsersManagementProps {
     embedded?: boolean;
 }
@@ -131,17 +131,16 @@ interface UsersManagementProps {
 function UsersManagement({ embedded = false }: UsersManagementProps) {
     usePageTitle();
     const navigate = useNavigate();
-    const { profile, loading: profileLoading, isAdmin } = useUserProfile();
+    const { profile, loading: profileLoading, canManageUsers, hasRole } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [users, setUsers] = useState<User[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
-    
-    // Modals state
+    const [availableRoles, setAvailableRoles] = useState<RoleOption[]>([]);
+
     const [createModalVisible, setCreateModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [inviteModalVisible, setInviteModalVisible] = useState(false);
 
-    // Create user form (react-hook-form + zod)
     const createUserForm = useForm<CreateUserFormData>({
         resolver: zodResolver(createUserSchema),
         defaultValues: {
@@ -159,32 +158,36 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const [createError, setCreateError] = useState<string | null>(null);
     const watchedRole = createUserForm.watch("role");
 
-    // Edit and invite forms (antd)
     const [editForm] = Form.useForm();
     const [inviteForm] = Form.useForm();
-    
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
         if (!profileLoading) {
-            if (!isAdmin) {
-                message.error("Acceso denegado: Solo administradores");
+            if (!canManageUsers) {
+                message.error("Acceso denegado: permiso admin:manage_users requerido");
                 navigate("/home");
                 return;
             }
             loadData();
         }
-    }, [profileLoading, isAdmin, navigate]);
+    }, [profileLoading, canManageUsers, navigate]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [usersData, branchesData] = await Promise.all([
+            const [usersData, branchesData, rolesData] = await Promise.all([
                 getJSON<{ users: User[] }>("/v1/users/"),
-                getJSON<Branch[]>("/v1/branches/")
+                getJSON<Branch[]>("/v1/branches/"),
+                getJSON<{ code: string; name: string; is_protected: boolean }[]>("/v1/rbac/roles"),
             ]);
             setUsers(usersData.users);
             setBranches(branchesData);
+            // Expose superuser option only if the current actor is a superuser themselves
+            const isSuperuser = hasRole("superuser");
+            setAvailableRoles(
+                rolesData.filter((r) => isSuperuser || r.code !== "superuser")
+            );
         } catch {
             message.error("Error al cargar datos");
         } finally {
@@ -195,8 +198,8 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const handleCreate = createUserForm.handleSubmit(async (data) => {
         setCreateError(null);
         try {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { confirmPassword, ...rest } = data;
+            void confirmPassword;
             await postJSON("/v1/users/", {
                 ...rest,
                 branch_ids: rest.branch_ids ?? [],
@@ -213,7 +216,26 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const handleEdit = async (values: Record<string, unknown>) => {
         if (!editingUser) return;
         try {
-            await putJSON(`/v1/users/${editingUser.id}`, values);
+            // If user has multiple roles (e.g. admin+superuser), never send `role` in the payload
+            // to avoid accidentally dropping roles via replace_user_roles on the backend.
+            const hasMultipleRoles = editingUser.roles.length > 1;
+            const isProtected = editingUser.roles.includes("superuser");
+
+            const payload: Record<string, unknown> = {
+                email: values.email,
+                username: values.username || null,
+                full_name: values.full_name,
+                is_active: values.is_active,
+                password: values.password || undefined,
+                branch_ids: values.branch_ids,
+            };
+
+            // Only send role change when the user has exactly one role and isn't protected
+            if (!hasMultipleRoles && !isProtected && values.role) {
+                payload.role = values.role;
+            }
+
+            await putJSON(`/v1/users/${editingUser.id}`, payload);
             message.success("Usuario actualizado");
             setEditModalVisible(false);
             editForm.resetFields();
@@ -230,9 +252,10 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             email: user.email,
             username: user.username,
             full_name: user.full_name,
-            role: user.role,
+            // Only pre-fill the role selector when the user has a single assignable role
+            role: user.roles.length === 1 ? user.roles[0] : undefined,
             is_active: user.is_active,
-            branch_ids: user.branch_ids
+            branch_ids: user.branch_ids,
         });
         setEditModalVisible(true);
     };
@@ -251,7 +274,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const handleToggleActive = async (userId: string, currentStatus: boolean) => {
         try {
             await postJSON(`/v1/users/${userId}/toggle-active`, {});
-            message.success(`Usuario ${currentStatus ? 'desactivado' : 'activado'}`);
+            message.success(`Usuario ${currentStatus ? "desactivado" : "activado"}`);
             await loadData();
         } catch {
             message.error("Error al cambiar estado");
@@ -268,18 +291,23 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         }
     };
 
+    // All known role codes for column filters
+    const roleFilterOptions = availableRoles.map((r) => ({ text: r.name, value: r.code }));
+
     const columns: ColumnsType<User> = [
-        { 
-            title: "Nombre", 
-            dataIndex: "full_name", 
+        {
+            title: "Nombre",
+            dataIndex: "full_name",
             key: "full_name",
             render: (name: string, record: User) => (
                 <Space>
-                    <Avatar 
-                        size={32} 
+                    <Avatar
+                        size={32}
                         src={record.avatar_url}
-                        style={{ 
-                            backgroundColor: record.avatar_url ? "transparent" : getAvatarColor(name || "Usuario"),
+                        style={{
+                            backgroundColor: record.avatar_url
+                                ? "transparent"
+                                : getAvatarColor(name || "Usuario"),
                             fontWeight: 600,
                             fontSize: 13,
                         }}
@@ -288,117 +316,71 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     </Avatar>
                     <span style={{ fontWeight: 500 }}>{name}</span>
                 </Space>
-            )
+            ),
         },
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Usuario", dataIndex: "username", key: "username", render: (text) => text || "—" },
-        { 
-            title: "Rol", 
-            dataIndex: "role", 
-            key: "role",
-            filters: [
-                { text: "Administrador", value: "admin" },
-                { text: "Patólogo", value: "pathologist" },
-                { text: "Técnico", value: "lab_tech" },
-                { text: "Facturación", value: "billing" },
-                { text: "Asistente", value: "assistant" },
-                { text: "Visor", value: "viewer" },
-            ],
-            onFilter: (value, record) => record.role === value,
-            render: (role) => {
-                const roleConfig: Record<string, { color: string; bg: string; label: string }> = {
-                    admin: { color: "#8b5cf6", bg: "#f5f3ff", label: "Admin" },
-                    pathologist: { color: "#3b82f6", bg: "#eff6ff", label: "Patólogo" },
-                    lab_tech: { color: "#10b981", bg: "#ecfdf5", label: "Técnico" },
-                    billing: { color: "#f59e0b", bg: "#fffbeb", label: "Facturación" },
-                    assistant: { color: "#06b6d4", bg: "#ecfeff", label: "Asistente" },
-                    viewer: { color: "#6b7280", bg: "#f3f4f6", label: "Visor" }
-                };
-                const config = roleConfig[role] || { color: "#6b7280", bg: "#f3f4f6", label: role };
-                return (
-                    <div style={{
-                        backgroundColor: config.bg,
-                        color: config.color,
-                        borderRadius: 12,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        padding: "4px 10px",
-                        display: "inline-block",
-                    }}>
-                        {config.label}
-                    </div>
-                );
-            }
+        {
+            title: "Rol(es)",
+            dataIndex: "roles",
+            key: "roles",
+            filters: roleFilterOptions,
+            onFilter: (value, record) => record.roles.includes(value as string),
+            render: (roles: string[]) => (
+                <Space size={4} wrap>
+                    {roles.map((r) => {
+                        const { color, bg } = roleColor(r);
+                        return (
+                            <div
+                                key={r}
+                                style={{
+                                    backgroundColor: bg,
+                                    color,
+                                    borderRadius: 12,
+                                    fontSize: 11,
+                                    fontWeight: 500,
+                                    padding: "3px 9px",
+                                    display: "inline-block",
+                                }}
+                            >
+                                {roleDisplayName(r)}
+                            </div>
+                        );
+                    })}
+                </Space>
+            ),
         },
         {
             title: "Sucursales",
             dataIndex: "branch_ids",
             key: "branches",
-            render: (ids: string[], record) => {
-                if (record.role === 'admin') {
+            render: (ids: string[], record: User) => {
+                if (hasFullBranchAccess(record.roles)) {
                     return (
-                        <div style={{
-                            backgroundColor: "#fffbeb",
-                            color: "#f59e0b",
-                            borderRadius: 12,
-                            fontSize: 11,
-                            fontWeight: 500,
-                            padding: "4px 10px",
-                            display: "inline-block",
-                        }}>
-                            Todas (Admin)
-                        </div>
+                        <Tag color="gold">Todas</Tag>
                     );
                 }
                 if (!ids || ids.length === 0) {
                     return <span style={{ color: "#888", fontSize: 12 }}>—</span>;
                 }
-                
-                // Show count if many, or names if few
-                const branchNames = ids.map(id => branches.find(b => b.id === id)?.name || id);
+                const branchNames = ids.map((id) => branches.find((b) => b.id === id)?.name || id);
                 if (branchNames.length > 2) {
                     return (
-                        <div 
-                            style={{
-                                backgroundColor: "#eff6ff",
-                                color: "#3b82f6",
-                                borderRadius: 12,
-                                fontSize: 11,
-                                fontWeight: 500,
-                                padding: "4px 10px",
-                                display: "inline-block",
-                            }}
-                            title={branchNames.join(', ')}
-                        >
-                            {branchNames.length} Sucursales
-                        </div>
+                        <Tag color="blue">{branchNames.length} sucursales</Tag>
                     );
                 }
                 return (
                     <Space size={4} wrap>
                         {branchNames.map((name, i) => (
-                            <div 
-                                key={i}
-                                style={{
-                                    backgroundColor: "#eff6ff",
-                                    color: "#3b82f6",
-                                    borderRadius: 12,
-                                    fontSize: 11,
-                                    fontWeight: 500,
-                                    padding: "4px 10px",
-                                    display: "inline-block",
-                                }}
-                            >
-                                {name}
-                            </div>
+                            <Tag key={i}>{name}</Tag>
                         ))}
                     </Space>
                 );
-            }
+            },
         },
-        { 
-            title: "Estado", 
-            dataIndex: "is_active", 
+        {
+            title: "Estado",
+            dataIndex: "is_active",
             key: "is_active",
             render: (active, record) => {
                 const isSelf = record.id === profile?.id;
@@ -411,7 +393,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                         unCheckedChildren="Inactivo"
                     />
                 );
-            }
+            },
         },
         {
             title: "Acciones",
@@ -421,26 +403,15 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                 const isSelf = record.id === profile?.id;
                 if (isSelf) {
                     return (
-                        <div style={{
-                            backgroundColor: "#f5f3ff",
-                            color: "#8b5cf6",
-                            borderRadius: 12,
-                            fontSize: 11,
-                            fontWeight: 500,
-                            padding: "4px 10px",
-                            display: "inline-block",
-                        }}>
-                            Tú
-                        </div>
+                        <Tag color="purple">Tú</Tag>
                     );
                 }
-                
                 return (
                     <Space>
-                        <Button 
-                            type="text" 
-                            icon={<EditOutlined />} 
-                            onClick={() => openEditModal(record)} 
+                        <Button
+                            type="text"
+                            icon={<EditOutlined />}
+                            onClick={() => openEditModal(record)}
                             size="small"
                             title="Editar"
                         />
@@ -450,12 +421,12 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                             okText="Sí"
                             cancelText="No"
                         >
-                            <Button 
-                                type="text" 
-                                danger 
-                                icon={<DeleteOutlined />} 
+                            <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
                                 size="small"
-                                title="Desactivar" 
+                                title="Desactivar"
                             />
                         </Popconfirm>
                     </Space>
@@ -475,332 +446,309 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         );
     }
 
+    // Common role options for create/invite modals
+    const roleSelectOptions = availableRoles.map((r) => (
+        <Select.Option key={r.code} value={r.code}>{r.name}</Select.Option>
+    ));
+
     const content = (
         <div>
-                    <Card
-                        title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
-                        extra={
-                            <Space>
-                                <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
-                                    Enviar Invitación
-                                </Button>
-                                <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
-                                    Crear Usuario
-                                </Button>
-                            </Space>
-                        }
-                        style={cardStyle}
-                    >
-                        <Table
-                            columns={columns}
-                            dataSource={users}
-                            loading={loading}
-                            rowKey="id"
-                            pagination={{ pageSize: 10 }}
+            <Card
+                title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
+                extra={
+                    <Space>
+                        <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
+                            Enviar Invitación
+                        </Button>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+                            Crear Usuario
+                        </Button>
+                    </Space>
+                }
+                style={cardStyle}
+            >
+                <Table
+                    columns={columns}
+                    dataSource={users}
+                    loading={loading}
+                    rowKey="id"
+                    pagination={{ pageSize: 10 }}
+                />
+            </Card>
+
+            {/* ── Create User Modal ── */}
+            <Modal
+                title="Crear Usuario"
+                open={createModalVisible}
+                onCancel={() => {
+                    setCreateModalVisible(false);
+                    createUserForm.reset();
+                    setCreateError(null);
+                }}
+                footer={null}
+                width={600}
+            >
+                <form onSubmit={handleCreate} noValidate style={{ display: "grid", gap: 16, paddingTop: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <FormField
+                            control={createUserForm.control}
+                            name="first_name"
+                            render={(p) => (
+                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre(s)" />
+                            )}
                         />
-                    </Card>
+                        <FormField
+                            control={createUserForm.control}
+                            name="last_name"
+                            render={(p) => (
+                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Apellidos" />
+                            )}
+                        />
+                    </div>
 
-                    {/* Create User Modal */}
-                    <Modal
-                        title="Crear Usuario"
-                        open={createModalVisible}
-                        onCancel={() => {
-                            setCreateModalVisible(false);
-                            createUserForm.reset();
-                            setCreateError(null);
-                        }}
-                        footer={null}
-                        width={600}
-                    >
-                        <form
-                            onSubmit={handleCreate}
-                            noValidate
-                            style={{ display: "grid", gap: 16, paddingTop: 8 }}
-                        >
-                            {/* Names row */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <FormField
-                                    control={createUserForm.control}
-                                    name="first_name"
-                                    render={(p) => (
-                                        <FloatingCaptionInput
-                                            {...p}
-                                            value={String(p.value ?? "")}
-                                            label="Nombre(s)"
-                                        />
-                                    )}
-                                />
-                                <FormField
-                                    control={createUserForm.control}
-                                    name="last_name"
-                                    render={(p) => (
-                                        <FloatingCaptionInput
-                                            {...p}
-                                            value={String(p.value ?? "")}
-                                            label="Apellidos"
-                                        />
-                                    )}
-                                />
-                            </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <FormField
+                            control={createUserForm.control}
+                            name="email"
+                            render={(p) => (
+                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" />
+                            )}
+                        />
+                        <FormField
+                            control={createUserForm.control}
+                            name="username"
+                            render={(p) => (
+                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Usuario (opcional)" />
+                            )}
+                        />
+                    </div>
 
-                            {/* Email and username row */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <FormField
-                                    control={createUserForm.control}
-                                    name="email"
-                                    render={(p) => (
-                                        <FloatingCaptionInput
-                                            {...p}
-                                            value={String(p.value ?? "")}
-                                            label="Email"
-                                        />
-                                    )}
-                                />
-                                <FormField
-                                    control={createUserForm.control}
-                                    name="username"
-                                    render={(p) => (
-                                        <FloatingCaptionInput
-                                            {...p}
-                                            value={String(p.value ?? "")}
-                                            label="Usuario (opcional)"
-                                        />
-                                    )}
-                                />
-                            </div>
-
-                            {/* Role and password row */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <div style={{ display: "grid", gap: 6 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
-                                        Rol <span style={{ color: "#b91c1c" }}>*</span>
-                                    </span>
-                                    <Controller
-                                        control={createUserForm.control}
-                                        name="role"
-                                        render={({ field, fieldState }) => (
-                                            <>
-                                                <Select
-                                                    value={field.value || undefined}
-                                                    onChange={field.onChange}
-                                                    onBlur={field.onBlur}
-                                                    placeholder="Seleccionar rol"
-                                                    status={fieldState.error ? "error" : undefined}
-                                                    style={{ width: "100%", height: 44 }}
-                                                >
-                                                    <Select.Option value="admin">Administrador</Select.Option>
-                                                    <Select.Option value="pathologist">Patólogo</Select.Option>
-                                                    <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
-                                                    <Select.Option value="billing">Facturación</Select.Option>
-                                                    <Select.Option value="assistant">Asistente</Select.Option>
-                                                    <Select.Option value="viewer">Visor</Select.Option>
-                                                </Select>
-                                                {fieldState.error && (
-                                                    <ErrorText>{fieldState.error.message}</ErrorText>
-                                                )}
-                                            </>
-                                        )}
-                                    />
-                                </div>
-                                <FormField
-                                    control={createUserForm.control}
-                                    name="password"
-                                    render={(p) => (
-                                        <FloatingCaptionPassword
-                                            {...p}
-                                            value={String(p.value ?? "")}
-                                            label="Contraseña"
-                                        />
-                                    )}
-                                />
-                            </div>
-
-                            {/* Confirm password */}
-                            <FormField
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <div style={{ display: "grid", gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                                Rol <span style={{ color: "#b91c1c" }}>*</span>
+                            </span>
+                            <Controller
                                 control={createUserForm.control}
-                                name="confirmPassword"
-                                render={(p) => (
-                                    <FloatingCaptionPassword
-                                        {...p}
-                                        value={String(p.value ?? "")}
-                                        label="Confirmar contraseña"
-                                    />
+                                name="role"
+                                render={({ field, fieldState }) => (
+                                    <>
+                                        <Select
+                                            value={field.value || undefined}
+                                            onChange={field.onChange}
+                                            onBlur={field.onBlur}
+                                            placeholder="Seleccionar rol"
+                                            status={fieldState.error ? "error" : undefined}
+                                            style={{ width: "100%", height: 44 }}
+                                        >
+                                            {roleSelectOptions}
+                                        </Select>
+                                        {fieldState.error && (
+                                            <ErrorText>{fieldState.error.message}</ErrorText>
+                                        )}
+                                    </>
                                 )}
                             />
+                        </div>
+                        <FormField
+                            control={createUserForm.control}
+                            name="password"
+                            render={(p) => (
+                                <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Contraseña" />
+                            )}
+                        />
+                    </div>
 
-                            {/* Branch IDs (conditional) */}
-                            {watchedRole !== "admin" ? (
-                                <div style={{ display: "grid", gap: 6 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
-                                        Sucursales asignadas
-                                    </span>
-                                    <Controller
-                                        control={createUserForm.control}
-                                        name="branch_ids"
-                                        render={({ field }) => (
-                                            <Select
-                                                mode="multiple"
-                                                value={field.value ?? []}
-                                                onChange={field.onChange}
-                                                onBlur={field.onBlur}
-                                                placeholder="Seleccione sucursales"
-                                                allowClear
-                                                style={{ width: "100%" }}
-                                            >
-                                                {branches.map((b) => (
-                                                    <Select.Option key={b.id} value={b.id}>
-                                                        {b.name} ({b.code})
-                                                    </Select.Option>
-                                                ))}
-                                            </Select>
-                                        )}
-                                    />
+                    <FormField
+                        control={createUserForm.control}
+                        name="confirmPassword"
+                        render={(p) => (
+                            <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Confirmar contraseña" />
+                        )}
+                    />
+
+                    {/* Branch selector hidden for full-access roles */}
+                    {watchedRole !== "admin" && watchedRole !== "superuser" ? (
+                        <div style={{ display: "grid", gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                                Sucursales asignadas
+                            </span>
+                            <Controller
+                                control={createUserForm.control}
+                                name="branch_ids"
+                                render={({ field }) => (
+                                    <Select
+                                        mode="multiple"
+                                        value={field.value ?? []}
+                                        onChange={field.onChange}
+                                        onBlur={field.onBlur}
+                                        placeholder="Seleccione sucursales"
+                                        allowClear
+                                        style={{ width: "100%" }}
+                                    >
+                                        {branches.map((b) => (
+                                            <Select.Option key={b.id} value={b.id}>
+                                                {b.name} ({b.code})
+                                            </Select.Option>
+                                        ))}
+                                    </Select>
+                                )}
+                            />
+                        </div>
+                    ) : (
+                        <div style={{ color: "#888", fontStyle: "italic", fontSize: 13 }}>
+                            * Este rol tiene acceso a todas las sucursales automáticamente.
+                        </div>
+                    )}
+
+                    {createError && <ErrorText>{createError}</ErrorText>}
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                        <Button
+                            onClick={() => {
+                                setCreateModalVisible(false);
+                                createUserForm.reset();
+                                setCreateError(null);
+                            }}
+                        >
+                            Cancelar
+                        </Button>
+                        <CelumaButton
+                            type="primary"
+                            htmlType="submit"
+                            loading={createUserForm.formState.isSubmitting}
+                            style={{ margin: 0 }}
+                        >
+                            Crear
+                        </CelumaButton>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* ── Edit User Modal ── */}
+            <Modal
+                title="Editar Usuario"
+                open={editModalVisible}
+                onCancel={() => {
+                    setEditModalVisible(false);
+                    editForm.resetFields();
+                    setEditingUser(null);
+                }}
+                footer={null}
+                width={600}
+            >
+                <Form form={editForm} layout="vertical" onFinish={handleEdit}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
+                            <Input />
+                        </Form.Item>
+                        <Form.Item name="username" label="Usuario">
+                            <Input />
+                        </Form.Item>
+                    </div>
+                    <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
+                        <Input />
+                    </Form.Item>
+
+                    {/* Role selector only when the user has a single non-protected role */}
+                    {editingUser && (editingUser.roles.length > 1 || editingUser.roles.includes("superuser")) ? (
+                        <Alert
+                            type="info"
+                            showIcon
+                            message={
+                                editingUser.roles.includes("superuser")
+                                    ? "Este usuario tiene el rol Superadministrador. Usa el panel de RBAC para modificar roles."
+                                    : `Este usuario tiene múltiples roles (${editingUser.roles.map(roleDisplayName).join(", ")}). Usa el panel de RBAC para modificar roles.`
+                            }
+                            style={{ marginBottom: 16 }}
+                        />
+                    ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                            <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
+                                <Select>{roleSelectOptions}</Select>
+                            </Form.Item>
+                            <Form.Item name="is_active" label="Estado" valuePropName="checked">
+                                <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
+                            </Form.Item>
+                        </div>
+                    )}
+
+                    {editingUser && (editingUser.roles.length > 1 || editingUser.roles.includes("superuser")) && (
+                        <Form.Item name="is_active" label="Estado" valuePropName="checked">
+                            <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
+                        </Form.Item>
+                    )}
+
+                    <Form.Item
+                        name="password"
+                        label="Nueva Contraseña (opcional)"
+                        help="Dejar en blanco para mantener la actual"
+                    >
+                        <Input.Password placeholder="Nueva contraseña" />
+                    </Form.Item>
+
+                    <Form.Item noStyle shouldUpdate={(prev, curr) => prev.role !== curr.role}>
+                        {({ getFieldValue }) => {
+                            const role = getFieldValue("role") || (editingUser?.roles[0] ?? "");
+                            const fullAccess =
+                                role === "admin" ||
+                                role === "superuser" ||
+                                hasFullBranchAccess(editingUser?.roles ?? []);
+                            return fullAccess ? (
+                                <div style={{ marginBottom: 24, color: "#888", fontStyle: "italic" }}>
+                                    * Este rol tiene acceso a todas las sucursales automáticamente.
                                 </div>
                             ) : (
-                                <div style={{ color: "#888", fontStyle: "italic", fontSize: 13 }}>
-                                    * Los administradores tienen acceso a todas las sucursales automáticamente.
-                                </div>
-                            )}
-
-                            {/* Server error */}
-                            {createError && <ErrorText>{createError}</ErrorText>}
-
-                            {/* Actions */}
-                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-                                <Button
-                                    onClick={() => {
-                                        setCreateModalVisible(false);
-                                        createUserForm.reset();
-                                        setCreateError(null);
-                                    }}
-                                >
-                                    Cancelar
-                                </Button>
-                                <CelumaButton
-                                    type="primary"
-                                    htmlType="submit"
-                                    loading={createUserForm.formState.isSubmitting}
-                                    style={{ margin: 0 }}
-                                >
-                                    Crear
-                                </CelumaButton>
-                            </div>
-                        </form>
-                    </Modal>
-
-                    {/* Edit User Modal */}
-                    <Modal
-                        title="Editar Usuario"
-                        open={editModalVisible}
-                        onCancel={() => {
-                            setEditModalVisible(false);
-                            editForm.resetFields();
-                            setEditingUser(null);
-                        }}
-                        footer={null}
-                        width={600}
-                    >
-                        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                                    <Input />
-                                </Form.Item>
-                                <Form.Item name="username" label="Usuario">
-                                    <Input />
-                                </Form.Item>
-                            </div>
-                            <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
-                                <Input />
-                            </Form.Item>
-                            
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                                    <Select>
-                                        <Select.Option value="admin">Administrador</Select.Option>
-                                        <Select.Option value="pathologist">Patólogo</Select.Option>
-                                        <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
-                                        <Select.Option value="billing">Facturación</Select.Option>
-                                        <Select.Option value="assistant">Asistente</Select.Option>
-                                        <Select.Option value="viewer">Visor</Select.Option>
+                                <Form.Item name="branch_ids" label="Sucursales asignadas">
+                                    <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
+                                        {branches.map((b) => (
+                                            <Select.Option key={b.id} value={b.id}>
+                                                {b.name} ({b.code})
+                                            </Select.Option>
+                                        ))}
                                     </Select>
                                 </Form.Item>
-                                <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                                    <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                                </Form.Item>
-                            </div>
-
-                            <Form.Item name="password" label="Nueva Contraseña (opcional)" help="Dejar en blanco para mantener la actual">
-                                <Input.Password placeholder="Nueva contraseña" />
-                            </Form.Item>
-
-                            <Form.Item 
-                                noStyle 
-                                shouldUpdate={(prev, current) => prev.role !== current.role}
-                            >
-                                {({ getFieldValue }) => {
-                                    const role = getFieldValue('role');
-                                    return role !== 'admin' ? (
-                                        <Form.Item name="branch_ids" label="Sucursales asignadas">
-                                            <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
-                                                {branches.map(b => (
-                                                    <Select.Option key={b.id} value={b.id}>
-                                                        {b.name} ({b.code})
-                                                    </Select.Option>
-                                                ))}
-                                            </Select>
-                                        </Form.Item>
-                                    ) : (
-                                        <div style={{ marginBottom: 24, color: '#888', fontStyle: 'italic' }}>
-                                            * Los administradores tienen acceso a todas las sucursales automáticamente.
-                                        </div>
-                                    );
-                                }}
-                            </Form.Item>
-
-                            <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                                <Space>
-                                    <Button onClick={() => setEditModalVisible(false)}>Cancelar</Button>
-                                    <Button type="primary" htmlType="submit">Guardar Cambios</Button>
-                                </Space>
-                            </Form.Item>
-                        </Form>
-                    </Modal>
-
-                    {/* Invite User Modal */}
-                    <Modal
-                        title="Enviar Invitación"
-                        open={inviteModalVisible}
-                        onCancel={() => {
-                            setInviteModalVisible(false);
-                            inviteForm.resetFields();
+                            );
                         }}
-                        footer={null}
-                    >
-                        <Form form={inviteForm} layout="vertical" onFinish={handleInvite}>
-                            <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                                <Input placeholder="correo@ejemplo.com" />
-                            </Form.Item>
-                            <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
-                                <Input placeholder="Juan Pérez" />
-                            </Form.Item>
-                            <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                                <Select placeholder="Seleccionar rol">
-                                    <Select.Option value="admin">Administrador</Select.Option>
-                                    <Select.Option value="pathologist">Patólogo</Select.Option>
-                                    <Select.Option value="lab_tech">Técnico de Laboratorio</Select.Option>
-                                    <Select.Option value="billing">Facturación</Select.Option>
-                                    <Select.Option value="assistant">Asistente</Select.Option>
-                                    <Select.Option value="viewer">Visor</Select.Option>
-                                </Select>
-                            </Form.Item>
-                            <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                                <Space>
-                                    <Button onClick={() => setInviteModalVisible(false)}>Cancelar</Button>
-                                    <Button type="primary" htmlType="submit">Enviar Invitación</Button>
-                                </Space>
-                            </Form.Item>
-                        </Form>
-                    </Modal>
+                    </Form.Item>
+
+                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+                        <Space>
+                            <Button onClick={() => setEditModalVisible(false)}>Cancelar</Button>
+                            <Button type="primary" htmlType="submit">Guardar Cambios</Button>
+                        </Space>
+                    </Form.Item>
+                </Form>
+            </Modal>
+
+            {/* ── Invite User Modal ── */}
+            <Modal
+                title="Enviar Invitación"
+                open={inviteModalVisible}
+                onCancel={() => {
+                    setInviteModalVisible(false);
+                    inviteForm.resetFields();
+                }}
+                footer={null}
+            >
+                <Form form={inviteForm} layout="vertical" onFinish={handleInvite}>
+                    <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
+                        <Input placeholder="correo@ejemplo.com" />
+                    </Form.Item>
+                    <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
+                        <Input placeholder="Juan Pérez" />
+                    </Form.Item>
+                    <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
+                        <Select placeholder="Seleccionar rol">{roleSelectOptions}</Select>
+                    </Form.Item>
+                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
+                        <Space>
+                            <Button onClick={() => setInviteModalVisible(false)}>Cancelar</Button>
+                            <Button type="primary" htmlType="submit">Enviar Invitación</Button>
+                        </Space>
+                    </Form.Item>
+                </Form>
+            </Modal>
         </div>
     );
 
@@ -810,7 +758,11 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
 
     return (
         <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey={"/config" as import("../components/ui/sidebar_menu").CelumaKey} onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <SidebarCeluma
+                selectedKey={"/config" as import("../components/ui/sidebar_menu").CelumaKey}
+                onNavigate={(k) => navigate(k)}
+                logoSrc={logo}
+            />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
                     {content}

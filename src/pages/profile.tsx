@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Layout, Card, notification, Avatar, Upload, message as antdMessage, Tag, Divider } from "antd";
+import { Layout, Card, notification, Avatar, Upload, message as antdMessage, Divider } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,13 +15,15 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { RcFile } from "antd/es/upload/interface";
 import { usePageTitle } from "../hooks/use_page_title";
+import { roleDisplayName, roleColor } from "../lib/rbac";
 
 interface UserProfile {
     id: string;
     email: string;
     username: string | null;
     full_name: string;
-    role: string;
+    roles: string[];
+    permissions: string[];
     tenant_id: string;
     avatar_url?: string;
 }
@@ -62,17 +64,6 @@ const getAvatarColor = (name: string): string => {
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
-};
-
-const getRoleDisplayName = (role: string): string => {
-    const roleNames: Record<string, string> = {
-        "admin": "Administrador",
-        "pathologist": "Patólogo",
-        "technician": "Técnico",
-        "receptionist": "Recepcionista",
-        "billing": "Facturación",
-    };
-    return roleNames[role.toLowerCase()] || role;
 };
 
 interface ProfileProps {
@@ -342,17 +333,34 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                     </Card>
 
                     {/* Profile Edit Card */}
-                                    <Card 
+                                    <Card
                         title={<span style={cardTitleStyle}>Editar Información</span>}
                         style={cardStyle}
-                                        extra={
-                                            profileData && (
-                                <Tag color={tokens.primary} style={{ fontSize: 13, padding: "4px 12px" }}>
-                                    {getRoleDisplayName(profileData.role)}
-                                </Tag>
-                                            )
-                                        }
-                                    >
+                        extra={
+                            profileData && (
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                    {profileData.roles.map((r) => {
+                                        const { color, bg } = roleColor(r);
+                                        return (
+                                            <span
+                                                key={r}
+                                                style={{
+                                                    backgroundColor: bg,
+                                                    color,
+                                                    borderRadius: 12,
+                                                    fontSize: 12,
+                                                    fontWeight: 500,
+                                                    padding: "4px 12px",
+                                                }}
+                                            >
+                                                {roleDisplayName(r)}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )
+                        }
+                    >
                                         <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)}>
                             <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
                                                 <div>

@@ -11,6 +11,7 @@ import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -56,6 +57,7 @@ export default function OrdersList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const { hasPermission } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
@@ -220,9 +222,9 @@ export default function OrdersList() {
                     <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
                 );
                 
-                if (v) {
+                if (v && hasPermission("billing:read")) {
                     return (
-                        <div 
+                        <div
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(`/billing/${record.id}`);
@@ -233,7 +235,7 @@ export default function OrdersList() {
                         </div>
                     );
                 }
-                
+
                 return icon;
             },
             filters: [

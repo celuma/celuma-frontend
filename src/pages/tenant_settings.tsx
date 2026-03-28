@@ -4,6 +4,7 @@ import { UploadOutlined, SaveOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
+import { useUserProfile } from "../hooks/use_user_profile";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
 
@@ -43,6 +44,7 @@ interface TenantInfo {
 
 function TenantSettings() {
     const navigate = useNavigate();
+    const { canManageTenant } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [tenant, setTenant] = useState<TenantInfo | null>(null);
     const [logoFile, setLogoFile] = useState<UploadFile | null>(null);
@@ -130,17 +132,22 @@ function TenantSettings() {
                         loading={loading}
                         style={cardStyle}
                     >
+                        {!canManageTenant && (
+                            <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7e6", border: "1px solid #ffe7ba", borderRadius: 8, color: "#ad6800", fontSize: 13 }}>
+                                Solo lectura — se requiere el permiso <strong>admin:manage_tenant</strong> para guardar cambios.
+                            </div>
+                        )}
                         <Form form={form} layout="vertical" onFinish={handleSave}>
                             <Form.Item name="name" label="Nombre del Laboratorio" rules={[{ required: true }]}>
-                                <Input placeholder="Laboratorio Central" />
+                                <Input placeholder="Laboratorio Central" disabled={!canManageTenant} />
                             </Form.Item>
 
                             <Form.Item name="legal_name" label="Razón Social">
-                                <Input placeholder="Laboratorio Central S.A. de C.V." />
+                                <Input placeholder="Laboratorio Central S.A. de C.V." disabled={!canManageTenant} />
                             </Form.Item>
 
                             <Form.Item name="tax_id" label="RFC / Tax ID">
-                                <Input placeholder="ABC123456XYZ" />
+                                <Input placeholder="ABC123456XYZ" disabled={!canManageTenant} />
                             </Form.Item>
 
                             <Form.Item label="Logo">
@@ -176,11 +183,13 @@ function TenantSettings() {
                                 )}
                             </Form.Item>
 
-                            <Form.Item>
-                                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
-                                    Guardar Cambios
-                                </Button>
-                            </Form.Item>
+                            {canManageTenant && (
+                                <Form.Item>
+                                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+                                        Guardar Cambios
+                                    </Button>
+                                </Form.Item>
+                            )}
                         </Form>
                     </Card>
                 </div>

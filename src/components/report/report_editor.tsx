@@ -32,6 +32,8 @@ import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
 import { renderStatusChip } from "../ui/table_helpers";
 import CommentInput from "../comments/comment_input";
+import { useUserProfile } from "../../hooks/use_user_profile";
+import { PERMS } from "../../lib/rbac";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -181,8 +183,8 @@ const ReportEditor: React.FC = () => {
     // Existing envelope (for editing)
     const [envelope, setEnvelope] = useState<ReportEnvelope | null>(null);
 
-    // User info
-    const [userRole, setUserRole] = useState<string>("");
+    // User permissions (RBAC)
+    const { hasPermission: userHasPermission } = useUserProfile();
 
     // Study type name (for display)
     const [studyTypeName, setStudyTypeName] = useState<string>("");
@@ -390,10 +392,7 @@ const ReportEditor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reportId, prefilledOrderId]);
 
-    // Load user role
-    useEffect(() => {
-        getJSON<{ role: string }>("/v1/auth/me").then((u) => setUserRole(u.role)).catch(() => {});
-    }, []);
+    // User role fetched via useUserProfile hook above (no separate effect needed)
 
     // Keep reportImages in sync with the images section
     useEffect(() => {
@@ -1061,7 +1060,7 @@ const ReportEditor: React.FC = () => {
                                     {envelope?.status === "DRAFT" && (
                                         <Button onClick={handleSubmit}>Enviar a Revisión</Button>
                                     )}
-                                    {envelope?.status === "IN_REVIEW" && userRole === "pathologist" && (
+                                    {envelope?.status === "IN_REVIEW" && userHasPermission(PERMS.REPORTS_APPROVE) && (
                                         <>
                                             <Button style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }}
                                                 onClick={() => setIsApproveModalVisible(true)}>Aprobar</Button>
@@ -1069,7 +1068,7 @@ const ReportEditor: React.FC = () => {
                                                 onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
                                         </>
                                     )}
-                                    {envelope?.status === "APPROVED" && userRole === "pathologist" && (
+                                    {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
                                         <Button style={{ background: "#1890ff", color: "white", borderColor: "#1890ff" }}
                                             onClick={handleSign}>Firmar y Publicar</Button>
                                     )}

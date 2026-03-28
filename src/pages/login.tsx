@@ -121,7 +121,8 @@ export default function Login() {
                 localStorage.removeItem("tenant_id");
             }
 
-            // Obtener y persistir user_id del perfil
+            // Fetch profile: persist user_id and determine redirect target
+            let redirectPath = "/home";
             try {
                 const meRes = await fetch(`${apiBase()}/v1/auth/me`, {
                     method: "GET",
@@ -132,7 +133,10 @@ export default function Login() {
                     credentials: "include",
                 });
                 const meText = await meRes.text();
-                const me = meText ? JSON.parse(meText) as { id?: string } : {};
+                const me = meText
+                    ? (JSON.parse(meText) as { id?: string; permissions?: string[] })
+                    : {};
+
                 if (me?.id) {
                     if (data.remember) {
                         localStorage.setItem("user_id", me.id);
@@ -142,12 +146,17 @@ export default function Login() {
                         localStorage.removeItem("user_id");
                     }
                 }
+
+                // Redirect physician-only users to their portal
+                const perms = me?.permissions ?? [];
+                if (perms.includes("portal:physician_access") && !perms.includes("lab:read")) {
+                    redirectPath = "/physician-portal";
+                }
             } catch {
-                // Silencioso; el flujo puede continuar
+                // Non-critical; default redirect applies
             }
 
-            // No seleccionar sucursal aquí; será seleccionada en los formularios
-            navigate("/home", { replace: true });
+            navigate(redirectPath, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         }

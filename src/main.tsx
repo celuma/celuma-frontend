@@ -32,74 +32,69 @@ import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
+import RequirePermission from "./components/auth/require_permission";
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
         <Routes>
+            {/* Public routes */}
             <Route path="/" element={<App />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/home" element={<Home />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/patients/register" element={<PatientRegister />} />
-            <Route path="/patients" element={<PatientsList />} />
-            <Route path="/patients/:patientId" element={<PatientDetailPage />} />
-            <Route path="/orders/register" element={<OrderRegister />} />
-            <Route path="/orders" element={<OrdersList />} />
-            <Route path="/samples" element={<SamplesList />} />
-            <Route path="/orders/:orderId" element={<OrderDetail />} />
-            <Route path="/samples/:sampleId" element={<SampleDetailPage />} />
-            <Route path="/samples/register" element={<SampleRegister />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/reports" element={<ReportsList />} />
-            <Route path="/reports/editor" element={<Reports />} />
-            <Route path="/reports/:reportId" element={<Reports />} />
-            <Route path="/worklist" element={<Worklist />} />
-            <Route path="/billing" element={<BillingList />} />
-            <Route path="/billing/:orderId" element={<BillingDetail />} />
-            <Route path="/catalog" element={<PriceCatalog />} />
-            <Route path="/study-types" element={<StudyTypes />} />
-            <Route path="/report-templates" element={<ReportTemplates />} />
-            <Route path="/users" element={<UsersManagement />} />
             <Route path="/password-reset" element={<PasswordResetRequest />} />
             <Route path="/reset-password" element={<PasswordResetConfirm />} />
-            <Route path="/settings" element={<TenantSettings />} />
-            <Route path="/physician-portal" element={<PhysicianPortal />} />
-            <Route path="/patient-portal" element={<PatientPortal />} />
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
-            <Route path="/config" element={<Config />}>
+            <Route path="/patient-portal" element={<PatientPortal />} />
+
+            {/* Lab read access */}
+            <Route path="/home" element={<RequirePermission permission="lab:read"><Home /></RequirePermission>} />
+            <Route path="/patients" element={<RequirePermission permission="lab:read"><PatientsList /></RequirePermission>} />
+            <Route path="/patients/:patientId" element={<RequirePermission permission="lab:read"><PatientDetailPage /></RequirePermission>} />
+            <Route path="/orders" element={<RequirePermission permission="lab:read"><OrdersList /></RequirePermission>} />
+            <Route path="/orders/:orderId" element={<RequirePermission permission="lab:read"><OrderDetail /></RequirePermission>} />
+            <Route path="/samples" element={<RequirePermission permission="lab:read"><SamplesList /></RequirePermission>} />
+            <Route path="/samples/:sampleId" element={<RequirePermission permission="lab:read"><SampleDetailPage /></RequirePermission>} />
+            <Route path="/worklist" element={<RequirePermission permission="lab:read"><Worklist /></RequirePermission>} />
+
+            {/* Lab create — lab:create_order */}
+            <Route path="/patients/register" element={<RequirePermission permission="lab:create_patient"><PatientRegister /></RequirePermission>} />
+            <Route path="/orders/register" element={<RequirePermission permission="lab:create_order"><OrderRegister /></RequirePermission>} />
+            <Route path="/samples/register" element={<RequirePermission permission="lab:create_sample"><SampleRegister /></RequirePermission>} />
+
+            {/* Reports */}
+            <Route path="/reports" element={<RequirePermission permission="reports:read"><ReportsList /></RequirePermission>} />
+            <Route path="/reports/editor" element={<RequirePermission permission="reports:create"><Reports /></RequirePermission>} />
+            <Route path="/reports/:reportId" element={<RequirePermission permission="reports:read"><Reports /></RequirePermission>} />
+
+            {/* Billing */}
+            <Route path="/billing" element={<RequirePermission permission="billing:read"><BillingList /></RequirePermission>} />
+            <Route path="/billing/:orderId" element={<RequirePermission permission="billing:read"><BillingDetail /></RequirePermission>} />
+
+            {/* Physician portal */}
+            <Route path="/physician-portal" element={<RequirePermission permission="portal:physician_access"><PhysicianPortal /></RequirePermission>} />
+
+            {/* Profile (any authenticated user with any permission; using lab:read as baseline) */}
+            <Route path="/profile" element={<Profile />} />
+
+            {/* Settings */}
+            <Route path="/settings" element={<RequirePermission permission="lab:read"><TenantSettings /></RequirePermission>} />
+
+            {/* Config panel — nested routes */}
+            <Route path="/config" element={<RequirePermission permission="lab:read"><Config /></RequirePermission>}>
                 <Route index element={<Navigate to="/config/profile" replace />} />
                 <Route path="profile" element={<Profile embedded />} />
-                <Route path="catalog" element={<PriceCatalog embedded />} />
-                <Route path="report-templates" element={<ReportTemplates embedded />} />
-                <Route path="study-types" element={<StudyTypes embedded />} />
-                <Route path="users" element={<UsersManagement embedded />} />
+                <Route path="catalog" element={<RequirePermission permission="admin:manage_catalog"><PriceCatalog embedded /></RequirePermission>} />
+                <Route path="report-templates" element={<RequirePermission permission="admin:manage_catalog"><ReportTemplates embedded /></RequirePermission>} />
+                <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
+                <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
+
+            {/* Legacy standalone catalog routes */}
+            <Route path="/catalog" element={<RequirePermission permission="lab:read"><PriceCatalog /></RequirePermission>} />
+            <Route path="/study-types" element={<RequirePermission permission="lab:read"><StudyTypes /></RequirePermission>} />
+            <Route path="/report-templates" element={<RequirePermission permission="lab:read"><ReportTemplates /></RequirePermission>} />
+            <Route path="/users" element={<RequirePermission permission="admin:manage_users"><UsersManagement /></RequirePermission>} />
         </Routes>
     </BrowserRouter>
 );
-
-/*
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import App from './App.tsx'
-import HealthPage from './endpoint-health.tsx'
-
-const router = createBrowserRouter([
-    {
-        path: '/',
-        element: <App />,
-        children: [
-            { index: true, element: <div className = "health-container"><h2> Home </h2><p> Use the nav to open <code> /health </code>.</p></div> },
-            { path: '/health', element: <HealthPage /> },
-        ],
-    },
-])
-
-createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-        <RouterProvider router = {router} />
-    </StrictMode>,
-)
- */

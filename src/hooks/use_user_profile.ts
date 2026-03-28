@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { hasPermission as _hasPermission, PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -13,7 +14,10 @@ export interface UserProfile {
     email: string;
     username?: string;
     full_name: string;
-    role: string;
+    /** Array of role codes, e.g. ["admin", "superuser"] */
+    roles: string[];
+    /** Array of atomic permission codes, e.g. ["admin:manage_users", "lab:read"] */
+    permissions: string[];
     tenant_id: string;
     branch_ids: string[];
     avatar_url?: string;
@@ -35,9 +39,9 @@ export function useUserProfile() {
             try {
                 const res = await fetch(`${getApiBase()}/v1/auth/me`, {
                     headers: {
-                        "Authorization": token,
-                        "accept": "application/json"
-                    }
+                        Authorization: token,
+                        accept: "application/json",
+                    },
                 });
 
                 if (res.ok) {
@@ -56,6 +60,20 @@ export function useUserProfile() {
         fetchProfile();
     }, []);
 
-    return { profile, loading, error, isAdmin: profile?.role === "admin" };
-}
+    const perms = profile?.permissions ?? [];
+    const roles = profile?.roles ?? [];
 
+    return {
+        profile,
+        loading,
+        error,
+        /** True when the user has the admin:manage_users permission. Replaces the old isAdmin flag. */
+        canManageUsers: _hasPermission(perms, PERMS.MANAGE_USERS),
+        canManageBranches: _hasPermission(perms, PERMS.MANAGE_BRANCHES),
+        canManageCatalog: _hasPermission(perms, PERMS.MANAGE_CATALOG),
+        canManageTenant: _hasPermission(perms, PERMS.MANAGE_TENANT),
+        /** Generic helper — check any permission code at the call site. */
+        hasPermission: (code: string) => _hasPermission(perms, code),
+        hasRole: (code: string) => roles.includes(code),
+    };
+}

@@ -1,14 +1,28 @@
 import { useState } from "react";
 import type { MenuProps } from "antd";
 import { Layout, Menu, Button } from "antd";
-import { HomeOutlined, FileTextOutlined, LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ExperimentOutlined, CheckSquareOutlined, ContainerOutlined, CreditCardOutlined, SettingOutlined } from "@ant-design/icons";
+import {
+    HomeOutlined,
+    FileTextOutlined,
+    LogoutOutlined,
+    UserOutlined,
+    MenuFoldOutlined,
+    MenuUnfoldOutlined,
+    ExperimentOutlined,
+    CheckSquareOutlined,
+    ContainerOutlined,
+    CreditCardOutlined,
+    SettingOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useUserProfile } from "../../hooks/use_user_profile";
+import { PERMS } from "../../lib/rbac";
 
 const { Sider } = Layout;
 
-export type CelumaKey = 
-    | "/home" 
-    | "/reports" 
+export type CelumaKey =
+    | "/home"
+    | "/reports"
     | "/worklist"
     | "/patients"
     | "/orders"
@@ -19,19 +33,20 @@ export type CelumaKey =
     | "/billing"
     | "/config";
 
-const itemsTop: Required<MenuProps>["items"] = [
-    { key: "/home", icon: <HomeOutlined />, label: "Inicio", title: "Inicio" },
-    { key: "/worklist", icon: <CheckSquareOutlined />, label: "Lista de Trabajo", title: "Lista de Trabajo" },
-    { key: "/reports", icon: <FileTextOutlined />, label: "Reportes", title: "Reportes" },
-    { key: "/patients", icon: <UserOutlined />, label: "Pacientes", title: "Pacientes" },
-    { key: "/orders", icon: <ContainerOutlined />, label: "Órdenes", title: "Órdenes" },
-    { key: "/samples", icon: <ExperimentOutlined />, label: "Muestras", title: "Muestras" },
-    { key: "/billing", icon: <CreditCardOutlined />, label: "Facturación", title: "Facturación" },
+// route → minimum permission required to show the item
+const NAV_ITEMS: { key: CelumaKey; icon: React.ReactNode; label: string; permission: string }[] = [
+    { key: "/home",      icon: <HomeOutlined />,         label: "Inicio",             permission: PERMS.LAB_READ },
+    { key: "/worklist",  icon: <CheckSquareOutlined />,  label: "Lista de Trabajo",   permission: PERMS.LAB_READ },
+    { key: "/reports",   icon: <FileTextOutlined />,     label: "Reportes",           permission: PERMS.REPORTS_READ },
+    { key: "/patients",  icon: <UserOutlined />,         label: "Pacientes",          permission: PERMS.LAB_READ },
+    { key: "/orders",    icon: <ContainerOutlined />,    label: "Órdenes",            permission: PERMS.LAB_READ },
+    { key: "/samples",   icon: <ExperimentOutlined />,   label: "Muestras",           permission: PERMS.LAB_READ },
+    { key: "/billing",   icon: <CreditCardOutlined />,   label: "Facturación",        permission: PERMS.BILLING_READ },
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
-    { key: "/config", icon: <SettingOutlined />, label: "Configuración", style: { margin: 0 }, title: "Configuración" },
-    { key: "/logout", icon: <LogoutOutlined />, label: "Cerrar Sesión", style: { margin: 0 }, title: "Cerrar Sesión" },
+    { key: "/config",  icon: <SettingOutlined />,  label: "Configuración", style: { margin: 0 }, title: "Configuración" },
+    { key: "/logout",  icon: <LogoutOutlined />,   label: "Cerrar Sesión", style: { margin: 0 }, title: "Cerrar Sesión" },
 ];
 
 export interface SidebarCelumaProps {
@@ -42,19 +57,36 @@ export interface SidebarCelumaProps {
 }
 
 const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
-    selectedKey = "/home", onNavigate, logoSrc, title = "Céluma" }) => {
+    selectedKey = "/home",
+    onNavigate,
+    logoSrc,
+    title = "Céluma",
+}) => {
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("sidebar_collapsed");
         return saved ? JSON.parse(saved) : false;
     });
     const navigate = useNavigate();
-    const menuItems = [...itemsTop];
-    const selectedTop = selectedKey !== "/logout" && selectedKey !== "/config"
-        ? ([selectedKey] as string[])
-        : [];
-    const selectedBottom = selectedKey === "/logout" || selectedKey === "/config"
-        ? ([selectedKey] as string[])
-        : [];
+    const { hasPermission } = useUserProfile();
+
+    // Build top menu filtered by permissions
+    const menuItems: Required<MenuProps>["items"] = NAV_ITEMS
+        .filter((item) => hasPermission(item.permission))
+        .map((item) => ({
+            key: item.key,
+            icon: item.icon,
+            label: item.label,
+            title: item.label,
+        }));
+
+    const selectedTop =
+        selectedKey !== "/logout" && selectedKey !== "/config"
+            ? ([selectedKey] as string[])
+            : [];
+    const selectedBottom =
+        selectedKey === "/logout" || selectedKey === "/config"
+            ? ([selectedKey] as string[])
+            : [];
 
     const handleNavigate = (key: CelumaKey) => {
         if (key === "/logout") {
@@ -64,10 +96,6 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
         } else {
             onNavigate?.(key);
         }
-    };
-
-    const handleLogoClick = () => {
-        handleNavigate("/home");
     };
 
     const toggleCollapsed = () => {
@@ -98,77 +126,77 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                 #root {
                     min-height: 100vh;
                 }
-                /* Dark hover */
                 .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-item:hover,
                 .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-submenu-title:hover {
                     background: rgba(0, 0, 0, 0.14) !important;
                 }
-                /* Dark selected */
                 .ant-layout-sider .ant-menu-dark .ant-menu-item-selected {
                     background: rgba(0, 0, 0, 0.30) !important;
                 }
             `}</style>
             <Sider
-                width = {260}
+                width={260}
                 collapsible
-                collapsed = {collapsed}
-                trigger = {null}
-                style = {styles.sider}
-                breakpoint = "lg"
+                collapsed={collapsed}
+                trigger={null}
+                style={styles.sider}
+                breakpoint="lg"
             >
-            <div style = {styles.inner}>
-                <div style = {collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
-                    <div
-                        style = {collapsed ? styles.headerCollapsed : styles.header}
-                        onClick = {handleLogoClick}
-                    >
-                        {logoSrc ? (
-                            <img
-                                src = {logoSrc}
-                                alt = "logo"
-                                style = {collapsed ? styles.logoCollapsed : styles.logo}
-                            />
-                        ) : (
-                            <div style = {styles.logoDot} />
-                        )}
-                        {!collapsed && <span style = {styles.brand}>{title}</span>}
+                <div style={styles.inner}>
+                    <div style={collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
+                        <div
+                            style={collapsed ? styles.headerCollapsed : styles.header}
+                            onClick={() => handleNavigate("/home")}
+                        >
+                            {logoSrc ? (
+                                <img
+                                    src={logoSrc}
+                                    alt="logo"
+                                    style={collapsed ? styles.logoCollapsed : styles.logo}
+                                />
+                            ) : (
+                                <div style={styles.logoDot} />
+                            )}
+                            {!collapsed && <span style={styles.brand}>{title}</span>}
+                        </div>
+                        <Button
+                            type="text"
+                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                            onClick={toggleCollapsed}
+                            style={{
+                                ...styles.collapseButton,
+                                ...(collapsed
+                                    ? styles.collapseButtonCollapsed
+                                    : styles.collapseButtonExpanded),
+                            }}
+                        />
                     </div>
-                    <Button
-                        type="text"
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={toggleCollapsed}
-                        style={{
-                            ...styles.collapseButton,
-                            ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
-                        }}
-                    />
-                </div>
 
-                <Menu
-                    items = {menuItems}
-                    selectedKeys = {selectedTop}
-                    mode = "inline"
-                    theme = "dark"
-                    inlineCollapsed = {collapsed}
-                    style = {styles.menu}
-                    onClick = {(e) => handleNavigate(e.key as CelumaKey)}
-                    inlineIndent = {collapsed ? 0 : 24}
-                />
-
-                <div style = {collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
                     <Menu
-                        items = {itemsBottom}
-                        selectedKeys = {selectedBottom}
-                        mode = "inline"
-                        theme = "dark"
-                        inlineCollapsed = {collapsed}
-                        style = {styles.menuBottom}
-                        onClick = {(e) => handleNavigate(e.key as CelumaKey)}
-                        inlineIndent = {collapsed ? 0 : 24}
+                        items={menuItems}
+                        selectedKeys={selectedTop}
+                        mode="inline"
+                        theme="dark"
+                        inlineCollapsed={collapsed}
+                        style={styles.menu}
+                        onClick={(e) => handleNavigate(e.key as CelumaKey)}
+                        inlineIndent={collapsed ? 0 : 24}
                     />
+
+                    <div style={collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
+                        <Menu
+                            items={itemsBottom}
+                            selectedKeys={selectedBottom}
+                            mode="inline"
+                            theme="dark"
+                            inlineCollapsed={collapsed}
+                            style={styles.menuBottom}
+                            onClick={(e) => handleNavigate(e.key as CelumaKey)}
+                            inlineIndent={collapsed ? 0 : 24}
+                        />
+                    </div>
                 </div>
-            </div>
-        </Sider>
+            </Sider>
         </>
     );
 };
