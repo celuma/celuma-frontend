@@ -206,8 +206,8 @@ export default function OrderDetail() {
     const conversationScrollRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
     
-    // Get current user profile for avatar and name
-    const { profile: currentUserProfile } = useUserProfile();
+    // Get current user profile for avatar, name and permissions
+    const { profile: currentUserProfile, hasPermission } = useUserProfile();
     
     // Scroll to bottom of conversation
     const scrollToBottom = useCallback(() => {
@@ -958,9 +958,9 @@ export default function OrderDetail() {
                     >
                         Agregar Muestra
                     </AntButton>
-                    {data?.order?.invoice_id && (
-                        <AntButton 
-                            block 
+                    {data?.order?.invoice_id && hasPermission("billing:read") && (
+                        <AntButton
+                            block
                             size="small"
                             icon={<DollarOutlined />}
                             onClick={() => data && navigate(`/billing/${data.order.id}`)}
@@ -969,9 +969,9 @@ export default function OrderDetail() {
                             Ver Factura
                         </AntButton>
                     )}
-                    {!reportId && (
-                        <AntButton 
-                            block 
+                    {!reportId && hasPermission("reports:create") && (
+                        <AntButton
+                            block
                             size="small"
                             type="primary"
                             icon={<FileTextOutlined />}
@@ -980,9 +980,9 @@ export default function OrderDetail() {
                             Crear Reporte
                         </AntButton>
                     )}
-                    {reportId && (
-                        <AntButton 
-                            block 
+                    {reportId && hasPermission("reports:read") && (
+                        <AntButton
+                            block
                             size="small"
                             icon={<FileTextOutlined />}
                             onClick={() => navigate(`/reports/${reportId}`)}
@@ -1096,12 +1096,14 @@ export default function OrderDetail() {
                                                         — El acceso al reporte está bloqueado.
                                                     </span>
                                         </div>
-                                        <AntButton 
-                                            size="small" 
-                                            onClick={() => navigate(`/billing/${data.order.id}`)}
-                                        >
-                                            Ver Facturación
-                                        </AntButton>
+                                        {hasPermission("billing:read") && (
+                                            <AntButton
+                                                size="small"
+                                                onClick={() => navigate(`/billing/${data.order.id}`)}
+                                            >
+                                                Ver Facturación
+                                            </AntButton>
+                                        )}
                                     </div>
                                 )}
 
@@ -1146,16 +1148,16 @@ export default function OrderDetail() {
                                         </Tooltip>
 
                                         {/* Invoice Link */}
-                                        {data.order.invoice_id && (
+                                        {data.order.invoice_id && hasPermission("billing:read") && (
                                             <div style={{ marginBottom: 16 }}>
-                                                <AntButton 
-                                                    type="default" 
+                                                <AntButton
+                                                    type="default"
                                                     size="small"
                                                     icon={<DollarOutlined />}
                                                     onClick={() => navigate(`/billing/${data.order.id}`)}
-                                                    style={{ 
+                                                    style={{
                                                         borderColor: tokens.primary,
-                                                        color: tokens.primary
+                                                        color: tokens.primary,
                                                     }}
                                                 >
                                                     Ver Factura

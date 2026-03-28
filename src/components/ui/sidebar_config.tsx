@@ -1,27 +1,24 @@
+import React from "react";
 import type { MenuProps } from "antd";
 import { Menu } from "antd";
 import {
     UserOutlined,
-    DollarOutlined,
     FileTextOutlined,
     ExperimentOutlined,
+    DollarOutlined,
     TeamOutlined,
     InfoCircleOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
-import { tokens } from "../design/tokens";
 import { useUserProfile } from "../../hooks/use_user_profile";
 
-export type ConfigKey =
-    | "/config/profile"
-    | "/config/catalog"
-    | "/config/report-templates"
-    | "/config/study-types"
-    | "/config/users"
-    | "/config/about";
-
+// Items visible to every authenticated user inside /config
 const baseMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/profile", icon: <UserOutlined />, label: "Mi Perfil" },
+];
+
+// Items that require admin:manage_catalog
+const catalogMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/report-templates", icon: <FileTextOutlined />, label: "Plantillas de Reporte" },
     { key: "/config/study-types", icon: <ExperimentOutlined />, label: "Tipos de Estudio" },
     { key: "/config/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios" },
@@ -42,15 +39,19 @@ const aboutMenuItem: Required<MenuProps>["items"][number] = {
 const SidebarConfig: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
-    const { isAdmin } = useUserProfile();
+    const { canManageUsers, canManageCatalog } = useUserProfile();
 
-    const menuItems = isAdmin
-        ? [...baseMenuItems, adminMenuItem, aboutMenuItem]
-        : [...baseMenuItems, aboutMenuItem];
+    const menuItems: Required<MenuProps>["items"] = [
+        ...baseMenuItems,
+        ...(canManageCatalog ? catalogMenuItems : []),
+        ...(canManageUsers ? [adminMenuItem] : []),
+        aboutMenuItem,
+    ];
 
-    const selectedKey = menuItems
-        .map((item) => item!.key as string)
-        .find((key) => pathname.startsWith(key)) ?? "/config/profile";
+    const selectedKey =
+        menuItems
+            .map((item) => item!.key as string)
+            .find((key) => pathname.startsWith(key)) ?? "/config/profile";
 
     return (
         <aside style={styles.container}>
@@ -73,34 +74,26 @@ export default SidebarConfig;
 
 const styles: Record<string, React.CSSProperties> = {
     container: {
-        width: 240,
-        minWidth: 240,
+        width: 220,
+        minWidth: 220,
         background: "#fff",
-        borderRadius: tokens.radius,
-        boxShadow: tokens.shadow,
-        display: "flex",
-        flexDirection: "column",
-        alignSelf: "flex-start",
+        borderRadius: 12,
+        border: "1px solid #e5e7eb",
         overflow: "hidden",
-        position: "sticky",
-        top: tokens.contentPadding,
+        flexShrink: 0,
     },
     header: {
-        padding: "18px 20px 12px 20px",
-        borderBottom: "1px solid #f0f0f0",
+        padding: "16px 20px 12px",
+        borderBottom: "1px solid #e5e7eb",
     },
     headerText: {
-        fontFamily: tokens.titleFont,
-        fontSize: 16,
         fontWeight: 700,
-        color: tokens.textPrimary,
-        letterSpacing: 0.2,
+        fontSize: 14,
+        color: "#374151",
+        letterSpacing: "-0.01em",
     },
     menu: {
-        background: "transparent",
-        borderInlineEnd: "none",
+        border: "none",
         padding: "8px 0",
-        fontSize: 14,
-        color: tokens.textPrimary,
     },
 };

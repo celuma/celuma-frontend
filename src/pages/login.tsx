@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
+import { Alert } from "antd";
 
 /* Reutilizables */
 import AuthLayout from "../components/auth/auth_layout";
@@ -42,8 +43,16 @@ export default function Login() {
     usePageTitle();
     const [serverError, setServerError] = useState<string | null>(null);
     const [forgotOpen, setForgotOpen] = useState(false);
-    // Branch selection moved to forms
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+
+    // Determine session message from router state or query string
+    const stateFrom = (location.state as { from?: string; sessionExpired?: boolean } | null);
+    const isSessionExpired =
+        stateFrom?.sessionExpired === true ||
+        searchParams.get("reason") === "session_expired";
+    const requiresAuth = !isSessionExpired && !!stateFrom?.from;
 
     const {
         control,
@@ -121,7 +130,8 @@ export default function Login() {
                 localStorage.removeItem("tenant_id");
             }
 
-            // Obtener y persistir user_id del perfil
+            // Fetch profile: persist user_id and determine redirect target
+            let redirectPath = "/home";
             try {
                 const meRes = await fetch(`${apiBase()}/v1/auth/me`, {
                     method: "GET",
@@ -132,7 +142,10 @@ export default function Login() {
                     credentials: "include",
                 });
                 const meText = await meRes.text();
-                const me = meText ? JSON.parse(meText) as { id?: string } : {};
+                const me = meText
+                    ? (JSON.parse(meText) as { id?: string; permissions?: string[] })
+                    : {};
+
                 if (me?.id) {
                     if (data.remember) {
                         localStorage.setItem("user_id", me.id);
@@ -142,12 +155,17 @@ export default function Login() {
                         localStorage.removeItem("user_id");
                     }
                 }
+
+                // Redirect physician-only users to their portal
+                const perms = me?.permissions ?? [];
+                if (perms.includes("portal:physician_access") && !perms.includes("lab:read")) {
+                    redirectPath = "/physician-portal";
+                }
             } catch {
-                // Silencioso; el flujo puede continuar
+                // Non-critical; default redirect applies
             }
 
-            // No seleccionar sucursal aquí; será seleccionada en los formularios
-            navigate("/home", { replace: true });
+            navigate(redirectPath, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         }
@@ -169,7 +187,26 @@ export default function Login() {
                         </p>
                     </div>
                 </CelumaModal>
-                {/* Branch selection removed from login; selection happens in forms */}
+                {/* Session alerts */}
+                {isSessionExpired && (
+                    <Alert
+                        type="warning"
+                        showIcon
+                        message="Sesión expirada"
+                        description="Tu sesión no es válida o expiró. Vuelve a iniciar sesión para continuar."
+                        style={{ marginBottom: 8 }}
+                    />
+                )}
+                {requiresAuth && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="Inicio de sesión requerido"
+                        description="Debes iniciar sesión para acceder a esa sección."
+                        style={{ marginBottom: 8 }}
+                    />
+                )}
+
                 <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
                     {/* Usuario / email */}
                     <FormField
