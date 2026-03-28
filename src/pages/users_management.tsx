@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
     Layout, Card, Table, Button, Form, Input, Select, Modal, message,
-    Space, Popconfirm, Switch, Spin, Avatar, Tag, Alert,
+    Space, Popconfirm, Switch, Spin, Avatar, Tag,
 } from "antd";
 import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
@@ -89,7 +89,16 @@ async function putJSON<TRes>(path: string, body: unknown): Promise<TRes> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = token;
     const res = await fetch(`${getApiBase()}${path}`, { method: "PUT", headers, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+        const text = await res.text();
+        let detail = text;
+        try {
+            const json = JSON.parse(text);
+            if (typeof json.detail === "string") detail = json.detail;
+            else if (Array.isArray(json.detail)) detail = json.detail.map((e: { msg?: string }) => e.msg).join("; ");
+        } catch { /* use raw text */ }
+        throw new Error(detail);
+    }
     return await res.json();
 }
 
@@ -216,33 +225,33 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const handleEdit = async (values: Record<string, unknown>) => {
         if (!editingUser) return;
         try {
-            // If user has multiple roles (e.g. admin+superuser), never send `role` in the payload
-            // to avoid accidentally dropping roles via replace_user_roles on the backend.
-            const hasMultipleRoles = editingUser.roles.length > 1;
-            const isProtected = editingUser.roles.includes("superuser");
-
-            const payload: Record<string, unknown> = {
+            // Profile fields — never include role here; roles are managed via the RBAC endpoint
+            await putJSON(`/v1/users/${editingUser.id}`, {
                 email: values.email,
                 username: values.username || null,
                 full_name: values.full_name,
                 is_active: values.is_active,
                 password: values.password || undefined,
                 branch_ids: values.branch_ids,
-            };
+            });
 
-            // Only send role change when the user has exactly one role and isn't protected
-            if (!hasMultipleRoles && !isProtected && values.role) {
-                payload.role = values.role;
+            // Separate RBAC call only when the role selection has actually changed
+            const newRoles = (values.roles as string[]) ?? [];
+            const rolesChanged =
+                newRoles.length !== editingUser.roles.length ||
+                newRoles.some((r) => !editingUser.roles.includes(r));
+
+            if (rolesChanged) {
+                await putJSON(`/v1/rbac/users/${editingUser.id}/roles`, { roles: newRoles });
             }
 
-            await putJSON(`/v1/users/${editingUser.id}`, payload);
             message.success("Usuario actualizado");
             setEditModalVisible(false);
             editForm.resetFields();
             setEditingUser(null);
             await loadData();
-        } catch {
-            message.error("Error al actualizar usuario");
+        } catch (e) {
+            message.error(e instanceof Error ? e.message : "Error al actualizar usuario");
         }
     };
 
@@ -252,8 +261,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             email: user.email,
             username: user.username,
             full_name: user.full_name,
-            // Only pre-fill the role selector when the user has a single assignable role
-            role: user.roles.length === 1 ? user.roles[0] : undefined,
+            roles: user.roles,
             is_active: user.is_active,
             branch_ids: user.branch_ids,
         });
@@ -650,34 +658,18 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                         <Input />
                     </Form.Item>
 
-                    {/* Role selector only when the user has a single non-protected role */}
-                    {editingUser && (editingUser.roles.length > 1 || editingUser.roles.includes("superuser")) ? (
-                        <Alert
-                            type="info"
-                            showIcon
-                            message={
-                                editingUser.roles.includes("superuser")
-                                    ? "Este usuario tiene el rol Superadministrador. Usa el panel de RBAC para modificar roles."
-                                    : `Este usuario tiene múltiples roles (${editingUser.roles.map(roleDisplayName).join(", ")}). Usa el panel de RBAC para modificar roles.`
-                            }
-                            style={{ marginBottom: 16 }}
-                        />
-                    ) : (
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                            <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                                <Select>{roleSelectOptions}</Select>
-                            </Form.Item>
-                            <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                                <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                            </Form.Item>
-                        </div>
-                    )}
-
-                    {editingUser && (editingUser.roles.length > 1 || editingUser.roles.includes("superuser")) && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <Form.Item name="roles" label="Rol(es)" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
+                            <Select
+                                mode="multiple"
+                                placeholder="Seleccionar roles"
+                                options={availableRoles.map((r) => ({ value: r.code, label: r.name }))}
+                            />
+                        </Form.Item>
                         <Form.Item name="is_active" label="Estado" valuePropName="checked">
                             <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
                         </Form.Item>
-                    )}
+                    </div>
 
                     <Form.Item
                         name="password"
@@ -687,13 +679,10 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                         <Input.Password placeholder="Nueva contraseña" />
                     </Form.Item>
 
-                    <Form.Item noStyle shouldUpdate={(prev, curr) => prev.role !== curr.role}>
+                    <Form.Item noStyle shouldUpdate={(prev, curr) => prev.roles !== curr.roles}>
                         {({ getFieldValue }) => {
-                            const role = getFieldValue("role") || (editingUser?.roles[0] ?? "");
-                            const fullAccess =
-                                role === "admin" ||
-                                role === "superuser" ||
-                                hasFullBranchAccess(editingUser?.roles ?? []);
+                            const selectedRoles: string[] = getFieldValue("roles") ?? editingUser?.roles ?? [];
+                            const fullAccess = hasFullBranchAccess(selectedRoles);
                             return fullAccess ? (
                                 <div style={{ marginBottom: 24, color: "#888", fontStyle: "italic" }}>
                                     * Este rol tiene acceso a todas las sucursales automáticamente.
