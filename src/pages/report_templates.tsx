@@ -108,6 +108,7 @@ function EditableRow({
         <div
             style={{
                 display: "flex",
+                flexWrap: "wrap",
                 alignItems: "center",
                 gap: 8,
                 padding: "6px 8px",
@@ -117,109 +118,109 @@ function EditableRow({
                 transition: "background 0.15s",
             }}
         >
-            {/* Drag handle */}
-            <span
-                {...dragHandleProps}
-                style={{
-                    cursor: "grab",
-                    color: "#bbb",
-                    fontSize: 14,
-                    lineHeight: 1,
-                    userSelect: "none",
-                    flexShrink: 0,
-                }}
-            >
-                <HolderOutlined />
-            </span>
-
-            {/* Visibility checkbox */}
-            <Checkbox
-                checked={isVisible}
-                onChange={(e) => onToggleVisible(itemKey, e.target.checked)}
-            />
-
-            {/* Label — click to rename (custom only) */}
-            {editing ? (
-                <input
-                    ref={inputRef}
-                    value={draftLabel}
-                    autoFocus
-                    onChange={(e) => setDraftLabel(e.target.value)}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") commitRename();
-                        if (e.key === "Escape") { setDraftLabel(label); setEditing(false); }
-                    }}
+            {/* Grupo izquierdo: handle + checkbox + label */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", maxWidth: "100%" }}>
+                <span
+                    {...dragHandleProps}
                     style={{
-                        flex: 1,
+                        cursor: "grab",
+                        color: "#bbb",
                         fontSize: 14,
-                        border: "none",
-                        borderBottom: `2px solid ${tokens.primary}`,
-                        outline: "none",
-                        background: "transparent",
-                        minWidth: 60,
+                        lineHeight: 1,
+                        userSelect: "none",
+                        flexShrink: 0,
                     }}
-                />
-            ) : (
-                <Text
-                    style={{ flex: 1, cursor: isPredefined ? "default" : "pointer" }}
-                    onClick={() => { if (!isPredefined) { setDraftLabel(label); setEditing(true); } }}
                 >
-                    {label}
-                    {!isPredefined && (
-                        <EditOutlined style={{ marginLeft: 5, fontSize: 11, color: "#bbb" }} />
-                    )}
-                </Text>
-            )}
+                    <HolderOutlined />
+                </span>
 
-            {/* Type badge / select */}
-            {isPredefined && type && (
-                <Tag color={type === "images" ? "cyan" : "default"} style={{ fontSize: 10, margin: 0 }}>
-                    {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type}
-                </Tag>
-            )}
-            {!isPredefined && type && onChangeType && (
-                <Select
-                    size="small"
-                    value={type}
-                    style={{ minWidth: 110 }}
-                    onChange={(v) => onChangeType(itemKey, v as TemplateFieldType)}
-                    options={typeOptions}
-                    bordered={false}
-                    dropdownMatchSelectWidth={false}
+                <Checkbox
+                    checked={isVisible}
+                    onChange={(e) => onToggleVisible(itemKey, e.target.checked)}
                 />
-            )}
-            {!isPredefined && (
-                <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>
-                    {isSection ? "Personalizada" : "Personalizado"}
-                </Tag>
-            )}
 
-            {/* Default value button — hidden for images sections */}
-            {effectiveType !== undefined && onEditDefaultValue && (
-                <Tooltip title={`${isSection ? "Contenido" : "Valor"} por defecto`}>
-                    <Button
-                        type="text"
-                        size="small"
-                        icon={<FormOutlined />}
-                        onClick={() => onEditDefaultValue(itemKey, label, effectiveType, currentValue ?? "")}
-                        style={{ color: currentValue ? tokens.primary : "#bbb", flexShrink: 0 }}
+                {editing ? (
+                    <input
+                        ref={inputRef}
+                        value={draftLabel}
+                        autoFocus
+                        onChange={(e) => setDraftLabel(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") { setDraftLabel(label); setEditing(false); }
+                        }}
+                        style={{
+                            flex: 1,
+                            fontSize: 14,
+                            border: "none",
+                            borderBottom: `2px solid ${tokens.primary}`,
+                            outline: "none",
+                            background: "transparent",
+                            minWidth: 60,
+                        }}
                     />
-                </Tooltip>
-            )}
+                ) : (
+                <Text
+                    style={{ cursor: isPredefined ? "default" : "pointer", wordBreak: "break-word" }}
+                        onClick={() => { if (!isPredefined) { setDraftLabel(label); setEditing(true); } }}
+                    >
+                        {label}
+                        {!isPredefined && (
+                            <EditOutlined style={{ marginLeft: 5, fontSize: 11, color: "#bbb" }} />
+                        )}
+                    </Text>
+                )}
+            </div>
 
-            {/* Remove (custom only) */}
-            {!isPredefined && (
-                <Tooltip title="Eliminar">
-                    <Button
-                        type="text"
+            {/* Grupo derecho: tipo + tags + botones de acción */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                {isPredefined && type && (
+                    <Tag color={type === "images" ? "cyan" : "default"} style={{ fontSize: 10, margin: 0 }}>
+                        {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type}
+                    </Tag>
+                )}
+                {!isPredefined && type && onChangeType && (
+                    <Select
                         size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => onRemove(itemKey)}
+                        value={type}
+                        style={{ minWidth: 110 }}
+                        onChange={(v) => onChangeType(itemKey, v as TemplateFieldType)}
+                        options={typeOptions}
+                        bordered={false}
+                        dropdownMatchSelectWidth={false}
                     />
-                </Tooltip>
-            )}
+                )}
+                {!isPredefined && (
+                    <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>
+                        {isSection ? "Personalizada" : "Personalizado"}
+                    </Tag>
+                )}
+
+                {effectiveType !== undefined && onEditDefaultValue && (
+                    <Tooltip title={`${isSection ? "Contenido" : "Valor"} por defecto`}>
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<FormOutlined />}
+                            onClick={() => onEditDefaultValue(itemKey, label, effectiveType, currentValue ?? "")}
+                            style={{ color: currentValue ? tokens.primary : "#bbb" }}
+                        />
+                    </Tooltip>
+                )}
+
+                {!isPredefined && (
+                    <Tooltip title="Eliminar">
+                        <Button
+                            type="text"
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => onRemove(itemKey)}
+                        />
+                    </Tooltip>
+                )}
+            </div>
         </div>
     );
 }
