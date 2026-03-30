@@ -43,18 +43,18 @@ export function usePdfExport() {
 <body>${pagesHtml}</body>
 </html>`;
 
-        const printWin = window.open("", "_blank");
-        if (!printWin) {
-            alert("No se pudo abrir la ventana de impresión. Permite las ventanas emergentes e intenta de nuevo.");
-            return;
-        }
+        // Create a hidden iframe — no popup window or tab is opened
+        const iframe = document.createElement("iframe");
+        iframe.style.cssText = "position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;";
+        document.body.appendChild(iframe);
 
-        printWin.document.open();
-        printWin.document.write(htmlDoc);
-        printWin.document.close();
+        const iframeDoc = iframe.contentDocument!;
+        iframeDoc.open();
+        iframeDoc.write(htmlDoc);
+        iframeDoc.close();
 
-        // Wait for all images to finish loading in the print window
-        const imgs = Array.from(printWin.document.querySelectorAll("img"));
+        // Wait for all images inside the iframe to load
+        const imgs = Array.from(iframeDoc.querySelectorAll("img"));
         await Promise.all(
             imgs.map(
                 (img) =>
@@ -66,19 +66,20 @@ export function usePdfExport() {
             ),
         );
 
-        if ("fonts" in printWin.document) {
-            await (printWin.document as FontFaceSource & Document).fonts.ready;
+        if ("fonts" in iframeDoc) {
+            await (iframeDoc as FontFaceSource & Document).fonts.ready;
         }
 
-        // Small delay to ensure the browser finishes layout
-        await new Promise((r) => setTimeout(r, 400));
+        // Small delay to ensure layout is complete
+        await new Promise((r) => setTimeout(r, 300));
 
-        printWin.focus();
-        printWin.print();
+        iframe.contentWindow!.focus();
+        iframe.contentWindow!.print();
 
-        printWin.addEventListener("afterprint", () => {
-            printWin.close();
-        });
+        // Remove iframe after printing (afterprint) or after a fallback timeout
+        const cleanup = () => { iframe.remove(); };
+        iframe.contentWindow!.addEventListener("afterprint", cleanup, { once: true });
+        setTimeout(cleanup, 3000);
     }, []);
 
     return { exportToPDF };
