@@ -319,11 +319,13 @@ const ReportEditor: React.FC = () => {
                     }
                     setTemplate(tmpl);
 
-                    // Populate base custom values
+                    // Populate base custom values (saved value → template default → "")
                     const savedBase = full.report?.report?.base ?? {};
                     const bv: Record<string, string> = {};
                     Object.entries(tmpl.base).forEach(([k, v]) => {
-                        if (isCustomField(v)) bv[k] = (savedBase[k]?.value as string) || "";
+                        if (isCustomField(v)) {
+                            bv[k] = (savedBase[k]?.value as string) || (v as ReportBaseFieldCustom).value || "";
+                        }
                     });
                     setBaseValues(bv);
 
@@ -371,6 +373,13 @@ const ReportEditor: React.FC = () => {
                         } catch { /* ignore, use empty template */ }
                     }
                     setTemplate(tmpl);
+
+                    // Initialize base custom values with template defaults
+                    const bv: Record<string, string> = {};
+                    Object.entries(tmpl.base).forEach(([k, v]) => {
+                        if (isCustomField(v)) bv[k] = (v as ReportBaseFieldCustom).value || "";
+                    });
+                    setBaseValues(bv);
 
                     // Initialize section content with template defaults
                     const sc: Record<string, string | TemplateImageItem[]> = {};

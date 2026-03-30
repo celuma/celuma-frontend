@@ -91,6 +91,8 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             body.style.overflow = "hidden";
             body.style.width = `${contentWpx}px`;
             body.style.height = `${contentHpx}px`;
+            body.style.paddingTop = "4mm";
+            body.style.boxSizing = "border-box";
             body.style.background = "#ffffff";
             body.style.backgroundColor = "#ffffff";
             body.style.fontFamily = "Arial, sans-serif";
@@ -231,7 +233,7 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             >
                 <div id="reporte-content" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
 
-                    {/* Predefined base info */}
+                    {/* Predefined base info + custom fields — no gap between groups */}
                     <div style={{ marginBottom: 12 }}>
                         {predefinedFields.map(({ key, label, value }) => (
                             <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
@@ -239,19 +241,13 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                                 {value || <em style={{ color: "#888" }}>Sin especificar</em>}
                             </p>
                         ))}
+                        {customFields.map(({ key, label, value }) => (
+                            <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
+                                <b>{label}:</b>{" "}
+                                {value || <em style={{ color: "#888" }}>Sin especificar</em>}
+                            </p>
+                        ))}
                     </div>
-
-                    {/* Custom base fields */}
-                    {customFields.length > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                            {customFields.map(({ key, label, value }) => (
-                                <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
-                                    <b>{label}:</b>{" "}
-                                    {value || <em style={{ color: "#888" }}>Sin especificar</em>}
-                                </p>
-                            ))}
-                        </div>
-                    )}
 
                     <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
 
