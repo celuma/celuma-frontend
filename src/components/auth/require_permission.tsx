@@ -22,7 +22,7 @@ export default function RequirePermission({ permission, children }: RequirePermi
     const { authStatus, sessionExpired, hasPermission, profile } = useUserProfile();
     const location = useLocation();
 
-    if (authStatus === "loading") {
+    if (authStatus === "loading" || authStatus === "error") {
         return (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
                 <Spin size="large" />
