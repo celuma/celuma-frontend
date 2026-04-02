@@ -10,8 +10,17 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
-import type { ReportTemplateListItem, ReportTemplateJSON, ReportBaseFieldConfig, ReportBaseFieldCustom, ReportSectionConfig, ReportSectionTextCustom, TemplateFieldType } from "../models/report";
-import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS } from "../models/report";
+import type {
+    ReportTemplateListItem,
+    ReportTemplateJSON,
+    ReportBaseFieldConfig,
+    ReportBaseFieldCustom,
+    ReportSectionConfig,
+    ReportSectionTextCustom,
+    TemplateFieldType,
+    TemplateOrderInput,
+} from "../models/report";
+import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, resolveBaseOrder, resolveSectionOrder } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
 
 const { TextArea } = Input;
@@ -377,14 +386,18 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const templateJSONFromArrays = (): ReportTemplateJSON => ({
         base: Object.fromEntries(baseItems.map(({ key, cfg }) => [key, cfg])) as ReportTemplateJSON["base"],
         sections: Object.fromEntries(sectionItems.map(({ key, cfg }) => [key, cfg])) as ReportTemplateJSON["sections"],
+        base_order: baseItems.map(({ key }) => key),
+        section_order: sectionItems.map(({ key }) => key),
     });
 
-    const arraysFromTemplateJSON = (json: ReportTemplateJSON) => {
+    const arraysFromTemplateJSON = (json: ReportTemplateJSON | TemplateOrderInput) => {
+        const bo = resolveBaseOrder(json);
+        const so = resolveSectionOrder(json);
         setBaseItems(
-            Object.entries(json.base).map(([key, cfg]) => ({ key, cfg: cfg as ReportBaseFieldConfig }))
+            bo.map((key) => ({ key, cfg: json.base[key] as ReportBaseFieldConfig }))
         );
         setSectionItems(
-            Object.entries(json.sections ?? {}).map(([key, cfg]) => ({ key, cfg: cfg as ReportSectionConfig }))
+            so.map((key) => ({ key, cfg: json.sections[key] as ReportSectionConfig }))
         );
     };
 
@@ -454,7 +467,13 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             Object.entries(defaults.base).forEach(([k, v]) => { if (!mergedBase[k]) mergedBase[k] = v; });
             Object.entries(defaults.sections).forEach(([k, v]) => { if (!mergedSections[k]) mergedSections[k] = v; });
 
-            arraysFromTemplateJSON({ base: mergedBase, sections: mergedSections });
+            const storedLoose = stored as TemplateOrderInput;
+            arraysFromTemplateJSON({
+                base: mergedBase,
+                sections: mergedSections,
+                base_order: storedLoose.base_order,
+                section_order: storedLoose.section_order,
+            });
         } catch {
             message.error("Error al cargar la plantilla");
             setPanelVisible(false);

@@ -71,6 +71,10 @@ export type ReportSectionConfig =
 export interface ReportTemplateJSON {
     base: Record<string, ReportBaseFieldConfig>;
     sections: Record<string, ReportSectionConfig>;
+    /** Display order of base field ids (source of truth; do not rely on object key order). */
+    base_order: string[];
+    /** Display order of section ids (source of truth). */
+    section_order: string[];
 }
 
 /** Template returned from GET /api/v1/reports/templates/ (list) */
@@ -213,6 +217,75 @@ export const DEFAULT_SECTIONS: Record<string, ReportSectionConfig> = {
     images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
 };
 
+/** Default base field ids in display order (matches DEFAULT_BASE_FIELDS insertion order). */
+export const DEFAULT_BASE_ORDER: string[] = Object.keys(DEFAULT_BASE_FIELDS);
+
+/** Default section ids in display order (matches DEFAULT_SECTIONS insertion order). */
+export const DEFAULT_SECTION_ORDER: string[] = Object.keys(DEFAULT_SECTIONS);
+
+/** Input for order resolution when `base_order` may be missing (legacy API payloads). */
+export type TemplateOrderInput = {
+    base: Record<string, ReportBaseFieldConfig>;
+    sections: Record<string, ReportSectionConfig>;
+    base_order?: string[];
+    section_order?: string[];
+};
+
+/**
+ * Canonical display order for base fields: use base_order when present and non-empty,
+ * else Object.keys(base); filter unknown ids; append any key in base missing from the list.
+ */
+export function resolveBaseOrder(t: Pick<TemplateOrderInput, "base" | "base_order">): string[] {
+    const keysInBase = Object.keys(t.base ?? {});
+    const raw = t.base_order?.length ? t.base_order : keysInBase;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const k of raw) {
+        if (t.base[k] !== undefined && !seen.has(k)) {
+            seen.add(k);
+            result.push(k);
+        }
+    }
+    for (const k of keysInBase) {
+        if (!seen.has(k)) {
+            seen.add(k);
+            result.push(k);
+        }
+    }
+    return result;
+}
+
+/** Same as resolveBaseOrder for sections. */
+export function resolveSectionOrder(t: Pick<TemplateOrderInput, "sections" | "section_order">): string[] {
+    const keysInSections = Object.keys(t.sections ?? {});
+    const raw = t.section_order?.length ? t.section_order : keysInSections;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const k of raw) {
+        if (t.sections[k] !== undefined && !seen.has(k)) {
+            seen.add(k);
+            result.push(k);
+        }
+    }
+    for (const k of keysInSections) {
+        if (!seen.has(k)) {
+            seen.add(k);
+            result.push(k);
+        }
+    }
+    return result;
+}
+
+/** Coerce legacy or partial API payloads into a full ReportTemplateJSON with canonical order arrays. */
+export function normalizeReportTemplateJSON(t: TemplateOrderInput): ReportTemplateJSON {
+    return {
+        base: t.base ?? {},
+        sections: t.sections ?? {},
+        base_order: resolveBaseOrder(t),
+        section_order: resolveSectionOrder(t),
+    };
+}
+
 /** Builds the default template_json skeleton used when creating a new template */
 export function buildDefaultTemplateJSON(): ReportTemplateJSON {
     return {
@@ -224,22 +297,32 @@ export function buildDefaultTemplateJSON(): ReportTemplateJSON {
             section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
             images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
         },
+        base_order: [...DEFAULT_BASE_ORDER],
+        section_order: [...DEFAULT_SECTION_ORDER],
     };
 }
 
 /** Builds an empty ReportContent from a template (same shape, content zeroed) */
 export function buildEmptyReportContent(template: ReportTemplateJSON): ReportContent {
+    const bo = resolveBaseOrder(template);
+    const so = resolveSectionOrder(template);
     return {
         base: Object.fromEntries(
-            Object.entries(template.base).map(([k, v]) => [k, { ...v, value: "" }])
+            bo.map((k) => {
+                const v = template.base[k];
+                return [k, { ...v, value: "" }];
+            })
         ) as Record<string, ReportBaseFieldConfig>,
         sections: Object.fromEntries(
-            Object.entries(template.sections).map(([k, v]) => {
+            so.map((k) => {
+                const v = template.sections[k];
                 if (v.type === "images") {
                     return [k, { ...v, content: [] as TemplateImageItem[] }];
                 }
                 return [k, { ...v, content: (v as ReportSectionText).content || "" }];
             })
         ) as Record<string, ReportSectionConfig>,
+        base_order: [...bo],
+        section_order: [...so],
     };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
+import { normalizeReportTemplateJSON, resolveBaseOrder, resolveSectionOrder } from "../../models/report";
 import { markdownTableToHtml } from "./table_utils";
 import logo from "../../images/report_logo.png";
 
@@ -186,33 +187,33 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     // Build content from new ReportTemplateJSON structure
     // ---------------------------------------------------------------------------
 
-    const template = report.template ?? { base: {}, sections: {} };
-    const content = report.report ?? { base: {}, sections: {} };
-    // Predefined base fields visible in header area
-    const predefinedFields = Object.entries(template.base)
-        .filter(([k, v]) => PREDEFINED_BASE_KEYS.has(k) && v.is_visible)
-        .map(([k, v]) => ({
-            key: k,
-            label: v.label,
-            value: content.base[k]?.value ?? "",
-        }));
+    const tmpl = normalizeReportTemplateJSON(report.template ?? { base: {}, sections: {} });
+    const contentData = report.report ?? { base: {}, sections: {} };
 
-    // Custom base fields
-    const customFields = Object.entries(template.base)
-        .filter(([k, v]) => !PREDEFINED_BASE_KEYS.has(k) && (v as { is_custom?: boolean }).is_custom === true && v.is_visible)
-        .map(([k, v]) => ({
-            key: k,
-            label: v.label,
-            value: content.base[k]?.value ?? "",
-        }));
+    // Base header rows: single list ordered by template.base_order (predefined + custom interleaved as configured)
+    const orderedBaseRows = resolveBaseOrder(tmpl)
+        .map((k) => {
+            const v = tmpl.base[k];
+            if (!v?.is_visible) return null;
+            const isCustom = (v as { is_custom?: boolean }).is_custom === true;
+            if (!PREDEFINED_BASE_KEYS.has(k) && !isCustom) return null;
+            return {
+                key: k,
+                label: v.label,
+                value: (contentData.base[k]?.value as string) ?? "",
+            };
+        })
+        .filter((row): row is { key: string; label: string; value: string } => row !== null);
 
-    // All sections in order
-    const sections = Object.entries(template.sections)
-        .filter(([, v]) => v.is_visible)
-        .map(([k, v]) => {
-            const savedSection = content.sections[k];
+    // Sections in template.section_order
+    const sections = resolveSectionOrder(tmpl)
+        .map((k) => {
+            const v = tmpl.sections[k];
+            if (!v?.is_visible) return null;
+            const savedSection = contentData.sections[k];
             return { key: k, section: v, savedContent: savedSection };
-        });
+        })
+        .filter((row): row is { key: string; section: NonNullable<typeof tmpl.sections[string]>; savedContent: typeof contentData.sections[string] } => row !== null);
 
     // Collect all images across image sections
     const allImages: { sectionLabel: string; images: TemplateImageItem[] }[] = sections
@@ -233,15 +234,9 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             >
                 <div id="reporte-content" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
 
-                    {/* Predefined base info + custom fields — no gap between groups */}
+                    {/* Base fields in template.base_order */}
                     <div style={{ marginBottom: 12 }}>
-                        {predefinedFields.map(({ key, label, value }) => (
-                            <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
-                                <b>{label}:</b>{" "}
-                                {value || <em style={{ color: "#888" }}>Sin especificar</em>}
-                            </p>
-                        ))}
-                        {customFields.map(({ key, label, value }) => (
+                        {orderedBaseRows.map(({ key, label, value }) => (
                             <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
                                 <b>{label}:</b>{" "}
                                 {value || <em style={{ color: "#888" }}>Sin especificar</em>}

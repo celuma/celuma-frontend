@@ -23,8 +23,14 @@ import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
     ReportTemplateJSON, ReportSectionText,
     ReportBaseFieldConfig, ReportBaseFieldCustom, TemplateImageItem,
+    TemplateOrderInput,
 } from "../../models/report";
-import { buildEmptyReportContent } from "../../models/report";
+import {
+    buildEmptyReportContent,
+    normalizeReportTemplateJSON,
+    resolveBaseOrder,
+    resolveSectionOrder,
+} from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import StatsCard from "../ui/stats_card";
 import { TableEditor } from "./table_editor";
@@ -89,6 +95,8 @@ function getAvatarColor(name: string): string {
 function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
     return (f as ReportBaseFieldCustom).is_custom === true;
 }
+
+const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -212,21 +220,25 @@ const ReportEditor: React.FC = () => {
         [envelope?.status]
     );
 
-    // Custom base fields (from template)
+    // Custom base fields (from template), ordered by template.base_order
     const customBaseFields = useMemo(() => {
         if (!template) return [];
-        return Object.entries(template.base)
-            .filter(([, v]) => isCustomField(v))
-            .map(([k, v]) => ({ key: k, field: v as ReportBaseFieldCustom }));
+        return resolveBaseOrder(template)
+            .map((k) => {
+                const v = template.base[k];
+                return v && isCustomField(v) ? { key: k, field: v as ReportBaseFieldCustom } : null;
+            })
+            .filter((x): x is { key: string; field: ReportBaseFieldCustom } => x !== null);
     }, [template]);
 
     const hasCustomFields = customBaseFields.length > 0;
 
-    // Sections from template
+    // Sections from template, ordered by template.section_order
     const templateSections = useMemo(() => {
         if (!template) return [];
-        return Object.entries(template.sections)
-            .filter(([, v]) => v.is_visible);
+        return resolveSectionOrder(template)
+            .map((k) => [k, template.sections[k]] as const)
+            .filter(([, v]) => v?.is_visible);
     }, [template]);
 
     // Images section key
@@ -314,15 +326,16 @@ const ReportEditor: React.FC = () => {
                         }
                     }
 
-                    if (!tmpl || !tmpl.base || !tmpl.sections) {
-                        tmpl = { base: {}, sections: {} };
-                    }
-                    setTemplate(tmpl);
+                    const effectiveTmpl =
+                        !tmpl || !tmpl.base || !tmpl.sections
+                            ? EMPTY_TEMPLATE_JSON
+                            : normalizeReportTemplateJSON(tmpl);
+                    setTemplate(effectiveTmpl);
 
                     // Populate base custom values (saved value → template default → "")
                     const savedBase = full.report?.report?.base ?? {};
                     const bv: Record<string, string> = {};
-                    Object.entries(tmpl.base).forEach(([k, v]) => {
+                    Object.entries(effectiveTmpl.base).forEach(([k, v]) => {
                         if (isCustomField(v)) {
                             bv[k] = (savedBase[k]?.value as string) || (v as ReportBaseFieldCustom).value || "";
                         }
@@ -332,7 +345,7 @@ const ReportEditor: React.FC = () => {
                     // Populate section content from saved report or template defaults
                     const savedSections = full.report?.report?.sections ?? {};
                     const sc: Record<string, string | TemplateImageItem[]> = {};
-                    Object.entries(tmpl.sections).forEach(([k, v]) => {
+                    Object.entries(effectiveTmpl.sections).forEach(([k, v]) => {
                         if (v.type === "images") {
                             const saved = savedSections[k];
                             sc[k] = (saved && Array.isArray(saved.content) ? saved.content : []) as TemplateImageItem[];
@@ -361,29 +374,30 @@ const ReportEditor: React.FC = () => {
                     setFullData(pseudoFull);
 
                     // Load template via study type → template
-                    let tmpl: ReportTemplateJSON = { base: {}, sections: {} };
+                    let tmplRaw: TemplateOrderInput | null = null;
                     if (orderFull.order.study_type_id) {
                         try {
                             const st = await getStudyType(orderFull.order.study_type_id);
                             setStudyTypeName(st.name);
                             if (st.default_report_template_id) {
                                 const tpl = await getReportTemplateById(st.default_report_template_id);
-                                tmpl = tpl.template_json;
+                                tmplRaw = tpl.template_json;
                             }
                         } catch { /* ignore, use empty template */ }
                     }
-                    setTemplate(tmpl);
+                    const tmplNew = tmplRaw ? normalizeReportTemplateJSON(tmplRaw) : EMPTY_TEMPLATE_JSON;
+                    setTemplate(tmplNew);
 
                     // Initialize base custom values with template defaults
                     const bv: Record<string, string> = {};
-                    Object.entries(tmpl.base).forEach(([k, v]) => {
+                    Object.entries(tmplNew.base).forEach(([k, v]) => {
                         if (isCustomField(v)) bv[k] = (v as ReportBaseFieldCustom).value || "";
                     });
                     setBaseValues(bv);
 
                     // Initialize section content with template defaults
                     const sc: Record<string, string | TemplateImageItem[]> = {};
-                    Object.entries(tmpl.sections).forEach(([k, v]) => {
+                    Object.entries(tmplNew.sections).forEach(([k, v]) => {
                         if (v.type === "images") {
                             sc[k] = [];
                         } else {
@@ -424,7 +438,7 @@ const ReportEditor: React.FC = () => {
     // ---------------------------------------------------------------------------
 
     const buildEnvelope = useCallback((): ReportEnvelope => {
-        const tmpl = template ?? { base: {}, sections: {} };
+        const tmpl = template ?? EMPTY_TEMPLATE_JSON;
         const report = buildEmptyReportContent(tmpl);
 
         // Fill predefined base values from full data
