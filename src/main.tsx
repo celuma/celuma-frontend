@@ -1,17 +1,9 @@
-import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App as AntApp } from "antd";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
-import { registerCelumaNotification } from "./lib/celuma_feedback";
 import App from "./App";
-
-/** Bridges App.useApp() notification instance into celuma_feedback helpers. */
-function CelumaNotificationProxy() {
-    const { notification } = AntApp.useApp();
-    useEffect(() => { registerCelumaNotification(notification); }, [notification]);
-    return null;
-}
+import CelumaNotificationProxy from "./components/ui/celuma_notification_proxy";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import Home from "./pages/home";
