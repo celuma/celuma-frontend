@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { App as AntApp } from "antd";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import App from "./App";
@@ -37,7 +38,8 @@ import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
 
 createRoot(document.getElementById("root")!).render(
-    <BrowserRouter>
+    <AntApp>
+        <BrowserRouter>
         <Routes>
             {/* Public routes */}
             <Route path="/" element={<App />} />
@@ -99,5 +101,6 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/report-templates" element={<RequirePermission permission="lab:read"><ReportTemplates /></RequirePermission>} />
             <Route path="/users" element={<RequirePermission permission="admin:manage_users"><UsersManagement /></RequirePermission>} />
         </Routes>
-    </BrowserRouter>
+        </BrowserRouter>
+    </AntApp>
 );

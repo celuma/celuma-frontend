@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Layout, Card, Row, Col, Typography } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { UserOutlined, FileTextOutlined, ExperimentOutlined, BarChartOutlined } from "@ant-design/icons";
@@ -10,8 +9,7 @@ import ErrorText from "../components/ui/error_text";
 import { useDashboardData } from "../hooks/use_dashboard_data";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
-import { PERMS, permissionLabel } from "../lib/rbac";
-import { showCelumaPermissionDenied } from "../lib/celuma_feedback";
+import { PERMS } from "../lib/rbac";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 
@@ -20,21 +18,9 @@ const { Title } = Typography;
 const Home: React.FC = () => {
     usePageTitle();
     const nav = useNavigate();
-    const location = useLocation();
-    const { pathname } = location;
+    const { pathname } = useLocation();
     const { data, loading, error } = useDashboardData();
     const { hasPermission } = useUserProfile();
-
-    // Flash message when RequirePermission redirected here after an access denial.
-    useEffect(() => {
-        const state = location.state as { permissionDenied?: string; from?: string } | null;
-        if (state?.permissionDenied) {
-            showCelumaPermissionDenied(permissionLabel(state.permissionDenied));
-            // Clear the state so the toast doesn't reappear on refresh.
-            nav(location.pathname, { replace: true, state: {} });
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     const handleActivityClick = (item: { id: string; type: string }) => {
         switch (item.type) {

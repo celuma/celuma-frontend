@@ -1,8 +1,9 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Spin } from "antd";
 import { useUserProfile } from "../../hooks/use_user_profile";
-import { defaultRouteForPermissions } from "../../lib/rbac";
+import { defaultRouteForPermissions, permissionLabel } from "../../lib/rbac";
+import { showCelumaPermissionDenied } from "../../lib/celuma_feedback";
 
 interface RequirePermissionProps {
     /** Permission code that must be present, e.g. "lab:read" */
@@ -21,6 +22,15 @@ interface RequirePermissionProps {
 export default function RequirePermission({ permission, children }: RequirePermissionProps) {
     const { authStatus, sessionExpired, hasPermission, profile } = useUserProfile();
     const location = useLocation();
+    // Guard against double-toast in React StrictMode (double-invoke effects).
+    const notifiedRef = useRef(false);
+
+    useEffect(() => {
+        if (authStatus === "authenticated" && !hasPermission(permission) && !notifiedRef.current) {
+            notifiedRef.current = true;
+            showCelumaPermissionDenied(permissionLabel(permission));
+        }
+    }, [authStatus, hasPermission, permission]);
 
     if (authStatus === "loading" || authStatus === "error") {
         return (
@@ -50,7 +60,7 @@ export default function RequirePermission({ permission, children }: RequirePermi
             <Navigate
                 to={safeRoute}
                 replace
-                state={{ permissionDenied: permission, from: location.pathname }}
+                state={{ from: location.pathname }}
             />
         );
     }
