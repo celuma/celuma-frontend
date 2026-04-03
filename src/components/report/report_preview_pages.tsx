@@ -1,5 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
+import { normalizeReportTemplateJSON, resolveDisplayOrder } from "../../models/report";
 import { markdownTableToHtml } from "./table_utils";
 import logo from "../../images/report_logo.png";
 
@@ -186,42 +187,37 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     // Build content from new ReportTemplateJSON structure
     // ---------------------------------------------------------------------------
 
-    const template = report.template ?? { base: {}, sections: {} };
-    const content = report.report ?? { base: {}, sections: {} };
-    // Predefined base fields visible in header area
-    const predefinedFields = Object.entries(template.base)
-        .filter(([k, v]) => PREDEFINED_BASE_KEYS.has(k) && v.is_visible)
-        .map(([k, v]) => ({
-            key: k,
-            label: v.label,
-            value: content.base[k]?.value ?? "",
-        }));
+    const tmpl = normalizeReportTemplateJSON(report.template ?? { base: {}, sections: {} });
+    const contentData = report.report ?? { base: {}, sections: {} };
 
-    // Custom base fields
-    const customFields = Object.entries(template.base)
-        .filter(([k, v]) => !PREDEFINED_BASE_KEYS.has(k) && (v as { is_custom?: boolean }).is_custom === true && v.is_visible)
-        .map(([k, v]) => ({
-            key: k,
-            label: v.label,
-            value: content.base[k]?.value ?? "",
-        }));
+    // Resolve effective order: content arrays take priority over template arrays (both fall back to Object.keys)
+    const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, contentData);
 
-    // All sections in order
-    const sections = Object.entries(template.sections)
-        .filter(([, v]) => v.is_visible)
-        .map(([k, v]) => {
-            const savedSection = content.sections[k];
+    // Base header rows: single list in resolved order (predefined + custom interleaved as configured)
+    const orderedBaseRows = baseOrder
+        .map((k) => {
+            const v = tmpl.base[k];
+            if (!v?.is_visible) return null;
+            const isCustom = (v as { is_custom?: boolean }).is_custom === true;
+            if (!PREDEFINED_BASE_KEYS.has(k) && !isCustom) return null;
+            return {
+                key: k,
+                label: v.label,
+                value: (contentData.base[k]?.value as string) ?? "",
+            };
+        })
+        .filter((row): row is { key: string; label: string; value: string } => row !== null);
+
+    // Sections in resolved order
+    const sections = sectionOrder
+        .map((k) => {
+            const v = tmpl.sections[k];
+            if (!v?.is_visible) return null;
+            const savedSection = contentData.sections[k];
             return { key: k, section: v, savedContent: savedSection };
-        });
+        })
+        .filter((row): row is { key: string; section: NonNullable<typeof tmpl.sections[string]>; savedContent: typeof contentData.sections[string] } => row !== null);
 
-    // Collect all images across image sections
-    const allImages: { sectionLabel: string; images: TemplateImageItem[] }[] = sections
-        .filter(({ section }) => section.type === "images")
-        .map(({ section, savedContent }) => ({
-            sectionLabel: section.label,
-            images: (savedContent && Array.isArray(savedContent.content) ? savedContent.content : []) as TemplateImageItem[],
-        }))
-        .filter(({ images }) => images.length > 0);
 
     return (
         <div style={style}>
@@ -233,15 +229,9 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             >
                 <div id="reporte-content" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
 
-                    {/* Predefined base info + custom fields — no gap between groups */}
+                    {/* Base fields in template.base_order */}
                     <div style={{ marginBottom: 12 }}>
-                        {predefinedFields.map(({ key, label, value }) => (
-                            <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
-                                <b>{label}:</b>{" "}
-                                {value || <em style={{ color: "#888" }}>Sin especificar</em>}
-                            </p>
-                        ))}
-                        {customFields.map(({ key, label, value }) => (
+                        {orderedBaseRows.map(({ key, label, value }) => (
                             <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
                                 <b>{label}:</b>{" "}
                                 {value || <em style={{ color: "#888" }}>Sin especificar</em>}
@@ -251,19 +241,8 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
 
                     <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
 
-                    {/* Dynamic sections */}
+                    {/* Dynamic sections — rendered in section_order; images are inline at their position */}
                     {sections.map(({ key, section, savedContent }) => {
-                        if (section.type === "images") {
-                            // Images sections rendered separately below
-                            return null;
-                        }
-
-                        const rawContent = savedContent
-                            ? (savedContent as ReportSectionText).content || ""
-                            : "";
-
-                        if (!rawContent) return null;
-
                         const sectionHeader = (
                             <h3 style={{
                                 margin: "0 0 6px 0",
@@ -276,6 +255,54 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                                 {section.label}
                             </h3>
                         );
+
+                        if (section.type === "images") {
+                            const images = (
+                                savedContent && Array.isArray(savedContent.content)
+                                    ? savedContent.content
+                                    : []
+                            ) as TemplateImageItem[];
+                            if (images.length === 0) return null;
+                            return (
+                                <div key={key} style={{ marginBottom: 14 }}>
+                                    <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                                    {sectionHeader}
+                                    <div style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                        gap: 10,
+                                    }}>
+                                        {images.map((img, idx) => (
+                                            <div key={img.id || idx} style={{
+                                                border: "1px solid #e5e7eb",
+                                                borderRadius: 6,
+                                                overflow: "hidden",
+                                                background: "#fff",
+                                            }}>
+                                                <img
+                                                    src={img.url}
+                                                    alt={img.caption || `Figura ${idx + 1}`}
+                                                    style={{ width: "100%", height: 200, objectFit: "contain", background: "#fafafa", display: "block" }}
+                                                    crossOrigin="anonymous"
+                                                />
+                                                <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>
+                                                    <b>Figura {idx + 1}.</b>{" "}
+                                                    {img.caption && img.caption.trim().length > 0
+                                                        ? img.caption
+                                                        : <em> </em>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        const rawContent = savedContent
+                            ? (savedContent as ReportSectionText).content || ""
+                            : "";
+
+                        if (!rawContent) return null;
 
                         if (section.type === "table") {
                             return (
@@ -299,50 +326,6 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                             </div>
                         );
                     })}
-
-                    {/* Images */}
-                    {allImages.map(({ sectionLabel, images }) => (
-                        <div key={sectionLabel} style={{ marginBottom: 14 }}>
-                            <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
-                            <h3 style={{
-                                margin: "0 0 8px 0",
-                                fontSize: "11pt",
-                                fontWeight: 700,
-                                color: "#002060",
-                                borderBottom: "1px solid #e5e7eb",
-                                paddingBottom: 3,
-                            }}>
-                                {sectionLabel}
-                            </h3>
-                            <div style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                gap: 10,
-                            }}>
-                                {images.map((img, idx) => (
-                                    <div key={img.id || idx} style={{
-                                        border: "1px solid #e5e7eb",
-                                        borderRadius: 6,
-                                        overflow: "hidden",
-                                        background: "#fff",
-                                    }}>
-                                        <img
-                                            src={img.url}
-                                            alt={img.caption || `Figura ${idx + 1}`}
-                                            style={{ width: "100%", height: 200, objectFit: "contain", background: "#fafafa", display: "block" }}
-                                            crossOrigin="anonymous"
-                                        />
-                                        <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>
-                                            <b>Figura {idx + 1}.</b>{" "}
-                                            {img.caption && img.caption.trim().length > 0
-                                                ? img.caption
-                                                : <em> </em>}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
 
                 </div>
             </div>
