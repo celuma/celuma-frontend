@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
-import { normalizeReportTemplateJSON, resolveBaseOrder, resolveSectionOrder } from "../../models/report";
+import { normalizeReportTemplateJSON, resolveDisplayOrder } from "../../models/report";
 import { markdownTableToHtml } from "./table_utils";
 import logo from "../../images/report_logo.png";
 
@@ -190,8 +190,11 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     const tmpl = normalizeReportTemplateJSON(report.template ?? { base: {}, sections: {} });
     const contentData = report.report ?? { base: {}, sections: {} };
 
-    // Base header rows: single list ordered by template.base_order (predefined + custom interleaved as configured)
-    const orderedBaseRows = resolveBaseOrder(tmpl)
+    // Resolve effective order: content arrays take priority over template arrays (both fall back to Object.keys)
+    const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, contentData);
+
+    // Base header rows: single list in resolved order (predefined + custom interleaved as configured)
+    const orderedBaseRows = baseOrder
         .map((k) => {
             const v = tmpl.base[k];
             if (!v?.is_visible) return null;
@@ -205,8 +208,8 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
         })
         .filter((row): row is { key: string; label: string; value: string } => row !== null);
 
-    // Sections in template.section_order
-    const sections = resolveSectionOrder(tmpl)
+    // Sections in resolved order
+    const sections = sectionOrder
         .map((k) => {
             const v = tmpl.sections[k];
             if (!v?.is_visible) return null;

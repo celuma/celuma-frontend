@@ -30,6 +30,7 @@ import {
     normalizeReportTemplateJSON,
     resolveBaseOrder,
     resolveSectionOrder,
+    resolveDisplayOrder,
 } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import StatsCard from "../ui/stats_card";
@@ -326,10 +327,20 @@ const ReportEditor: React.FC = () => {
                         }
                     }
 
-                    const effectiveTmpl =
+                    const baseTmpl =
                         !tmpl || !tmpl.base || !tmpl.sections
                             ? EMPTY_TEMPLATE_JSON
                             : normalizeReportTemplateJSON(tmpl);
+
+                    // Fuse the saved report's order arrays into the template state so the
+                    // editor panel and buildEnvelope both use the same effective order.
+                    const savedReport = full.report?.report;
+                    const { baseOrder: savedBO, sectionOrder: savedSO } = resolveDisplayOrder(baseTmpl, savedReport);
+                    const effectiveTmpl: ReportTemplateJSON = {
+                        ...baseTmpl,
+                        base_order: savedBO,
+                        section_order: savedSO,
+                    };
                     setTemplate(effectiveTmpl);
 
                     // Populate base custom values (saved value → template default → "")
@@ -439,7 +450,10 @@ const ReportEditor: React.FC = () => {
 
     const buildEnvelope = useCallback((): ReportEnvelope => {
         const tmpl = template ?? EMPTY_TEMPLATE_JSON;
-        const report = buildEmptyReportContent(tmpl);
+        // When a report has already been saved, preserve its stored order.
+        const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, envelope?.report);
+        const tmplWithSavedOrder = { ...tmpl, base_order: baseOrder, section_order: sectionOrder };
+        const report = buildEmptyReportContent(tmplWithSavedOrder);
 
         // Fill predefined base values from full data
         if (fullData) {

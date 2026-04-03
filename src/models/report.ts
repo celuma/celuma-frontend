@@ -276,6 +276,25 @@ export function resolveSectionOrder(t: Pick<TemplateOrderInput, "sections" | "se
     return result;
 }
 
+/**
+ * Resolve the effective display order for a report, merging template definitions
+ * with an optional saved content order.
+ *
+ * Priority: content.base_order (if non-empty) > template.base_order > Object.keys(template.base)
+ * The template's base/sections maps are always used for metadata (labels, types, visibility).
+ */
+export function resolveDisplayOrder(
+    template: Pick<TemplateOrderInput, "base" | "sections" | "base_order" | "section_order">,
+    content?: { base_order?: string[]; section_order?: string[] } | null,
+): { baseOrder: string[]; sectionOrder: string[] } {
+    const contentBaseOrder = content?.base_order?.length ? content.base_order : undefined;
+    const contentSectionOrder = content?.section_order?.length ? content.section_order : undefined;
+    return {
+        baseOrder: resolveBaseOrder({ base: template.base, base_order: contentBaseOrder ?? template.base_order }),
+        sectionOrder: resolveSectionOrder({ sections: template.sections, section_order: contentSectionOrder ?? template.section_order }),
+    };
+}
+
 /** Coerce legacy or partial API payloads into a full ReportTemplateJSON with canonical order arrays. */
 export function normalizeReportTemplateJSON(t: TemplateOrderInput): ReportTemplateJSON {
     return {
