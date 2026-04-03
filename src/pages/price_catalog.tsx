@@ -366,10 +366,12 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                                 rules={[
                                     { required: true, message: "Requerido" },
                                     { type: "number", min: 0, message: "Debe ser mayor o igual a 0" },
+                                    { type: "number", max: 9999999999.99, message: "El precio no puede superar $9,999,999,999.99" },
                                 ]}
                             >
                                 <InputNumber
                                     min={0}
+                                    max={9999999999.99}
                                     step={0.01}
                                     precision={2}
                                     style={{ width: "100%" }}
