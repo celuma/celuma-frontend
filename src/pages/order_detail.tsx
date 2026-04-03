@@ -1082,7 +1082,7 @@ export default function OrderDetail() {
                         {data && (
                             <>
                                         {/* Billed Lock Warning */}
-                                {data.order.billed_lock && (
+                                {data.order.billed_lock && hasPermission("billing:read") && (
                                     <div style={{ 
                                                 padding: "12px 16px", 
                                         background: "#fff7e6", 
