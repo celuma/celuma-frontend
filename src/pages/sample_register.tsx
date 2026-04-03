@@ -235,6 +235,7 @@ export default function SampleRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Sucursal</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione la sucursal donde se recibirá y procesará la muestra.</p>
                                 <div className="sr-grid-2">
                                     <FormField
                                         control={control}
@@ -254,6 +255,7 @@ export default function SampleRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Orden</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione la orden a la que pertenece esta muestra.</p>
                                 <div className="sr-grid-2">
                                     <FormField
                                         control={control}
@@ -274,6 +276,7 @@ export default function SampleRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Muestra</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código debe ser único dentro de la orden.</p>
                                 <div className="sr-grid-3">
                                     <FormField
                                         control={control}
