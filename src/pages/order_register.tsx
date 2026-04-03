@@ -326,7 +326,7 @@ export default function OrderRegister() {
                                         control={control}
                                         name="notes"
                                         render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Notas (opcional)" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Descripción (opcional)" />
                                         )}
                                     />
                                 </div>
@@ -368,7 +368,7 @@ export default function OrderRegister() {
                                                     control={control}
                                                     name={`samples.${index}.notes`}
                                                     render={(p) => (
-                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Notas (opcional)" />
+                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Descripción (opcional)" />
                                                     )}
                                                 />
                                             </div>
