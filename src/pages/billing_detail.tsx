@@ -9,6 +9,8 @@ import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
 import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
 import CelumaModal from "../components/ui/celuma_modal";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -109,7 +111,10 @@ function BillingDetail() {
     const [loading, setLoading] = useState(false);
     const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
     const [form] = Form.useForm();
-    
+    const { hasPermission } = useUserProfile();
+    const canRegisterPayment = hasPermission(PERMS.REGISTER_PAYMENT);
+    const canEditItems = hasPermission(PERMS.EDIT_ITEMS);
+
     // Estado para modal de edición
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [editingItem, setEditingItem] = useState<InvoiceItem | null>(null);
@@ -187,7 +192,7 @@ function BillingDetail() {
         { title: "Cantidad", dataIndex: "quantity", key: "quantity", width: 100 },
         { title: "Precio Unitario", dataIndex: "unit_price", key: "unit_price", width: 150, render: (price) => `$${price.toFixed(2)}` },
         { title: "Subtotal", dataIndex: "subtotal", key: "subtotal", width: 150, render: (subtotal) => `$${subtotal.toFixed(2)}` },
-        {
+        ...(canEditItems ? [{
             title: "Acciones",
             key: "actions",
             width: 100,
@@ -204,7 +209,7 @@ function BillingDetail() {
                     Editar
                 </Button>
             ),
-        },
+        }] as ColumnsType<InvoiceItem> : []),
     ];
 
     const paymentsColumns: ColumnsType<Payment> = [
@@ -280,7 +285,7 @@ function BillingDetail() {
                                     <div style={{ padding: 16, textAlign: "center", color: tokens.textSecondary }}>Sin pagos registrados</div>
                                 )}
 
-                                {invoice.balance > 0 && (
+                                {invoice.balance > 0 && canRegisterPayment && (
                                     <>
                                         <Divider orientation="left">Registrar Pago</Divider>
                                         <Form

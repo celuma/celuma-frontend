@@ -42,10 +42,17 @@ export default function RequirePermission({ permission, children }: RequirePermi
 
     if (!hasPermission(permission)) {
         // User is authenticated but lacks this specific permission.
-        // Route them to the best landing page for their actual permissions.
+        // Route them to the best landing page for their actual permissions,
+        // passing state so the landing page can show an access-denied toast.
         const perms = profile?.permissions ?? [];
         const safeRoute = defaultRouteForPermissions(perms);
-        return <Navigate to={safeRoute} replace />;
+        return (
+            <Navigate
+                to={safeRoute}
+                replace
+                state={{ permissionDenied: permission, from: location.pathname }}
+            />
+        );
     }
 
     return <>{children}</>;

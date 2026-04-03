@@ -62,8 +62,7 @@ function BillingList() {
             const data = await getJSON<Invoice[]>("/v1/billing/invoices/");
             setInvoices(data);
         } catch (error) {
-            message.error("Error al cargar facturas");
-            console.error(error);
+            message.error(error instanceof Error ? error.message : "Error al cargar facturas");
         } finally {
             setLoading(false);
         }

@@ -103,6 +103,38 @@ export function defaultRouteForPermissions(permissions: string[]): string {
     return "/access-denied";
 }
 
+/** Human-readable label for a permission code (used in access-denied messages). */
+export function permissionLabel(code: string): string {
+    const labels: Record<string, string> = {
+        "lab:read": "Laboratorio",
+        "lab:create_order": "Crear Órdenes",
+        "lab:create_patient": "Registrar Pacientes",
+        "lab:create_sample": "Registrar Muestras",
+        "lab:update_order": "Actualizar Órdenes",
+        "lab:update_sample": "Actualizar Muestras",
+        "billing:read": "Facturación",
+        "billing:create_invoice": "Crear Facturas",
+        "billing:register_payment": "Registrar Pagos",
+        "billing:edit_items": "Editar Ítems de Factura",
+        "reports:read": "Reportes",
+        "reports:create": "Crear Reportes",
+        "reports:edit": "Editar Reportes",
+        "reports:submit": "Enviar Reportes",
+        "reports:approve": "Aprobar Reportes",
+        "reports:sign": "Firmar Reportes",
+        "reports:retract": "Retractar Reportes",
+        "reports:manage_templates": "Plantillas de Reportes",
+        "admin:manage_users": "Gestión de Usuarios",
+        "admin:manage_branches": "Gestión de Sucursales",
+        "admin:manage_catalog": "Catálogo",
+        "admin:manage_tenant": "Configuración del Tenant",
+        "portal:physician_access": "Portal Médico",
+        "portal:patient_access": "Portal de Pacientes",
+        "audit:read_auditlog": "Auditoría",
+    };
+    return labels[code] ?? code;
+}
+
 /** Accent colour for a role badge. */
 export function roleColor(code: string): { color: string; bg: string } {
     const palette: Record<string, { color: string; bg: string }> = {
