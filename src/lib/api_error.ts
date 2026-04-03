@@ -4,6 +4,21 @@
  * used apiFetch or a local fetch wrapper.
  */
 
+/** Known English backend messages → Spanish translation. */
+const BACKEND_MSG_ES: Record<string, string> = {
+    "Current password is incorrect": "La contraseña actual es incorrecta.",
+    "Current password is required to set a new password": "Debes ingresar tu contraseña actual para cambiarla.",
+    "Username already registered for this tenant": "Ese nombre de usuario ya está en uso.",
+    "Email already registered for this tenant": "Ese correo electrónico ya está registrado.",
+    "Failed to update profile": "No se pudo actualizar el perfil.",
+    "Failed to update password": "No se pudo actualizar la contraseña.",
+};
+
+/** Translates a known backend English string; returns it unchanged if not mapped. */
+export function localizeBackendMessage(msg: string): string {
+    return BACKEND_MSG_ES[msg] ?? msg;
+}
+
 interface FastApiDetail {
     detail?: string | Array<{ msg: string; loc?: unknown[] }>;
     message?: string;
@@ -39,7 +54,8 @@ export function parseFastApiDetail(bodyText: string): string | null {
  * else → "Error inesperado (status)."
  */
 export function formatHttpError(status: number, bodyText: string): string {
-    const detail = parseFastApiDetail(bodyText);
+    const raw = parseFastApiDetail(bodyText);
+    const detail = raw ? localizeBackendMessage(raw) : null;
 
     if (status === 403) {
         const suffix = detail ? `: ${detail}` : ".";
