@@ -41,6 +41,7 @@ import {
 } from "../components/comments/comment_utils";
 import { renderLabels } from "../components/ui/table_helpers";
 import { getSampleTypeConfig } from "../components/ui/table_helpers";
+import { showCelumaApiError } from "../lib/celuma_feedback";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -236,8 +237,8 @@ export default function OrderDetail() {
             const report = await getReport(rId);
             setLatestReport(report);
         } catch (err) {
-            console.error("Error loading latest report:", err);
             setLatestReport(null);
+            showCelumaApiError(err, "Error al cargar la vista previa del reporte.");
         } finally {
             setReportLoading(false);
         }
@@ -312,7 +313,8 @@ export default function OrderDetail() {
             }> }>(`/v1/laboratory/orders/${orderId}/events`);
             setTimeline(eventsResult.events);
         } catch (err) {
-            console.error("Error loading timeline:", err);
+            // Timeline is secondary; skip toast to avoid noise on background refreshes.
+            void err;
         }
     }, [orderId]);
 
@@ -326,7 +328,7 @@ export default function OrderDetail() {
             setAllLabels(labelsData);
             setAllUsers(usersData);
         } catch (err) {
-            console.error("Error loading collaboration data:", err);
+            showCelumaApiError(err, "Error al cargar datos de colaboración.");
         }
     }, []);
 
@@ -424,7 +426,9 @@ export default function OrderDetail() {
                 scrollToBottom();
             }
         } catch (err) {
-            console.error("Error loading conversation:", err);
+            if (!options?.silent) {
+                showCelumaApiError(err, "Error al cargar la conversación.");
+            }
         } finally {
             if (!options?.silent) {
                 setLoadingConversation(false);
@@ -1078,7 +1082,7 @@ export default function OrderDetail() {
                         {data && (
                             <>
                                         {/* Billed Lock Warning */}
-                                {data.order.billed_lock && (
+                                {data.order.billed_lock && hasPermission("billing:read") && (
                                     <div style={{ 
                                                 padding: "12px 16px", 
                                         background: "#fff7e6", 

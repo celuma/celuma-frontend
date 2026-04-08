@@ -104,7 +104,7 @@ export default function SelectField({ value, onChange, options, placeholder, err
             <div style={wrapperStyle}>
                 <Select
                     className={`sf-${uid}`}
-                    value={value}
+                    value={value === "" ? undefined : value}
                     onChange={(v) => onChange?.(v)}
                     options={options}
                     placeholder={placeholder}

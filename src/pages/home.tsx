@@ -8,6 +8,8 @@ import RecentActivity from "../components/ui/recent_activity";
 import ErrorText from "../components/ui/error_text";
 import { useDashboardData } from "../hooks/use_dashboard_data";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 
@@ -18,6 +20,7 @@ const Home: React.FC = () => {
     const nav = useNavigate();
     const { pathname } = useLocation();
     const { data, loading, error } = useDashboardData();
+    const { hasPermission } = useUserProfile();
 
     const handleActivityClick = (item: { id: string; type: string }) => {
         switch (item.type) {
@@ -155,81 +158,38 @@ const Home: React.FC = () => {
                                     Acciones Rápidas
                                 </h3>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                                    <button
-                                        onClick={() => nav("/patients/register")}
-                                        style={{
-                                            padding: "12px 16px",
-                                            border: "1px solid #e5e7eb",
-                                            borderRadius: 8,
-                                            background: "#fff",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            fontSize: 14,
-                                            fontWeight: 500,
-                                            color: "#374151",
-                                            transition: "all 0.2s",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = "#f9fafb";
-                                            e.currentTarget.style.borderColor = "#0f8b8d";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = "#fff";
-                                            e.currentTarget.style.borderColor = "#e5e7eb";
-                                        }}
-                                    >
-                                        📝 Registrar Nuevo Paciente
-                                    </button>
-                                    <button
-                                        onClick={() => nav("/orders/register")}
-                                        style={{
-                                            padding: "12px 16px",
-                                            border: "1px solid #e5e7eb",
-                                            borderRadius: 8,
-                                            background: "#fff",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            fontSize: 14,
-                                            fontWeight: 500,
-                                            color: "#374151",
-                                            transition: "all 0.2s",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = "#f9fafb";
-                                            e.currentTarget.style.borderColor = "#0f8b8d";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = "#fff";
-                                            e.currentTarget.style.borderColor = "#e5e7eb";
-                                        }}
-                                    >
-                                        🧪 Crear Nueva Orden
-                                    </button>
-                                    <button
-                                        onClick={() => nav("/reports")}
-                                        style={{
-                                            padding: "12px 16px",
-                                            border: "1px solid #e5e7eb",
-                                            borderRadius: 8,
-                                            background: "#fff",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            fontSize: 14,
-                                            fontWeight: 500,
-                                            color: "#374151",
-                                            transition: "all 0.2s",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = "#f9fafb";
-                                            e.currentTarget.style.borderColor = "#0f8b8d";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = "#fff";
-                                            e.currentTarget.style.borderColor = "#e5e7eb";
-                                        }}
-                                    >
-                                        📊 Ver Todos los Reportes
-                                    </button>
+                                    {([
+                                        { perm: PERMS.CREATE_PATIENT, route: "/patients/register", label: "📝 Registrar Nuevo Paciente" },
+                                        { perm: PERMS.CREATE_ORDER,   route: "/orders/register",   label: "🧪 Crear Nueva Orden" },
+                                        { perm: PERMS.REPORTS_READ,   route: "/reports",            label: "📊 Ver Todos los Reportes" },
+                                    ] as const).filter(({ perm }) => hasPermission(perm)).map(({ route, label }) => (
+                                        <button
+                                            key={route}
+                                            onClick={() => nav(route)}
+                                            style={{
+                                                padding: "12px 16px",
+                                                border: "1px solid #e5e7eb",
+                                                borderRadius: 8,
+                                                background: "#fff",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                fontSize: 14,
+                                                fontWeight: 500,
+                                                color: "#374151",
+                                                transition: "all 0.2s",
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.background = "#f9fafb";
+                                                e.currentTarget.style.borderColor = "#0f8b8d";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = "#fff";
+                                                e.currentTarget.style.borderColor = "#e5e7eb";
+                                            }}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
                                 </div>
                             </Card>
                         </Col>

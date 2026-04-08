@@ -138,7 +138,7 @@ export default function OrderRegister() {
             requested_by: "",
             notes: "",
             samples: [
-                { sample_code: "", type: "OTRO", notes: "", collected_date: "", received_date: "" },
+                { sample_code: "", type: undefined as unknown as OrderFormData["samples"][0]["type"], notes: "", collected_date: "", received_date: "" },
             ],
         },
         mode: "onTouched",
@@ -297,6 +297,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Orden</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione el tipo de estudio que se realizará. El código de la orden se asignará automáticamente a partir de él.</p>
                                 <div className="cr-grid-2">
                                     <FormField
                                         control={control}
@@ -320,16 +321,12 @@ export default function OrderRegister() {
                                     />
                                 </div>
                                 
-                                <div style={{ marginBottom: 16, padding: 12, background: "#f0f9ff", borderRadius: 8, color: "#0369a1", fontSize: 13 }}>
-                                    ℹ️ El código de orden se asignará automáticamente según el tipo de estudio (ej. IHQ-1)
-                                </div>
-
                                 <div className="cr-grid-2">
                                     <FormField
                                         control={control}
                                         name="notes"
                                         render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Notas (opcional)" />
+                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Descripción (opcional)" />
                                         )}
                                     />
                                 </div>
@@ -337,6 +334,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Muestras</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Complete el código, tipo y las fechas de recolección y recepción de cada una.</p>
                                 <div style={{ display: "grid", gap: 12 }}>
                                     {fields.map((field, index) => (
                                         <div key={field.id} className="sample-card">
@@ -370,7 +368,7 @@ export default function OrderRegister() {
                                                     control={control}
                                                     name={`samples.${index}.notes`}
                                                     render={(p) => (
-                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Notas (opcional)" />
+                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Descripción (opcional)" />
                                                     )}
                                                 />
                                             </div>
@@ -412,7 +410,7 @@ export default function OrderRegister() {
                                         <Button
                                             type="default"
                                             onClick={() =>
-                                                append({ sample_code: "", type: "OTRO", notes: "", collected_date: "", received_date: "" })
+                                                append({ sample_code: "", type: undefined as unknown as OrderFormData["samples"][0]["type"], notes: "", collected_date: "", received_date: "" })
                                             }
                                         >
                                             Agregar otra muestra

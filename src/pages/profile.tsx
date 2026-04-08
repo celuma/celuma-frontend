@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Layout, Card, notification, Avatar, Upload, message as antdMessage, Divider } from "antd";
+import { Layout, Card, Avatar, Upload, Divider } from "antd";
+import { showCelumaSuccess, showCelumaWarning, showCelumaApiError } from "../lib/celuma_feedback";
+import { formatHttpError } from "../lib/api_error";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,7 +76,8 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
     usePageTitle();
     const nav = useNavigate();
     const { pathname } = useLocation();
-    const [loading, setLoading] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [savingPassword, setSavingPassword] = useState(false);
     const [profileData, setProfileData] = useState<UserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
     const [avatarFile, setAvatarFile] = useState<RcFile | null>(null);
@@ -133,7 +136,7 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
             profileForm.reset({ full_name: data.full_name, username: data.username || "", email: data.email });
         } catch (error) {
             console.error("Error fetching profile:", error);
-            notification.error({ message: "Error", description: "No se pudo cargar el perfil." });
+            showCelumaApiError(error, "No se pudo cargar el perfil.");
         } finally {
             setProfileLoading(false);
         }
@@ -150,7 +153,7 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
 
     const handleProfileUpdate = async (data: ProfileFormData) => {
         try {
-            setLoading(true);
+            setSavingProfile(true);
             const token = getAuthToken();
             if (!token) throw new Error("No authentication token found");
             const response = await fetch(`${apiBase()}/v1/auth/me`, {
@@ -159,23 +162,23 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                 body: JSON.stringify(buildProfileUpdatePayload(data))
             });
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || "Failed to update profile");
+                const bodyText = await response.text();
+                throw new Error(formatHttpError(response.status, bodyText));
             }
             const updatedProfile: UserProfile = await response.json();
             setProfileData(updatedProfile);
             profileForm.reset({ full_name: updatedProfile.full_name, username: updatedProfile.username || "", email: updatedProfile.email });
-            notification.success({ message: "Perfil actualizado", description: "Tu información ha sido actualizada." });
+            showCelumaSuccess("Perfil actualizado", "Tu información ha sido guardada correctamente.");
         } catch (error) {
-            notification.error({ message: "Error", description: error instanceof Error ? error.message : "No se pudo actualizar." });
+            showCelumaApiError(error, "No se pudo actualizar el perfil.");
         } finally {
-            setLoading(false);
+            setSavingProfile(false);
         }
     };
 
     const handlePasswordUpdate = async (data: PasswordFormData) => {
         try {
-            setLoading(true);
+            setSavingPassword(true);
             const token = getAuthToken();
             if (!token) throw new Error("No authentication token found");
             const response = await fetch(`${apiBase()}/v1/auth/me`, {
@@ -184,21 +187,27 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                 body: JSON.stringify({ current_password: data.current_password, new_password: data.new_password })
             });
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || "Failed to update password");
+                const bodyText = await response.text();
+                const msg = formatHttpError(response.status, bodyText);
+                if (response.status === 400 && bodyText.includes("Current password is incorrect")) {
+                    showCelumaWarning("Contraseña incorrecta", "La contraseña actual que ingresaste no es correcta.");
+                } else {
+                    throw new Error(msg);
+                }
+                return;
             }
             passwordForm.reset();
-            notification.success({ message: "Contraseña actualizada", description: "Tu contraseña ha sido cambiada." });
+            showCelumaSuccess("Contraseña actualizada", "Tu contraseña ha sido cambiada correctamente.");
         } catch (error) {
-            notification.error({ message: "Error", description: error instanceof Error ? error.message : "No se pudo actualizar." });
+            showCelumaApiError(error, "No se pudo actualizar la contraseña.");
         } finally {
-            setLoading(false);
+            setSavingPassword(false);
         }
     };
 
     const handleAvatarSelect = async (file: RcFile) => {
-        if (!file.type.startsWith("image/")) { antdMessage.error("Solo se permiten imágenes"); return false; }
-        if (file.size / 1024 / 1024 >= 5) { antdMessage.error("Máximo 5MB"); return false; }
+        if (!file.type.startsWith("image/")) { showCelumaWarning("Tipo de archivo no permitido", "Solo se permiten imágenes."); return false; }
+        if (file.size / 1024 / 1024 >= 5) { showCelumaWarning("Archivo demasiado grande", "El archivo no puede superar 5 MB."); return false; }
         setAvatarFile(file);
         try { setAvatarPreview(await createSDRPreview(file)); } catch { setAvatarPreview(null); }
         return false;
@@ -219,11 +228,11 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                 body: formData,
             });
             if (!res.ok) throw new Error("Upload failed");
-            antdMessage.success("Foto actualizada");
+            showCelumaSuccess("Foto actualizada", "Tu foto de perfil ha sido guardada.");
             handleClearAvatarSelection();
             await fetchProfile();
         } catch (err) {
-            antdMessage.error(err instanceof Error ? err.message : "Error al subir foto");
+            showCelumaApiError(err, "Error al subir la foto de perfil.");
         } finally {
             setUploadingAvatar(false);
         }
@@ -366,24 +375,24 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre completo *</label>
                                     <FormField control={profileForm.control} name="full_name" render={({ value, onChange, error }) => (
-                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre completo" disabled={loading} />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre completo" disabled={savingProfile} />
                                     )} />
                                                 </div>
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nombre de usuario</label>
                                     <FormField control={profileForm.control} name="username" render={({ value, onChange, error }) => (
-                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre de usuario (opcional)" disabled={loading} />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<UserOutlined />} label="Nombre de usuario (opcional)" disabled={savingProfile} />
                                     )} />
                                                 </div>
                                                 <div>
                                     <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Correo electrónico *</label>
                                     <FormField control={profileForm.control} name="email" render={({ value, onChange, error }) => (
-                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} label="Correo electrónico" disabled={loading} type="email" />
+                                        <FloatingCaptionInput value={value} onChange={onChange} error={error} prefixNode={<MailOutlined />} label="Correo electrónico" disabled={savingProfile} type="email" />
                                     )} />
                                 </div>
                                                 </div>
                             <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-                                <Button type="primary" htmlType="submit" loading={loading} disabled={!hasProfileChanges || loading}>
+                                <Button type="primary" htmlType="submit" loading={savingProfile} disabled={!hasProfileChanges || savingProfile}>
                                     Guardar Cambios
                                                 </Button>
                                             </div>
@@ -412,19 +421,19 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                                                 <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Contraseña actual *</label>
                                         <FormField control={passwordForm.control} name="current_password" render={({ value, onChange, error }) => (
-                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Contraseña actual" disabled={loading} />
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Contraseña actual" disabled={savingPassword} />
                                         )} />
                                                 </div>
                                                 <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Nueva contraseña *</label>
                                         <FormField control={passwordForm.control} name="new_password" render={({ value, onChange, error }) => (
-                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Nueva contraseña" disabled={loading} />
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Nueva contraseña" disabled={savingPassword} />
                                         )} />
                                                 </div>
                                                 <div>
                                         <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: "#374151" }}>Confirmar contraseña *</label>
                                         <FormField control={passwordForm.control} name="confirm_password" render={({ value, onChange, error }) => (
-                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Confirmar contraseña" disabled={loading} />
+                                            <PasswordField value={value} onChange={onChange} error={error} prefixNode={<KeyOutlined />} placeholder="Confirmar contraseña" disabled={savingPassword} />
                                         )} />
                                     </div>
                                 </div>
@@ -432,7 +441,7 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                                     Mínimo 8 caracteres con mayúscula, minúscula, número y símbolo (!@#$%^&*).
                                                 </div>
                                 <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
-                                    <Button type="primary" htmlType="submit" loading={loading}>
+                                    <Button type="primary" htmlType="submit" loading={savingPassword}>
                                                     Cambiar Contraseña
                                                 </Button>
                                             </div>

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout, Input, Card, Avatar, Tooltip } from "antd";
-import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -142,12 +141,6 @@ export default function ReportsList() {
             }));
     }, [rows]);
 
-    // Published filter -> PDF filter
-    const pdfFilters = [
-        { text: "Con PDF", value: true },
-        { text: "Sin PDF", value: false },
-    ];
-
     const columns: ColumnsType<ReportsListResponse["reports"][number]> = [
         { 
             title: "Código", 
@@ -201,20 +194,6 @@ export default function ReportsList() {
             key: "title",
             render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
             sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
-        },
-        { 
-            title: "PDF", 
-            dataIndex: "has_pdf", 
-            key: "has_pdf", 
-            width: 40,
-            align: "center" as const,
-            render: (v: boolean) => v ? (
-                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
-            ) : (
-                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
-            ),
-            filters: pdfFilters,
-            onFilter: (value, record) => record.has_pdf === value,
         },
         { 
             title: "Estado", 
