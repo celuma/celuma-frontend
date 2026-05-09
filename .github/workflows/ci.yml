@@ -1,5 +1,12 @@
 name: ci
 
+# Docker images: built and pushed to GHCR + ECR for local dev / rollback use.
+# S3 + CloudFront: the actual production deployment path (Vite build → S3 sync → CF invalidation).
+#
+# Both paths run in parallel on each trigger:
+#   push main    -> docker image (stg)  +  deploy to stg S3/CloudFront
+#   push tag v*  -> docker image (prod) +  deploy to prod S3/CloudFront
+
 on:
   push:
     branches:
@@ -7,15 +14,60 @@ on:
     tags:
       - "v*"
 
+env:
+  AWS_REGION: mx-central-1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared Vite build (artifact consumed by both deploy jobs)
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
+  build-npm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Classify trigger
+        id: classify
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Vite build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || '/api' }}
+          VITE_APP_VERSION: ${{ steps.classify.outputs.version }}
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker images (kept as-is for local dev / isolated testing)
+# ─────────────────────────────────────────────────────────────────────────────
+
   docker-build-main:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
       contents: read
-      packages: write           # keep GHCR publishing
-      id-token: write           # needed for AWS OIDC
+      packages: write           # GHCR
+      id-token: write           # AWS OIDC
 
     steps:
       - uses: actions/checkout@v4
@@ -26,30 +78,26 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU (multi-arch emulation)
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-      # --- GHCR login (kept as-is) ---
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- NEW: Configure AWS OIDC credentials for ECR push ---
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECRPushRole
-          aws-region: mx-central-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # --- NEW: Login to Amazon ECR (captures registry URL) ---
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image (main branch → GHCR + ECR STG)
+      - name: Build and push Docker image (main → GHCR + ECR stg)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -72,29 +120,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output main branch image reference
-        run: |
-          echo "### 🚀 Main Branch Image Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**GHCR tags:**" >> $GITHUB_STEP_SUMMARY
+      - run: |
+          echo "### Docker image published (stg)" >> $GITHUB_STEP_SUMMARY
           echo "- ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- ghcr.io/${{ github.repository }}:main" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**ECR (stg) tags:**" >> $GITHUB_STEP_SUMMARY
           echo "- ${{ steps.login-ecr.outputs.registry }}/celuma-stg/celuma-frontend:stg-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- ${{ steps.login-ecr.outputs.registry }}/celuma-stg/celuma-frontend:stg-latest" >> $GITHUB_STEP_SUMMARY
 
   docker-release:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'push' &&
-      startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 
     permissions:
       contents: read
-      packages: write           # keep GHCR publishing
-      id-token: write           # needed for AWS OIDC
+      packages: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -105,25 +145,21 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU (multi-arch emulation)
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-      # --- GHCR login (kept as-is) ---
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- NEW: Configure AWS OIDC credentials for ECR push ---
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECRPushRole
-          aws-region: mx-central-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # --- NEW: Login to Amazon ECR (captures registry URL) ---
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -131,12 +167,10 @@ jobs:
       - name: Extract release version
         id: release_version
         run: |
-          # Strip leading 'v' (e.g. v1.2.3 -> 1.2.3)
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "RELEASE_TAG=$VERSION" >> $GITHUB_ENV
 
-      - name: Build and push Docker image (tag → GHCR + ECR PROD)
+      - name: Build and push Docker image (tag → GHCR + ECR prod)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -160,19 +194,118 @@ jobs:
             org.opencontainers.image.title=Release-${{ github.ref_name }}
             org.opencontainers.image.version=${{ steps.release_version.outputs.version }}
 
-      - name: Output release image reference
-        run: |
-          echo "### 🎉 Release Image Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Release:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**GHCR tags:**" >> $GITHUB_STEP_SUMMARY
+      - run: |
+          echo "### Docker image published (prod)" >> $GITHUB_STEP_SUMMARY
           echo "- ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/${{ github.repository }}:${{ steps.release_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**ECR (prod) tags:**" >> $GITHUB_STEP_SUMMARY
           echo "- ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:${{ steps.release_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- ${{ steps.login-ecr.outputs.registry }}/celuma/celuma-frontend:latest" >> $GITHUB_STEP_SUMMARY
-          
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S3 + CloudFront deploys (the live production path)
+# ─────────────────────────────────────────────────────────────────────────────
+
+  deploy-stg:
+    needs: build-npm
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: stg
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Configure AWS (OIDC, deploy role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECSDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve CloudFront distribution id (stg)
+        id: cf
+        run: |
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='Celuma stg (SPA + /api proxy)'].Id | [0]" \
+            --output text)
+          if [ -z "$DIST_ID" ] || [ "$DIST_ID" = "None" ]; then
+            echo "::error::Could not find stg CloudFront distribution"
+            exit 1
+          fi
+          echo "dist_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync to S3 (stg)
+        run: |
+          aws s3 sync dist/ s3://celuma-frontend-stg/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html"
+          aws s3 cp dist/index.html s3://celuma-frontend-stg/index.html \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --content-type "text/html"
+
+      - name: Invalidate CloudFront (stg)
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.cf.outputs.dist_id }}" \
+            --paths "/index.html" "/" \
+            --no-cli-pager > /dev/null
+
+      - run: echo "### Frontend deployed to stg (${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+
+  deploy-prod:
+    needs: build-npm
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: prod
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Configure AWS (OIDC, deploy role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECSDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve CloudFront distribution id (prod)
+        id: cf
+        run: |
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='Celuma prod (SPA + /api proxy)'].Id | [0]" \
+            --output text)
+          if [ -z "$DIST_ID" ] || [ "$DIST_ID" = "None" ]; then
+            echo "::error::Could not find prod CloudFront distribution"
+            exit 1
+          fi
+          echo "dist_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync to S3 (prod)
+        run: |
+          aws s3 sync dist/ s3://celuma-frontend-prod/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html"
+          aws s3 cp dist/index.html s3://celuma-frontend-prod/index.html \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --content-type "text/html"
+
+      - name: Invalidate CloudFront (prod)
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.cf.outputs.dist_id }}" \
+            --paths "/index.html" "/" \
+            --no-cli-pager > /dev/null
+
+      - run: echo "### Frontend deployed to prod (${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY
