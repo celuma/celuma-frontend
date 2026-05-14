@@ -7,6 +7,7 @@ import {
     ExperimentOutlined,
     DollarOutlined,
     TeamOutlined,
+    SafetyCertificateOutlined,
     InfoCircleOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -30,6 +31,12 @@ const adminMenuItem: Required<MenuProps>["items"][number] = {
     label: "Gestión de Usuarios",
 };
 
+const reviewersMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/reviewers",
+    icon: <SafetyCertificateOutlined />,
+    label: "Revisores",
+};
+
 const aboutMenuItem: Required<MenuProps>["items"][number] = {
     key: "/config/about",
     icon: <InfoCircleOutlined />,
@@ -44,7 +51,7 @@ const SidebarConfig: React.FC = () => {
     const menuItems: Required<MenuProps>["items"] = [
         ...baseMenuItems,
         ...(canManageCatalog ? catalogMenuItems : []),
-        ...(canManageUsers ? [adminMenuItem] : []),
+        ...(canManageUsers ? [adminMenuItem, reviewersMenuItem] : []),
         aboutMenuItem,
     ];
 
