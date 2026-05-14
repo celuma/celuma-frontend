@@ -212,3 +212,23 @@ export async function getLabUsers(): Promise<LabUser[]> {
     const response = await getJSON<{ users: LabUser[] }>("/v1/laboratory/users/search");
     return response.users;
 }
+
+// Users in the tenant that hold the 'reviewer' role. Used by selectors that
+// must only show eligible reviewers (e.g. assigning reviewers to an order).
+export async function getReviewerUsers(): Promise<LabUser[]> {
+    const response = await getJSON<{
+        reviewers: Array<{
+            id: string;
+            full_name: string;
+            email: string;
+            avatar_url?: string | null;
+        }>;
+    }>("/v1/users/reviewers");
+    return response.reviewers.map((r) => ({
+        id: r.id,
+        name: r.full_name,
+        email: r.email,
+        avatar_url: r.avatar_url ?? null,
+        username: null,
+    }));
+}
