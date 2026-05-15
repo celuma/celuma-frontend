@@ -3,20 +3,22 @@ import React, { useRef, forwardRef, useImperativeHandle } from "react";
 import { FilePdfOutlined } from "@ant-design/icons";
 import type { ReportEnvelope } from "../../models/report";
 import { tokens } from "../design/tokens";
-import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
+import ReportPreviewPages, { type ReportPreviewPagesRef, type SignerLookupEntry } from "./report_preview_pages";
 import { usePdfExport } from "../../hooks/use_pdf_export";
 
 interface ReportPreviewProps {
     report: ReportEnvelope;
     loading?: boolean;
     style?: React.CSSProperties;
+    /** Forwarded to the inner pages component to resolve the signer's display name. */
+    signerLookup?: SignerLookupEntry[];
 }
 
 export interface ReportPreviewRef {
     exportPDF: () => Promise<void>;
 }
 
-const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report, loading = false, style }, ref) => {
+const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report, loading = false, style, signerLookup }, ref) => {
     const previewPagesRef = useRef<ReportPreviewPagesRef>(null);
     const { exportToPDF } = usePdfExport();
 
@@ -67,7 +69,7 @@ const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report
                         Exportar PDF
                     </Button>
                 </div>
-                <ReportPreviewPages ref={previewPagesRef} report={report} />
+                <ReportPreviewPages ref={previewPagesRef} report={report} signerLookup={signerLookup} />
             </div>
         </Card>
     );

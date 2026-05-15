@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Layout, Card, Button, DatePicker, Form, Input, Modal, message, Space, Popconfirm, Switch, Checkbox, Select, Divider, Typography, Tag, Empty, Spin, Tooltip } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import dayjs from "dayjs";
@@ -20,7 +20,7 @@ import type {
     TemplateFieldType,
     TemplateOrderInput,
 } from "../models/report";
-import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, resolveBaseOrder, resolveSectionOrder } from "../models/report";
+import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
 
 const { TextArea } = Input;
@@ -366,6 +366,10 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const [baseItems, setBaseItems] = useState<DraggableItem[]>([]);
     const [sectionItems, setSectionItems] = useState<DraggableItem[]>([]);
 
+    // ---- Signature metadata flags (T7) ----
+    const [showSignatureSection, setShowSignatureSection] = useState(false);
+    const [requireDigitalSignature, setRequireDigitalSignature] = useState(false);
+
     // ---- Modals ----
     const [baseFieldModalOpen, setBaseFieldModalOpen] = useState(false);
     const [baseFieldForm] = Form.useForm();
@@ -388,6 +392,10 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         sections: Object.fromEntries(sectionItems.map(({ key, cfg }) => [key, cfg])) as ReportTemplateJSON["sections"],
         base_order: baseItems.map(({ key }) => key),
         section_order: sectionItems.map(({ key }) => key),
+        signatureMetadata: {
+            show_signature_section: showSignatureSection,
+            require_digital_signature: showSignatureSection && requireDigitalSignature,
+        },
     });
 
     const arraysFromTemplateJSON = (json: ReportTemplateJSON | TemplateOrderInput) => {
@@ -399,6 +407,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         setSectionItems(
             so.map((key) => ({ key, cfg: json.sections[key] as ReportSectionConfig }))
         );
+        const sig = resolveSignatureMetadata(json as { signatureMetadata?: ReportTemplateJSON["signatureMetadata"] });
+        setShowSignatureSection(sig.show_signature_section);
+        setRequireDigitalSignature(sig.require_digital_signature);
     };
 
     // Load list
@@ -467,12 +478,16 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             Object.entries(defaults.base).forEach(([k, v]) => { if (!mergedBase[k]) mergedBase[k] = v; });
             Object.entries(defaults.sections).forEach(([k, v]) => { if (!mergedSections[k]) mergedSections[k] = v; });
 
-            const storedLoose = stored as TemplateOrderInput;
+            const storedLoose = stored as ReportTemplateJSON;
+
             arraysFromTemplateJSON({
                 base: mergedBase,
                 sections: mergedSections,
                 base_order: storedLoose.base_order,
                 section_order: storedLoose.section_order,
+                // Required so Switch UI reflects persisted flags (arraysFromTemplateJSON
+                // derives toggle state exclusively from signatureMetadata).
+                signatureMetadata: storedLoose.signatureMetadata,
             });
         } catch {
             message.error("Error al cargar la plantilla");
@@ -864,6 +879,61 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                 openDefaultValueModal(key, true, label, type, value)
                             }
                         />
+
+                        <Divider />
+
+                        {/* ---- Firma (T7) ---- */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <SafetyCertificateOutlined style={{ color: tokens.primary }} />
+                            <Title level={5} style={{ margin: 0, fontFamily: tokens.titleFont }}>
+                                Firma
+                            </Title>
+                        </div>
+                        <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+                            Estos valores se usan como predeterminados al crear nuevos informes con esta plantilla.
+                        </Text>
+                        <div style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                            padding: "12px 14px",
+                            borderRadius: tokens.radius,
+                            background: "#fafafa",
+                            border: "1px solid #f0f0f0",
+                        }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 500 }}>
+                                        Incluir sección de firma en el reporte
+                                    </div>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Agrega un bloque al final del informe con espacio para la firma del revisor.
+                                    </Text>
+                                </div>
+                                <Switch
+                                    checked={showSignatureSection}
+                                    onChange={(checked) => {
+                                        setShowSignatureSection(checked);
+                                        if (!checked) setRequireDigitalSignature(false);
+                                    }}
+                                />
+                            </div>
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, opacity: showSignatureSection ? 1 : 0.5 }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 500 }}>
+                                        Firma digital (imagen PNG)
+                                    </div>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Inserta la firma digital del revisor al firmar el reporte.
+                                    </Text>
+                                </div>
+                                <Switch
+                                    checked={requireDigitalSignature}
+                                    disabled={!showSignatureSection}
+                                    onChange={setRequireDigitalSignature}
+                                />
+                            </div>
+                        </div>
 
                         <Divider />
 

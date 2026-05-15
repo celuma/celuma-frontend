@@ -796,6 +796,10 @@ export default function OrderDetail() {
                             report={latestReport} 
                             loading={reportLoading}
                             style={{ margin: 0 }}
+                            signerLookup={(data?.order.reviewers ?? []).map((r) => ({
+                                id: r.id,
+                                name: r.name,
+                            }))}
                         />
                     )}
                 </div>

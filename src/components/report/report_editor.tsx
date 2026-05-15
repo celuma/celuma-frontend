@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-    message, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image, Modal, Avatar, Divider, Form,
+    message, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image, Modal, Avatar, Divider, Form, Switch,
 } from "antd";
 import {
     UserOutlined, FileTextOutlined, ExperimentOutlined,
-    DeleteOutlined, FilePdfOutlined, SaveOutlined, EditOutlined,
+    DeleteOutlined, FilePdfOutlined, SaveOutlined, EditOutlined, SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
@@ -31,6 +31,7 @@ import {
     resolveBaseOrder,
     resolveSectionOrder,
     resolveDisplayOrder,
+    resolveSignatureMetadata,
 } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import StatsCard from "../ui/stats_card";
@@ -208,6 +209,10 @@ const ReportEditor: React.FC = () => {
     const [tableModal, setTableModal] = useState<{ key: string; label: string } | null>(null);
     const [tableDraft, setTableDraft] = useState("");
 
+    // Signature metadata flags (T7) — persisted at the document root in the JSON body.
+    const [showSignatureSection, setShowSignatureSection] = useState(false);
+    const [requireDigitalSignature, setRequireDigitalSignature] = useState(false);
+
     // Preview ref
     const previewPagesRef = useRef<ReportPreviewPagesRef>(null);
     const leftColumnRef = useRef<HTMLDivElement>(null);
@@ -367,6 +372,18 @@ const ReportEditor: React.FC = () => {
                     });
                     setSectionContent(sc);
 
+                    // Initialize signature toggles: prefer saved content, fall back to template defaults.
+                    const savedSig = resolveSignatureMetadata(full.report?.report ?? null);
+                    const tmplSig = resolveSignatureMetadata(effectiveTmpl);
+                    const showInit = full.report?.report?.signatureMetadata !== undefined
+                        ? savedSig.show_signature_section
+                        : tmplSig.show_signature_section;
+                    const requireInit = full.report?.report?.signatureMetadata !== undefined
+                        ? savedSig.require_digital_signature
+                        : tmplSig.require_digital_signature;
+                    setShowSignatureSection(showInit);
+                    setRequireDigitalSignature(showInit && requireInit);
+
                 } else if (prefilledOrderId) {
                     // ---- Create new report from order ----
                     const orderFull = await getJSON<{
@@ -416,6 +433,11 @@ const ReportEditor: React.FC = () => {
                         }
                     });
                     setSectionContent(sc);
+
+                    // Inherit signature toggles from the template defaults for new reports.
+                    const tmplSig = resolveSignatureMetadata(tmplNew);
+                    setShowSignatureSection(tmplSig.show_signature_section);
+                    setRequireDigitalSignature(tmplSig.require_digital_signature);
                 }
             } catch (err) {
                 setLoadError(err instanceof Error ? err.message : "No se pudo cargar el reporte");
@@ -491,6 +513,15 @@ const ReportEditor: React.FC = () => {
             }
         });
 
+        // Preserve any signature_url the backend embedded at sign-time so saving
+        // a draft after signing does not strip it from the JSON body.
+        const preservedSignatureUrl = envelope?.report?.signatureMetadata?.signature_url ?? null;
+        report.signatureMetadata = {
+            show_signature_section: showSignatureSection,
+            require_digital_signature: showSignatureSection && requireDigitalSignature,
+            ...(preservedSignatureUrl ? { signature_url: preservedSignatureUrl } : {}),
+        };
+
         return {
             id: envelope?.id ?? "",
             version_no: envelope?.version_no ?? 1,
@@ -506,14 +537,14 @@ const ReportEditor: React.FC = () => {
             template: tmpl,
             report,
         };
-    }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName]);
+    }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature]);
 
     // Live preview envelope
     const previewEnvelope = useMemo(() => {
         if (!template) return null;
         try { return buildEnvelope(); } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope]);
+    }, [template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope, showSignatureSection, requireDigitalSignature]);
 
     // ---------------------------------------------------------------------------
     // Handlers
@@ -1084,6 +1115,66 @@ const ReportEditor: React.FC = () => {
 
                                 <Divider />
 
+                                {/* Signature configuration (T7) */}
+                                <div style={{ marginBottom: 16 }}>
+                                    <h3 style={{
+                                        ...cardTitleStyle,
+                                        fontSize: 16,
+                                        marginBottom: 12,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                    }}>
+                                        <SafetyCertificateOutlined style={{ color: tokens.primary }} />
+                                        Firma
+                                    </h3>
+                                    <div style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 12,
+                                        padding: "12px 14px",
+                                        borderRadius: 8,
+                                        background: "#fafafa",
+                                        border: "1px solid #f0f0f0",
+                                    }}>
+                                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontWeight: 500, color: tokens.textPrimary }}>
+                                                    Incluir sección de firma en el reporte
+                                                </div>
+                                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                    Agrega un bloque al final del informe con espacio para la firma del revisor.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={showSignatureSection}
+                                                disabled={isReadOnly}
+                                                onChange={(checked) => {
+                                                    setShowSignatureSection(checked);
+                                                    if (!checked) setRequireDigitalSignature(false);
+                                                }}
+                                            />
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, opacity: showSignatureSection ? 1 : 0.5 }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontWeight: 500, color: tokens.textPrimary }}>
+                                                    Firma digital (imagen PNG)
+                                                </div>
+                                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                    Inserta la firma digital del revisor al firmar el reporte.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={requireDigitalSignature}
+                                                disabled={isReadOnly || !showSignatureSection}
+                                                onChange={setRequireDigitalSignature}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Divider />
+
                                 {/* Action buttons */}
                                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                                     {!isReadOnly && (
@@ -1122,7 +1213,14 @@ const ReportEditor: React.FC = () => {
                             style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
                         >
                             {previewEnvelope ? (
-                                <ReportPreviewPages ref={previewPagesRef} report={previewEnvelope} />
+                                <ReportPreviewPages
+                                    ref={previewPagesRef}
+                                    report={previewEnvelope}
+                            signerLookup={(fullData?.order.reviewers ?? []).map((r) => ({
+                                id: r.id,
+                                name: r.name,
+                            }))}
+                                />
                             ) : (
                                 <Typography.Text type="secondary">Cargando vista previa...</Typography.Text>
                             )}

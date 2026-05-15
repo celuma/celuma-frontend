@@ -64,6 +64,26 @@ export type ReportSectionConfig =
     | ReportSectionImages;
 
 // ---------------------------------------------------------------------------
+// Signature metadata — flags that control the signature block of a report.
+// Persisted at the same level as base/sections inside the JSON body.
+// ---------------------------------------------------------------------------
+
+/** Signature metadata as persisted in the JSON body (mirrors the backend schema). */
+export interface SignatureMetadata {
+    show_signature_section?: boolean;
+    require_digital_signature?: boolean;
+    /** Embedded by the backend at sign-time; never set from templates. */
+    signature_url?: string | null;
+}
+
+/** Same shape but with the booleans guaranteed (used by consumers). */
+export interface ResolvedSignatureMetadata {
+    show_signature_section: boolean;
+    require_digital_signature: boolean;
+    signature_url?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Full template_json structure saved in the backend
 // ---------------------------------------------------------------------------
 
@@ -75,6 +95,8 @@ export interface ReportTemplateJSON {
     base_order: string[];
     /** Display order of section ids (source of truth). */
     section_order: string[];
+    /** Optional signature configuration. Absent / partial documents resolve to false/false. */
+    signatureMetadata?: SignatureMetadata;
 }
 
 /** Template returned from GET /api/v1/reports/templates/ (list) */
@@ -302,6 +324,31 @@ export function normalizeReportTemplateJSON(t: TemplateOrderInput): ReportTempla
         sections: t.sections ?? {},
         base_order: resolveBaseOrder(t),
         section_order: resolveSectionOrder(t),
+        signatureMetadata: (t as { signatureMetadata?: SignatureMetadata }).signatureMetadata,
+    };
+}
+
+/**
+ * Resolve the signature metadata flags for a report/template document.
+ *
+ * Legacy documents without `signatureMetadata` (or with an invalid value) resolve
+ * to `{ false, false }` so the signature toggles stay off and the block does not
+ * render. `signature_url` is preserved verbatim when present (only the backend
+ * embeds it, at sign-time).
+ */
+export function resolveSignatureMetadata(
+    doc?: { signatureMetadata?: SignatureMetadata | null } | null,
+): ResolvedSignatureMetadata {
+    const raw = doc?.signatureMetadata;
+    if (!raw || typeof raw !== "object") {
+        return { show_signature_section: false, require_digital_signature: false };
+    }
+    const show = Boolean(raw.show_signature_section);
+    const require = show && Boolean(raw.require_digital_signature);
+    return {
+        show_signature_section: show,
+        require_digital_signature: require,
+        signature_url: raw.signature_url ?? null,
     };
 }
 
@@ -325,6 +372,9 @@ export function buildDefaultTemplateJSON(): ReportTemplateJSON {
 export function buildEmptyReportContent(template: ReportTemplateJSON): ReportContent {
     const bo = resolveBaseOrder(template);
     const so = resolveSectionOrder(template);
+    // Copy signature flags from the template as defaults for new reports.
+    // signature_url is never inherited from templates — only the backend embeds it.
+    const tmplSig = resolveSignatureMetadata(template);
     return {
         base: Object.fromEntries(
             bo.map((k) => {
@@ -343,5 +393,9 @@ export function buildEmptyReportContent(template: ReportTemplateJSON): ReportCon
         ) as Record<string, ReportSectionConfig>,
         base_order: [...bo],
         section_order: [...so],
+        signatureMetadata: {
+            show_signature_section: tmplSig.show_signature_section,
+            require_digital_signature: tmplSig.require_digital_signature,
+        },
     };
 }
