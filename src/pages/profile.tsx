@@ -10,7 +10,10 @@ import {
     UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined,
     IdcardOutlined, SafetyCertificateOutlined, DeleteOutlined, PlusOutlined,
 } from "@ant-design/icons";
-import { uploadSignature, getSignature, deleteSignature } from "../services/signature_service";
+import {
+    uploadSignature, getSignature, deleteSignature,
+    NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION, isSignatureMissingError,
+} from "../services/signature_service";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -94,6 +97,8 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
     const [uploadingSignature, setUploadingSignature] = useState(false);
     const [deletingSignature, setDeletingSignature] = useState(false);
     const signatureInputRef = useRef<HTMLInputElement | null>(null);
+    // Avoid spamming the "no signature yet" warning on re-renders / refetches.
+    const noSignatureHintShownRef = useRef(false);
 
     const createSDRPreview = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -262,15 +267,28 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
             setLoadingSignature(true);
             try {
                 const sig = await getSignature();
-                if (!cancelled) {
-                    setSignatureUrl(sig?.url ?? null);
+                if (cancelled) return;
+                if (sig?.url) {
+                    setSignatureUrl(sig.url);
                     setSignatureKey((k) => k + 1);
+                    return;
+                }
+                setSignatureUrl(null);
+                if (!noSignatureHintShownRef.current) {
+                    noSignatureHintShownRef.current = true;
+                    showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
                 }
             } catch (error) {
-                if (!cancelled) {
-                    showCelumaApiError(error, "No se pudo cargar la firma digital.");
-                    setSignatureUrl(null);
+                if (cancelled) return;
+                setSignatureUrl(null);
+                if (isSignatureMissingError(error)) {
+                    if (!noSignatureHintShownRef.current) {
+                        noSignatureHintShownRef.current = true;
+                        showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
+                    }
+                    return;
                 }
+                showCelumaApiError(error, "No se pudo cargar la firma digital.");
             } finally {
                 if (!cancelled) setLoadingSignature(false);
             }
@@ -301,6 +319,9 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
             // cache when the user replaces an existing signature.
             setSignatureUrl(sig.url);
             setSignatureKey((k) => k + 1);
+            // Once the user has a signature, the "missing" warning is no longer
+            // relevant; if they later delete it, surface the hint again.
+            noSignatureHintShownRef.current = false;
             showCelumaSuccess("Firma actualizada", "Tu firma digital ha sido guardada correctamente.");
         } catch (error) {
             showCelumaApiError(error, "No se pudo subir la firma digital.");

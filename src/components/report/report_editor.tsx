@@ -15,7 +15,13 @@ import {
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signReport,
 } from "../../services/report_service";
-import { getSignature } from "../../services/signature_service";
+import {
+    getSignature,
+    NO_SIGNATURE_TITLE,
+    NO_SIGNATURE_DESCRIPTION,
+    isSignatureMissingError,
+} from "../../services/signature_service";
+import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
@@ -611,25 +617,43 @@ const ReportEditor: React.FC = () => {
         } catch (err) { message.error(err instanceof Error ? err.message : "Error al solicitar cambios"); }
     };
 
+    const promptUploadSignature = () => {
+        showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
+        Modal.warning({
+            title: "Firma digital requerida",
+            content:
+                "Este informe se va a firmar con firma digital, pero aún no tienes una imagen PNG cargada. Súbela en tu perfil para continuar.",
+            okText: "Ir al perfil",
+            okCancel: true,
+            cancelText: "Más tarde",
+            onOk: () => navigate("/profile"),
+        });
+    };
+
     const handleSign = async () => {
         if (!envelope?.id) return;
-        const draftMeta = resolveSignatureMetadata(envelope.report);
-        if (draftMeta.require_digital_signature) {
+        // Use the live toggle state so an unsaved "Firma digital" change is honoured.
+        // resolveSignatureMetadata mirrors the same precedence applied in buildEnvelope.
+        const needsDigitalSignature = resolveSignatureMetadata({
+            signatureMetadata: {
+                show_signature_section: showSignatureSection,
+                require_digital_signature: requireDigitalSignature,
+            },
+        }).require_digital_signature;
+
+        if (needsDigitalSignature) {
             try {
                 const sig = await getSignature();
                 if (!sig?.has_signature) {
-                    Modal.confirm({
-                        title: "Firma digital requerida",
-                        content:
-                            "Este informe exige firma con imagen PNG. Sube tu firma en Mi perfil (sección Firma digital) antes de firmar.",
-                        okText: "Ir al perfil",
-                        cancelText: "Cancelar",
-                        onOk: () => navigate("/profile"),
-                    });
+                    promptUploadSignature();
                     return;
                 }
-            } catch {
-                message.warning("No pudimos verificar tu firma guardada. Revisa tu conexión o inténtalo de nuevo.");
+            } catch (err) {
+                if (isSignatureMissingError(err)) {
+                    promptUploadSignature();
+                    return;
+                }
+                showCelumaApiError(err, "No pudimos verificar tu firma guardada. Inténtalo de nuevo.");
                 return;
             }
         }
@@ -639,7 +663,11 @@ const ReportEditor: React.FC = () => {
             const full = await getReportFull(envelope.id);
             setEnvelope(full.report);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al firmar");
+            if (isSignatureMissingError(err)) {
+                promptUploadSignature();
+                return;
+            }
+            showCelumaApiError(err, "Error al firmar el reporte.");
         }
     };
 

@@ -11,6 +11,26 @@ export interface SignatureResponse {
     has_signature: boolean;
 }
 
+/** Shared Spanish copy for the "user has no signature uploaded yet" UX. */
+export const NO_SIGNATURE_TITLE = "Aún no tienes firma digital";
+export const NO_SIGNATURE_DESCRIPTION =
+    "Sube un archivo PNG (máx. 2 MB) en la sección de Firma Digital de tu perfil para poder firmar informes que la requieran.";
+
+/**
+ * Identifies whether an error thrown by `getSignature` represents the
+ * "user has no signature uploaded yet" case rather than a real failure.
+ *
+ * Mainly useful as a defensive fallback if the backend ever signals the
+ * absence with a non-404 status containing a known error message — today
+ * `getSignature` already returns `null` for 404, so the helper is rarely
+ * needed in happy paths.
+ */
+export function isSignatureMissingError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message.toLowerCase();
+    return msg.includes("no signature") || msg.includes("signature object not found");
+}
+
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
