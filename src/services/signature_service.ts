@@ -16,6 +16,11 @@ export const NO_SIGNATURE_TITLE = "Aún no tienes firma digital";
 export const NO_SIGNATURE_DESCRIPTION =
     "Sube un archivo PNG (máx. 2 MB) en la sección de Firma Digital de tu perfil para poder firmar informes que la requieran.";
 
+/** Sentinel message used when the backend reply isn't valid JSON. */
+export const SIGNATURE_HTML_RESPONSE_MESSAGE =
+    "El servidor devolvió una respuesta inválida al consultar la firma digital. " +
+    "Es posible que el backend no esté desplegado o que la ruta /api no esté bien configurada.";
+
 /**
  * Identifies whether an error thrown by `getSignature` represents the
  * "user has no signature uploaded yet" case rather than a real failure.
@@ -29,6 +34,17 @@ export function isSignatureMissingError(err: unknown): boolean {
     if (!(err instanceof Error)) return false;
     const msg = err.message.toLowerCase();
     return msg.includes("no signature") || msg.includes("signature object not found");
+}
+
+/**
+ * True when the error indicates the API returned HTML (typically the SPA's
+ * index.html because the request never reached FastAPI). Callers in the
+ * "check signature" flow can degrade gracefully to the "no signature" UX
+ * while infra is fixed, instead of surfacing the cryptic browser message.
+ */
+export function isSignatureHtmlResponseError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    return err.message === SIGNATURE_HTML_RESPONSE_MESSAGE;
 }
 
 function getApiBase(): string {
@@ -46,8 +62,25 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
     return headers;
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-    const text = await res.text();
+/**
+ * Heuristic: body text that starts with `<` is almost certainly HTML
+ * (an SPA index.html, an ALB/CloudFront error page, etc.) and not the
+ * JSON the API is supposed to return.
+ */
+function looksLikeHtml(text: string): boolean {
+    return text.trimStart().startsWith("<");
+}
+
+function parseSignatureJson(text: string): SignatureResponse | null {
+    try {
+        return JSON.parse(text) as SignatureResponse;
+    } catch {
+        return null;
+    }
+}
+
+function buildErrorMessage(res: Response, text: string): string {
+    if (looksLikeHtml(text)) return SIGNATURE_HTML_RESPONSE_MESSAGE;
     try {
         const json = JSON.parse(text) as { detail?: unknown; message?: string };
         if (typeof json.detail === "string") return json.detail;
@@ -75,17 +108,26 @@ export async function uploadSignature(file: File): Promise<SignatureResponse> {
         body: formData,
     });
 
-    if (!res.ok) {
-        throw new Error(await readErrorMessage(res));
-    }
-    return (await res.json()) as SignatureResponse;
+    const text = await res.text();
+    if (!res.ok) throw new Error(buildErrorMessage(res, text));
+    if (looksLikeHtml(text)) throw new Error(SIGNATURE_HTML_RESPONSE_MESSAGE);
+
+    const parsed = parseSignatureJson(text);
+    if (!parsed) throw new Error(SIGNATURE_HTML_RESPONSE_MESSAGE);
+    return parsed;
 }
 
 /**
- * Fetch a presigned URL for the current user's signature.
+ * Fetch the URL for the current user's signature.
  *
- * Returns `null` if the user does not have a signature uploaded (404).
- * Throws on any other error.
+ * Returns `null` when:
+ *   - the backend explicitly reports 404 (no signature uploaded), or
+ *   - the API responds with HTML (the SPA's index.html), which in practice
+ *     means the request never reached FastAPI. Treating this as "no
+ *     signature" keeps the warning UX usable while infra is fixed, instead
+ *     of showing the browser's cryptic JSON parsing error.
+ *
+ * Throws on any other unexpected error.
  */
 export async function getSignature(): Promise<SignatureResponse | null> {
     const res = await fetch(`${getApiBase()}/v1/users/me/signature`, {
@@ -94,10 +136,24 @@ export async function getSignature(): Promise<SignatureResponse | null> {
     });
 
     if (res.status === 404) return null;
-    if (!res.ok) {
-        throw new Error(await readErrorMessage(res));
+
+    const text = await res.text();
+
+    if (!res.ok) throw new Error(buildErrorMessage(res, text));
+
+    if (looksLikeHtml(text)) {
+        if (import.meta.env.DEV) {
+            console.warn(
+                "[signature_service] GET /me/signature returned HTML instead of JSON; " +
+                "check that /api/* is proxied to FastAPI and the backend is deployed.",
+            );
+        }
+        return null;
     }
-    return (await res.json()) as SignatureResponse;
+
+    const parsed = parseSignatureJson(text);
+    if (!parsed) return null;
+    return parsed;
 }
 
 /** Delete the current user's signature from storage. */
@@ -107,7 +163,9 @@ export async function deleteSignature(): Promise<void> {
         headers: authHeaders(),
     });
 
-    if (!res.ok && res.status !== 204) {
-        throw new Error(await readErrorMessage(res));
+    if (res.status === 204) return;
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(buildErrorMessage(res, text));
     }
 }

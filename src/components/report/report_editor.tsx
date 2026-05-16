@@ -20,6 +20,7 @@ import {
     NO_SIGNATURE_TITLE,
     NO_SIGNATURE_DESCRIPTION,
     isSignatureMissingError,
+    isSignatureHtmlResponseError,
 } from "../../services/signature_service";
 import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback";
 import type { ReportImage } from "./report_images";
@@ -619,12 +620,11 @@ const ReportEditor: React.FC = () => {
 
     const promptUploadSignature = () => {
         showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
-        Modal.warning({
+        Modal.confirm({
             title: "Firma digital requerida",
             content:
                 "Este informe se va a firmar con firma digital, pero aún no tienes una imagen PNG cargada. Súbela en tu perfil para continuar.",
             okText: "Ir al perfil",
-            okCancel: true,
             cancelText: "Más tarde",
             onOk: () => navigate("/profile"),
         });
@@ -649,7 +649,10 @@ const ReportEditor: React.FC = () => {
                     return;
                 }
             } catch (err) {
-                if (isSignatureMissingError(err)) {
+                // Both the explicit "missing" sentinel and the HTML-response case
+                // (backend / proxy misconfigured) degrade to the upload prompt so
+                // the reviewer keeps an actionable next step.
+                if (isSignatureMissingError(err) || isSignatureHtmlResponseError(err)) {
                     promptUploadSignature();
                     return;
                 }
@@ -663,7 +666,7 @@ const ReportEditor: React.FC = () => {
             const full = await getReportFull(envelope.id);
             setEnvelope(full.report);
         } catch (err) {
-            if (isSignatureMissingError(err)) {
+            if (isSignatureMissingError(err) || isSignatureHtmlResponseError(err)) {
                 promptUploadSignature();
                 return;
             }

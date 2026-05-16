@@ -68,12 +68,42 @@ export function formatHttpError(status: number, bodyText: string): string {
 }
 
 /**
+ * Cryptic browser-level errors we want to translate before showing to the
+ * user. These are usually raised when a JSON parser hits HTML or when an
+ * extension/network layer aborts the request.
+ */
+const OPAQUE_BROWSER_ERROR_PATTERNS: ReadonlyArray<RegExp> = [
+    /unexpected token .*<!?/i,
+    /unexpected token '<'/i,
+    /did not match the expected pattern/i,
+    /^json parse error/i,
+    /^load failed$/i,
+    /^failed to fetch$/i,
+    /^networkerror /i,
+];
+
+const OPAQUE_BROWSER_ERROR_MESSAGE =
+    "El servidor devolvió una respuesta inválida. Es posible que el backend no esté disponible o que la ruta /api no esté bien configurada.";
+
+/**
+ * Replaces unhelpful browser-level error strings with a Spanish message
+ * the user can act on. Other messages are returned unchanged.
+ */
+export function normalizeClientErrorMessage(msg: string): string {
+    if (!msg) return msg;
+    return OPAQUE_BROWSER_ERROR_PATTERNS.some((re) => re.test(msg))
+        ? OPAQUE_BROWSER_ERROR_MESSAGE
+        : msg;
+}
+
+/**
  * Extracts a display message from any thrown value.
- * Understands plain Error objects and enriched ApiError instances.
+ * Understands plain Error objects and enriched ApiError instances, and
+ * rewrites opaque browser messages to something the user can act on.
  */
 export function getErrorMessage(err: unknown): string {
-    if (err instanceof Error) return err.message;
-    if (typeof err === "string") return err;
+    if (err instanceof Error) return normalizeClientErrorMessage(err.message);
+    if (typeof err === "string") return normalizeClientErrorMessage(err);
     return "Ocurrió un error inesperado.";
 }
 

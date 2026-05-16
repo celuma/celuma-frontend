@@ -12,7 +12,8 @@ import {
 } from "@ant-design/icons";
 import {
     uploadSignature, getSignature, deleteSignature,
-    NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION, isSignatureMissingError,
+    NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION,
+    isSignatureMissingError, isSignatureHtmlResponseError,
 } from "../services/signature_service";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
@@ -281,7 +282,11 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
             } catch (error) {
                 if (cancelled) return;
                 setSignatureUrl(null);
-                if (isSignatureMissingError(error)) {
+                // Treat both the explicit "missing" sentinel and the HTML-response
+                // case (backend / proxy misconfigured) as "no signature uploaded",
+                // so reviewers still see actionable guidance instead of a cryptic
+                // browser error.
+                if (isSignatureMissingError(error) || isSignatureHtmlResponseError(error)) {
                     if (!noSignatureHintShownRef.current) {
                         noSignatureHintShownRef.current = true;
                         showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
