@@ -24,6 +24,7 @@ import BillingDetail from "./pages/billing_detail";
 import BillingList from "./pages/billing_list";
 import PriceCatalog from "./pages/price_catalog";
 import UsersManagement from "./pages/users_management";
+import ReviewersManagement from "./pages/reviewers_management";
 import PasswordResetRequest from "./pages/password_reset_request";
 import PasswordResetConfirm from "./pages/password_reset_confirm";
 import TenantSettings from "./pages/tenant_settings";
@@ -94,6 +95,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="report-templates" element={<RequirePermission permission="admin:manage_catalog"><ReportTemplates embedded /></RequirePermission>} />
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
+                <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
 

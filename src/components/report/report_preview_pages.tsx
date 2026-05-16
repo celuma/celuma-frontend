@@ -1,8 +1,9 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
-import { normalizeReportTemplateJSON, resolveDisplayOrder } from "../../models/report";
+import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../models/report";
 import { markdownTableToHtml } from "./table_utils";
 import logo from "../../images/report_logo.png";
+import SignatureBlock, { type SignatureBlockSigner } from "./signature_block";
 
 // Page layout constants (Letter size)
 const PX_TO_MM = 0.264583;
@@ -16,16 +17,25 @@ const FOOTER_H_MM = 20;
 // Keys that are pre-populated from order/patient data (not custom)
 const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age"]);
 
+/** Lightweight user lookup so the signature block can resolve `signed_by` (a UUID)
+ *  into a display name without forcing every caller to pass a resolved object. */
+export interface SignerLookupEntry {
+    id: string;
+    name: string;
+}
+
 interface ReportPreviewPagesProps {
     report: ReportEnvelope;
     style?: CSSProperties;
+    /** Candidates the signature block can use to resolve `report.signed_by`. */
+    signerLookup?: SignerLookupEntry[];
 }
 
 export interface ReportPreviewPagesRef {
     getPages: () => HTMLElement[];
 }
 
-const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesProps>(({ report, style }, ref) => {
+const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesProps>(({ report, style, signerLookup }, ref) => {
     const previewHostRef = useRef<HTMLDivElement>(null);
     const hiddenSourceRef = useRef<HTMLDivElement>(null);
 
@@ -181,7 +191,7 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                 }
             });
         });
-    }, [report]);
+    }, [report, signerLookup]);
 
     // ---------------------------------------------------------------------------
     // Build content from new ReportTemplateJSON structure
@@ -192,6 +202,16 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
 
     // Resolve effective order: content arrays take priority over template arrays (both fall back to Object.keys)
     const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, contentData);
+
+    // Signature metadata + signer display (T8). `contentData` is the saved JSON body
+    // so it carries the `signature_url` that the backend embeds at sign time.
+    const signatureMeta = resolveSignatureMetadata(contentData as { signatureMetadata?: ReportEnvelope["report"]["signatureMetadata"] });
+    const signerEntry = report.signed_by
+        ? signerLookup?.find((u) => u.id === report.signed_by)
+        : undefined;
+    const signerDisplay: SignatureBlockSigner | undefined = signerEntry
+        ? { full_name: signerEntry.name }
+        : undefined;
 
     // Base header rows: single list in resolved order (predefined + custom interleaved as configured)
     const orderedBaseRows = baseOrder
@@ -326,6 +346,13 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                             </div>
                         );
                     })}
+
+                    {/* Signature block (T8). Rendered last so the paginator places it after all sections. */}
+                    <SignatureBlock
+                        signatureMetadata={signatureMeta}
+                        signedBy={signerDisplay}
+                        signedAt={report.signed_at}
+                    />
 
                 </div>
             </div>

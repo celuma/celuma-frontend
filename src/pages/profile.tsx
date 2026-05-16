@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
-import { Layout, Card, Avatar, Upload, Divider } from "antd";
+import { useState, useEffect, useRef } from "react";
+import { Layout, Card, Avatar, Upload, Divider, Popconfirm, Button as AntButton, Tooltip } from "antd";
 import { showCelumaSuccess, showCelumaWarning, showCelumaApiError } from "../lib/celuma_feedback";
 import { formatHttpError } from "../lib/api_error";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined, IdcardOutlined } from "@ant-design/icons";
+import {
+    UserOutlined, MailOutlined, KeyOutlined, UploadOutlined, CameraOutlined,
+    IdcardOutlined, SafetyCertificateOutlined, DeleteOutlined, PlusOutlined,
+} from "@ant-design/icons";
+import { uploadSignature, getSignature, deleteSignature } from "../services/signature_service";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -84,6 +88,12 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [avatarHover, setAvatarHover] = useState(false);
+    const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+    const [signatureKey, setSignatureKey] = useState(0);
+    const [loadingSignature, setLoadingSignature] = useState(false);
+    const [uploadingSignature, setUploadingSignature] = useState(false);
+    const [deletingSignature, setDeletingSignature] = useState(false);
+    const signatureInputRef = useRef<HTMLInputElement | null>(null);
 
     const createSDRPreview = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -241,6 +251,81 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchProfile(); }, []);
 
+    useEffect(() => {
+        if (!profileData) return;
+        if (!profileData.roles.includes("reviewer")) {
+            setSignatureUrl(null);
+            return;
+        }
+        let cancelled = false;
+        const loadSignature = async () => {
+            setLoadingSignature(true);
+            try {
+                const sig = await getSignature();
+                if (!cancelled) {
+                    setSignatureUrl(sig?.url ?? null);
+                    setSignatureKey((k) => k + 1);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    showCelumaApiError(error, "No se pudo cargar la firma digital.");
+                    setSignatureUrl(null);
+                }
+            } finally {
+                if (!cancelled) setLoadingSignature(false);
+            }
+        };
+        loadSignature();
+        return () => { cancelled = true; };
+    }, [profileData]);
+
+    const handleSignatureFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] ?? null;
+        // Reset the input so selecting the same file again still triggers onChange
+        event.target.value = "";
+        if (!file) return;
+
+        if (file.type !== "image/png") {
+            showCelumaWarning("Tipo no permitido", "Solo se aceptan archivos PNG para la firma digital.");
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            showCelumaWarning("Archivo demasiado grande", "La firma no puede superar 2 MB.");
+            return;
+        }
+
+        setUploadingSignature(true);
+        try {
+            const sig = await uploadSignature(file);
+            // Bump key so React remounts the <img> tag and bypasses any browser
+            // cache when the user replaces an existing signature.
+            setSignatureUrl(sig.url);
+            setSignatureKey((k) => k + 1);
+            showCelumaSuccess("Firma actualizada", "Tu firma digital ha sido guardada correctamente.");
+        } catch (error) {
+            showCelumaApiError(error, "No se pudo subir la firma digital.");
+        } finally {
+            setUploadingSignature(false);
+        }
+    };
+
+    const handleDeleteSignature = async () => {
+        setDeletingSignature(true);
+        try {
+            await deleteSignature();
+            setSignatureUrl(null);
+            showCelumaSuccess("Firma eliminada", "Tu firma digital fue eliminada.");
+        } catch (error) {
+            showCelumaApiError(error, "No se pudo eliminar la firma digital.");
+        } finally {
+            setDeletingSignature(false);
+        }
+    };
+
+    const triggerSignatureUpload = () => {
+        signatureInputRef.current?.click();
+    };
+
     const watched = profileForm.watch();
     const hasProfileChanges = profileData && (
             watched?.full_name !== profileData.full_name ||
@@ -267,6 +352,15 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                 .avatar-container { position: relative; cursor: pointer; }
                 .avatar-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
                 .avatar-container:hover .avatar-overlay { opacity: 1; }
+                .sig-preview-wrap { position: relative; }
+                .sig-delete-overlay {
+                    position: absolute; top: 0; left: 0; right: 0; height: 160px;
+                    background: rgba(0, 0, 0, 0.45);
+                    display: flex; align-items: center; justify-content: center;
+                    opacity: 0; cursor: pointer;
+                    transition: opacity 0.2s ease;
+                }
+                .sig-preview-wrap:hover .sig-delete-overlay { opacity: 1; }
             `}</style>
                     {/* Profile Header Card */}
                     <Card style={cardStyle} loading={profileLoading}>
@@ -448,6 +542,182 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                                         </form>
                         </div>
                                     </Card>
+
+                    {/* Digital Signature Card — only for users with the reviewer role */}
+                    {profileData?.roles.includes("reviewer") && (
+                        <Card
+                            title={
+                                <span style={cardTitleStyle}>
+                                    <SafetyCertificateOutlined style={{ color: tokens.primary, marginRight: 8 }} />
+                                    Firma Digital
+                                </span>
+                            }
+                            style={cardStyle}
+                            loading={loadingSignature}
+                        >
+                            <p style={{ marginTop: 0, marginBottom: 16, color: tokens.textSecondary, fontSize: 13 }}>
+                                Esta firma se inserta automáticamente en los informes que firmes
+                                como revisor cuando la plantilla así lo requiera.
+                            </p>
+
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
+                                {signatureUrl ? (
+                                    /* Filled state — gallery-style card with hover overlay + compact footer */
+                                    <div
+                                        className="sig-preview-wrap"
+                                        style={{
+                                            position: "relative",
+                                            width: 320,
+                                            borderRadius: tokens.radius,
+                                            overflow: "hidden",
+                                            border: "1px solid #e5e7eb",
+                                            background: "#fff",
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        {/* Image area with checkered background to evidence transparency */}
+                                        <div
+                                            style={{
+                                                width: "100%",
+                                                height: 160,
+                                                backgroundImage: `
+                                                    linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+                                                    linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+                                                    linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+                                                    linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)
+                                                `,
+                                                backgroundSize: "16px 16px",
+                                                backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+                                                backgroundColor: "#f9fafb",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                padding: 12,
+                                            }}
+                                        >
+                                            <img
+                                                key={signatureKey}
+                                                src={signatureUrl}
+                                                alt="Firma digital del usuario"
+                                                style={{
+                                                    maxWidth: "100%",
+                                                    maxHeight: "100%",
+                                                    objectFit: "contain",
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Hover overlay with delete action */}
+                                        <Popconfirm
+                                            title="Eliminar firma digital"
+                                            description="¿Estás seguro? No podrás firmar informes que requieran imagen digital hasta que cargues una nueva."
+                                            okText="Eliminar"
+                                            cancelText="Cancelar"
+                                            okButtonProps={{ danger: true, loading: deletingSignature }}
+                                            onConfirm={handleDeleteSignature}
+                                            disabled={uploadingSignature}
+                                        >
+                                            <div className="sig-delete-overlay" title="Eliminar firma">
+                                                <DeleteOutlined style={{ color: "#fff", fontSize: 22 }} />
+                                            </div>
+                                        </Popconfirm>
+
+                                        {/* Compact footer — status pill + small icon action (matches sample gallery footer) */}
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                padding: "8px 10px",
+                                                gap: 6,
+                                                borderTop: "1px solid #f0f0f0",
+                                                background: "#fff",
+                                            }}
+                                        >
+                                            <span
+                                                style={{
+                                                    color: "#10b981",
+                                                    fontSize: 11,
+                                                    fontWeight: 600,
+                                                    background: "#ecfdf5",
+                                                    padding: "2px 8px",
+                                                    borderRadius: 8,
+                                                }}
+                                            >
+                                                Firma cargada
+                                            </span>
+                                            <Tooltip title="Reemplazar firma">
+                                                <AntButton
+                                                    size="small"
+                                                    type="text"
+                                                    icon={<UploadOutlined />}
+                                                    onClick={triggerSignatureUpload}
+                                                    loading={uploadingSignature}
+                                                    disabled={uploadingSignature || deletingSignature}
+                                                    style={{ padding: "0 4px", height: 20, minWidth: 20 }}
+                                                />
+                                            </Tooltip>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Empty state — full clickable dropzone matching sample-detail gallery */
+                                    <div
+                                        onClick={uploadingSignature ? undefined : triggerSignatureUpload}
+                                        style={{
+                                            width: 320,
+                                            height: 160,
+                                            borderRadius: tokens.radius,
+                                            border: "1px dashed #d9d9d9",
+                                            background: "#fafafa",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            color: "#8c8c8c",
+                                            cursor: uploadingSignature ? "default" : "pointer",
+                                            transition: "all 0.2s ease",
+                                            padding: 12,
+                                            flexShrink: 0,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (uploadingSignature) return;
+                                            e.currentTarget.style.borderColor = tokens.primary;
+                                            e.currentTarget.style.background = "#e6f7f7";
+                                            e.currentTarget.style.color = tokens.primary;
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.borderColor = "#d9d9d9";
+                                            e.currentTarget.style.background = "#fafafa";
+                                            e.currentTarget.style.color = "#8c8c8c";
+                                        }}
+                                    >
+                                        <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                                        <strong style={{ fontSize: 14 }}>
+                                            {uploadingSignature ? "Subiendo..." : "Agregar firma"}
+                                        </strong>
+                                        <span style={{ marginTop: 4, fontSize: 12 }}>
+                                            Clic para subir PNG
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div style={{ fontSize: 12, color: tokens.textSecondary, lineHeight: 1.6, flex: 1, minWidth: 220, paddingTop: 4 }}>
+                                    <div style={{ marginBottom: 4 }}>
+                                        <strong style={{ color: tokens.textPrimary }}>Requisitos:</strong> archivo PNG de máximo 2 MB.
+                                    </div>
+                                    <div>Se recomienda usar una imagen con <strong style={{ color: tokens.textPrimary }}>fondo transparente</strong> para que la firma se integre correctamente al diseño del informe.</div>
+                                </div>
+                            </div>
+
+                            <input
+                                ref={signatureInputRef}
+                                type="file"
+                                accept="image/png"
+                                onChange={handleSignatureFileSelected}
+                                style={{ display: "none" }}
+                            />
+                        </Card>
+                    )}
         </div>
     );
 

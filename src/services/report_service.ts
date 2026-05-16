@@ -21,6 +21,29 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
     return headers;
 }
 
+/** Readable message from FastAPI JSON error `{ "detail": "..." | [...] }`. */
+function parseFastApiErrorDetail(bodyText: string): string | undefined {
+    try {
+        const j = JSON.parse(bodyText) as { detail?: unknown };
+        const d = j.detail;
+        if (typeof d === "string") return d;
+        if (Array.isArray(d)) {
+            return d
+                .map((item) =>
+                    typeof item === "object" && item !== null && "msg" in item &&
+                    typeof (item as { msg: unknown }).msg === "string"
+                        ? (item as { msg: string }).msg
+                        : "",
+                )
+                .filter(Boolean)
+                .join("; ");
+        }
+        return undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Report CRUD
 // ---------------------------------------------------------------------------
@@ -251,7 +274,8 @@ export async function signReport(reportId: string, changelog?: string): Promise<
     });
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Error al firmar reporte: ${res.status} - ${errText}`);
+        const detail = parseFastApiErrorDetail(errText);
+        throw new Error(detail ?? `Error al firmar reporte (${res.status})`);
     }
     return await res.json();
 }

@@ -26,6 +26,7 @@ import type { ReviewerWithStatus } from "../services/worklist_service";
 import { 
     getLabels, 
     getLabUsers, 
+    getReviewerUsers,
     updateOrderAssignees, 
     updateOrderReviewers, 
     updateOrderLabels 
@@ -203,6 +204,7 @@ export default function OrderDetail() {
     // Collaboration states
     const [allLabels, setAllLabels] = useState<Label[]>([]);
     const [allUsers, setAllUsers] = useState<LabUser[]>([]);
+    const [allReviewerUsers, setAllReviewerUsers] = useState<LabUser[]>([]);
 
     const conversationScrollRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -318,15 +320,17 @@ export default function OrderDetail() {
         }
     }, [orderId]);
 
-    // Function to load collaboration data (labels and users)
+    // Function to load collaboration data (labels, users and reviewer-eligible users)
     const loadCollaborationData = useCallback(async () => {
         try {
-            const [labelsData, usersData] = await Promise.all([
+            const [labelsData, usersData, reviewerUsersData] = await Promise.all([
                 getLabels(),
                 getLabUsers(),
+                getReviewerUsers(),
             ]);
             setAllLabels(labelsData);
             setAllUsers(usersData);
+            setAllReviewerUsers(reviewerUsersData);
         } catch (err) {
             showCelumaApiError(err, "Error al cargar datos de colaboración.");
         }
@@ -792,6 +796,10 @@ export default function OrderDetail() {
                             report={latestReport} 
                             loading={reportLoading}
                             style={{ margin: 0 }}
+                            signerLookup={(data?.order.reviewers ?? []).map((r) => ({
+                                id: r.id,
+                                name: r.name,
+                            }))}
                         />
                     )}
                 </div>
@@ -896,7 +904,7 @@ export default function OrderDetail() {
             >
                 <ReviewersSection
                     reviewers={data?.order.reviewers || []}
-                    allUsers={allUsers}
+                    allUsers={allReviewerUsers}
                     onUpdate={handleUpdateReviewers}
                     orderStatus={data?.order.status}
                 />

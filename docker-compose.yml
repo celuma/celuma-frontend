@@ -11,23 +11,17 @@ services:
     depends_on:
       - backend
 
-  db-init:
-    image: ghcr.io/celuma/celuma-backend:latest
-    pull_policy: always
-    env_file: .env
-    command: bash init_db.sh
-    depends_on:
-      - db
-    restart: "no"
-
   backend:
     image: ghcr.io/celuma/celuma-backend:latest
     pull_policy: always
     env_file: .env
+    command: bash start.sh
     ports:
       - "8000:8000"
     depends_on:
-      - db-init
+      - db
+    environment:
+      - ENV=${ENV:-dev}
     restart: unless-stopped
 
   db:
@@ -44,5 +38,3 @@ services:
 
 volumes:
   pgdata:
-
-
