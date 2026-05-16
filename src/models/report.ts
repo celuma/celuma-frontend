@@ -317,6 +317,81 @@ export function resolveDisplayOrder(
     };
 }
 
+/** Merge persisted order arrays: preferred first, then fallback, then any remaining keys from the map (insertion order). */
+function mergeKeyOrderMaps(preferred: string[], fallback: string[], mergedMap: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const k of preferred) {
+        if (mergedMap[k] === undefined || seen.has(k)) continue;
+        out.push(k);
+        seen.add(k);
+    }
+    for (const k of fallback) {
+        if (mergedMap[k] === undefined || seen.has(k)) continue;
+        out.push(k);
+        seen.add(k);
+    }
+    for (const k of Object.keys(mergedMap)) {
+        if (!seen.has(k)) {
+            out.push(k);
+            seen.add(k);
+        }
+    }
+    return out;
+}
+
+/**
+ * Copies base/section field definitions from saved report JSON into the template snapshot
+ * when persisted content still has blocks missing from the template revision (legacy data).
+ *
+ * Keeps ``templateSnapshot.signatureMetadata``; does **not** copy ``signatureMetadata`` from
+ * saved content onto the snapshot (those flags live on the report body separately).
+ */
+export function mergePersistedContentIntoTemplateSnapshot(
+    templateSnapshot: ReportTemplateJSON,
+    savedContent: ReportTemplateJSON | null | undefined,
+): ReportTemplateJSON {
+    if (!savedContent) return templateSnapshot;
+
+    const mergedBase: Record<string, ReportBaseFieldConfig> = { ...templateSnapshot.base };
+    if (savedContent.base) {
+        for (const k of Object.keys(savedContent.base)) {
+            if (mergedBase[k] === undefined) {
+                mergedBase[k] = { ...(savedContent.base as Record<string, ReportBaseFieldConfig>)[k] };
+            }
+        }
+    }
+
+    const mergedSections: Record<string, ReportSectionConfig> = { ...templateSnapshot.sections };
+    if (savedContent.sections) {
+        for (const k of Object.keys(savedContent.sections)) {
+            if (mergedSections[k] === undefined) {
+                mergedSections[k] = { ...savedContent.sections[k] } as ReportSectionConfig;
+            }
+        }
+    }
+
+    const base_order = mergeKeyOrderMaps(
+        savedContent.base_order ?? [],
+        templateSnapshot.base_order ?? resolveBaseOrder({ base: mergedBase }),
+        mergedBase,
+    );
+    const section_order = mergeKeyOrderMaps(
+        savedContent.section_order ?? [],
+        templateSnapshot.section_order ?? resolveSectionOrder({ sections: mergedSections }),
+        mergedSections,
+    );
+
+    return {
+        ...templateSnapshot,
+        base: mergedBase,
+        sections: mergedSections,
+        base_order,
+        section_order,
+        signatureMetadata: templateSnapshot.signatureMetadata,
+    };
+}
+
 /** Coerce legacy or partial API payloads into a full ReportTemplateJSON with canonical order arrays. */
 export function normalizeReportTemplateJSON(t: TemplateOrderInput): ReportTemplateJSON {
     return {

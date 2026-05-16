@@ -15,6 +15,7 @@ import {
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signReport,
 } from "../../services/report_service";
+import { getSignature } from "../../services/signature_service";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
@@ -28,6 +29,7 @@ import type {
 import {
     buildEmptyReportContent,
     normalizeReportTemplateJSON,
+    mergePersistedContentIntoTemplateSnapshot,
     resolveBaseOrder,
     resolveSectionOrder,
     resolveDisplayOrder,
@@ -332,14 +334,19 @@ const ReportEditor: React.FC = () => {
                         }
                     }
 
-                    const baseTmpl =
+                    const normalized =
                         !tmpl || !tmpl.base || !tmpl.sections
                             ? EMPTY_TEMPLATE_JSON
                             : normalizeReportTemplateJSON(tmpl);
 
+                    const savedReport = full.report?.report;
+                    const baseTmpl = mergePersistedContentIntoTemplateSnapshot(
+                        normalized,
+                        savedReport ?? undefined,
+                    );
+
                     // Fuse the saved report's order arrays into the template state so the
                     // editor panel and buildEnvelope both use the same effective order.
-                    const savedReport = full.report?.report;
                     const { baseOrder: savedBO, sectionOrder: savedSO } = resolveDisplayOrder(baseTmpl, savedReport);
                     const effectiveTmpl: ReportTemplateJSON = {
                         ...baseTmpl,
@@ -606,12 +613,34 @@ const ReportEditor: React.FC = () => {
 
     const handleSign = async () => {
         if (!envelope?.id) return;
+        const draftMeta = resolveSignatureMetadata(envelope.report);
+        if (draftMeta.require_digital_signature) {
+            try {
+                const sig = await getSignature();
+                if (!sig?.has_signature) {
+                    Modal.confirm({
+                        title: "Firma digital requerida",
+                        content:
+                            "Este informe exige firma con imagen PNG. Sube tu firma en Mi perfil (sección Firma digital) antes de firmar.",
+                        okText: "Ir al perfil",
+                        cancelText: "Cancelar",
+                        onOk: () => navigate("/profile"),
+                    });
+                    return;
+                }
+            } catch {
+                message.warning("No pudimos verificar tu firma guardada. Revisa tu conexión o inténtalo de nuevo.");
+                return;
+            }
+        }
         try {
             const result = await signReport(envelope.id);
             message.success(result.message);
             const full = await getReportFull(envelope.id);
             setEnvelope(full.report);
-        } catch (err) { message.error(err instanceof Error ? err.message : "Error al firmar"); }
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al firmar");
+        }
     };
 
     const updateImageCaption = (sectionKey: string, index: number, caption: string) => {
