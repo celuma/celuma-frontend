@@ -110,7 +110,6 @@ const SignatureBlock: React.FC<SignatureBlockProps> = ({
                         src={signatureMetadata.signature_url}
                         alt="Firma digital del revisor"
                         style={imageStyle}
-                        crossOrigin="anonymous"
                         onError={() => setImageFailed(true)}
                     />
                 </div>
