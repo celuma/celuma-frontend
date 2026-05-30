@@ -87,6 +87,7 @@ type OrderFullResponse = {
         patient_id: string;
         tenant_id: string;
         branch_id: string;
+        requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
@@ -1187,11 +1188,24 @@ export default function OrderDetail() {
                                             fontSize: 13,
                                             marginBottom: 16
                                         }}>
-                                            {data.order.requested_by && (
+                                            {(data.order.requesting_physician || data.order.requested_by) && (
                                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                                     <UserOutlined />
                                                     <span>Solicitante:</span>
-                                                    <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                    {data.order.requesting_physician ? (
+                                                        <a
+                                                            href={`/requesting-physicians/${data.order.requesting_physician.id}`}
+                                                            onClick={(event) => {
+                                                                event.preventDefault();
+                                                                navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
+                                                            }}
+                                                            style={{ fontWeight: 500, color: tokens.primary }}
+                                                        >
+                                                            {data.order.requesting_physician.full_name}
+                                                        </a>
+                                                    ) : (
+                                                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                    )}
                                                 </div>
                                             )}
 

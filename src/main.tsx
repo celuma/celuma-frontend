@@ -8,6 +8,9 @@ import Login from "./pages/login";
 import Register from "./pages/register";
 import Home from "./pages/home";
 import PatientRegister from "./pages/patient_register";
+import RequestingPhysicianForm from "./pages/requesting_physician_form";
+import RequestingPhysicianDetailPage from "./pages/requesting_physician_detail";
+import RequestingPhysiciansList from "./pages/requesting_physicians_list";
 import Profile from "./pages/profile";
 import OrderRegister from "./pages/order_register";
 import SampleRegister from "./pages/sample_register";
@@ -58,6 +61,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/home" element={<RequirePermission permission="lab:read"><Home /></RequirePermission>} />
             <Route path="/patients" element={<RequirePermission permission="lab:read"><PatientsList /></RequirePermission>} />
             <Route path="/patients/:patientId" element={<RequirePermission permission="lab:read"><PatientDetailPage /></RequirePermission>} />
+            <Route path="/requesting-physicians" element={<RequirePermission permission="lab:read"><RequestingPhysiciansList /></RequirePermission>} />
+            <Route path="/requesting-physicians/:physicianId" element={<RequirePermission permission="lab:read"><RequestingPhysicianDetailPage /></RequirePermission>} />
             <Route path="/orders" element={<RequirePermission permission="lab:read"><OrdersList /></RequirePermission>} />
             <Route path="/orders/:orderId" element={<RequirePermission permission="lab:read"><OrderDetail /></RequirePermission>} />
             <Route path="/samples" element={<RequirePermission permission="lab:read"><SamplesList /></RequirePermission>} />
@@ -66,6 +71,8 @@ createRoot(document.getElementById("root")!).render(
 
             {/* Lab create — lab:create_order */}
             <Route path="/patients/register" element={<RequirePermission permission="lab:create_patient"><PatientRegister /></RequirePermission>} />
+            <Route path="/requesting-physicians/register" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
+            <Route path="/requesting-physicians/:physicianId/edit" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
             <Route path="/orders/register" element={<RequirePermission permission="lab:create_order"><OrderRegister /></RequirePermission>} />
             <Route path="/samples/register" element={<RequirePermission permission="lab:create_sample"><SampleRegister /></RequirePermission>} />
 
