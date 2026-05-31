@@ -6,10 +6,11 @@ import { tokens } from "../design/tokens";
 const { Header } = Layout;
 
 type Props = {
+    // Mantenido para compatibilidad mientras los enlaces de navegación están ocultos.
     activeLink?: "login" | "register";
 };
 
-export default function AuthHeader({ activeLink }: Props) {
+export default function AuthHeader(_props: Props) {
     return (
         <Header
             style={{
@@ -55,7 +56,8 @@ export default function AuthHeader({ activeLink }: Props) {
                 </span>
             </Link>
 
-            {/* Navigation Links */}
+            {/* Navigation Links — temporalmente ocultos para evitar múltiples registros
+                mientras se terminan otras partes del proyecto.
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <Link
                     to="/login"
@@ -89,6 +91,7 @@ export default function AuthHeader({ activeLink }: Props) {
                     Registrarme
                 </Link>
             </div>
+            */}
         </Header>
     );
 }
