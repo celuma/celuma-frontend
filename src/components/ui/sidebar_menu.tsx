@@ -198,7 +198,12 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                     background: rgba(255, 255, 255, 0.22) !important;
                     border-radius: 8px !important;
                 }
-                .ant-layout-sider .ant-menu-dark .ant-menu-item { border-radius: 8px !important; }
+                .ant-layout-sider .ant-menu-dark .ant-menu-item {
+                    border-radius: 8px !important;
+                    margin-inline: 4px !important;
+                    margin-block: 4px !important;
+                    width: calc(100% - 8px) !important;
+                }
                 .celuma-drawer .ant-menu-dark .ant-menu-item:hover { background: rgba(255,255,255,0.14) !important; border-radius: 8px !important; }
                 .celuma-drawer .ant-menu-dark .ant-menu-item-selected { background: rgba(255,255,255,0.22) !important; border-radius: 8px !important; }
                 .celuma-drawer .ant-menu-dark .ant-menu-item { border-radius: 8px !important; }
@@ -357,7 +362,7 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
-        padding: "12px 10px 20px 10px",
+        padding: "12px 0 20px 0",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     bottomWrapperCollapsed: {
@@ -371,14 +376,14 @@ const styles: Record<string, React.CSSProperties> = {
     menuBottom: {
         background: "transparent",
         borderInlineEnd: "none",
-        padding: 0,
+        padding: "0 10px",
         margin: 0,
         color: "#fff",
     },
     menuBottomCollapsed: {
         background: "transparent",
         borderInlineEnd: "none",
-        padding: 0,
+        padding: "0",
         margin: 0,
         color: "#fff",
     },
