@@ -59,7 +59,7 @@ type OrdersListResponse = {
         order_code: string;
         status: string;
         branch: { id: string; name?: string; code?: string | null };
-        patient: { id: string; full_name: string; patient_code: string };
+        patient?: { id: string; full_name: string; patient_code: string } | null;
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
@@ -88,10 +88,10 @@ export default function SamplesList() {
                     getJSON<SamplesListResponse>("/v1/laboratory/samples/"),
                     getJSON<OrdersListResponse>("/v1/laboratory/orders/"),
                 ]);
-                const orderMap = new Map<string, { patient_id: string; patient_name?: string; patient_code?: string; requested_by?: string | null }>();
+                const orderMap = new Map<string, { patient_id?: string; patient_name?: string; patient_code?: string; requested_by?: string | null }>();
                 for (const o of ordersRes.orders || []) {
                     orderMap.set(o.id, {
-                        patient_id: o.patient.id,
+                        patient_id: o.patient?.id,
                         patient_name: o.patient?.full_name || o.patient?.patient_code,
                         patient_code: o.patient?.patient_code,
                         requested_by: o.requested_by ?? null,

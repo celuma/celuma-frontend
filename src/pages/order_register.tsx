@@ -81,19 +81,22 @@ const sampleSchema = z.object({
 const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
     branch_id: z.string().trim().nonempty("La sucursal es requerida."),
-    patient_id: z.string().trim().nonempty("El paciente es requerido."),
+    patient_id: z.string().trim().optional(),
     requesting_physician_id: z.string().trim().optional(),
     study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
     requested_by: z.string().trim().optional(),
     notes: z.string().trim().optional(),
     created_by: z.string().trim().optional(),
     samples: z.array(sampleSchema).min(1, "Agregue al menos una muestra."),
+}).refine((data) => Boolean(data.patient_id || data.requesting_physician_id), {
+    path: ["patient_id"],
+    message: "Seleccione un paciente, un médico solicitante o ambos.",
 });
 
 type OrderFormData = z.infer<typeof schema>;
 
 type UnifiedResponse = {
-    order: { id: string; order_code: string; status: string; patient_id: string; tenant_id: string; branch_id: string };
+    order: { id: string; order_code: string; status: string; patient_id?: string | null; tenant_id: string; branch_id: string };
     samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
@@ -229,7 +232,7 @@ export default function OrderRegister() {
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
-                patient_id: data.patient_id,
+                patient_id: data.patient_id || undefined,
                 requesting_physician_id: data.requesting_physician_id || undefined,
                 study_type_id: data.study_type_id,
                 notes: data.notes || undefined,
@@ -308,6 +311,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Paciente</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione un paciente, un médico solicitante o ambos.</p>
                                 <div className="cr-grid-2">
                                     <FormField
                                         control={control}
@@ -320,6 +324,7 @@ export default function OrderRegister() {
                                                 options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
                                                 showSearch
                                                 disabled={Boolean(prefilledPatientId)}
+                                                error={p.error}
                                             />
                                         )}
                                     />

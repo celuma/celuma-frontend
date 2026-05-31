@@ -39,7 +39,7 @@ type OrdersListResponse = {
         status: string;
         tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
-        patient: { id: string; full_name: string; patient_code: string };
+        patient?: { id: string; full_name: string; patient_code: string } | null;
         requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
         requested_by?: string | null;
         notes?: string | null;
@@ -84,7 +84,7 @@ export default function OrdersList() {
         if (!q) return rows;
         return rows.filter((r) => {
             // Search in basic fields
-            const basicFields = [r.order_code, r.patient.full_name, r.patient.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
+            const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q));
             
@@ -198,7 +198,7 @@ export default function OrdersList() {
             filters: patientFilters,
             onFilter: (value, record) => record.patient?.id === value,
             render: (_, r) => {
-                if (!r.patient?.full_name || !r.patient?.id) return "—";
+                if (!r.patient?.full_name || !r.patient?.id) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <PatientCell
                         patientId={r.patient.id}

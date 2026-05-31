@@ -127,7 +127,7 @@ export type OrderDetail = {
     id: string;
     order_code: string;
     status: string;
-    patient_id: string;
+    patient_id?: string | null;
     tenant_id: string;
     branch_id: string;
     requested_by?: string | null;

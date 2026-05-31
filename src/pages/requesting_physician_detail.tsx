@@ -60,7 +60,7 @@ type OrdersListResponse = {
         status: string;
         tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
-        patient: { id: string; full_name: string; patient_code: string };
+        patient?: { id: string; full_name: string; patient_code: string } | null;
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;

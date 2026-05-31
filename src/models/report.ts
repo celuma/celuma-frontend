@@ -164,7 +164,7 @@ export interface ReportFullResponse {
         id: string;
         order_code: string;
         status: string;
-        patient_id: string;
+        patient_id?: string | null;
         tenant_id: string;
         branch_id: string;
         requested_by?: string | null;
@@ -177,7 +177,7 @@ export interface ReportFullResponse {
         reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null }>;
         labels?: Array<{ id: string; name: string; color: string; inherited?: boolean }>;
     };
-    patient: {
+    patient?: {
         id: string;
         tenant_id: string;
         branch_id: string;
@@ -188,7 +188,7 @@ export interface ReportFullResponse {
         sex?: string | null;
         phone?: string | null;
         email?: string | null;
-    };
+    } | null;
     samples: Array<{
         id: string;
         sample_code: string;
