@@ -258,7 +258,7 @@ export default function ReportsList() {
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onSearch={(v) => setSearch(v)}
-                                style={{ width: 320 }}
+                                style={{ width: "100%", maxWidth: 320 }}
                             />
                         </div>
                         <CelumaTable
@@ -274,7 +274,7 @@ export default function ReportsList() {
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin reportes',
                                 selectAll: 'Seleccionar todo',

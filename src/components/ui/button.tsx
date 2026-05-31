@@ -18,10 +18,10 @@ export default function Button({ fullWidth, style, ...rest }: Props) {
         width: fullWidth ? "100%" : "auto",
     };
     const primaryColors = {
-        base: "#0f8b8d",
-        hover: "#0c6f71",
-        active: "#0a5557",
-        disabled: "#9fb8bb",
+        base: "#49b6ad",
+        hover: "#3da8a0",
+        active: "#2e9692",
+        disabled: "#a8d4d0",
     };
 
     return (

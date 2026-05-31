@@ -34,3 +34,111 @@ html, body {
   padding: 2px 6px;
   border-radius: 6px;
 }
+
+/* ── Config sidebar menu — overrides ────────────────── */
+.celuma-config-menu .ant-menu-item {
+  border-radius: 8px !important;
+  margin: 2px 8px !important;
+  width: calc(100% - 16px) !important;
+  color: #374151 !important;
+  font-size: 14px !important;
+}
+.celuma-config-menu .ant-menu-item .ant-menu-item-icon {
+  color: #6b7280 !important;
+}
+.celuma-config-menu .ant-menu-item:hover {
+  background: #f0fdfa !important;
+  color: #2e9692 !important;
+}
+.celuma-config-menu .ant-menu-item:hover .ant-menu-item-icon {
+  color: #49b6ad !important;
+}
+.celuma-config-menu .ant-menu-item-selected {
+  background: #49b6ad !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.celuma-config-menu .ant-menu-item-selected .ant-menu-item-icon,
+.celuma-config-menu .ant-menu-item-selected .anticon {
+  color: #fff !important;
+}
+/* Selected item hover: deepen slightly, don't wash it out */
+.celuma-config-menu .ant-menu-item-selected:hover {
+  background: #3da8a0 !important;
+  color: #fff !important;
+}
+.celuma-config-menu .ant-menu-item-selected:hover .ant-menu-item-icon,
+.celuma-config-menu .ant-menu-item-selected:hover .anticon {
+  color: #fff !important;
+}
+
+/* ── Small desktop / tablet (768–1200px) ────────────── */
+@media (min-width: 768px) and (max-width: 1200px) {
+  .ant-layout-content {
+    padding: 16px !important;
+    overflow-x: hidden; /* contain table overflow within layout */
+  }
+
+  .ant-card-body {
+    padding: 16px !important;
+  }
+
+  /* Tables: scroll horizontally instead of wrapping text */
+  .ant-table-wrapper {
+    overflow-x: auto !important;
+  }
+
+  /* Config layout: stack when sidebar takes too much room */
+  .celuma-config-layout {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .celuma-config-sidebar {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  /* Page header: wrap title/CTA gracefully */
+  .celuma-page-header {
+    gap: 12px !important;
+  }
+}
+
+/* ── Mobile / responsive ─────────────────────────────── */
+@media (max-width: 767px) {
+  /* On mobile the sidebar is a drawer; content takes full width */
+  .ant-layout-content {
+    padding: 12px !important;
+    padding-top: 56px !important; /* space for the floating hamburger */
+    min-width: 0 !important;
+  }
+
+  /* Header card title+CTA: stack vertically */
+  .celuma-page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .celuma-page-header .celuma-page-cta {
+    width: 100% !important;
+  }
+
+  /* Tables: allow horizontal scroll */
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+
+  /* Reduce card padding */
+  .ant-card-body {
+    padding: 16px !important;
+  }
+
+  /* Config layout: stack sidebar + content vertically */
+  .celuma-config-layout {
+    flex-direction: column !important;
+  }
+  .celuma-config-sidebar {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+}

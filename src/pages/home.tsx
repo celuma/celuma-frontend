@@ -52,7 +52,7 @@ const Home: React.FC = () => {
                     {/* Header */}
                     <Card
                         style={cardStyle}
-                        bodyStyle={{ padding: tokens.cardPadding }}
+                        styles={{ body: { padding: tokens.cardPadding } }}
                     >
                         <Title 
                             level={2} 
@@ -146,7 +146,7 @@ const Home: React.FC = () => {
                         <Col xs={24} lg={12}>
                             <Card
                                 style={cardStyle}
-                                bodyStyle={{ padding: tokens.cardPadding }}
+                                styles={{ body: { padding: tokens.cardPadding } }}
                             >
                                 <h3 style={{ 
                                     fontFamily: tokens.titleFont, 

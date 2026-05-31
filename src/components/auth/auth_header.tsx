@@ -83,7 +83,7 @@ export default function AuthHeader({ activeLink }: Props) {
                         boxShadow: "0 4px 16px rgba(15,139,141,0.35)",
                         lineHeight: 1,
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#0c6f71")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#3da8a0")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = tokens.primary)}
                 >
                     Registrarme

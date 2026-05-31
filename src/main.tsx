@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { App as AntApp } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import App from "./App";
@@ -46,6 +46,18 @@ import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
 
 createRoot(document.getElementById("root")!).render(
+    <ConfigProvider theme={{
+        token: {
+            colorPrimary: "#49b6ad",
+            colorLink: "#49b6ad",
+            colorLinkHover: "#3da8a0",
+            borderRadius: 8,
+        },
+        components: {
+            Button: { borderRadius: 8 },
+            Menu: { darkItemBg: "transparent", darkItemSelectedBg: "rgba(255,255,255,0.22)" },
+        },
+    }}>
     <AntApp>
         <CelumaNotificationProxy />
         <BrowserRouter>
@@ -123,4 +135,5 @@ createRoot(document.getElementById("root")!).render(
         </Routes>
         </BrowserRouter>
     </AntApp>
+    </ConfigProvider>
 );

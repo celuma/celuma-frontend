@@ -9,8 +9,8 @@ export const tokens = {
     // Colors
     bg: "#fbf6ec",
     cardBg: "#fff",
-    primary: "#0f8b8d",
-    accent: "#0f8b8d",
+    primary: "#49b6ad",
+    accent: "#49b6ad",
     textPrimary: "#0d1b2a",
     textSecondary: "#6b7280",
     

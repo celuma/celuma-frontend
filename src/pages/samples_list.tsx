@@ -343,7 +343,7 @@ export default function SamplesList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                        <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                             <div>
                                 <h1 style={pageTitleStyle}>Muestras</h1>
                                 <p style={subtitleStyle}>Consulta y gestiona las muestras procesadas</p>
@@ -361,7 +361,7 @@ export default function SamplesList() {
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onSearch={(v) => setSearch(v)}
-                                style={{ width: 400 }}
+                                style={{ width: "100%", maxWidth: 400 }}
                             />
                         </div>
                         <CelumaTable
@@ -377,7 +377,7 @@ export default function SamplesList() {
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin muestras',
                                 selectAll: 'Seleccionar todo',

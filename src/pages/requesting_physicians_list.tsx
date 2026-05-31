@@ -132,7 +132,7 @@ export default function RequestingPhysiciansList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                        <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                             <div>
                                 <h1 style={pageTitleStyle}>Médicos Solicitantes</h1>
                                 <p style={subtitleStyle}>Consulta y gestiona los médicos solicitantes</p>
@@ -150,7 +150,7 @@ export default function RequestingPhysiciansList() {
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
                                 onSearch={(value) => setSearch(value)}
-                                style={{ width: 320 }}
+                                style={{ width: "100%", maxWidth: 320 }}
                             />
                         </div>
                         <CelumaTable

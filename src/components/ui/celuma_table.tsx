@@ -85,8 +85,9 @@ export function CelumaTable<T>({
             rowKey={rowKey}
             columns={columns}
             pagination={defaultPagination}
-            locale={{ 
-                emptyText: <Empty description={emptyText} /> 
+            scroll={{ x: "max-content" }}
+            locale={{
+                emptyText: <Empty description={emptyText} />
             }}
             onRow={(record) => ({
                 onClick: () => onRowClick?.(record),

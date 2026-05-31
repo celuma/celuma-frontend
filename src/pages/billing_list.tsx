@@ -179,7 +179,7 @@ function BillingList() {
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin facturas',
                                 selectAll: 'Seleccionar todo',

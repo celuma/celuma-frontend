@@ -24,7 +24,7 @@ export const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: 
     "SANGRE": { icon: <MedicineBoxOutlined />, color: "#dc2626", label: "Sangre" },
     "LIQUIDO": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Líquido" },
     "ORINA": { icon: <ExperimentOutlined />, color: "#f59e0b", label: "Orina" },
-    "DEFAULT": { icon: <ExperimentOutlined />, color: "#0f8b8d", label: "Muestra" },
+    "DEFAULT": { icon: <ExperimentOutlined />, color: "#49b6ad", label: "Muestra" },
 };
 
 /**
@@ -63,7 +63,7 @@ export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
 
 // Item type configuration for worklist items
 export const ITEM_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-    "lab_order": { icon: <InboxOutlined />, color: "#0f8b8d", label: "Orden" },
+    "lab_order": { icon: <InboxOutlined />, color: "#49b6ad", label: "Orden" },
     "sample": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Muestra" },
     "report": { icon: <FileTextOutlined />, color: "#8b5cf6", label: "Reporte" },
     "DEFAULT": { icon: <FileTextOutlined />, color: "#6b7280", label: "Item" },
@@ -177,7 +177,7 @@ export const PatientCell: React.FC<{
 
     const getAvatarColor = (name: string): string => {
         const colors = [
-            "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
+            "#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", 
             "#f59e0b", "#10b981", "#ef4444", "#6366f1"
         ];
         let hash = 0;
@@ -227,8 +227,8 @@ export const PatientCell: React.FC<{
             <div>
                 <div style={{ 
                     fontWeight: 600, 
-                    color: "#0f8b8d",
-                    borderBottom: "1px dashed #0f8b8d",
+                    color: "#49b6ad",
+                    borderBottom: "1px dashed #49b6ad",
                     display: "inline-block"
                 }}>
                     {patientName}

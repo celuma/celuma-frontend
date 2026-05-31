@@ -232,7 +232,7 @@ export default function OrdersList() {
                             }}
                             style={{ color: "inherit", textDecoration: "none" }}
                         >
-                            <div style={{ fontWeight: 600, color: "#0f8b8d", borderBottom: "1px dashed #0f8b8d", display: "inline-block" }}>
+                            <div style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block" }}>
                                 {r.requesting_physician.full_name}
                             </div>
                             <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
@@ -357,7 +357,7 @@ export default function OrdersList() {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                        <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                             <div>
                                 <h1 style={pageTitleStyle}>Órdenes</h1>
                                 <p style={subtitleStyle}>Consulta y gestiona las órdenes de laboratorio</p>
@@ -375,7 +375,7 @@ export default function OrdersList() {
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onSearch={(v) => setSearch(v)}
-                                style={{ width: 320 }}
+                                style={{ width: "100%", maxWidth: 320 }}
                             />
                         </div>
                         <CelumaTable
@@ -391,7 +391,7 @@ export default function OrdersList() {
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin casos',
                                 selectAll: 'Seleccionar todo',

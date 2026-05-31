@@ -13,7 +13,7 @@ export default function CelumaModal({ title, children, styles, ...rest }: Props)
         fontSize: 22,
         fontWeight: 800,
         margin: 0,
-        color: "#0f8b8d",
+        color: "#49b6ad",
     };
 
     return (

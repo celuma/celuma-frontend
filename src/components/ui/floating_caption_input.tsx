@@ -35,12 +35,12 @@ export default function FloatingCaptionInput({
     const isFloating = focused || (value && String(value).length > 0);
     
     const colors = {
-        base: "#0f8b8d",
-        baseHover: "#0c6f71",
-        ringBase: "rgba(15,139,141,.18)",
+        base: "#49b6ad",
+        baseHover: "#3da8a0",
+        ringBase: "rgba(73,182,173,.20)",
         text: "#0d1b2a",
         placeholder: "#6b7280",
-        prefix: "#0f8b8d",
+        prefix: "#49b6ad",
         clear: "#94a3b8",
         clearHover: "#64748b",
         error: "#b91c1c",

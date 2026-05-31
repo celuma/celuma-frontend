@@ -77,7 +77,7 @@ const SidebarConfig: React.FC = () => {
             .find((key) => pathname.startsWith(key)) ?? "/config/profile";
 
     return (
-        <aside style={styles.container}>
+        <aside className="celuma-config-menu" style={styles.container}>
             <div style={styles.header}>
                 <span style={styles.headerText}>Configuración</span>
             </div>

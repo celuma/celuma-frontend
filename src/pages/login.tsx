@@ -288,7 +288,7 @@ export default function Login() {
                             style={{
                                 background: "none",
                                 border: "none",
-                                color: "#0f8b8d",
+                                color: "#49b6ad",
                                 cursor: "pointer",
                                 textDecoration: "underline",
                                 fontSize: 14,
