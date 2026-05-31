@@ -15,7 +15,8 @@ import CelumaButton from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { CelumaTable } from "../components/ui/celuma_table";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -460,27 +461,31 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     ));
 
     const content = (
-        <div>
-            <Card
-                title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
-                extra={
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                    <div>
+                        <h1 style={pageTitleStyle}>Gestión de Usuarios</h1>
+                        <p style={subtitleStyle}>Administra los usuarios y sus permisos de acceso</p>
+                    </div>
                     <Space>
                         <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
                             Enviar Invitación
                         </Button>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+                        <CelumaButton type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
                             Crear Usuario
-                        </Button>
+                        </CelumaButton>
                     </Space>
-                }
-                style={cardStyle}
-            >
-                <Table
+                </div>
+            </Card>
+            <Card style={cardStyle}>
+                <CelumaTable
                     columns={columns}
                     dataSource={users}
                     loading={loading}
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
+                    emptyText="Sin usuarios registrados"
                 />
             </Card>
 

@@ -72,30 +72,55 @@ html, body {
   color: #fff !important;
 }
 
+/* ── Config layout: prevent cards from overflowing the outlet ── */
+.celuma-config-layout > div:last-child {
+  min-width: 0;
+}
+.celuma-config-layout .ant-card {
+  min-width: 0;
+}
+
 /* ── Small desktop / tablet (768–1200px) ────────────── */
 @media (min-width: 768px) and (max-width: 1200px) {
   .ant-layout-content {
     padding: 16px !important;
-    overflow-x: hidden; /* contain table overflow within layout */
   }
 
   .ant-card-body {
     padding: 16px !important;
   }
 
-  /* Tables: scroll horizontally instead of wrapping text */
-  .ant-table-wrapper {
-    overflow-x: auto !important;
+  /* Grid items: allow shrinking below min-content so cards don't overflow */
+  .ant-layout-content > div > .ant-card {
+    min-width: 0;
   }
 
-  /* Config layout: stack when sidebar takes too much room */
+  /* Card bodies with a table: constrain width and scroll horizontally */
+  .ant-card-body:has(.ant-table-wrapper) {
+    overflow-x: auto;
+  }
+
+  /* Table wrapper: ensure horizontal scroll */
+  .ant-table-wrapper {
+    overflow-x: auto !important;
+    min-width: 0;
+  }
+
+  /* Config layout: stack vertically with tabs nav on top */
   .celuma-config-layout {
     flex-direction: column !important;
-    gap: 16px !important;
+    align-items: stretch !important;
+    gap: 12px !important;
   }
   .celuma-config-sidebar {
     width: 100% !important;
     min-width: unset !important;
+    flex-shrink: 0;
+  }
+  /* Outlet must fill full width when stacked */
+  .celuma-config-layout > div:last-child {
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   /* Page header: wrap title/CTA gracefully */

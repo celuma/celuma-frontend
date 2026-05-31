@@ -1026,6 +1026,9 @@ export default function OrderDetail() {
                             gap: ${tokens.gap}px;
                             align-items: start;
                         }
+                        .order-detail-grid > * {
+                            min-width: 0;
+                        }
                         .order-detail-sidebar-desktop {
                             display: block;
                             position: sticky;

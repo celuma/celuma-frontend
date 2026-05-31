@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
 import type {
     ReportTemplateListItem,
@@ -966,16 +966,26 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     // Content
     const content = (
         <>
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: panelVisible ? "1fr 1.4fr" : "1fr",
-                    alignItems: "start",
-                    gap: tokens.gap * 2,
-                }}
-            >
-                {listPanel}
-                {editorPanel}
+            <div style={{ display: "grid", gap: tokens.gap }}>
+                <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div>
+                            <h1 style={pageTitleStyle}>Plantillas de Reporte</h1>
+                            <p style={subtitleStyle}>Diseña y gestiona las plantillas para los reportes de laboratorio</p>
+                        </div>
+                    </div>
+                </Card>
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: panelVisible ? "1fr 1.4fr" : "1fr",
+                        alignItems: "start",
+                        gap: tokens.gap * 2,
+                    }}
+                >
+                    {listPanel}
+                    {editorPanel}
+                </div>
             </div>
 
             {/* ---- Modal: crear campo base custom ---- */}

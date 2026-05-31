@@ -917,6 +917,9 @@ export default function SampleDetailPage() {
                             gap: ${tokens.gap}px;
                             align-items: start;
                         }
+                        .sample-detail-grid > * {
+                            min-width: 0;
+                        }
                         .sample-detail-sidebar-desktop {
                             display: block;
                             position: sticky;

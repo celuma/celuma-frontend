@@ -66,14 +66,25 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
     title = "Céluma",
 }) => {
     const [collapsed, setCollapsed] = useState(() => {
-        if (typeof window !== "undefined" && window.innerWidth <= 1100) return true;
-        const saved = localStorage.getItem("sidebar_collapsed");
+        if (typeof window === "undefined") return false;
+        // On narrow screens always start collapsed
+        if (window.matchMedia("(max-width: 1100px)").matches) return true;
+        // On wide screens respect user's saved preference
+        const saved = localStorage.getItem("sidebar_collapsed_wide");
         return saved ? JSON.parse(saved) : false;
     });
 
     useEffect(() => {
         const mq = window.matchMedia("(max-width: 1100px)");
-        const handler = (e: MediaQueryListEvent) => setCollapsed(e.matches);
+        const handler = (e: MediaQueryListEvent) => {
+            if (e.matches) {
+                setCollapsed(true);
+            } else {
+                // Restore wide-screen preference when expanding viewport
+                const saved = localStorage.getItem("sidebar_collapsed_wide");
+                setCollapsed(saved ? JSON.parse(saved) : false);
+            }
+        };
         mq.addEventListener("change", handler);
         return () => mq.removeEventListener("change", handler);
     }, []);
@@ -114,7 +125,10 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
     const toggleCollapsed = () => {
         const newCollapsed = !collapsed;
         setCollapsed(newCollapsed);
-        localStorage.setItem("sidebar_collapsed", JSON.stringify(newCollapsed));
+        // Only persist manual toggle on wide screens; narrow-screen collapses are always auto
+        if (!window.matchMedia("(max-width: 1100px)").matches) {
+            localStorage.setItem("sidebar_collapsed_wide", JSON.stringify(newCollapsed));
+        }
     };
 
     const menuContent = (inDrawer = false) => (

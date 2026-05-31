@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Divider } from "antd";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { FRONTEND_DEPENDENCIES, BACKEND_DEPENDENCIES } from "../legal/third_party_dependencies";
 
@@ -50,81 +50,53 @@ export default function ConfigAbout() {
     }, []);
 
     return (
-        <Card title={<span style={cardTitleStyle}>Acerca de Céluma</span>} style={cardStyle}>
-            {/* Logo + server version (prominent) + UI version (secondary) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 24 }}>
-                <img
-                    src={logo}
-                    alt=""
-                    width={56}
-                    height={56}
-                    style={{ borderRadius: 12, flexShrink: 0, boxShadow: "0 4px 12px rgba(0,0,0,.12)" }}
-                />
-                <div>
-                    <div
-                        style={{
-                            fontFamily: tokens.titleFont,
-                            fontSize: 22,
-                            fontWeight: tokens.titleWeight,
-                            color: tokens.textPrimary,
-                            lineHeight: 1.2,
-                        }}
-                    >
-                        Céluma
-                    </div>
-                    {serverVersion !== null && (
-                        <div style={{ fontSize: 14, color: tokens.textSecondary, marginTop: 4 }}>
-                            {" "}
-                            <span
-                                style={{
-                                    fontWeight: 600,
-                                    color: tokens.primary,
-                                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                                    fontSize: 13,
-                                }}
-                            >
-                                {serverVersion}
-                            </span>
-                        </div>
-                    )}
-                    <div
-                        style={{
-                            fontSize: 12,
-                            color: tokens.textSecondary,
-                            marginTop: serverVersion !== null ? 2 : 4,
-                            opacity: 0.75,
-                        }}
-                    >
-                        Interfaz{" "}
-                        <span
-                            style={{
-                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                            }}
-                        >
-                            {uiVersion}
-                        </span>
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            {/* Header */}
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                    <img src={logo} alt="" width={52} height={52} style={{ borderRadius: 12, flexShrink: 0, boxShadow: "0 4px 12px rgba(0,0,0,.12)" }} />
+                    <div>
+                        <h1 style={pageTitleStyle}>Acerca de Céluma</h1>
+                        <p style={subtitleStyle}>Información del sistema y licencias de componentes</p>
                     </div>
                 </div>
-            </div>
+            </Card>
 
-            {/* Copyright */}
-            <p style={{ margin: "0 0 8px 0", fontSize: 14, color: tokens.textPrimary, fontWeight: 600 }}>
-                © {CURRENT_YEAR} Céluma. Todos los derechos reservados.
-            </p>
-            <p style={{ margin: 0, fontSize: 13, color: tokens.textSecondary, lineHeight: 1.65 }}>
-                Este software incorpora componentes de código abierto de terceros distribuidos
-                bajo sus respectivas licencias (MIT, BSD, Apache 2.0, LGPL, MPL-2.0, entre otras).
-                Las dependencias listadas a continuación corresponden exclusivamente a los paquetes
-                de ejecución del cliente web y del servidor.
-            </p>
+            {/* Version info */}
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <p style={{ margin: "0 0 4px 0", fontSize: 11, fontWeight: 600, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>Servidor</p>
+                        <p style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 18, fontWeight: 700, color: tokens.primary }}>
+                            {serverVersion ?? "—"}
+                        </p>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <p style={{ margin: "0 0 4px 0", fontSize: 11, fontWeight: 600, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>Interfaz</p>
+                        <p style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 18, fontWeight: 700, color: tokens.textPrimary }}>
+                            {uiVersion}
+                        </p>
+                    </div>
+                    <div style={{ flex: 2, minWidth: 220 }}>
+                        <p style={{ margin: "0 0 4px 0", fontSize: 11, fontWeight: 600, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>Licencia</p>
+                        <p style={{ margin: 0, fontSize: 13, color: tokens.textSecondary, lineHeight: 1.6 }}>
+                            © {CURRENT_YEAR} Céluma. Todos los derechos reservados.
+                        </p>
+                    </div>
+                </div>
+            </Card>
 
-            <Divider style={{ margin: "24px 0" }} />
-
-            {/* Dependency lists */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                <DepBlock title="Cliente web" deps={FRONTEND_DEPENDENCIES} />
-                <DepBlock title="Servidor" deps={BACKEND_DEPENDENCIES} />
-            </div>
-        </Card>
+            {/* Dependencies */}
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                <p style={{ margin: "0 0 16px 0", fontSize: 13, color: tokens.textSecondary, lineHeight: 1.65 }}>
+                    Este software incorpora componentes de código abierto bajo licencias MIT, BSD, Apache 2.0, LGPL, MPL-2.0, entre otras.
+                </p>
+                <Divider style={{ margin: "0 0 20px 0" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                    <DepBlock title="Cliente Web" deps={FRONTEND_DEPENDENCIES} />
+                    <DepBlock title="Servidor" deps={BACKEND_DEPENDENCIES} />
+                </div>
+            </Card>
+        </div>
     );
 }
