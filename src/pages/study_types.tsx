@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Layout, Card, Table, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -319,7 +319,7 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                             <h1 style={pageTitleStyle}>Tipos de Estudio</h1>
                             <p style={subtitleStyle}>Configura los tipos de estudio disponibles en el laboratorio</p>
                         </div>
-                        <CelumaButton type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                        <CelumaButton type="primary" onClick={handleCreate}>
                             Nuevo Tipo de Estudio
                         </CelumaButton>
                     </div>

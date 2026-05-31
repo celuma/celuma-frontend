@@ -241,9 +241,9 @@ function Worklist() {
         },
         {
             title: "Código",
-            dataIndex: "display_id",
             key: "display_id",
             width: 120,
+            render: (_, record) => record.order_code || record.display_id,
         },
         {
             title: "Paciente",

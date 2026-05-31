@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Card, Divider } from "antd";
-import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { FRONTEND_DEPENDENCIES, BACKEND_DEPENDENCIES } from "../legal/third_party_dependencies";
@@ -53,12 +52,9 @@ export default function ConfigAbout() {
         <div style={{ display: "grid", gap: tokens.gap }}>
             {/* Header */}
             <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <img src={logo} alt="" width={52} height={52} style={{ borderRadius: 12, flexShrink: 0, boxShadow: "0 4px 12px rgba(0,0,0,.12)" }} />
-                    <div>
-                        <h1 style={pageTitleStyle}>Acerca de Céluma</h1>
-                        <p style={subtitleStyle}>Información del sistema y licencias de componentes</p>
-                    </div>
+                <div>
+                    <h1 style={pageTitleStyle}>Acerca de Céluma</h1>
+                    <p style={subtitleStyle}>Información del sistema y licencias de componentes</p>
                 </div>
             </Card>
 

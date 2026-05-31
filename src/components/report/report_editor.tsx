@@ -597,7 +597,7 @@ const ReportEditor: React.FC = () => {
             const result = await submitReport(envelope.id);
             setEnvelope((e) => e ? { ...e, status: result.status as ReportStatus } : e);
             message.success(result.message);
-        } catch (err) { message.error(err instanceof Error ? err.message : "Error al enviar"); }
+        } catch (err) { showCelumaApiError(err, "Error al enviar el reporte."); }
     };
 
     const handleApprove = async () => {

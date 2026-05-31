@@ -4,7 +4,7 @@ import {
     Space, Popconfirm, Spin, Avatar,
 } from "antd";
 import {
-    PlusOutlined, DeleteOutlined, SafetyCertificateOutlined,
+    DeleteOutlined, SafetyCertificateOutlined,
     CheckCircleFilled, MinusCircleOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
@@ -286,7 +286,6 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
                     </div>
                     <CelumaButton
                         type="primary"
-                        icon={<PlusOutlined />}
                         onClick={() => setAddModalOpen(true)}
                         disabled={eligibleUsers.length === 0}
                     >

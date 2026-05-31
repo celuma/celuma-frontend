@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar, Tag } from "antd";
+import { Layout, Input, Card, Avatar } from "antd";
 import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -117,7 +117,19 @@ export default function RequestingPhysiciansList() {
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
-            render: (isActive: boolean) => <Tag color={isActive ? "green" : "default"}>{isActive ? "Activo" : "Inactivo"}</Tag>,
+            render: (isActive: boolean) => (
+                <div style={{
+                    backgroundColor: isActive ? "#ecfdf5" : "#f3f4f6",
+                    color: isActive ? "#10b981" : "#6b7280",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "4px 10px",
+                    display: "inline-block",
+                }}>
+                    {isActive ? "Activo" : "Inactivo"}
+                </div>
+            ),
             filters: [
                 { text: "Activo", value: true },
                 { text: "Inactivo", value: false },

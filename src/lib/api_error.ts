@@ -12,6 +12,8 @@ const BACKEND_MSG_ES: Record<string, string> = {
     "Email already registered for this tenant": "Ese correo electrónico ya está registrado.",
     "Failed to update profile": "No se pudo actualizar el perfil.",
     "Failed to update password": "No se pudo actualizar la contraseña.",
+    "Cannot submit report for review without reviewers assigned": "No es posible enviar el reporte a revisión sin tener un revisor asignado.",
+    "Only users with the 'reviewer' role can sign reports": "Solo los usuarios con el rol de Revisor pueden firmar reportes.",
 };
 
 /** Translates a known backend English string; returns it unchanged if not mapped. */

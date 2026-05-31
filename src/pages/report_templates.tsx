@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Layout, Card, Button, DatePicker, Form, Input, Modal, message, Space, Popconfirm, Switch, Checkbox, Select, Divider, Typography, Tag, Empty, Spin, Tooltip } from "antd";
+import CelumaButton from "../components/ui/button";
 import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
@@ -699,14 +700,8 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     // Left panel — list
     const listPanel = (
         <Card
-            title={<span style={cardTitleStyle}>Plantillas de Reporte</span>}
             style={{ ...cardStyle, maxHeight: "calc(100vh - 96px)", overflow: "hidden", display: "flex", flexDirection: "column" }}
             styles={{ body: { overflowY: "auto", flex: 1 } }}
-            extra={
-                <Button type="primary" icon={<PlusOutlined />} onClick={openNewPanel}>
-                    Nuevo
-                </Button>
-            }
         >
             <Spin spinning={loadingList}>
                 {templates.length === 0 && !loadingList ? (
@@ -738,12 +733,17 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                         <FileTextOutlined style={{ color: tokens.primary }} />
                                         <Text strong ellipsis style={{ maxWidth: 160 }}>{t.name}</Text>
-                                        <Tag
-                                            color={t.is_active ? "success" : "default"}
-                                            style={{ fontSize: 10, lineHeight: "16px", padding: "0 6px" }}
-                                        >
+                                        <div style={{
+                                            backgroundColor: t.is_active ? "#ecfdf5" : "#f3f4f6",
+                                            color: t.is_active ? "#10b981" : "#6b7280",
+                                            borderRadius: 12,
+                                            fontSize: 10,
+                                            fontWeight: 500,
+                                            padding: "2px 8px",
+                                            display: "inline-block",
+                                        }}>
                                             {t.is_active ? "Activo" : "Inactivo"}
-                                        </Tag>
+                                        </div>
                                     </div>
                                     {t.description && (
                                         <Text
@@ -968,11 +968,14 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         <>
             <div style={{ display: "grid", gap: tokens.gap }}>
                 <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                         <div>
                             <h1 style={pageTitleStyle}>Plantillas de Reporte</h1>
                             <p style={subtitleStyle}>Diseña y gestiona las plantillas para los reportes de laboratorio</p>
                         </div>
+                        <CelumaButton type="primary" onClick={openNewPanel}>
+                            Nueva Plantilla
+                        </CelumaButton>
                     </div>
                 </Card>
                 <div
