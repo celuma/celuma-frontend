@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space, Avatar } from "antd";
+import { Layout, Input, Card, Avatar } from "antd";
+import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { SEX_CONFIG } from "../components/ui/status_configs";
@@ -186,26 +187,29 @@ export default function PatientsList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Pacientes</span>}
-                        extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en pacientes"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 320 }}
-                                />
-                                <Button type="primary" onClick={() => navigate("/patients/register")}>
-                                    Registrar Paciente
-                                </Button>
-                            </Space>
-                        }
-                        style={cardStyle}
-                    >
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                            <div>
+                                <h1 style={pageTitleStyle}>Pacientes</h1>
+                                <p style={subtitleStyle}>Consulta y gestiona el registro de pacientes</p>
+                            </div>
+                            <CelumaButton type="primary" onClick={() => navigate("/patients/register")}>
+                                Registrar Paciente
+                            </CelumaButton>
+                        </div>
+                    </Card>
+                    <Card style={cardStyle}>
+                        <div style={{ marginBottom: 16 }}>
+                            <Input.Search
+                                allowClear
+                                placeholder="Buscar en pacientes"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onSearch={(v) => setSearch(v)}
+                                style={{ width: 320 }}
+                            />
+                        </div>
                         <CelumaTable
                             dataSource={filtered}
                             columns={columns}
@@ -237,6 +241,7 @@ export default function PatientsList() {
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>
                 </div>
+
             </Layout.Content>
         </Layout>
     );

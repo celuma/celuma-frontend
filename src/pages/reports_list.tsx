@@ -6,7 +6,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -245,21 +245,22 @@ export default function ReportsList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Reportes</span>}
-                        extra={
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <h1 style={pageTitleStyle}>Reportes</h1>
+                        <p style={subtitleStyle}>Consulta y gestiona los reportes generados</p>
+                    </Card>
+                    <Card style={cardStyle}>
+                        <div style={{ marginBottom: 16 }}>
                             <Input.Search
                                 allowClear
-                                placeholder="Buscar en reportes" 
+                                placeholder="Buscar en reportes"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onSearch={(v) => setSearch(v)}
                                 style={{ width: 320 }}
                             />
-                        }
-                        style={cardStyle}
-                    >
+                        </div>
                         <CelumaTable
                             dataSource={filtered}
                             columns={columns}

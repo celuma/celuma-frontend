@@ -16,8 +16,6 @@ export default function Button({ fullWidth, style, ...rest }: Props) {
         transition: "background .2s, transform .05s",
         padding: "0 28px",
         width: fullWidth ? "100%" : "auto",
-        display: "block",
-        margin: "20px auto 0 auto",
     };
     const primaryColors = {
         base: "#0f8b8d",

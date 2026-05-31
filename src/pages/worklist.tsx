@@ -15,7 +15,7 @@ import {
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -302,11 +302,13 @@ function Worklist() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Mi Lista de Trabajo</span>}
-                        style={cardStyle}
-                        extra={
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <h1 style={pageTitleStyle}>Mi Lista de Trabajo</h1>
+                        <p style={subtitleStyle}>Tus asignaciones y revisiones pendientes</p>
+                    </Card>
+                    <Card style={cardStyle}>
+                        <div style={{ marginBottom: 16 }}>
                             <Input.Search
                                 allowClear
                                 placeholder="Buscar en lista de trabajo"
@@ -315,8 +317,7 @@ function Worklist() {
                                 onSearch={(v) => setSearch(v)}
                                 style={{ width: 320 }}
                             />
-                        }
-                    >
+                        </div>
                         <CelumaTable
                             dataSource={filteredItems}
                             columns={columns}

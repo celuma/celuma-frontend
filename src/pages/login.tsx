@@ -173,7 +173,19 @@ export default function Login() {
 
     return (
         <AuthLayout activeLink="login">
-            <AuthCard maxWidth={520}>
+            <AuthCard
+                maxWidth={520}
+                header={
+                    <div style={{ textAlign: "center", paddingBottom: 4 }}>
+                        <h1 style={{ fontFamily: "'Baloo 2', system-ui, sans-serif", fontSize: 26, fontWeight: 800, color: "#0d1b2a", margin: 0, letterSpacing: "-0.02em" }}>
+                            Iniciar sesión
+                        </h1>
+                        <p style={{ margin: "6px 0 0 0", fontSize: 14, color: "#6b7280" }}>
+                            Bienvenido de nuevo a Céluma
+                        </p>
+                    </div>
+                }
+            >
                 <CelumaModal
                     open={forgotOpen}
                     onCancel={() => setForgotOpen(false)}
@@ -264,7 +276,7 @@ export default function Login() {
                     {serverError && <AlertText variant="error">{serverError}</AlertText>}
 
                     {/* Botón */}
-                    <Button type="primary" htmlType="submit" loading={isSubmitting} fullWidth>
+                    <Button type="primary" htmlType="submit" loading={isSubmitting} fullWidth style={{ marginTop: 8 }}>
                         Iniciar Sesión
                     </Button>
                     

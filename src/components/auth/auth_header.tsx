@@ -14,7 +14,7 @@ export default function AuthHeader({ activeLink }: Props) {
         <Header
             style={{
                 background: tokens.cardBg,
-                boxShadow: tokens.shadow,
+                boxShadow: "0 1px 12px rgba(0,0,0,0.08)",
                 height: 64,
                 display: "flex",
                 alignItems: "center",
@@ -56,7 +56,7 @@ export default function AuthHeader({ activeLink }: Props) {
             </Link>
 
             {/* Navigation Links */}
-            <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <Link
                     to="/login"
                     style={{
@@ -69,16 +69,22 @@ export default function AuthHeader({ activeLink }: Props) {
                 >
                     Iniciar sesión
                 </Link>
-                <span style={{ color: tokens.textSecondary }}>|</span>
                 <Link
                     to="/register"
                     style={{
-                        fontSize: 15,
-                        fontWeight: 600,
-                        color: activeLink === "register" ? tokens.primary : tokens.textSecondary,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: "#fff",
                         textDecoration: "none",
-                        transition: "color 0.2s ease",
+                        background: tokens.primary,
+                        padding: "8px 20px",
+                        borderRadius: 999,
+                        transition: "background 0.2s ease",
+                        boxShadow: "0 4px 16px rgba(15,139,141,0.35)",
+                        lineHeight: 1,
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#0c6f71")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = tokens.primary)}
                 >
                     Registrarme
                 </Link>

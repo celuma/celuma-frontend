@@ -1,6 +1,6 @@
 import { Layout, Card, Row, Col, Typography } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
-import { UserOutlined, FileTextOutlined, ExperimentOutlined, BarChartOutlined } from "@ant-design/icons";
+import { UserOutlined, FileTextOutlined, ExperimentOutlined, BarChartOutlined, PlusOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import StatsCard from "../components/ui/stats_card";
@@ -119,7 +119,7 @@ const Home: React.FC = () => {
                             <StatsCard
                                 title="Reportes en Borrador"
                                 value={data?.stats.draft_reports || 0}
-                                color="#6b7280"
+                                color="#f59e0b"
                                 loading={loading}
                             />
                         </Col>
@@ -159,10 +159,10 @@ const Home: React.FC = () => {
                                 </h3>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                                     {([
-                                        { perm: PERMS.CREATE_PATIENT, route: "/patients/register", label: "📝 Registrar Nuevo Paciente" },
-                                        { perm: PERMS.CREATE_ORDER,   route: "/orders/register",   label: "🧪 Crear Nueva Orden" },
-                                        { perm: PERMS.REPORTS_READ,   route: "/reports",            label: "📊 Ver Todos los Reportes" },
-                                    ] as const).filter(({ perm }) => hasPermission(perm)).map(({ route, label }) => (
+                                        { perm: PERMS.CREATE_PATIENT, route: "/patients/register", label: "Registrar Nuevo Paciente", icon: <UserOutlined /> },
+                                        { perm: PERMS.CREATE_ORDER,   route: "/orders/register",   label: "Crear Nueva Orden",        icon: <PlusOutlined /> },
+                                        { perm: PERMS.REPORTS_READ,   route: "/reports",            label: "Ver Todos los Reportes",   icon: <UnorderedListOutlined /> },
+                                    ] as const).filter(({ perm }) => hasPermission(perm)).map(({ route, label, icon }) => (
                                         <button
                                             key={route}
                                             onClick={() => nav(route)}
@@ -187,7 +187,10 @@ const Home: React.FC = () => {
                                                 e.currentTarget.style.borderColor = "#e5e7eb";
                                             }}
                                         >
-                                            {label}
+                                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                <span style={{ color: "#0f8b8d" }}>{icon}</span>
+                                                {label}
+                                            </span>
                                         </button>
                                     ))}
                                 </div>

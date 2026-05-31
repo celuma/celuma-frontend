@@ -48,8 +48,8 @@ const NAV_ITEMS: { key: CelumaKey; icon: React.ReactNode; label: string; permiss
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
-    { key: "/config",  icon: <SettingOutlined />,  label: "Configuración", style: { margin: 0 }, title: "Configuración" },
-    { key: "/logout",  icon: <LogoutOutlined />,   label: "Cerrar Sesión", style: { margin: 0 }, title: "Cerrar Sesión" },
+    { key: "/config",  icon: <SettingOutlined />,  label: "Configuración", style: { margin: "0 0 4px 0" }, title: "Configuración" },
+    { key: "/logout",  icon: <LogoutOutlined />,   label: "Cerrar Sesión", style: { margin: 0 },           title: "Cerrar Sesión" },
 ];
 
 export interface SidebarCelumaProps {
@@ -129,12 +129,17 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                 #root {
                     min-height: 100vh;
                 }
-                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-item:hover,
-                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-submenu-title:hover {
-                    background: rgba(0, 0, 0, 0.14) !important;
+                .ant-layout-sider .ant-menu-dark .ant-menu-item:hover,
+                .ant-layout-sider .ant-menu-dark .ant-menu-submenu-title:hover {
+                    background: rgba(255, 255, 255, 0.14) !important;
+                    border-radius: 8px !important;
                 }
                 .ant-layout-sider .ant-menu-dark .ant-menu-item-selected {
-                    background: rgba(0, 0, 0, 0.30) !important;
+                    background: rgba(255, 255, 255, 0.22) !important;
+                    border-radius: 8px !important;
+                }
+                .ant-layout-sider .ant-menu-dark .ant-menu-item {
+                    border-radius: 8px !important;
                 }
             `}</style>
             <Sider
@@ -181,9 +186,9 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                         mode="inline"
                         theme="dark"
                         inlineCollapsed={collapsed}
-                        style={styles.menu}
+                        style={collapsed ? styles.menuCollapsed : styles.menu}
                         onClick={(e) => handleNavigate(e.key as CelumaKey)}
-                        inlineIndent={collapsed ? 0 : 24}
+                        inlineIndent={collapsed ? 0 : 20}
                     />
 
                     <div style={collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
@@ -193,9 +198,9 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                             mode="inline"
                             theme="dark"
                             inlineCollapsed={collapsed}
-                            style={styles.menuBottom}
+                            style={collapsed ? styles.menuBottomCollapsed : styles.menuBottom}
                             onClick={(e) => handleNavigate(e.key as CelumaKey)}
-                            inlineIndent={collapsed ? 0 : 24}
+                            inlineIndent={collapsed ? 0 : 20}
                         />
                     </div>
                 </div>
@@ -225,7 +230,7 @@ const styles: Record<string, React.CSSProperties> = {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        fontFamily: "Nanito, sans-serif",
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
         overflow: "hidden",
     },
     headerContainer: {
@@ -279,17 +284,27 @@ const styles: Record<string, React.CSSProperties> = {
     },
     brand: {
         color: "#ffffff",
-        fontWeight: 900,
+        fontWeight: 800,
         fontSize: 26,
-        letterSpacing: 0.3,
-        fontFamily: "Nanito, sans-serif",
+        letterSpacing: -0.02,
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
         lineHeight: 1.1,
     },
     menu: {
         background: "transparent",
         borderInlineEnd: "none",
         flex: 1,
-        padding: "8px 16px 0 16px",
+        padding: "8px 10px 0 10px",
+        margin: 0,
+        color: "#fff",
+        overflowY: "auto",
+        minHeight: 0,
+    },
+    menuCollapsed: {
+        background: "transparent",
+        borderInlineEnd: "none",
+        flex: 1,
+        padding: "8px 0 0 0",
         margin: 0,
         color: "#fff",
         overflowY: "auto",
@@ -300,7 +315,7 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
-        padding: "16px 16px 20px 16px",
+        padding: "12px 10px 20px 10px",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     bottomWrapperCollapsed: {
@@ -308,11 +323,17 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
-        alignItems: "center",
-        padding: "16px 16px 20px 16px",
+        padding: "12px 0 20px 0",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {
+        background: "transparent",
+        borderInlineEnd: "none",
+        padding: 0,
+        margin: 0,
+        color: "#fff",
+    },
+    menuBottomCollapsed: {
         background: "transparent",
         borderInlineEnd: "none",
         padding: 0,

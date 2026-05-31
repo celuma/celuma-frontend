@@ -112,7 +112,7 @@ const styles: Record<string, React.CSSProperties> = {
     headerText: {
         fontWeight: 700,
         fontSize: 14,
-        color: "#374151",
+        color: "#0d1b2a",
         letterSpacing: "-0.01em",
     },
     menu: {
