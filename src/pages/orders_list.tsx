@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Layout, Input, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -59,11 +59,17 @@ export default function OrdersList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const [searchParams] = useSearchParams();
     const { hasPermission } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
     const [search, setSearch] = useState("");
+    // Status filter, optionally seeded from the URL (?status=RECEIVED,PROCESSING) e.g. when arriving from the dashboard cards
+    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+        const s = searchParams.get("status");
+        return s ? s.split(",") : null;
+    });
 
     useEffect(() => {
         (async () => {
@@ -301,6 +307,7 @@ export default function OrdersList() {
             width: 120,
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
+            filteredValue: statusFilter,
             onFilter: (value, record) => record.status === value,
             sorter: stringSorter("status"),
         },
@@ -384,6 +391,7 @@ export default function OrdersList() {
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin casos"
                             pagination={{ pageSize: 10 }}
                             locale={{

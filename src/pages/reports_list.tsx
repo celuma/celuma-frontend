@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout, Input, Card, Avatar, Tooltip } from "antd";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -60,10 +60,16 @@ export default function ReportsList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const [searchParams] = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<ReportsListResponse["reports"]>([]);
     const [search, setSearch] = useState("");
+    // Status filter, optionally seeded from the URL (?status=DRAFT) e.g. when arriving from the dashboard cards
+    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+        const s = searchParams.get("status");
+        return s ? s.split(",") : null;
+    });
 
     useEffect(() => {
         (async () => {
@@ -202,6 +208,7 @@ export default function ReportsList() {
             width: 120,
             render: (status: string) => renderStatusChip(status, "report"),
             filters: statusFilters,
+            filteredValue: statusFilter,
             onFilter: (value, record) => record.status === value,
             sorter: stringSorter("status"),
         },
@@ -267,6 +274,7 @@ export default function ReportsList() {
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/reports/${record.id}`)}
+                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin reportes"
                             pagination={{ pageSize: 10 }}
                             locale={{
