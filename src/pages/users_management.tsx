@@ -15,7 +15,8 @@ import CelumaButton from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/celuma_table";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -330,7 +331,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Usuario", dataIndex: "username", key: "username", render: (text) => text || "—" },
         {
-            title: "Rol(es)",
+            title: "Roles",
             dataIndex: "roles",
             key: "roles",
             filters: roleFilterOptions,
@@ -462,12 +463,10 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
 
     const content = (
         <div style={{ display: "grid", gap: tokens.gap }}>
-            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                    <div>
-                        <h1 style={pageTitleStyle}>Gestión de Usuarios</h1>
-                        <p style={subtitleStyle}>Administra los usuarios y sus permisos de acceso</p>
-                    </div>
+            <PageHeader
+                title="Gestión de Usuarios"
+                subtitle="Administra los usuarios y sus permisos de acceso"
+                extra={
                     <Space>
                         <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
                             Enviar Invitación
@@ -476,8 +475,8 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                             Crear Usuario
                         </CelumaButton>
                     </Space>
-                </div>
-            </Card>
+                }
+            />
             <Card style={cardStyle}>
                 <CelumaTable
                     columns={columns}
@@ -664,7 +663,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     </Form.Item>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <Form.Item name="roles" label="Rol(es)" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
+                        <Form.Item name="roles" label="Roles" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
                             <Select
                                 mode="multiple"
                                 placeholder="Seleccionar roles"

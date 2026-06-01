@@ -1,4 +1,4 @@
-import { Layout, Card, Row, Col, Typography } from "antd";
+import { Layout, Card, Row, Col } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { UserOutlined, FileTextOutlined, ExperimentOutlined, BarChartOutlined, PlusOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -6,15 +6,14 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import StatsCard from "../components/ui/stats_card";
 import RecentActivity from "../components/ui/recent_activity";
 import DashboardSummary from "../components/ui/dashboard_summary";
+import PageHeader from "../components/ui/page_header";
 import ErrorText from "../components/ui/error_text";
 import { useDashboardData } from "../hooks/use_dashboard_data";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
-
-const { Title } = Typography;
+import { tokens, cardStyle } from "../components/design/tokens";
 
 const Home: React.FC = () => {
     usePageTitle();
@@ -65,22 +64,10 @@ const Home: React.FC = () => {
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     {/* Header */}
-                    <Card
-                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.primary}` }}
-                        styles={{ body: { padding: tokens.cardPadding } }}
-                    >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                            <div>
-                                <Title
-                                    level={2}
-                                    style={pageTitleStyle}
-                                >
-                                    {greeting}{firstName ? `, ${firstName}` : ""} 👋
-                                </Title>
-                                <p style={subtitleStyle}>
-                                    Resumen de información importante del laboratorio
-                                </p>
-                            </div>
+                    <PageHeader
+                        title={`${greeting}${firstName ? `, ${firstName}` : ""} 👋`}
+                        subtitle="Resumen de información importante del laboratorio"
+                        extra={
                             <span style={{
                                 fontSize: 13,
                                 fontWeight: 600,
@@ -92,8 +79,8 @@ const Home: React.FC = () => {
                             }}>
                                 {today}
                             </span>
-                        </div>
-                    </Card>
+                        }
+                    />
 
                     {/* Stats Cards */}
                     <Row gutter={[16, 16]}>

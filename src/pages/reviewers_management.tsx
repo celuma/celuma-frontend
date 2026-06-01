@@ -10,7 +10,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/celuma_table";
 import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
@@ -278,12 +279,10 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
 
     const content = (
         <div style={{ display: "grid", gap: tokens.gap }}>
-            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                    <div>
-                        <h1 style={pageTitleStyle}>Revisores</h1>
-                        <p style={subtitleStyle}>Usuarios autorizados para firmar y publicar informes patológicos</p>
-                    </div>
+            <PageHeader
+                title="Revisores"
+                subtitle="Usuarios autorizados para firmar y publicar informes patológicos"
+                extra={
                     <CelumaButton
                         type="primary"
                         onClick={() => setAddModalOpen(true)}
@@ -291,8 +290,8 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
                     >
                         Agregar Revisor
                     </CelumaButton>
-                </div>
-            </Card>
+                }
+            />
             <Card style={cardStyle}>
                 <CelumaTable
                     columns={columns}

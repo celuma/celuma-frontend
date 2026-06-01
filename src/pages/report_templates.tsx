@@ -9,7 +9,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
 import type {
     ReportTemplateListItem,
@@ -967,17 +968,15 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const content = (
         <>
             <div style={{ display: "grid", gap: tokens.gap }}>
-                <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                    <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                        <div>
-                            <h1 style={pageTitleStyle}>Plantillas de Reporte</h1>
-                            <p style={subtitleStyle}>Diseña y gestiona las plantillas para los reportes de laboratorio</p>
-                        </div>
+                <PageHeader
+                    title="Plantillas de Reporte"
+                    subtitle="Diseña y gestiona las plantillas para los reportes de laboratorio"
+                    extra={
                         <CelumaButton type="primary" onClick={openNewPanel}>
                             Nueva Plantilla
                         </CelumaButton>
-                    </div>
-                </Card>
+                    }
+                />
                 <div
                     style={{
                         display: "grid",

@@ -5,7 +5,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/celuma_table";
 import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
@@ -314,17 +315,15 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
 
     const content = (
         <div style={{ display: "grid", gap: tokens.gap }}>
-            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                    <div>
-                        <h1 style={pageTitleStyle}>Catálogo de Precios</h1>
-                        <p style={subtitleStyle}>Define los precios por tipo de estudio y vigencia</p>
-                    </div>
+            <PageHeader
+                title="Catálogo de Precios"
+                subtitle="Define los precios por tipo de estudio y vigencia"
+                extra={
                     <CelumaButton type="primary" onClick={handleCreate}>
                         Nuevo Precio
                     </CelumaButton>
-                </div>
-            </Card>
+                }
+            />
             <Card style={cardStyle}>
                 <CelumaTable
                     columns={columns}

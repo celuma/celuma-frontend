@@ -8,7 +8,8 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -363,17 +364,15 @@ export default function OrdersList() {
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                        <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                            <div>
-                                <h1 style={pageTitleStyle}>Órdenes</h1>
-                                <p style={subtitleStyle}>Consulta y gestiona las órdenes de laboratorio</p>
-                            </div>
+                    <PageHeader
+                        title="Órdenes"
+                        subtitle="Consulta y gestiona las órdenes de laboratorio"
+                        extra={
                             <CelumaButton type="primary" onClick={() => navigate("/orders/register")}>
                                 Nueva Orden
                             </CelumaButton>
-                        </div>
-                    </Card>
+                        }
+                    />
                     <Card style={cardStyle}>
                         <div style={{ marginBottom: 16 }}>
                             <Input.Search

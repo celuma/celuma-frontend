@@ -14,8 +14,9 @@ import {
     CheckCircleOutlined,
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -303,10 +304,7 @@ function Worklist() {
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                        <h1 style={pageTitleStyle}>Mi Lista de Trabajo</h1>
-                        <p style={subtitleStyle}>Tus asignaciones y revisiones pendientes</p>
-                    </Card>
+                    <PageHeader title="Mi Lista de Trabajo" subtitle="Tus asignaciones y revisiones pendientes" />
                     <Card style={cardStyle}>
                         <div style={{ marginBottom: 16 }}>
                             <Input.Search

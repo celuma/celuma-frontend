@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Divider } from "antd";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { usePageTitle } from "../hooks/use_page_title";
 import { FRONTEND_DEPENDENCIES, BACKEND_DEPENDENCIES } from "../legal/third_party_dependencies";
 
@@ -51,12 +52,7 @@ export default function ConfigAbout() {
     return (
         <div style={{ display: "grid", gap: tokens.gap }}>
             {/* Header */}
-            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                <div>
-                    <h1 style={pageTitleStyle}>Acerca de Céluma</h1>
-                    <p style={subtitleStyle}>Información del sistema y licencias de componentes</p>
-                </div>
-            </Card>
+            <PageHeader title="Acerca de Céluma" subtitle="Información del sistema y licencias de componentes" />
 
             {/* Version info */}
             <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>

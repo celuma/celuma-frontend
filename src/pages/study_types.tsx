@@ -5,7 +5,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, pageTitleStyle, subtitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/celuma_table";
 import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
@@ -313,17 +314,15 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const content = (
         <>
             <div style={{ display: "grid", gap: tokens.gap }}>
-                <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
-                    <div className="celuma-page-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                        <div>
-                            <h1 style={pageTitleStyle}>Tipos de Estudio</h1>
-                            <p style={subtitleStyle}>Configura los tipos de estudio disponibles en el laboratorio</p>
-                        </div>
+                <PageHeader
+                    title="Tipos de Estudio"
+                    subtitle="Configura los tipos de estudio disponibles en el laboratorio"
+                    extra={
                         <CelumaButton type="primary" onClick={handleCreate}>
                             Nuevo Tipo de Estudio
                         </CelumaButton>
-                    </div>
-                </Card>
+                    }
+                />
                 <Card style={cardStyle}>
                     <CelumaTable
                         columns={columns}
