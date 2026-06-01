@@ -84,9 +84,10 @@ type OrderFullResponse = {
         id: string;
         order_code: string;
         status: string;
-        patient_id: string;
+        patient_id?: string | null;
         tenant_id: string;
         branch_id: string;
+        requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
@@ -97,7 +98,7 @@ type OrderFullResponse = {
         reviewers?: ReviewerWithStatus[] | null;
         labels?: Label[] | null;
     };
-    patient: {
+    patient?: {
         id: string;
         patient_code: string;
         first_name?: string;
@@ -108,7 +109,7 @@ type OrderFullResponse = {
         email?: string | null;
         tenant_id: string;
         branch_id: string;
-    };
+    } | null;
     samples: Array<{
         id: string;
         sample_code: string;
@@ -561,7 +562,7 @@ export default function OrderDetail() {
     }, []);
 
     const fullName = useMemo(() => {
-        return `${data?.patient.first_name ?? ""} ${data?.patient.last_name ?? ""}`.trim();
+        return `${data?.patient?.first_name ?? ""} ${data?.patient?.last_name ?? ""}`.trim();
     }, [data]);
 
     // Order status steps configuration
@@ -1120,44 +1121,50 @@ export default function OrderDetail() {
                                 )}
 
                                         {/* Patient Info */}
-                                        <Tooltip title="Ver perfil del paciente">
-                                            <div 
-                                                onClick={() => navigate(`/patients/${data.patient.id}`)}
-                                                style={{ 
-                                                    display: "inline-flex", 
-                                                    alignItems: "center", 
-                                                    gap: 10,
-                                                    cursor: "pointer",
-                                                    padding: "8px 12px",
-                                                    borderRadius: 8,
-                                                    marginLeft: -12,
-                                                    marginBottom: 16,
-                                                    transition: "background 0.15s ease"
-                                                }}
-                                                onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                                                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                                            >
-                                                <Avatar 
-                                                    size={40}
+                                        {data.patient ? (
+                                            <Tooltip title="Ver perfil del paciente">
+                                                <div 
+                                                    onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
                                                     style={{ 
-                                                        backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
-                                                        fontSize: 15,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0
+                                                        display: "inline-flex", 
+                                                        alignItems: "center", 
+                                                        gap: 10,
+                                                        cursor: "pointer",
+                                                        padding: "8px 12px",
+                                                        borderRadius: 8,
+                                                        marginLeft: -12,
+                                                        marginBottom: 16,
+                                                        transition: "background 0.15s ease"
                                                     }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                                                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                                                 >
-                                                    {getInitials(fullName || data.patient.patient_code)}
-                                                </Avatar>
-                                                <div>
-                                                    <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
-                                                        {fullName || data.patient.patient_code}
-                                                    </div>
-                                                    <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                        {data.patient.patient_code}
+                                                    <Avatar 
+                                                        size={40}
+                                                        style={{ 
+                                                            backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
+                                                            fontSize: 15,
+                                                            fontWeight: 600,
+                                                            flexShrink: 0
+                                                        }}
+                                                    >
+                                                        {getInitials(fullName || data.patient.patient_code)}
+                                                    </Avatar>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
+                                                            {fullName || data.patient.patient_code}
+                                                        </div>
+                                                        <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                            {data.patient.patient_code}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                            </Tooltip>
+                                        ) : (
+                                            <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 13 }}>
+                                                Orden sin paciente asociado.
                                             </div>
-                                        </Tooltip>
+                                        )}
 
                                         {/* Invoice Link */}
                                         {data.order.invoice_id && hasPermission("billing:read") && (
@@ -1187,11 +1194,24 @@ export default function OrderDetail() {
                                             fontSize: 13,
                                             marginBottom: 16
                                         }}>
-                                            {data.order.requested_by && (
+                                            {(data.order.requesting_physician || data.order.requested_by) && (
                                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                                     <UserOutlined />
                                                     <span>Solicitante:</span>
-                                                    <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                    {data.order.requesting_physician ? (
+                                                        <a
+                                                            href={`/requesting-physicians/${data.order.requesting_physician.id}`}
+                                                            onClick={(event) => {
+                                                                event.preventDefault();
+                                                                navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
+                                                            }}
+                                                            style={{ fontWeight: 500, color: tokens.primary }}
+                                                        >
+                                                            {data.order.requesting_physician.full_name}
+                                                        </a>
+                                                    ) : (
+                                                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                    )}
                                                 </div>
                                             )}
 

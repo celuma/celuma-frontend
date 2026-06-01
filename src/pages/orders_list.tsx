@@ -39,7 +39,8 @@ type OrdersListResponse = {
         status: string;
         tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
-        patient: { id: string; full_name: string; patient_code: string };
+        patient?: { id: string; full_name: string; patient_code: string } | null;
+        requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
@@ -83,7 +84,7 @@ export default function OrdersList() {
         if (!q) return rows;
         return rows.filter((r) => {
             // Search in basic fields
-            const basicFields = [r.order_code, r.patient.full_name, r.patient.patient_code, r.requested_by, r.notes]
+            const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
                 .filter(Boolean)
                 .some((v) => String(v).toLowerCase().includes(q));
             
@@ -162,6 +163,21 @@ export default function OrdersList() {
             }));
     }, [rows]);
 
+    const requestingPhysicianFilters = useMemo(() => {
+        const physicians = new Map<string, string>();
+        rows.forEach(r => {
+            if (r.requesting_physician?.id && r.requesting_physician?.full_name) {
+                physicians.set(r.requesting_physician.id, r.requesting_physician.full_name);
+            }
+        });
+        return Array.from(physicians.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({
+                text: name,
+                value: id,
+            }));
+    }, [rows]);
+
     const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
         { 
             title: "Código", 
@@ -182,7 +198,7 @@ export default function OrdersList() {
             filters: patientFilters,
             onFilter: (value, record) => record.patient?.id === value,
             render: (_, r) => {
-                if (!r.patient?.full_name || !r.patient?.id) return "—";
+                if (!r.patient?.full_name || !r.patient?.id) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <PatientCell
                         patientId={r.patient.id}
@@ -192,6 +208,39 @@ export default function OrdersList() {
                 );
             },
         },
+        ...(rows.some(r => r.requesting_physician || r.requested_by) ? [{
+            title: "Solicitante",
+            key: "requesting_physician",
+            width: 220,
+            filters: requestingPhysicianFilters.length > 0 ? requestingPhysicianFilters : undefined,
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => record.requesting_physician?.id === value,
+            sorter: (a: OrdersListResponse["orders"][number], b: OrdersListResponse["orders"][number]) => {
+                const nameA = a.requesting_physician?.full_name || a.requested_by || "";
+                const nameB = b.requesting_physician?.full_name || b.requested_by || "";
+                return nameA.localeCompare(nameB);
+            },
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
+                if (r.requesting_physician) {
+                    return (
+                        <a
+                            href={`/requesting-physicians/${r.requesting_physician.id}`}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
+                            }}
+                            style={{ color: "inherit", textDecoration: "none" }}
+                        >
+                            <div style={{ fontWeight: 600, color: "#0f8b8d", borderBottom: "1px dashed #0f8b8d", display: "inline-block" }}>
+                                {r.requesting_physician.full_name}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
+                        </a>
+                    );
+                }
+                return r.requested_by ? <span>{r.requested_by}</span> : <span style={{ color: "#888" }}>—</span>;
+            },
+        }] : []),
         { 
             title: "Reporte", 
             dataIndex: "has_report", 

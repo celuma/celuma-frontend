@@ -81,18 +81,22 @@ const sampleSchema = z.object({
 const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
     branch_id: z.string().trim().nonempty("La sucursal es requerida."),
-    patient_id: z.string().trim().nonempty("El paciente es requerido."),
+    patient_id: z.string().trim().optional(),
+    requesting_physician_id: z.string().trim().optional(),
     study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
     requested_by: z.string().trim().optional(),
     notes: z.string().trim().optional(),
     created_by: z.string().trim().optional(),
     samples: z.array(sampleSchema).min(1, "Agregue al menos una muestra."),
+}).refine((data) => Boolean(data.patient_id || data.requesting_physician_id), {
+    path: ["patient_id"],
+    message: "Seleccione un paciente, un médico solicitante o ambos.",
 });
 
 type OrderFormData = z.infer<typeof schema>;
 
 type UnifiedResponse = {
-    order: { id: string; order_code: string; status: string; patient_id: string; tenant_id: string; branch_id: string };
+    order: { id: string; order_code: string; status: string; patient_id?: string | null; tenant_id: string; branch_id: string };
     samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
@@ -118,6 +122,8 @@ export default function OrderRegister() {
     const session = useMemo(() => getSessionContext(), []);
     const [patients, setPatients] = useState<Array<{ id: string; label: string }>>([]);
     const [loadingPatients, setLoadingPatients] = useState(false);
+    const [requestingPhysicians, setRequestingPhysicians] = useState<Array<{ id: string; label: string }>>([]);
+    const [loadingRequestingPhysicians, setLoadingRequestingPhysicians] = useState(false);
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [studyTypes, setStudyTypes] = useState<Array<{ id: string; code: string; name: string; is_active: boolean }>>([]);
@@ -128,12 +134,18 @@ export default function OrderRegister() {
         return qs.get("patientId") || "";
     }, [search]);
 
+    const prefilledRequestingPhysicianId = useMemo(() => {
+        const qs = new URLSearchParams(search);
+        return qs.get("requestingPhysicianId") || "";
+    }, [search]);
+
     const { control, handleSubmit, reset } = useForm<OrderFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
             patient_id: prefilledPatientId,
+            requesting_physician_id: prefilledRequestingPhysicianId,
             study_type_id: "",
             requested_by: "",
             notes: "",
@@ -158,6 +170,28 @@ export default function OrderRegister() {
                 setPatients(mapped);
             } finally {
                 setLoadingPatients(false);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                setLoadingRequestingPhysicians(true);
+                const data = await getJSON<Array<{
+                    id: string;
+                    physician_code: string;
+                    full_name: string;
+                    specialty?: string | null;
+                    institution?: string | null;
+                }>>("/v1/requesting-physicians/");
+                const mapped = (data || []).map((physician) => ({
+                    id: physician.id,
+                    label: `${physician.physician_code} - ${physician.full_name}${physician.specialty ? ` · ${physician.specialty}` : ""}${physician.institution ? ` · ${physician.institution}` : ""}`.trim(),
+                }));
+                setRequestingPhysicians(mapped);
+            } finally {
+                setLoadingRequestingPhysicians(false);
             }
         })();
     }, []);
@@ -198,9 +232,9 @@ export default function OrderRegister() {
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
-                patient_id: data.patient_id,
+                patient_id: data.patient_id || undefined,
+                requesting_physician_id: data.requesting_physician_id || undefined,
                 study_type_id: data.study_type_id,
-                requested_by: data.requested_by || undefined,
                 notes: data.notes || undefined,
                 created_by: (currentUserId || undefined),
                 samples: data.samples.map((s) => ({
@@ -277,6 +311,7 @@ export default function OrderRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Paciente</h3>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione un paciente, un médico solicitante o ambos.</p>
                                 <div className="cr-grid-2">
                                     <FormField
                                         control={control}
@@ -289,6 +324,7 @@ export default function OrderRegister() {
                                                 options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
                                                 showSearch
                                                 disabled={Boolean(prefilledPatientId)}
+                                                error={p.error}
                                             />
                                         )}
                                     />
@@ -314,9 +350,16 @@ export default function OrderRegister() {
                                     />
                                     <FormField
                                         control={control}
-                                        name="requested_by"
+                                        name="requesting_physician_id"
                                         render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Solicitante (opcional)" />
+                                            <SelectField
+                                                value={typeof p.value === "string" ? p.value : undefined}
+                                                onChange={(val) => p.onChange(val)}
+                                                placeholder={loadingRequestingPhysicians ? "Cargando médicos solicitantes..." : "Médico solicitante (opcional)"}
+                                                options={requestingPhysicians.map((physician) => ({ value: physician.id, label: physician.label }))}
+                                                showSearch
+                                                disabled={Boolean(prefilledRequestingPhysicianId)}
+                                            />
                                         )}
                                     />
                                 </div>
@@ -431,5 +474,3 @@ export default function OrderRegister() {
         </Layout>
     );
 }
-
-

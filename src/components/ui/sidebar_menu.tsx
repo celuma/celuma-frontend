@@ -13,6 +13,7 @@ import {
     ContainerOutlined,
     CreditCardOutlined,
     SettingOutlined,
+    MedicineBoxOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -25,6 +26,7 @@ export type CelumaKey =
     | "/reports"
     | "/worklist"
     | "/patients"
+    | "/requesting-physicians"
     | "/orders"
     | "/samples"
     | "/orders/register"
@@ -39,6 +41,7 @@ const NAV_ITEMS: { key: CelumaKey; icon: React.ReactNode; label: string; permiss
     { key: "/worklist",  icon: <CheckSquareOutlined />,  label: "Lista de Trabajo",   permission: PERMS.LAB_READ },
     { key: "/reports",   icon: <FileTextOutlined />,     label: "Reportes",           permission: PERMS.REPORTS_READ },
     { key: "/patients",  icon: <UserOutlined />,         label: "Pacientes",          permission: PERMS.LAB_READ },
+    { key: "/requesting-physicians", icon: <MedicineBoxOutlined />, label: "Médicos Solicitantes", permission: PERMS.LAB_READ },
     { key: "/orders",    icon: <ContainerOutlined />,    label: "Órdenes",            permission: PERMS.LAB_READ },
     { key: "/samples",   icon: <ExperimentOutlined />,   label: "Muestras",           permission: PERMS.LAB_READ },
     { key: "/billing",   icon: <CreditCardOutlined />,   label: "Facturación",        permission: PERMS.BILLING_READ },

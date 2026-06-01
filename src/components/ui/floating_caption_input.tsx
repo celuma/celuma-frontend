@@ -5,10 +5,11 @@ import AlertText from "./error_text";
 type Status = "default" | "error" | "warning" | "success";
 
 type Props = Omit<React.ComponentProps<typeof Input>, "status" | "onChange" | "placeholder"> & {
-    label: string;
+    label: React.ReactNode;
     error?: string;
     status?: Exclude<Status, "default" | "error">;
     prefixNode?: React.ReactNode;
+    requiredMark?: boolean;
     showClear?: boolean;
     onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 };
@@ -18,6 +19,7 @@ export default function FloatingCaptionInput({
     error,
     status,
     prefixNode,
+    requiredMark = false,
     showClear = false,
     value,
     onChange,
@@ -142,6 +144,7 @@ export default function FloatingCaptionInput({
 
                 <label htmlFor={`input-${uid}`} style={labelStyle}>
                     {label}
+                    {requiredMark && <span style={{ color: colors.error }}> *</span>}
                 </label>
 
                 <Input

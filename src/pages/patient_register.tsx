@@ -66,7 +66,6 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 const schema = z.object({
     tenant_id: z.string().trim().optional(),
     branch_id: z.string().trim().optional(),
-    patient_code: z.string().trim().nonempty("El código del paciente es requerido."),
     first_name: z.string().trim().nonempty("El nombre es requerido."),
     last_name: z.string().trim().nonempty("El apellido es requerido."),
     dob: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
@@ -113,7 +112,6 @@ export default function PatientRegister() {
         defaultValues: {
             tenant_id: session.tenantId,
             branch_id: "",
-            patient_code: "",
             first_name: "",
             last_name: "",
             dob: "",
@@ -149,7 +147,6 @@ export default function PatientRegister() {
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
-                patient_code: data.patient_code,
                 first_name: data.first_name,
                 last_name: data.last_name,
                 dob: data.dob || undefined,
@@ -222,14 +219,10 @@ export default function PatientRegister() {
 
                             <section style={{ display: "grid", gap: 10 }}>
                                 <h3 style={{ margin: 0 }}>Paciente</h3>
-                                <div className="pr-grid-3">
-                                    <FormField
-                                        control={control}
-                                        name="patient_code"
-                                        render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código" />
-                                        )}
-                                    />
+                                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                                    El código de paciente se asignará automáticamente al guardar.
+                                </div>
+                                <div className="pr-grid-2">
                                     <FormField
                                         control={control}
                                         name="first_name"

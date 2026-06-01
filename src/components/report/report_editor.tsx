@@ -494,11 +494,11 @@ const ReportEditor: React.FC = () => {
         if (fullData) {
             const patient = fullData.patient;
             const order = fullData.order;
-            if (report.base["patient"]) report.base["patient"].value =
+            if (patient && report.base["patient"]) report.base["patient"].value =
                 `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() || patient.patient_code;
             if (report.base["order_code"]) report.base["order_code"].value = order.order_code || "";
             if (report.base["study_type"]) report.base["study_type"].value = studyTypeName || "";
-            if (report.base["patient_age"]) {
+            if (patient && report.base["patient_age"]) {
                 let age: number | null = null;
                 if (patient.dob) {
                     const birth = new Date(patient.dob);

@@ -11,6 +11,8 @@ const routeTitleMap: Record<string, string> = {
     "/reports/editor": "Editor de Reportes - Céluma",
     "/patients": "Pacientes - Céluma",
     "/patients/register": "Registrar Paciente - Céluma",
+    "/requesting-physicians": "Médicos Solicitantes - Céluma",
+    "/requesting-physicians/register": "Registrar Médico Solicitante - Céluma",
     "/orders": "Órdenes - Céluma",
     "/orders/register": "Registrar Orden - Céluma",
     "/samples": "Muestras - Céluma",
