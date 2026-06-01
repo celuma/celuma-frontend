@@ -1,4 +1,5 @@
 import React, { useId } from "react";
+import { ExclamationCircleFilled, CheckCircleFilled } from "@ant-design/icons";
 
 type Variant = "error" | "warning" | "success";
 
@@ -13,10 +14,10 @@ type Props = {
 export default function AlertText({children, variant = "error", showIcon = true, title, mt = 6,}: Props) {
     const uid = useId();
     if (!children && !title) return null;
-    const palette: Record<Variant, { bg: string; border: string; text: string; icon: string }> = {
-        error:   { bg: "#fee2e2", border: "#fecaca", text: "#b91c1c", icon: "⚠️" },
-        warning: { bg: "#fff7ed", border: "#fde68a", text: "#b45309", icon: "⚠️" },
-        success: { bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46", icon: "✅" },
+    const palette: Record<Variant, { bg: string; border: string; text: string; icon: React.ReactNode }> = {
+        error:   { bg: "#fee2e2", border: "#fecaca", text: "#b91c1c", icon: <ExclamationCircleFilled /> },
+        warning: { bg: "#fff7ed", border: "#fde68a", text: "#b45309", icon: <ExclamationCircleFilled /> },
+        success: { bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46", icon: <CheckCircleFilled /> },
     };
     const colors = palette[variant];
     const boxStyle: React.CSSProperties = {
@@ -42,7 +43,7 @@ export default function AlertText({children, variant = "error", showIcon = true,
                   to   { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
-            {showIcon && <span aria-hidden="true" style={{ fontSize: 14 }}>{colors.icon}</span>}
+            {showIcon && <span aria-hidden="true" style={{ fontSize: 14, color: colors.text, display: "inline-flex" }}>{colors.icon}</span>}
             <div style={{ display: "inline" }}>
                 {title && <strong style={{ marginRight: 4 }}>{title}</strong>}
                 {children}

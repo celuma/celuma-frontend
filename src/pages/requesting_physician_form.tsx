@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout } from "antd";
+import { Layout, Card, Switch } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
-import SelectField from "../components/ui/select_field";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
@@ -69,7 +70,7 @@ const schema = z.object({
     phone: z.string().trim().optional(),
     email: z.string().trim().optional(),
     address: z.string().trim().optional(),
-    is_active: z.enum(["true", "false"]).optional(),
+    is_active: z.boolean().optional(),
 });
 
 type PhysicianFormData = z.infer<typeof schema>;
@@ -91,23 +92,16 @@ type RequestingPhysicianResponse = {
     is_active: boolean;
 };
 
-const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: tokens.cardPadding }}>
-            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
-        </div>
-        <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
-            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
-            {children}
-        </div>
-    </div>
-);
-
-const RequiredFieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div style={{ fontSize: 13, fontWeight: 700, color: tokens.textPrimary, marginBottom: 6 }}>
-        {children}<span style={{ color: "#ef4444" }}> *</span>
-    </div>
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h3 style={{
+        margin: 0,
+        fontFamily: tokens.titleFont,
+        fontSize: 15,
+        fontWeight: 700,
+        color: tokens.textPrimary,
+    }}>
+        {children}
+    </h3>
 );
 
 export default function RequestingPhysicianForm() {
@@ -132,7 +126,7 @@ export default function RequestingPhysicianForm() {
             phone: "",
             email: "",
             address: "",
-            is_active: "true",
+            is_active: true,
         },
         mode: "onTouched",
     });
@@ -160,7 +154,7 @@ export default function RequestingPhysicianForm() {
                 phone: detail.phone || "",
                 email: detail.email || "",
                 address: detail.address || "",
-                is_active: detail.is_active ? "true" : "false",
+                is_active: detail.is_active,
             });
         })()
             .catch((err) => setServerError(err instanceof Error ? err.message : "No se pudo cargar el médico solicitante."))
@@ -182,7 +176,7 @@ export default function RequestingPhysicianForm() {
                 phone: data.phone || undefined,
                 email: data.email || undefined,
                 address: data.address || undefined,
-                is_active: data.is_active !== "false",
+                is_active: data.is_active ?? true,
             };
             const saved = isEditing && physicianId
                 ? await requestJSON<typeof payload, RequestingPhysicianResponse>("PUT", `/v1/requesting-physicians/${physicianId}`, payload)
@@ -200,65 +194,82 @@ export default function RequestingPhysicianForm() {
             <SidebarCeluma selectedKey="/requesting-physicians" onNavigate={(key) => navigate(key)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                  .rp-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-                  .rp-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-                  .rp-required-note { color: ${tokens.textSecondary}; font-size: 12px; margin: -4px 0 4px; }
+                  .rp-grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+                  .rp-grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
                   @media (max-width: 768px) {
                     .rp-grid-2, .rp-grid-3 { grid-template-columns: 1fr; }
                   }
                 `}</style>
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <FormCard
+                    <PageHeader
                         title={isEditing ? "Editar Médico Solicitante" : "Registrar Médico Solicitante"}
-                        description="Administre los datos del médico solicitante para usarlo en las órdenes del laboratorio."
-                    >
-                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
-                            <div className="rp-required-note"><span style={{ color: "#ef4444" }}>*</span> Campos obligatorios</div>
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Sucursal</h3>
+                        subtitle="Administra los datos del médico solicitante para usarlo en las órdenes del laboratorio."
+                    />
+
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
+                            <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                                Los campos marcados con <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span> son obligatorios.
+                            </div>
+
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Información general</SectionTitle>
                                 <div className="rp-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(props) => (
-                                            <div>
-                                                <RequiredFieldLabel>Sucursal</RequiredFieldLabel>
-                                                <SelectField
-                                                    value={typeof props.value === "string" ? props.value : undefined}
-                                                    onChange={(value) => props.onChange(value)}
-                                                    placeholder="Seleccione la sucursal"
-                                                    options={branches.map((branch) => ({ value: branch.id, label: `${branch.code ?? ""} ${branch.name ?? ""}`.trim() }))}
-                                                    showSearch
-                                                    error={props.error}
-                                                />
-                                            </div>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={control}
-                                        name="is_active"
-                                        render={(props) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Sucursal"
+                                                requiredMark
                                                 value={typeof props.value === "string" ? props.value : undefined}
-                                                onChange={(value) => props.onChange(value)}
-                                                placeholder="Estado"
-                                                options={[
-                                                    { value: "true", label: "Activo" },
-                                                    { value: "false", label: "Inactivo" },
-                                                ]}
+                                                onChange={(value) => props.onChange(value ?? "")}
+                                                placeholder="Seleccione la sucursal"
+                                                options={branches.map((branch) => ({ value: branch.id, label: `${branch.code ?? ""} ${branch.name ?? ""}`.trim() }))}
+                                                showSearch
+                                                error={props.error}
                                             />
                                         )}
                                     />
                                 </div>
+                                {isEditing && (
+                                    <FormField
+                                        control={control}
+                                        name="is_active"
+                                        render={(props) => {
+                                            const active = props.value !== false;
+                                            return (
+                                                <div style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    gap: 16,
+                                                    border: "1px solid #e5e7eb",
+                                                    borderRadius: 12,
+                                                    padding: "14px 16px",
+                                                    background: "#fafbfc",
+                                                }}>
+                                                    <div>
+                                                        <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado del médico</div>
+                                                        <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>
+                                                            Define si está disponible para asignarse a nuevas órdenes.
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                        <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>
+                                                            {active ? "Activo" : "Inactivo"}
+                                                        </span>
+                                                        <Switch checked={active} onChange={(checked) => props.onChange(checked)} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        }}
+                                    />
+                                )}
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Médico</h3>
-                                {!isEditing && (
-                                    <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                                        El código de solicitante se asignará automáticamente al guardar.
-                                    </div>
-                                )}
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Datos del médico</SectionTitle>
                                 <div className="rp-grid-2">
                                     <FormField control={control} name="first_name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Nombre" requiredMark />} />
                                     <FormField control={control} name="last_name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Apellido" requiredMark />} />
@@ -270,8 +281,8 @@ export default function RequestingPhysicianForm() {
                                 </div>
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Contacto</h3>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Contacto</SectionTitle>
                                 <div className="rp-grid-3">
                                     <FormField control={control} name="phone" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Teléfono" />} />
                                     <FormField control={control} name="email" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Email" />} />
@@ -279,13 +290,18 @@ export default function RequestingPhysicianForm() {
                                 </div>
                             </section>
 
-                            <Button htmlType="submit" type="primary" fullWidth loading={loading}>
-                                {isEditing ? "Guardar cambios" : "Registrar"}
-                            </Button>
-                        </form>
+                            {serverError && <ErrorText>{serverError}</ErrorText>}
 
-                        <ErrorText>{serverError}</ErrorText>
-                    </FormCard>
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
+                                <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
+                                    Cancelar
+                                </Button>
+                                <Button htmlType="submit" type="primary" loading={loading}>
+                                    {isEditing ? "Guardar cambios" : "Registrar"}
+                                </Button>
+                            </div>
+                        </form>
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

@@ -1,7 +1,10 @@
-import React, { useId, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { Input } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import AlertText from "./error_text";
+
+/** How long a validation message stays on screen before auto-hiding. */
+const MESSAGE_AUTO_HIDE_MS = 5000;
 
 type Status = "default" | "error" | "warning" | "success";
 
@@ -27,9 +30,18 @@ export default function FloatingCaptionPassword({
     const [hovered, setHovered] = useState(false);
     const [focused, setFocused] = useState(false);
     const [visible, setVisible] = useState(false);
+    const [msgVisible, setMsgVisible] = useState(true);
     const uid = useId();
-    
+
     const finalStatus: Status = error ? "error" : status ?? "default";
+
+    // Show the message when it appears/changes, then auto-hide after a while.
+    useEffect(() => {
+        if (!error && finalStatus === "default") return;
+        setMsgVisible(true);
+        const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
+        return () => clearTimeout(t);
+    }, [error, finalStatus]);
     const isFloating = focused || (value && String(value).length > 0);
     
     const colors = {
@@ -39,29 +51,24 @@ export default function FloatingCaptionPassword({
         text: "#0d1b2a",
         placeholder: "#6b7280",
         prefix: "#49b6ad",
-        error: "#b91c1c",
-        ringError: "rgba(185, 28, 28, .12)",
+        error: "#e5484d",
+        ringError: "rgba(229, 72, 77, .20)",
         warning: "#f59e0b",
-        ringWarning: "rgba(245, 158, 11, .12)",
+        ringWarning: "rgba(245, 158, 11, .20)",
         success: "#059669",
-        ringSuccess: "rgba(5,150,105,.12)",
+        ringSuccess: "rgba(5,150,105,.20)",
         bg: "#fff",
     };
 
     const { borderColor, boxShadow } = (() => {
-        if (finalStatus === "error") {
-            return { borderColor: colors.error, boxShadow: `0 0 8px 2px rgba(185, 28, 28, 0.15)` };
-        }
-        if (finalStatus === "warning") {
-            return { borderColor: colors.warning, boxShadow: `0 0 8px 2px rgba(245, 158, 11, 0.15)` };
-        }
-        if (finalStatus === "success") {
-            return { borderColor: colors.success, boxShadow: `0 0 8px 2px rgba(5, 150, 105, 0.15)` };
-        }
         const active = hovered || focused;
+        const ring = (c: string) => (active ? `0 0 0 3px ${c}` : "none");
+        if (finalStatus === "error") return { borderColor: colors.error, boxShadow: ring(colors.ringError) };
+        if (finalStatus === "warning") return { borderColor: colors.warning, boxShadow: ring(colors.ringWarning) };
+        if (finalStatus === "success") return { borderColor: colors.success, boxShadow: ring(colors.ringSuccess) };
         return {
             borderColor: active ? colors.baseHover : colors.base,
-            boxShadow: active ? `0 0 0 3px ${colors.ringBase}` : "none",
+            boxShadow: ring(colors.ringBase),
         };
     })();
 
@@ -118,10 +125,9 @@ export default function FloatingCaptionPassword({
         background: "transparent",
         border: "none",
         boxShadow: "none",
-        padding: isFloating ? "16px 12px 6px 12px" : "10px 12px",
+        padding: "10px 12px",
         color: colors.text,
         flex: 1,
-        transition: "padding 0.2s ease",
     };
 
     const toggleBtnStyle: React.CSSProperties = {
@@ -138,7 +144,7 @@ export default function FloatingCaptionPassword({
 
     return (
         <div
-            style={{ display: "grid", gap: 6, ...style }}
+            style={{ position: "relative", ...style }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -160,6 +166,7 @@ export default function FloatingCaptionPassword({
                     style={inputStyle}
                     onFocus={(e) => {
                         setFocused(true);
+                        setMsgVisible(true);
                         rest.onFocus?.(e);
                     }}
                     onBlur={(e) => {
@@ -178,12 +185,16 @@ export default function FloatingCaptionPassword({
                 </button>
             </div>
 
-            {error && <AlertText variant="error">{error}</AlertText>}
-            {!error && finalStatus === "warning" && (
-                <AlertText variant="warning">{rest["aria-describedby"] ?? "Advertencia"}</AlertText>
-            )}
-            {!error && finalStatus === "success" && (
-                <AlertText variant="success">{rest["aria-describedby"] ?? "¡Todo correcto!"}</AlertText>
+            {msgVisible && (
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20 }}>
+                    {error && <AlertText variant="error">{error}</AlertText>}
+                    {!error && finalStatus === "warning" && (
+                        <AlertText variant="warning">{rest["aria-describedby"] ?? "Advertencia"}</AlertText>
+                    )}
+                    {!error && finalStatus === "success" && (
+                        <AlertText variant="success">{rest["aria-describedby"] ?? "¡Todo correcto!"}</AlertText>
+                    )}
+                </div>
             )}
         </div>
     );
