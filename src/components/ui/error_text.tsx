@@ -14,25 +14,25 @@ type Props = {
 export default function AlertText({children, variant = "error", showIcon = true, title, mt = 6,}: Props) {
     const uid = useId();
     if (!children && !title) return null;
-    const palette: Record<Variant, { bg: string; border: string; text: string; icon: React.ReactNode }> = {
-        error:   { bg: "#fee2e2", border: "#fecaca", text: "#b91c1c", icon: <ExclamationCircleFilled /> },
-        warning: { bg: "#fff7ed", border: "#fde68a", text: "#b45309", icon: <ExclamationCircleFilled /> },
-        success: { bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46", icon: <CheckCircleFilled /> },
+    const palette: Record<Variant, { bg: string; text: string; icon: React.ReactNode }> = {
+        error:   { bg: "#fff0f1", text: "#e5484d", icon: <ExclamationCircleFilled /> },
+        warning: { bg: "#fff7ed", text: "#d97706", icon: <ExclamationCircleFilled /> },
+        success: { bg: "#ecfdf5", text: "#059669", icon: <CheckCircleFilled /> },
     };
     const colors = palette[variant];
     const boxStyle: React.CSSProperties = {
         marginTop: mt,
-        padding: "6px 10px",
+        padding: "7px 12px",
         fontSize: 13,
-        fontWeight: 500,
+        fontWeight: 600,
         color: colors.text,
         background: colors.bg,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 6,
+        border: "none",
+        borderRadius: 10,
         display: "flex",
         alignItems: "center",
-        gap: 6,
-        animation: `at-fadeIn-${uid} .25s ease-in`,
+        gap: 7,
+        animation: `at-fadeIn-${uid} .25s ease-out`,
     };
 
     return (

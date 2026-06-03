@@ -10,6 +10,7 @@ import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import Panel from "../components/ui/panel";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
@@ -96,9 +97,10 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     <h3 style={{
         margin: 0,
         fontFamily: tokens.titleFont,
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: 700,
         color: tokens.textPrimary,
+        letterSpacing: "-0.01em",
     }}>
         {children}
     </h3>
@@ -208,10 +210,6 @@ export default function RequestingPhysicianForm() {
 
                     <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
                         <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
-                            <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                                Los campos marcados con <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span> son obligatorios.
-                            </div>
-
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Información general</SectionTitle>
                                 <div className="rp-grid-2">
@@ -239,16 +237,7 @@ export default function RequestingPhysicianForm() {
                                         render={(props) => {
                                             const active = props.value !== false;
                                             return (
-                                                <div style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "space-between",
-                                                    gap: 16,
-                                                    border: "1px solid #e5e7eb",
-                                                    borderRadius: 12,
-                                                    padding: "14px 16px",
-                                                    background: "#fafbfc",
-                                                }}>
+                                                <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
                                                     <div>
                                                         <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado del médico</div>
                                                         <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>
@@ -261,7 +250,7 @@ export default function RequestingPhysicianForm() {
                                                         </span>
                                                         <Switch checked={active} onChange={(checked) => props.onChange(checked)} />
                                                     </div>
-                                                </div>
+                                                </Panel>
                                             );
                                         }}
                                     />
@@ -292,13 +281,18 @@ export default function RequestingPhysicianForm() {
 
                             {serverError && <ErrorText>{serverError}</ErrorText>}
 
-                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
-                                <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
-                                    Cancelar
-                                </Button>
-                                <Button htmlType="submit" type="primary" loading={loading}>
-                                    {isEditing ? "Guardar cambios" : "Registrar"}
-                                </Button>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                                    Los campos marcados con <span style={{ color: "#e5484d", fontWeight: 700 }}>*</span> son obligatorios.
+                                </div>
+                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                                    <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
+                                        Cancelar
+                                    </Button>
+                                    <Button htmlType="submit" type="primary" loading={loading}>
+                                        {isEditing ? "Guardar cambios" : "Registrar"}
+                                    </Button>
+                                </div>
                             </div>
                         </form>
                     </Card>

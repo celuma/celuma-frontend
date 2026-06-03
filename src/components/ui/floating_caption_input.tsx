@@ -1,6 +1,6 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { Input } from "antd";
-import AlertText from "./error_text";
+import FieldMessage from "./field_message";
 
 /** How long a validation message stays on screen before auto-hiding. */
 const MESSAGE_AUTO_HIDE_MS = 5000;
@@ -36,14 +36,30 @@ export default function FloatingCaptionInput({
     const [msgVisible, setMsgVisible] = useState(true);
 
     const finalStatus: Status = error ? "error" : status ?? "default";
+    const hasMessage = !!error || finalStatus === "warning" || finalStatus === "success";
+    const active = hovered || focused;
+    const shownRef = useRef(false);
 
-    // Show the message when it appears/changes, then auto-hide after a while.
+    // The chin appears once when a message is (re)triggered, then auto-hides. Hovering or
+    // focusing "focuses" the glow into the crisp ring and dismisses the chin for good — it
+    // won't pop back when the pointer leaves; it only returns if the error is provoked anew.
     useEffect(() => {
-        if (!error && finalStatus === "default") return;
-        setMsgVisible(true);
-        const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
-        return () => clearTimeout(t);
-    }, [error, finalStatus]);
+        if (!hasMessage) {
+            shownRef.current = false;
+            setMsgVisible(false);
+            return;
+        }
+        if (active) {
+            setMsgVisible(false);
+            return;
+        }
+        if (!shownRef.current) {
+            shownRef.current = true;
+            setMsgVisible(true);
+            const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
+            return () => clearTimeout(t);
+        }
+    }, [error, finalStatus, hasMessage, active]);
     const isFloating = focused || (value && String(value).length > 0);
     
     const colors = {
@@ -69,7 +85,6 @@ export default function FloatingCaptionInput({
 
     // Attention glow when idle; crisp double-border ring when focused/hovered.
     const { borderColor, boxShadow } = (() => {
-        const active = hovered || focused;
         const shadow = (ringC: string, glowC: string) => (active ? `0 0 0 3px ${ringC}` : `0 0 8px 2px ${glowC}`);
         if (finalStatus === "error") return { borderColor: colors.error, boxShadow: shadow(colors.ringError, colors.glowError) };
         if (finalStatus === "warning") return { borderColor: colors.warning, boxShadow: shadow(colors.ringWarning, colors.glowWarning) };
@@ -82,6 +97,7 @@ export default function FloatingCaptionInput({
 
     const wrapperStyle: React.CSSProperties = {
         position: "relative",
+        zIndex: 2,
         border: `2px solid ${borderColor}`,
         borderRadius: 12,
         background: colors.bg,
@@ -151,7 +167,7 @@ export default function FloatingCaptionInput({
 
     return (
         <div
-            style={{ position: "relative", ...style }}
+            style={{ position: "relative", zIndex: active ? 30 : (finalStatus !== "default" ? 20 : 1), ...style }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -173,7 +189,6 @@ export default function FloatingCaptionInput({
                     style={inputStyle}
                     onFocus={(e) => {
                         setFocused(true);
-                        setMsgVisible(true);
                         rest.onFocus?.(e);
                     }}
                     onBlur={(e) => {
@@ -199,16 +214,14 @@ export default function FloatingCaptionInput({
                 )}
             </div>
 
-            {msgVisible && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20 }}>
-                    {error && <AlertText variant="error">{error}</AlertText>}
-                    {!error && finalStatus === "warning" && (
-                        <AlertText variant="warning">{rest["aria-describedby"] ?? "Advertencia"}</AlertText>
-                    )}
-                    {!error && finalStatus === "success" && (
-                        <AlertText variant="success">{rest["aria-describedby"] ?? "¡Todo correcto!"}</AlertText>
-                    )}
-                </div>
+            {hasMessage && (
+                <FieldMessage variant={finalStatus === "default" ? "error" : finalStatus} open={msgVisible}>
+                    {error
+                        ? error
+                        : finalStatus === "warning"
+                            ? (rest["aria-describedby"] ?? "Advertencia")
+                            : (rest["aria-describedby"] ?? "¡Todo correcto!")}
+                </FieldMessage>
             )}
         </div>
     );

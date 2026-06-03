@@ -1,6 +1,6 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { Select } from "antd";
-import AlertText from "./error_text";
+import FieldMessage from "./field_message";
 
 /** How long a validation message stays on screen before auto-hiding. */
 const MESSAGE_AUTO_HIDE_MS = 5000;
@@ -51,14 +51,30 @@ export default function FloatingCaptionSelect({
     const [msgVisible, setMsgVisible] = useState(true);
 
     const finalStatus: Status = error ? "error" : status ?? "default";
+    const active = hovered || focused || open;
+    const shownRef = useRef(false);
 
-    // Show the message when it appears/changes, then auto-hide after a while.
+    // The chin appears once when the error is (re)triggered, then auto-hides. Hovering,
+    // focusing or opening "focuses" the glow into the crisp ring and dismisses the chin
+    // for good — it won't pop back when the pointer leaves; it only returns if the error
+    // is provoked anew.
     useEffect(() => {
-        if (!error) return;
-        setMsgVisible(true);
-        const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
-        return () => clearTimeout(t);
-    }, [error]);
+        if (!error) {
+            shownRef.current = false;
+            setMsgVisible(false);
+            return;
+        }
+        if (active) {
+            setMsgVisible(false);
+            return;
+        }
+        if (!shownRef.current) {
+            shownRef.current = true;
+            setMsgVisible(true);
+            const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
+            return () => clearTimeout(t);
+        }
+    }, [error, active]);
     const isFloating = focused || open || (value !== undefined && value !== "" && value !== null);
 
     const colors = {
@@ -70,26 +86,31 @@ export default function FloatingCaptionSelect({
         bg: "#fff",
         error: "#e5484d",
         ringError: "rgba(229, 72, 77, .20)",
+        glowError: "rgba(229, 72, 77, .28)",
         warning: "#f59e0b",
         ringWarning: "rgba(245, 158, 11, .20)",
+        glowWarning: "rgba(245, 158, 11, .28)",
         success: "#059669",
         ringSuccess: "rgba(5,150,105,.20)",
+        glowSuccess: "rgba(5,150,105,.25)",
     };
 
+    // Attention glow when idle; crisp double-border ring when focused/open/hovered.
     const { borderColor, boxShadow } = (() => {
-        const active = hovered || focused || open;
-        const ring = (c: string) => (active ? `0 0 0 3px ${c}` : "none");
-        if (finalStatus === "error") return { borderColor: colors.error, boxShadow: ring(colors.ringError) };
-        if (finalStatus === "warning") return { borderColor: colors.warning, boxShadow: ring(colors.ringWarning) };
-        if (finalStatus === "success") return { borderColor: colors.success, boxShadow: ring(colors.ringSuccess) };
+        const shadow = (ringC: string, glowC: string) => (active ? `0 0 0 3px ${ringC}` : `0 0 8px 2px ${glowC}`);
+        if (finalStatus === "error") return { borderColor: colors.error, boxShadow: shadow(colors.ringError, colors.glowError) };
+        if (finalStatus === "warning") return { borderColor: colors.warning, boxShadow: shadow(colors.ringWarning, colors.glowWarning) };
+        if (finalStatus === "success") return { borderColor: colors.success, boxShadow: shadow(colors.ringSuccess, colors.glowSuccess) };
         return {
             borderColor: active ? colors.baseHover : colors.base,
-            boxShadow: ring(colors.ringBase),
+            boxShadow: active ? `0 0 0 3px ${colors.ringBase}` : "none",
         };
     })();
+    const elevated = active || finalStatus !== "default";
 
     const wrapperStyle: React.CSSProperties = {
         position: "relative",
+        zIndex: 2,
         border: `2px solid ${borderColor}`,
         borderRadius: 12,
         background: colors.bg,
@@ -127,7 +148,7 @@ export default function FloatingCaptionSelect({
 
     return (
         <div
-            style={{ position: "relative", ...style }}
+            style={{ position: "relative", zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -149,7 +170,9 @@ export default function FloatingCaptionSelect({
               .fcs-${uid} .ant-select-selection-search { inset-inline-start: 12px !important; inset-inline-end: 12px !important; }
               .fcs-${uid} .ant-select-selection-search-input { font-size: 15px !important; line-height: 52px !important; height: 52px !important; color: ${colors.text}; }
               .fcs-${uid} .ant-select-selection-placeholder { font-size: 15px !important; line-height: 52px !important; color: transparent !important; }
-              .fcs-${uid} .ant-select-arrow { color: ${colors.base}; }
+              .fcs-${uid} .ant-select-arrow,
+              .fcs-${uid} .ant-select-clear { color: ${borderColor}; }
+              .fcs-${uid} .ant-select-clear { background: ${colors.bg}; }
             `}</style>
             <div style={wrapperStyle}>
                 <label style={labelStyle}>
@@ -165,7 +188,7 @@ export default function FloatingCaptionSelect({
                     disabled={disabled}
                     showSearch={showSearch}
                     optionFilterProp="label"
-                    onFocus={() => { setFocused(true); setMsgVisible(true); }}
+                    onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
                     onOpenChange={setOpen}
                     style={{ width: "100%" }}
@@ -175,10 +198,8 @@ export default function FloatingCaptionSelect({
                 />
             </div>
 
-            {msgVisible && error && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20 }}>
-                    <AlertText variant="error">{error}</AlertText>
-                </div>
+            {error && (
+                <FieldMessage variant="error" open={msgVisible}>{error}</FieldMessage>
             )}
         </div>
     );
