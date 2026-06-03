@@ -2,6 +2,20 @@ import { useMemo } from "react";
 import { Table, Empty } from "antd";
 import type { TableProps, TablePaginationConfig } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { tokens } from "../design/tokens";
+
+// Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
+const SORTER_TOOLTIP = {
+    color: tokens.textPrimary,
+    overlayInnerStyle: {
+        fontFamily: tokens.textFont,
+        fontSize: 13,
+        fontWeight: 500,
+        borderRadius: 8,
+        padding: "6px 11px",
+        minHeight: "auto",
+    },
+} as const;
 
 export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {
     dataSource: T[];
@@ -34,6 +48,7 @@ export function CelumaTable<T>({
     loading = false,
     pagination,
     emptyText = "Sin datos",
+    className,
     ...rest
 }: CelumaTableProps<T>) {
     
@@ -80,12 +95,14 @@ export function CelumaTable<T>({
 
     return (
         <Table<T>
+            className={["celuma-table", className].filter(Boolean).join(" ")}
             loading={loading}
             dataSource={sortedData}
             rowKey={rowKey}
             columns={columns}
             pagination={defaultPagination}
             scroll={{ x: "max-content" }}
+            showSorterTooltip={SORTER_TOOLTIP}
             locale={{
                 emptyText: <Empty description={emptyText} />
             }}

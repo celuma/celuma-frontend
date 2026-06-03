@@ -231,20 +231,20 @@ export default function OrdersList() {
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (r.requesting_physician) {
                     return (
-                        <a
-                            href={`/requesting-physicians/${r.requesting_physician.id}`}
-                            onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
-                            }}
-                            style={{ color: "inherit", textDecoration: "none" }}
-                        >
-                            <div style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block" }}>
+                        <div>
+                            <a
+                                href={`/requesting-physicians/${r.requesting_physician.id}`}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
+                                }}
+                                style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block", textDecoration: "none", cursor: "pointer" }}
+                            >
                                 {r.requesting_physician.full_name}
-                            </div>
+                            </a>
                             <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
-                        </a>
+                        </div>
                     );
                 }
                 return r.requested_by ? <span>{r.requested_by}</span> : <span style={{ color: "#888" }}>—</span>;

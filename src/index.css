@@ -90,6 +90,11 @@ html, body {
     padding: 16px !important;
   }
 
+  /* Keep the card title aligned with the (reduced) body padding */
+  .ant-card-head {
+    padding-inline: 16px !important;
+  }
+
   /* Grid items: allow shrinking below min-content so cards don't overflow */
   .ant-layout-content > div > .ant-card {
     min-width: 0;
@@ -157,6 +162,10 @@ html, body {
   .ant-card-body {
     padding: 16px !important;
   }
+  /* Keep the card title aligned with the (reduced) body padding */
+  .ant-card-head {
+    padding-inline: 16px !important;
+  }
 
   /* Config layout: stack sidebar + content vertically */
   .celuma-config-layout {
@@ -166,4 +175,78 @@ html, body {
     width: 100% !important;
     min-width: unset !important;
   }
+}
+
+/* ── Céluma table ─────────────────────────────────────── */
+.celuma-table .ant-table {
+  background: transparent;
+}
+.celuma-table .ant-table-thead > tr > th {
+  background: #f6faf9;
+  color: #0d1b2a;
+  font-weight: 700;
+  border-bottom: 1px solid #eef1f0;
+}
+/* Soften the column header divider */
+.celuma-table .ant-table-thead > tr > th::before {
+  background-color: #e2e8f0 !important;
+}
+.celuma-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f1f4f3;
+}
+.celuma-table .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: #f1f9f8;
+}
+
+/* Pagination — one Céluma "Panel" container holding borderless tinted buttons
+   (same look as the icon-button group in the detail badge). */
+.celuma-table .ant-table-pagination.ant-pagination {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: 0;
+  padding: 5px;
+  background: #fafbfc;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+}
+.celuma-table .ant-pagination-item,
+.celuma-table .ant-pagination-prev,
+.celuma-table .ant-pagination-next,
+.celuma-table .ant-pagination-prev .ant-pagination-item-link,
+.celuma-table .ant-pagination-next .ant-pagination-item-link {
+  margin: 0 !important;
+  min-width: 30px;
+  height: 30px;
+  line-height: 28px;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  transition: color .15s, background .15s;
+}
+.celuma-table .ant-pagination-item a {
+  color: #374151;
+  font-weight: 600;
+}
+.celuma-table .ant-pagination-item:hover,
+.celuma-table .ant-pagination-prev:hover .ant-pagination-item-link,
+.celuma-table .ant-pagination-next:hover .ant-pagination-item-link {
+  background: #eaf7f5 !important;
+  color: #49b6ad !important;
+}
+.celuma-table .ant-pagination-item:hover a {
+  color: #49b6ad;
+}
+.celuma-table .ant-pagination-item-active {
+  background: #eaf7f5 !important;
+}
+.celuma-table .ant-pagination-item-active a {
+  color: #49b6ad !important;
+}
+.celuma-table .ant-pagination-disabled .ant-pagination-item-link,
+.celuma-table .ant-pagination-disabled:hover .ant-pagination-item-link {
+  background: transparent !important;
+  color: #cbd5e1 !important;
 }
