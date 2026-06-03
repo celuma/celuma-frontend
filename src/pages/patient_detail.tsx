@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout, Card, Space, Button as AntButton, Avatar, Input, Tag, Tooltip } from "antd";
-import { PhoneOutlined, MailOutlined, CalendarOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { PhoneOutlined, MailOutlined, CalendarOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, ClockCircleOutlined, EditOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/celuma_table";
 import { renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { useUserProfile } from "../hooks/use_user_profile";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -70,6 +71,8 @@ export default function PatientDetailPage() {
     const [ordersResp, setOrdersResp] = useState<OrdersListResponse | null>(null);
     const [patient, setPatient] = useState<PatientDetail | null>(null);
     const [search, setSearch] = useState("");
+    const { hasPermission } = useUserProfile();
+    const canEdit = hasPermission("lab:create_patient");
 
     useEffect(() => {
         if (!patientId) return;
@@ -362,6 +365,14 @@ export default function PatientDetailPage() {
                                             <div style={{ fontSize: 13, color: tokens.textSecondary }}>Muestras</div>
                                         </div>
                                     </div>
+
+                                    {canEdit && (
+                                        <div style={{ marginTop: 16 }}>
+                                            <AntButton icon={<EditOutlined />} onClick={() => navigate(`/patients/${patient.id}/edit`)}>
+                                                Editar
+                                            </AntButton>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
