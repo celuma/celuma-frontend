@@ -20,7 +20,7 @@ import type {
     TemplateFieldType,
     TemplateOrderInput,
 } from "../models/report";
-import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
+import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, LEGACY_PREDEFINED_BASE_HIDDEN, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
 
 const { TextArea } = Input;
@@ -43,10 +43,11 @@ const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
 ];
 
 const BASE_FIELD_LABELS: Record<string, string> = {
-    order_code:         "Código de orden",
-    patient:            "Paciente",
-    study_type:         "Tipo de estudio",
-    patient_age:        "Edad",
+    order_code:           "Código de orden",
+    patient:              "Paciente",
+    study_type:           "Tipo de estudio",
+    patient_age:          "Edad",
+    requesting_physician: "Médico solicitante",
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -474,8 +475,14 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 });
             }
 
-            // Add missing predefined keys at the end
-            Object.entries(defaults.base).forEach(([k, v]) => { if (!mergedBase[k]) mergedBase[k] = v; });
+            // Add missing predefined keys at the end.
+            // Fields in LEGACY_PREDEFINED_BASE_HIDDEN are hidden by default in existing
+            // templates because they didn't exist when those templates were created.
+            Object.entries(defaults.base).forEach(([k, v]) => {
+                if (!mergedBase[k]) {
+                    mergedBase[k] = LEGACY_PREDEFINED_BASE_HIDDEN.has(k) ? { ...v, is_visible: false } : v;
+                }
+            });
             Object.entries(defaults.sections).forEach(([k, v]) => { if (!mergedSections[k]) mergedSections[k] = v; });
 
             const storedLoose = stored as ReportTemplateJSON;

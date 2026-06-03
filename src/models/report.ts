@@ -176,6 +176,13 @@ export interface ReportFullResponse {
         assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
         reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null }>;
         labels?: Array<{ id: string; name: string; color: string; inherited?: boolean }>;
+        requesting_physician?: {
+            id: string;
+            full_name: string;
+            physician_code: string;
+            specialty?: string | null;
+            institution?: string | null;
+        } | null;
     };
     patient?: {
         id: string;
@@ -225,11 +232,20 @@ export interface StudyTypeDetail {
 
 /** Predefined base fields with empty value (template skeleton) */
 export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
-    order_code:         { is_visible: true, label: "Código de orden",    value: "" },
-    patient:            { is_visible: true, label: "Paciente",           value: "" },
-    study_type:         { is_visible: true, label: "Tipo de estudio",    value: "" },
-    patient_age:        { is_visible: true, label: "Edad",               value: "" },
+    order_code:             { is_visible: true,  label: "Código de orden",      value: "" },
+    patient:                { is_visible: true,  label: "Paciente",             value: "" },
+    study_type:             { is_visible: true,  label: "Tipo de estudio",      value: "" },
+    patient_age:            { is_visible: true,  label: "Edad",                 value: "" },
+    requesting_physician:   { is_visible: true,  label: "Médico solicitante",   value: "" },
 };
+
+/**
+ * Predefined base fields that are new additions absent from older saved templates.
+ * When merging defaults into an existing template, these keys are added with
+ * `is_visible: false` so they don't silently appear in reports created before
+ * the field existed.
+ */
+export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set(["requesting_physician"]);
 
 /** Predefined sections with empty content (template skeleton).
  *  images is the 3rd section by default. */
