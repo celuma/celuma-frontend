@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Layout, Card, Avatar, Space, Tooltip } from "antd";
+import { Layout, Card, Avatar, Space } from "antd";
 import { MailOutlined, PhoneOutlined, IdcardOutlined, BankOutlined, MedicineBoxOutlined, EnvironmentOutlined, EditOutlined, PoweroffOutlined, CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -8,6 +8,7 @@ import CelumaButton from "../components/ui/button";
 import SearchField from "../components/ui/search_field";
 import Panel from "../components/ui/panel";
 import ConfirmDialog from "../components/ui/confirm_dialog";
+import Tooltip from "../components/ui/tooltip";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
@@ -68,12 +69,19 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
-async function deleteJSON(path: string): Promise<void> {
+async function putJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
     const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = { accept: "application/json" };
+    const headers: Record<string, string> = { "Content-Type": "application/json", accept: "application/json" };
     if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, { method: "DELETE", headers, credentials: "include" });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const res = await fetch(`${getApiBase()}${path}`, { method: "PUT", headers, body: JSON.stringify(body), credentials: "include" });
+    const text = await res.text();
+    let parsed: unknown = undefined;
+    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
+    if (!res.ok) {
+        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        throw new Error(message);
+    }
+    return parsed as TRes;
 }
 
 type RequestingPhysicianDetail = {
@@ -120,7 +128,7 @@ export default function RequestingPhysicianDetailPage() {
     const [ordersResp, setOrdersResp] = useState<OrdersListResponse | null>(null);
     const [search, setSearch] = useState("");
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+    const [toggling, setToggling] = useState(false);
 
     useEffect(() => {
         if (!physicianId) return;
@@ -155,6 +163,7 @@ export default function RequestingPhysicianDetailPage() {
     const totalOrders = rows.length;
     const totalReports = rows.filter((order) => order.has_report).length;
     const totalSamples = rows.reduce((acc, order) => acc + order.sample_count, 0);
+    const isActive = !!physician?.is_active;
 
     const filteredOrders = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -295,17 +304,19 @@ export default function RequestingPhysicianDetailPage() {
         }] : []),
     ];
 
-    const handleDelete = async () => {
-        if (!physicianId) return;
+    const handleToggleActive = async () => {
+        if (!physician) return;
+        const next = !physician.is_active;
         setError(null);
-        setDeleting(true);
+        setToggling(true);
         try {
-            await deleteJSON(`/v1/requesting-physicians/${physicianId}`);
-            navigate("/requesting-physicians", { replace: true });
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "No se pudo desactivar el médico solicitante.");
-            setDeleting(false);
+            await putJSON(`/v1/requesting-physicians/${physician.id}`, { is_active: next });
+            setPhysician({ ...physician, is_active: next });
             setConfirmOpen(false);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudo actualizar el estado del médico solicitante.");
+        } finally {
+            setToggling(false);
         }
     };
 
@@ -331,7 +342,7 @@ export default function RequestingPhysicianDetailPage() {
 
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card
-                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.primary}` }}
+                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}` }}
                         loading={loading}
                     >
                         {!loading && physician && (
@@ -342,8 +353,7 @@ export default function RequestingPhysicianDetailPage() {
                                         backgroundColor: avatarColor,
                                         fontSize: 38,
                                         fontWeight: 700,
-                                        border: "4px solid #fff",
-                                        boxShadow: "0 0 0 1px #e8edec",
+                                        border: "2px solid #d1d5db",
                                         flexShrink: 0,
                                     }}
                                 >
@@ -374,22 +384,24 @@ export default function RequestingPhysicianDetailPage() {
                                             <Stat value={totalSamples} label="Muestras" color="#f59e0b" />
                                         </div>
                                         <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 5 }}>
-                                            <CelumaButton
-                                                size="xsmall"
-                                                icon={<EditOutlined />}
-                                                title="Editar"
-                                                aria-label="Editar"
-                                                onClick={() => navigate(`/requesting-physicians/${physician.id}/edit`)}
-                                            />
+                                            <Tooltip title="Editar médico">
+                                                <CelumaButton
+                                                    size="xsmall"
+                                                    icon={<EditOutlined />}
+                                                    aria-label="Editar"
+                                                    onClick={() => navigate(`/requesting-physicians/${physician.id}/edit`)}
+                                                />
+                                            </Tooltip>
                                             <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: "4px 2px" }} />
-                                            <CelumaButton
-                                                size="xsmall"
-                                                danger
-                                                icon={<PoweroffOutlined />}
-                                                title="Desactivar"
-                                                aria-label="Desactivar"
-                                                onClick={() => setConfirmOpen(true)}
-                                            />
+                                            <Tooltip title={isActive ? "Desactivar médico" : "Activar médico"}>
+                                                <CelumaButton
+                                                    size="xsmall"
+                                                    danger={isActive}
+                                                    icon={<PoweroffOutlined />}
+                                                    aria-label={isActive ? "Desactivar" : "Activar"}
+                                                    onClick={() => setConfirmOpen(true)}
+                                                />
+                                            </Tooltip>
                                         </Panel>
                                     </div>
                                 </div>
@@ -453,13 +465,15 @@ export default function RequestingPhysicianDetailPage() {
 
                 <ConfirmDialog
                     open={confirmOpen}
-                    danger
-                    title="Desactivar médico solicitante"
-                    description="El médico quedará inactivo y no aparecerá como opción activa para nuevas órdenes."
-                    confirmText="Desactivar"
+                    danger={isActive}
+                    title={isActive ? "Desactivar médico solicitante" : "Activar médico solicitante"}
+                    description={isActive
+                        ? "El médico quedará inactivo y no aparecerá como opción activa para nuevas órdenes."
+                        : "El médico volverá a estar disponible como opción activa para nuevas órdenes."}
+                    confirmText={isActive ? "Desactivar" : "Activar"}
                     cancelText="Cancelar"
-                    loading={deleting}
-                    onConfirm={handleDelete}
+                    loading={toggling}
+                    onConfirm={handleToggleActive}
                     onCancel={() => setConfirmOpen(false)}
                 />
             </Layout.Content>

@@ -23,7 +23,7 @@ interface PageHeaderProps {
 export default function PageHeader({ title, subtitle, extra }: PageHeaderProps) {
     return (
         <Card
-            style={{ ...cardStyle, borderLeft: `5px solid ${tokens.primary}` }}
+            style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}` }}
             styles={{ body: { padding: tokens.cardPadding } }}
         >
             <div
