@@ -1,12 +1,50 @@
-import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Avatar, Tag, Space, Button as AntButton, Popconfirm, Input, Tooltip } from "antd";
-import { MailOutlined, PhoneOutlined, IdcardOutlined, BankOutlined, MedicineBoxOutlined, EditOutlined, DeleteOutlined, CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Layout, Card, Avatar, Space, Tooltip } from "antd";
+import { MailOutlined, PhoneOutlined, IdcardOutlined, BankOutlined, MedicineBoxOutlined, EnvironmentOutlined, EditOutlined, PoweroffOutlined, CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import CelumaButton from "../components/ui/button";
+import SearchField from "../components/ui/search_field";
+import Panel from "../components/ui/panel";
+import ConfirmDialog from "../components/ui/confirm_dialog";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+
+const codeChipStyle: CSSProperties = {
+    background: tokens.secondary,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "3px 12px",
+    borderRadius: 999,
+    lineHeight: 1.5,
+};
+
+const statusChipStyle = (active: boolean): CSSProperties => ({
+    background: active ? "#e9f9f1" : "#f1f5f9",
+    color: active ? "#0f9d6e" : "#64748b",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "3px 12px",
+    borderRadius: 999,
+    lineHeight: 1.5,
+});
+
+const MetaItem = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: tokens.textSecondary, fontSize: 14 }}>
+        <span style={{ color: tokens.primary, fontSize: 16, display: "inline-flex" }}>{icon}</span>
+        {children}
+    </span>
+);
+
+const Stat = ({ value, label, color }: { value: number; label: string; color: string }) => (
+    <div style={{ textAlign: "center", padding: "0 18px" }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: tokens.titleFont, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
+    </div>
+);
 import { CelumaTable } from "../components/ui/celuma_table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -81,6 +119,8 @@ export default function RequestingPhysicianDetailPage() {
     const [physician, setPhysician] = useState<RequestingPhysicianDetail | null>(null);
     const [ordersResp, setOrdersResp] = useState<OrdersListResponse | null>(null);
     const [search, setSearch] = useState("");
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (!physicianId) return;
@@ -166,8 +206,9 @@ export default function RequestingPhysicianDetailPage() {
             title: "Código",
             dataIndex: "order_code",
             key: "order_code",
-            width: 140,
+            width: 120,
             sorter: stringSorter("order_code"),
+            defaultSortOrder: "ascend",
         },
         {
             title: "Paciente",
@@ -178,7 +219,7 @@ export default function RequestingPhysicianDetailPage() {
                 return nameA.localeCompare(nameB);
             },
             render: (_, row) => {
-                if (!row.patient?.full_name || !row.patient?.id) return "—";
+                if (!row.patient?.full_name || !row.patient?.id) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <PatientCell
                         patientId={row.patient.id}
@@ -187,6 +228,23 @@ export default function RequestingPhysicianDetailPage() {
                     />
                 );
             },
+        },
+        {
+            title: "Reporte",
+            dataIndex: "has_report",
+            key: "has_report",
+            width: 80,
+            align: "center" as const,
+            render: (hasReport: boolean) => hasReport ? (
+                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
+            ) : (
+                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
+            ),
+            filters: [
+                { text: "Con Reporte", value: true },
+                { text: "Sin Reporte", value: false },
+            ],
+            onFilter: (value, record) => record.has_report === value,
         },
         {
             title: "Estado",
@@ -207,23 +265,6 @@ export default function RequestingPhysicianDetailPage() {
             render: (_: unknown, row: OrdersListResponse["orders"][number]) =>
                 row.labels && row.labels.length > 0 ? renderLabels(row.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        {
-            title: "Reporte",
-            dataIndex: "has_report",
-            key: "has_report",
-            width: 110,
-            align: "center" as const,
-            render: (hasReport: boolean) => hasReport ? (
-                <CheckCircleOutlined style={{ color: "#10b981", fontSize: 16 }} />
-            ) : (
-                <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
-            ),
-            filters: [
-                { text: "Con Reporte", value: true },
-                { text: "Sin Reporte", value: false },
-            ],
-            onFilter: (value, record) => record.has_report === value,
-        },
         ...(rows.some((row) => row.assignees && row.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
@@ -257,11 +298,14 @@ export default function RequestingPhysicianDetailPage() {
     const handleDelete = async () => {
         if (!physicianId) return;
         setError(null);
+        setDeleting(true);
         try {
             await deleteJSON(`/v1/requesting-physicians/${physicianId}`);
             navigate("/requesting-physicians", { replace: true });
         } catch (err) {
             setError(err instanceof Error ? err.message : "No se pudo desactivar el médico solicitante.");
+            setDeleting(false);
+            setConfirmOpen(false);
         }
     };
 
@@ -270,120 +314,83 @@ export default function RequestingPhysicianDetailPage() {
             <SidebarCeluma selectedKey="/requesting-physicians" onNavigate={(key) => navigate(key)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                    .rp-header { display: flex; align-items: flex-start; gap: 32px; }
-                    .rp-avatar-section { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-                    .rp-info-section { flex: 1; min-width: 0; }
-                    .rp-stats { display: flex; gap: 40px; margin-top: 20px; }
-                    .rp-stat { text-align: center; }
-                    .rp-details { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+                    .rp-badge { display: flex; gap: 24px; align-items: flex-start; }
+                    .rp-badge-info { flex: 1; min-width: 0; }
+                    .rp-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
+                    .rp-footer { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-top: 18px; }
+                    .rp-stats { display: flex; align-items: stretch; margin-left: -18px; }
+                    .rp-stat-divider { width: 1px; background: #eef1f0; }
                     @media (max-width: 640px) {
-                        .rp-header { flex-direction: column; align-items: center; text-align: center; }
-                        .rp-details { justify-content: center; }
-                        .rp-stats { justify-content: center; gap: 24px; }
+                        .rp-badge { flex-direction: column; align-items: center; text-align: center; }
+                        .rp-meta { justify-content: center; }
+                        .rp-name-row { justify-content: center; }
+                        .rp-footer { justify-content: center; }
+                        .rp-stats { margin-left: 0; }
                     }
                 `}</style>
 
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card
-                        style={cardStyle}
+                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.primary}` }}
                         loading={loading}
-                        extra={!loading && physician ? (
-                            <Space>
-                                <AntButton icon={<EditOutlined />} onClick={() => navigate(`/requesting-physicians/${physician.id}/edit`)}>
-                                    Editar
-                                </AntButton>
-                                <Popconfirm
-                                    title="Desactivar médico solicitante"
-                                    description="El médico quedará inactivo y no aparecerá como opción activa."
-                                    okText="Desactivar"
-                                    cancelText="Cancelar"
-                                    onConfirm={handleDelete}
-                                >
-                                    <AntButton danger icon={<DeleteOutlined />}>
-                                        Desactivar
-                                    </AntButton>
-                                </Popconfirm>
-                            </Space>
-                        ) : null}
                     >
                         {!loading && physician && (
-                            <div className="rp-header">
-                                <div className="rp-avatar-section">
-                                    <Avatar
-                                        size={140}
-                                        style={{
-                                            backgroundColor: avatarColor,
-                                            fontSize: 52,
-                                            fontWeight: 700,
-                                            border: "3px solid #e5e7eb",
-                                        }}
-                                    >
-                                        {initials}
-                                    </Avatar>
-                                    <h1 style={{ margin: "16px 0 0 0", fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800, color: tokens.textPrimary }}>
-                                        {physician.full_name}
-                                    </h1>
-                                    <Space style={{ marginTop: 8 }}>
-                                        <Tag color={tokens.primary} style={{ fontSize: 13, padding: "2px 12px", borderRadius: 12 }}>
-                                            {physician.physician_code}
-                                        </Tag>
-                                        <Tag color={physician.is_active ? "green" : "default"}>{physician.is_active ? "Activo" : "Inactivo"}</Tag>
-                                    </Space>
-                                </div>
-
-                                <div className="rp-info-section">
-                                    <div className="rp-details">
-                                        {physician.specialty && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <MedicineBoxOutlined style={{ fontSize: 18, color: tokens.primary }} />
-                                                <span>{physician.specialty}</span>
-                                            </div>
-                                        )}
-                                        {physician.professional_license && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <IdcardOutlined style={{ fontSize: 18, color: tokens.primary }} />
-                                                <span>Cédula: {physician.professional_license}</span>
-                                            </div>
-                                        )}
-                                        {physician.institution && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <BankOutlined style={{ fontSize: 18, color: tokens.primary }} />
-                                                <span>{physician.institution}</span>
-                                            </div>
-                                        )}
-                                        {physician.phone && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <PhoneOutlined style={{ fontSize: 16, color: tokens.primary }} />
-                                                <span>{physician.phone}</span>
-                                            </div>
-                                        )}
-                                        {physician.email && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <MailOutlined style={{ fontSize: 16, color: tokens.primary }} />
-                                                <span>{physician.email}</span>
-                                            </div>
-                                        )}
+                            <div className="rp-badge">
+                                <Avatar
+                                    size={104}
+                                    style={{
+                                        backgroundColor: avatarColor,
+                                        fontSize: 38,
+                                        fontWeight: 700,
+                                        border: "4px solid #fff",
+                                        boxShadow: "0 0 0 1px #e8edec",
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    {initials}
+                                </Avatar>
+                                <div className="rp-badge-info">
+                                    <div className="rp-name-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                                        <h1 style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1 }}>
+                                            {physician.full_name}
+                                        </h1>
+                                        <span style={codeChipStyle}>{physician.physician_code}</span>
+                                        <span style={statusChipStyle(physician.is_active)}>{physician.is_active ? "Activo" : "Inactivo"}</span>
                                     </div>
-                                    {physician.address && (
-                                        <div style={{ color: tokens.textSecondary, marginTop: 24 }}>
-                                            <div style={{ fontWeight: 700, color: tokens.textPrimary, marginBottom: 4 }}>Dirección</div>
-                                            <div>{physician.address}</div>
+                                    <div className="rp-meta">
+                                        {physician.specialty && <MetaItem icon={<MedicineBoxOutlined />}>{physician.specialty}</MetaItem>}
+                                        {physician.professional_license && <MetaItem icon={<IdcardOutlined />}>Cédula: {physician.professional_license}</MetaItem>}
+                                        {physician.institution && <MetaItem icon={<BankOutlined />}>{physician.institution}</MetaItem>}
+                                        {physician.phone && <MetaItem icon={<PhoneOutlined />}>{physician.phone}</MetaItem>}
+                                        {physician.email && <MetaItem icon={<MailOutlined />}>{physician.email}</MetaItem>}
+                                        {physician.address && <MetaItem icon={<EnvironmentOutlined />}>{physician.address}</MetaItem>}
+                                    </div>
+                                    <div className="rp-footer">
+                                        <div className="rp-stats">
+                                            <Stat value={totalOrders} label="Órdenes" color={tokens.primary} />
+                                            <div className="rp-stat-divider" />
+                                            <Stat value={totalReports} label="Reportes" color="#22c55e" />
+                                            <div className="rp-stat-divider" />
+                                            <Stat value={totalSamples} label="Muestras" color="#f59e0b" />
                                         </div>
-                                    )}
-
-                                    <div className="rp-stats">
-                                        <div className="rp-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: tokens.primary, fontFamily: tokens.titleFont }}>{totalOrders}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Órdenes</div>
-                                        </div>
-                                        <div className="rp-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: "#22c55e", fontFamily: tokens.titleFont }}>{totalReports}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Reportes</div>
-                                        </div>
-                                        <div className="rp-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: "#f59e0b", fontFamily: tokens.titleFont }}>{totalSamples}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Muestras</div>
-                                        </div>
+                                        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 5 }}>
+                                            <CelumaButton
+                                                size="xsmall"
+                                                icon={<EditOutlined />}
+                                                title="Editar"
+                                                aria-label="Editar"
+                                                onClick={() => navigate(`/requesting-physicians/${physician.id}/edit`)}
+                                            />
+                                            <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: "4px 2px" }} />
+                                            <CelumaButton
+                                                size="xsmall"
+                                                danger
+                                                icon={<PoweroffOutlined />}
+                                                title="Desactivar"
+                                                aria-label="Desactivar"
+                                                onClick={() => setConfirmOpen(true)}
+                                            />
+                                        </Panel>
                                     </div>
                                 </div>
                             </div>
@@ -396,18 +403,17 @@ export default function RequestingPhysicianDetailPage() {
                         loading={loading}
                         style={cardStyle}
                         extra={!loading && physician ? (
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en órdenes"
+                            <Space size={10}>
+                                <SearchField
+                                    small
                                     value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
-                                    onSearch={(value) => setSearch(value)}
-                                    style={{ width: 300 }}
+                                    onChange={setSearch}
+                                    placeholder="Buscar en órdenes"
+                                    style={{ width: 240 }}
                                 />
-                                <AntButton type="primary" onClick={() => navigate(`/orders/register?requestingPhysicianId=${physician.id}`)}>
+                                <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?requestingPhysicianId=${physician.id}`)}>
                                     Registrar Orden
-                                </AntButton>
+                                </CelumaButton>
                             </Space>
                         ) : null}
                     >
@@ -420,11 +426,42 @@ export default function RequestingPhysicianDetailPage() {
                                 onRowClick={(record) => navigate(`/orders/${record.id}`)}
                                 emptyText="Sin órdenes"
                                 pagination={{ pageSize: 10 }}
-                            />
+                                locale={{
+                                        filterTitle: 'Filtrar',
+                                        filterConfirm: 'Aceptar',
+                                        filterReset: 'Limpiar',
+                                        filterEmptyText: 'Sin filtros',
+                                        filterCheckAll: 'Seleccionar todo',
+                                        filterSearchPlaceholder: 'Buscar en filtros',
+                                        emptyText: 'Sin órdenes',
+                                        selectAll: 'Seleccionar todo',
+                                        selectInvert: 'Invertir selección',
+                                        selectNone: 'Limpiar selección',
+                                        selectionAll: 'Seleccionar todos',
+                                        sortTitle: 'Ordenar',
+                                        expand: 'Expandir fila',
+                                        collapse: 'Colapsar fila',
+                                        triggerDesc: 'Clic para ordenar descendente',
+                                        triggerAsc: 'Clic para ordenar ascendente',
+                                        cancelSort: 'Clic para cancelar ordenamiento',
+                                    }}
+                                />
                         )}
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>
                 </div>
+
+                <ConfirmDialog
+                    open={confirmOpen}
+                    danger
+                    title="Desactivar médico solicitante"
+                    description="El médico quedará inactivo y no aparecerá como opción activa para nuevas órdenes."
+                    confirmText="Desactivar"
+                    cancelText="Cancelar"
+                    loading={deleting}
+                    onConfirm={handleDelete}
+                    onCancel={() => setConfirmOpen(false)}
+                />
             </Layout.Content>
         </Layout>
     );

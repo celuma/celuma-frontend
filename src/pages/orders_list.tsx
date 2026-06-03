@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar, Tooltip } from "antd";
+import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
+import SearchField from "../components/ui/search_field";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -375,13 +376,11 @@ export default function OrdersList() {
                     />
                     <Card style={cardStyle}>
                         <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en órdenes"
+                            <SearchField
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: "100%", maxWidth: 320 }}
+                                onChange={setSearch}
+                                placeholder="Buscar en órdenes"
+                                style={{ maxWidth: 320 }}
                             />
                         </div>
                         <CelumaTable
