@@ -42,7 +42,11 @@ interface TenantInfo {
     logo_url?: string;
 }
 
-function TenantSettings() {
+interface TenantSettingsProps {
+    embedded?: boolean;
+}
+
+function TenantSettings({ embedded = false }: TenantSettingsProps) {
     const navigate = useNavigate();
     const { canManageTenant } = useUserProfile();
     const [loading, setLoading] = useState(false);
@@ -122,76 +126,84 @@ function TenantSettings() {
         }
     };
 
+    const card = (
+        <Card
+            title={<span style={cardTitleStyle}>Configuración del Laboratorio</span>}
+            loading={loading}
+            style={cardStyle}
+        >
+            {!canManageTenant && (
+                <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7e6", border: "1px solid #ffe7ba", borderRadius: 8, color: "#ad6800", fontSize: 13 }}>
+                    Solo lectura — se requiere el permiso <strong>admin:manage_tenant</strong> para guardar cambios.
+                </div>
+            )}
+            <Form form={form} layout="vertical" onFinish={handleSave}>
+                <Form.Item name="name" label="Nombre del Laboratorio" rules={[{ required: true }]}>
+                    <Input placeholder="Laboratorio Central" disabled={!canManageTenant} />
+                </Form.Item>
+
+                <Form.Item name="legal_name" label="Razón Social">
+                    <Input placeholder="Laboratorio Central S.A. de C.V." disabled={!canManageTenant} />
+                </Form.Item>
+
+                <Form.Item name="tax_id" label="RFC / Tax ID">
+                    <Input placeholder="ABC123456XYZ" disabled={!canManageTenant} />
+                </Form.Item>
+
+                <Form.Item label="Logo">
+                    {tenant?.logo_url && (
+                        <div style={{ marginBottom: 12 }}>
+                            <Image
+                                src={tenant.logo_url}
+                                alt="Logo actual"
+                                style={{ maxWidth: 200, maxHeight: 100, objectFit: "contain" }}
+                            />
+                        </div>
+                    )}
+                    <Upload
+                        beforeUpload={(file) => {
+                            setLogoFile(file);
+                            return false;
+                        }}
+                        fileList={logoFile ? [logoFile] : []}
+                        onRemove={() => setLogoFile(null)}
+                        accept="image/*"
+                        maxCount={1}
+                    >
+                        <Button icon={<UploadOutlined />}>Seleccionar Logo</Button>
+                    </Upload>
+                    {logoFile && (
+                        <Button
+                            type="primary"
+                            onClick={handleLogoUpload}
+                            style={{ marginTop: 8 }}
+                        >
+                            Subir Logo
+                        </Button>
+                    )}
+                </Form.Item>
+
+                {canManageTenant && (
+                    <Form.Item>
+                        <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+                            Guardar Cambios
+                        </Button>
+                    </Form.Item>
+                )}
+            </Form>
+        </Card>
+    );
+
+    if (embedded) {
+        return card;
+    }
+
     return (
         <Layout style={{ minHeight: "100vh" }}>
             <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
                 <div style={{ maxWidth: 800, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Configuración del Laboratorio</span>}
-                        loading={loading}
-                        style={cardStyle}
-                    >
-                        {!canManageTenant && (
-                            <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7e6", border: "1px solid #ffe7ba", borderRadius: 8, color: "#ad6800", fontSize: 13 }}>
-                                Solo lectura — se requiere el permiso <strong>admin:manage_tenant</strong> para guardar cambios.
-                            </div>
-                        )}
-                        <Form form={form} layout="vertical" onFinish={handleSave}>
-                            <Form.Item name="name" label="Nombre del Laboratorio" rules={[{ required: true }]}>
-                                <Input placeholder="Laboratorio Central" disabled={!canManageTenant} />
-                            </Form.Item>
-
-                            <Form.Item name="legal_name" label="Razón Social">
-                                <Input placeholder="Laboratorio Central S.A. de C.V." disabled={!canManageTenant} />
-                            </Form.Item>
-
-                            <Form.Item name="tax_id" label="RFC / Tax ID">
-                                <Input placeholder="ABC123456XYZ" disabled={!canManageTenant} />
-                            </Form.Item>
-
-                            <Form.Item label="Logo">
-                                {tenant?.logo_url && (
-                                    <div style={{ marginBottom: 12 }}>
-                                        <Image 
-                                            src={tenant.logo_url} 
-                                            alt="Logo actual"
-                                            style={{ maxWidth: 200, maxHeight: 100, objectFit: "contain" }}
-                                        />
-                                    </div>
-                                )}
-                                <Upload
-                                    beforeUpload={(file) => {
-                                        setLogoFile(file);
-                                        return false;
-                                    }}
-                                    fileList={logoFile ? [logoFile] : []}
-                                    onRemove={() => setLogoFile(null)}
-                                    accept="image/*"
-                                    maxCount={1}
-                                >
-                                    <Button icon={<UploadOutlined />}>Seleccionar Logo</Button>
-                                </Upload>
-                                {logoFile && (
-                                    <Button 
-                                        type="primary" 
-                                        onClick={handleLogoUpload}
-                                        style={{ marginTop: 8 }}
-                                    >
-                                        Subir Logo
-                                    </Button>
-                                )}
-                            </Form.Item>
-
-                            {canManageTenant && (
-                                <Form.Item>
-                                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
-                                        Guardar Cambios
-                                    </Button>
-                                </Form.Item>
-                            )}
-                        </Form>
-                    </Card>
+                    {card}
                 </div>
             </Layout.Content>
         </Layout>

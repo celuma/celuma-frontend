@@ -7,7 +7,7 @@ import CelumaNotificationProxy from "./components/ui/celuma_notification_proxy";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import Home from "./pages/home";
-import PatientRegister from "./pages/patient_register";
+import PatientForm from "./pages/patient_form";
 import RequestingPhysicianForm from "./pages/requesting_physician_form";
 import RequestingPhysicianDetailPage from "./pages/requesting_physician_detail";
 import RequestingPhysiciansList from "./pages/requesting_physicians_list";
@@ -38,6 +38,9 @@ import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
+import BranchesList from "./pages/branches_list";
+import BranchForm from "./pages/branch_form";
+import BranchDetail from "./pages/branch_detail";
 import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
@@ -70,7 +73,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/worklist" element={<RequirePermission permission="lab:read"><Worklist /></RequirePermission>} />
 
             {/* Lab create — lab:create_order */}
-            <Route path="/patients/register" element={<RequirePermission permission="lab:create_patient"><PatientRegister /></RequirePermission>} />
+            <Route path="/patients/register" element={<RequirePermission permission="lab:create_patient"><PatientForm /></RequirePermission>} />
+            <Route path="/patients/:patientId/edit" element={<RequirePermission permission="lab:create_patient"><PatientForm /></RequirePermission>} />
             <Route path="/requesting-physicians/register" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
             <Route path="/requesting-physicians/:physicianId/edit" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
             <Route path="/orders/register" element={<RequirePermission permission="lab:create_order"><OrderRegister /></RequirePermission>} />
@@ -91,8 +95,8 @@ createRoot(document.getElementById("root")!).render(
             {/* Profile — any authenticated user, no specific permission required */}
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
-            {/* Settings */}
-            <Route path="/settings" element={<RequirePermission permission="lab:read"><TenantSettings /></RequirePermission>} />
+            {/* Settings — redirect to config/tenant */}
+            <Route path="/settings" element={<Navigate to="/config/tenant" replace />} />
 
             {/* Config panel — nested routes */}
             <Route path="/config" element={<RequirePermission permission="lab:read"><Config /></RequirePermission>}>
@@ -103,6 +107,11 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />
+                <Route path="branches" element={<RequirePermission permission="admin:manage_branches"><BranchesList embedded /></RequirePermission>} />
+                <Route path="branches/register" element={<RequirePermission permission="admin:manage_branches"><BranchForm embedded /></RequirePermission>} />
+                <Route path="branches/:branchId" element={<RequirePermission permission="admin:manage_branches"><BranchDetail embedded /></RequirePermission>} />
+                <Route path="branches/:branchId/edit" element={<RequirePermission permission="admin:manage_branches"><BranchForm embedded /></RequirePermission>} />
+                <Route path="tenant" element={<RequirePermission permission="admin:manage_tenant"><TenantSettings embedded /></RequirePermission>} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
 

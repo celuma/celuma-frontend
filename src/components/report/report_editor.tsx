@@ -509,6 +509,11 @@ const ReportEditor: React.FC = () => {
                 }
                 report.base["patient_age"].value = age !== null ? `${age} años` : "";
             }
+            if (report.base["requesting_physician"]) {
+                const physician = order.requesting_physician;
+                report.base["requesting_physician"].value =
+                    physician?.full_name || order.requested_by || "";
+            }
         }
 
         // Fill custom base values

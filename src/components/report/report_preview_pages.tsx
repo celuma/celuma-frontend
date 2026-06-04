@@ -15,7 +15,7 @@ const HEADER_H_MM = 28;
 const FOOTER_H_MM = 20;
 
 // Keys that are pre-populated from order/patient data (not custom)
-const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age"]);
+const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
 
 /** Lightweight user lookup so the signature block can resolve `signed_by` (a UUID)
  *  into a display name without forcing every caller to pass a resolved object. */

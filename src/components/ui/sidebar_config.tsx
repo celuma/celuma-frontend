@@ -1,6 +1,6 @@
 import React from "react";
-import type { MenuProps } from "antd";
 import { Menu } from "antd";
+import type { MenuProps } from "antd";
 import {
     UserOutlined,
     FileTextOutlined,
@@ -9,6 +9,8 @@ import {
     TeamOutlined,
     SafetyCertificateOutlined,
     InfoCircleOutlined,
+    ShopOutlined,
+    BankOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -37,6 +39,18 @@ const reviewersMenuItem: Required<MenuProps>["items"][number] = {
     label: "Revisores",
 };
 
+const branchesMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/branches",
+    icon: <ShopOutlined />,
+    label: "Sucursales",
+};
+
+const tenantMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/tenant",
+    icon: <BankOutlined />,
+    label: "Empresa",
+};
+
 const aboutMenuItem: Required<MenuProps>["items"][number] = {
     key: "/config/about",
     icon: <InfoCircleOutlined />,
@@ -46,12 +60,14 @@ const aboutMenuItem: Required<MenuProps>["items"][number] = {
 const SidebarConfig: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
-    const { canManageUsers, canManageCatalog } = useUserProfile();
+    const { canManageUsers, canManageCatalog, canManageBranches, canManageTenant } = useUserProfile();
 
     const menuItems: Required<MenuProps>["items"] = [
         ...baseMenuItems,
         ...(canManageCatalog ? catalogMenuItems : []),
         ...(canManageUsers ? [adminMenuItem, reviewersMenuItem] : []),
+        ...(canManageBranches ? [branchesMenuItem] : []),
+        ...(canManageTenant ? [tenantMenuItem] : []),
         aboutMenuItem,
     ];
 
