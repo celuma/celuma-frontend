@@ -6,9 +6,9 @@ import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import CelumaButton from "../components/ui/button";
 import SearchField from "../components/ui/search_field";
-import Panel from "../components/ui/panel";
 import ConfirmDialog from "../components/ui/confirm_dialog";
 import Tooltip from "../components/ui/tooltip";
+import ActionButtonPanel from "../components/ui/action_button_panel";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
@@ -383,26 +383,23 @@ export default function RequestingPhysicianDetailPage() {
                                             <div className="rp-stat-divider" />
                                             <Stat value={totalSamples} label="Muestras" color="#f59e0b" />
                                         </div>
-                                        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 5 }}>
-                                            <Tooltip title="Editar médico">
-                                                <CelumaButton
-                                                    size="xsmall"
-                                                    icon={<EditOutlined />}
-                                                    aria-label="Editar"
-                                                    onClick={() => navigate(`/requesting-physicians/${physician.id}/edit`)}
-                                                />
-                                            </Tooltip>
-                                            <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: "4px 2px" }} />
-                                            <Tooltip title={isActive ? "Desactivar médico" : "Activar médico"}>
-                                                <CelumaButton
-                                                    size="xsmall"
-                                                    danger={isActive}
-                                                    icon={<PoweroffOutlined />}
-                                                    aria-label={isActive ? "Desactivar" : "Activar"}
-                                                    onClick={() => setConfirmOpen(true)}
-                                                />
-                                            </Tooltip>
-                                        </Panel>
+                                        <ActionButtonPanel
+                                            actions={[
+                                                {
+                                                    icon: <EditOutlined />,
+                                                    tooltip: "Editar médico",
+                                                    ariaLabel: "Editar",
+                                                    onClick: () => navigate(`/requesting-physicians/${physician.id}/edit`),
+                                                },
+                                                {
+                                                    icon: <PoweroffOutlined />,
+                                                    tooltip: isActive ? "Desactivar médico" : "Activar médico",
+                                                    ariaLabel: isActive ? "Desactivar" : "Activar",
+                                                    danger: isActive,
+                                                    onClick: () => setConfirmOpen(true),
+                                                },
+                                            ]}
+                                        />
                                     </div>
                                 </div>
                             </div>
