@@ -46,7 +46,7 @@ const Stat = ({ value, label, color }: { value: number; label: string; color: st
         <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
     </div>
 );
-import { CelumaTable } from "../components/ui/celuma_table";
+import { CelumaTable } from "../components/ui/table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 

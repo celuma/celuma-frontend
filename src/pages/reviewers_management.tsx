@@ -12,7 +12,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";

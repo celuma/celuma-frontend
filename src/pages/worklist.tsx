@@ -18,7 +18,7 @@ import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
 

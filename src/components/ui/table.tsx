@@ -85,6 +85,7 @@ export function CelumaTable<T>({
     emptyText = "Sin datos",
     className,
     onChange,
+    locale,
     searchable = false,
     searchPlaceholder = "Buscar",
     searchFilter,
@@ -194,7 +195,10 @@ export function CelumaTable<T>({
                 scroll={{ x: "max-content" }}
                 showSorterTooltip={SORTER_TOOLTIP}
                 locale={{
-                    emptyText: <Empty description={emptyText} />
+                    ...locale,
+                    // Always use the illustrated Empty state (with icon), regardless of any
+                    // string emptyText a page may pass in its locale.
+                    emptyText: <Empty description={emptyText} />,
                 }}
                 onRow={(record) => ({
                     onClick: () => onRowClick?.(record),
