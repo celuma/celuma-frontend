@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip } from "antd";
+import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Tabs, Badge, Tooltip } from "antd";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
-    DollarOutlined
+    DollarOutlined, ClockCircleOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -16,8 +16,9 @@ import ErrorText from "../components/ui/error_text";
 import ActionButtonPanel, { type ActionButtonItem } from "../components/ui/action_button_panel";
 import CelumaButton from "../components/ui/button";
 import Panel from "../components/ui/panel";
+import CelumaSteps, { type CelumaStep } from "../components/ui/celuma_steps";
 import CelumaTextArea from "../components/ui/textarea_field";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { getReport } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
@@ -136,15 +137,16 @@ type OrderFullResponse = {
     } | null;
 };
 
-// Status configuration
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico" },
-    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión" },
-    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada" },
-    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada" },
-    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
+// Status configuration — single source of truth for color + icon + label per status,
+// so the status chip and the Céluma steps bar stay visually in sync.
+const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <ExperimentOutlined /> },
+    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico", icon: <SolutionOutlined /> },
+    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión", icon: <AuditOutlined /> },
+    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada", icon: <SendOutlined /> },
+    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada", icon: <LockOutlined /> },
+    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada", icon: <CloseCircleOutlined /> },
 };
 
 // Sample state configuration - matches backend SampleState enum
@@ -206,7 +208,7 @@ export default function OrderDetail() {
     const [latestReport, setLatestReport] = useState<ReportEnvelope | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
     const previewRef = useRef<ReportPreviewRef>(null);
-    const [activeTab, setActiveTab] = useState("samples");
+    const [activeTab, setActiveTab] = useState("timeline");
     const [timeline, setTimeline] = useState<Array<{
         id: string;
         event_type: string;
@@ -622,13 +624,6 @@ export default function OrderDetail() {
         if (status === "CANCELLED") return -1;
         const index = ORDER_STEPS.findIndex((step) => step.key === status);
         return index >= 0 ? index : 0;
-    };
-
-    const getStepStatus = (stepIndex: number, currentStep: number, orderStatus: string | undefined): "wait" | "process" | "finish" | "error" => {
-        if (orderStatus === "CANCELLED") return "error";
-        if (stepIndex < currentStep) return "finish";
-        if (stepIndex === currentStep) return "process";
-        return "wait";
     };
 
     const handleCreateReport = () => {
@@ -1101,6 +1096,17 @@ export default function OrderDetail() {
                         /* Right rail — action panel (left) + alert (right), pinned to the bottom and sharing the same baseline.
                            gap matches the vertical spacing down to the description panel (20px). */
                         .od-rail { display: flex; flex-direction: row; align-items: flex-end; justify-content: flex-end; gap: 20px; flex-shrink: 0; align-self: flex-end; }
+                        /* Céluma tabs — teal active ink + label */
+                        .od-tabs .ant-tabs-tab .ant-tabs-tab-btn { font-weight: 600; color: ${tokens.textSecondary}; }
+                        .od-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn { color: #3da8a0; }
+                        .od-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: ${tokens.primary}; }
+                        .od-tabs .ant-tabs-ink-bar { background: ${tokens.primary}; height: 3px; border-radius: 3px; }
+                        .od-tabs .ant-tabs-nav::before { border-bottom-color: #eef1f0; }
+                        /* Céluma timeline — soft connector + comfortable spacing */
+                        .od-timeline { padding-top: 4px; }
+                        .od-timeline .ant-timeline-item-tail { border-inline-start: 2px solid #eef1f0; }
+                        .od-timeline .ant-timeline-item { padding-bottom: 22px; }
+                        .od-timeline .ant-timeline-item-head { background: transparent; }
                         @media (max-width: 640px) {
                             .od-badge { flex-direction: column; align-items: center; text-align: center; }
                             .od-meta { justify-content: center; }
@@ -1125,7 +1131,7 @@ export default function OrderDetail() {
                                 <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                                     <span style={codeChipStyle}>{data.order.order_code}</span>
                                     <span style={statusChipStyle(statusConfig)}>
-                                        {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                                        {statusConfig.icon}
                                         {statusConfig.label}
                                     </span>
                                 </div>
@@ -1314,48 +1320,49 @@ export default function OrderDetail() {
                         <ErrorText>{error}</ErrorText>
                     </Card>
 
-                            {/* Timeline Card */}
-                    <Card
-                                title={<span style={cardTitleStyle}>Línea de Tiempo</span>}
-                        loading={loading}
-                                style={cardStyle}
-                            >
-                                {/* Order Status Steps */}
+                            {/* Tabs Card — "Línea de Tiempo" is the default tab so users don't have to scroll to find it */}
+                            <div ref={tabsContainerRef}>
+                            <Card loading={loading} style={cardStyle}>
+                                <Tabs
+                                    activeKey={activeTab}
+                                    onChange={setActiveTab}
+                                    className="od-tabs"
+                                    items={[
+                                        {
+                                            key: "timeline",
+                                            label: (
+                                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <ClockCircleOutlined />
+                                                    Línea de Tiempo
+                                                </span>
+                                            ),
+                                            children: (
+                                                <>
+                                {/* Order Status Steps — Céluma styled */}
                                 {data && (
                                     <div style={{ marginBottom: 24 }}>
                                         {data.order.status === "CANCELLED" ? (
-                                            <div style={{ 
-                                                padding: 16, 
-                                                background: "#fff2f0", 
-                                                border: "1px solid #ffccc7", 
-                                                borderRadius: 8,
-                                                textAlign: "center"
+                                            <Panel style={{
+                                                background: STATUS_CONFIG.CANCELLED.bg,
+                                                border: "2px solid #fecaca",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                gap: 10,
+                                                padding: "16px",
                                             }}>
-                                                <CloseCircleOutlined style={{ fontSize: 32, color: "#ff4d4f", marginBottom: 8 }} />
-                                                <div style={{ fontSize: 16, fontWeight: 600, color: "#cf1322" }}>Orden Cancelada</div>
-                                            </div>
+                                                <CloseCircleOutlined style={{ fontSize: 22, color: STATUS_CONFIG.CANCELLED.color }} />
+                                                <span style={{ fontSize: 16, fontWeight: 700, color: "#b91c1c", fontFamily: tokens.titleFont }}>Orden Cancelada</span>
+                                            </Panel>
                                         ) : (
-                                            <Steps
+                                            <CelumaSteps
                                                 current={getCurrentStep(data.order.status)}
-                                                size="small"
-                                                items={ORDER_STEPS.map((step, index) => {
-                                                    const stepStatus = getStepStatus(index, getCurrentStep(data.order.status), data.order.status);
-                                                    const stepConfig = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
-                                                    const isActive = stepStatus === "process" || stepStatus === "finish";
-                                                    
-                                                    return {
-                                                        title: step.title,
-                                                        icon: step.icon,
-                                                        status: stepStatus,
-                                                        styles: isActive ? {
-                                                            icon: {
-                                                                backgroundColor: stepConfig.color,
-                                                                borderColor: stepConfig.color,
-                                                            }
-                                                        } : undefined,
-                                                    };
-                                                })}
-                                                style={{ padding: "16px 0" }}
+                                                steps={ORDER_STEPS.map<CelumaStep>((step) => ({
+                                                    key: step.key,
+                                                    title: step.title,
+                                                    icon: step.icon,
+                                                    color: (STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED).color,
+                                                }))}
                                             />
                                         )}
                                     </div>
@@ -1363,6 +1370,7 @@ export default function OrderDetail() {
 
                         {timeline.length > 0 ? (
                             <Timeline
+                                className="od-timeline"
                                 items={timeline.map((event, index) => {
                                     // Check if previous event is from the same user
                                     const prevEvent = index > 0 ? timeline[index - 1] : null;
@@ -2112,23 +2120,17 @@ export default function OrderDetail() {
                         ) : (
                             <Empty description="Sin eventos registrados" />
                         )}
-                    </Card>
-
-                            {/* Tabs Card - Samples, Report, Conversation */}
-                            <div ref={tabsContainerRef}>
-                                <Card style={cardStyle}>
-                                    <Tabs
-                                        activeKey={activeTab}
-                                        onChange={setActiveTab}
-                                    items={[
+                                                </>
+                                            ),
+                                        },
                                         {
                                             key: "samples",
                                             label: (
                                                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                                     <ExperimentOutlined />
                                                     Muestras
-                                                    <Badge 
-                                                        count={data?.samples.length || 0} 
+                                                    <Badge
+                                                        count={data?.samples.length || 0}
                                                         style={{ backgroundColor: tokens.primary }}
                                                         size="small"
                                                     />
