@@ -1,16 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Space, Button as AntButton, Avatar, Input, Tag, Tooltip } from "antd";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Layout, Card, Avatar, Space } from "antd";
 import { PhoneOutlined, MailOutlined, CalendarOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, ClockCircleOutlined, EditOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
+import CelumaButton from "../components/ui/button";
+import SearchField from "../components/ui/search_field";
+import Tooltip from "../components/ui/tooltip";
+import ActionButtonPanel from "../components/ui/action_button_panel";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/table";
 import { renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
+
+const codeChipStyle: CSSProperties = {
+    background: tokens.secondary,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "3px 12px",
+    borderRadius: 999,
+    lineHeight: 1.5,
+};
+
+const MetaItem = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: tokens.textSecondary, fontSize: 14 }}>
+        <span style={{ color: tokens.primary, fontSize: 16, display: "inline-flex" }}>{icon}</span>
+        {children}
+    </span>
+);
+
+const Stat = ({ value, label, color }: { value: number; label: string; color: string }) => (
+    <div style={{ textAlign: "center", padding: "0 18px" }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: tokens.titleFont, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
+    </div>
+);
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -39,6 +68,7 @@ type OrdersListResponse = {
         tenant_id: string;
         branch: { id: string; name?: string; code?: string | null };
         patient: { id: string; full_name: string; patient_code: string };
+        requesting_physician?: { id: string; full_name: string; physician_code: string } | null;
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
@@ -63,6 +93,7 @@ type PatientDetail = {
 };
 
 export default function PatientDetailPage() {
+    usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const { patientId } = useParams();
@@ -101,8 +132,9 @@ export default function PatientDetailPage() {
     }, [patientId]);
 
     const fullName = useMemo(() => `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(), [patient]);
-    const initials = useMemo(() => getInitials(fullName || "Patient"), [fullName]);
-    const avatarColor = useMemo(() => getAvatarColor(fullName || "Patient"), [fullName]);
+    const avatarSeed = fullName || patient?.patient_code || "Patient";
+    const initials = useMemo(() => getInitials(avatarSeed), [avatarSeed]);
+    const avatarColor = useMemo(() => getAvatarColor(avatarSeed), [avatarSeed]);
 
     const age = useMemo(() => {
         if (!patient?.dob) return null;
@@ -114,115 +146,134 @@ export default function PatientDetailPage() {
         return years;
     }, [patient?.dob]);
 
-    const totalOrders = ordersResp?.orders?.length ?? 0;
-    const totalReports = ordersResp?.orders?.filter(o => o.has_report).length ?? 0;
-    const totalSamples = ordersResp?.orders?.reduce((acc, o) => acc + o.sample_count, 0) ?? 0;
-
-    // Get rows for filters and search
     const rows = useMemo(() => ordersResp?.orders ?? [], [ordersResp?.orders]);
+    const totalOrders = rows.length;
+    const totalReports = rows.filter((o) => o.has_report).length;
+    const totalSamples = rows.reduce((acc, o) => acc + o.sample_count, 0);
 
-    // Filter orders based on search
     const filteredOrders = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.order_code, r.status, r.requested_by, r.notes]
+        return rows.filter((row) => {
+            const basicFields = [row.order_code, row.status, row.requesting_physician?.full_name, row.requesting_physician?.physician_code, row.requested_by, row.notes]
                 .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in labels
-            const labelMatch = r.labels?.some(label => 
-                label.name.toLowerCase().includes(q)
-            ) || false;
-            
-            // Search in assignees
-            const assigneeMatch = r.assignees?.some(user => 
-                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
-            ) || false;
-            
+                .some((value) => String(value).toLowerCase().includes(q));
+            const labelMatch = row.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
+            const assigneeMatch = row.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
             return basicFields || labelMatch || assigneeMatch;
         });
     }, [rows, search]);
 
-    // Get unique statuses for filter
     const statusFilters = useMemo(() => {
-        const statuses = new Set(rows.map(r => r.status));
-        return Array.from(statuses).map(status => ({
+        const statuses = new Set(rows.map((r) => r.status));
+        return Array.from(statuses).map((status) => ({
             text: renderStatusChip(status, "order").props.children,
             value: status,
         }));
     }, [rows]);
 
-    // Get unique labels for filters
     const labelFilters = useMemo(() => {
         const labelsMap = new Map<string, { name: string; color: string }>();
-        rows.forEach(r => {
-            r.labels?.forEach(label => {
-                if (!labelsMap.has(label.id)) {
-                    labelsMap.set(label.id, { name: label.name, color: label.color });
-                }
+        rows.forEach((r) => {
+            r.labels?.forEach((label) => {
+                if (!labelsMap.has(label.id)) labelsMap.set(label.id, { name: label.name, color: label.color });
             });
         });
         return Array.from(labelsMap.entries())
             .sort((a, b) => a[1].name.localeCompare(b[1].name))
-            .map(([id, label]) => ({
-                text: label.name,
-                value: id,
-            }));
+            .map(([id, label]) => ({ text: label.name, value: id }));
     }, [rows]);
 
-    // Get unique assignees for filters
     const assigneeFilters = useMemo(() => {
         const assigneesMap = new Map<string, string>();
-        rows.forEach(r => {
-            r.assignees?.forEach(user => {
-                if (!assigneesMap.has(user.id)) {
-                    assigneesMap.set(user.id, user.name);
-                }
+        rows.forEach((r) => {
+            r.assignees?.forEach((user) => {
+                if (!assigneesMap.has(user.id)) assigneesMap.set(user.id, user.name);
             });
         });
         return Array.from(assigneesMap.entries())
             .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
+            .map(([id, name]) => ({ text: name, value: id }));
+    }, [rows]);
+
+    const requestingPhysicianFilters = useMemo(() => {
+        const physicians = new Map<string, string>();
+        rows.forEach((r) => {
+            if (r.requesting_physician?.id && r.requesting_physician?.full_name) {
+                physicians.set(r.requesting_physician.id, r.requesting_physician.full_name);
+            }
+        });
+        return Array.from(physicians.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({ text: name, value: id }));
     }, [rows]);
 
     const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
-        { 
-            title: "Código", 
-            dataIndex: "order_code", 
-            key: "order_code", 
+        {
+            title: "Código",
+            dataIndex: "order_code",
+            key: "order_code",
             width: 140,
             sorter: stringSorter("order_code"),
+            defaultSortOrder: "ascend",
         },
-        { 
-            title: "Estado", 
-            dataIndex: "status", 
-            key: "status", 
+        ...(rows.some((r) => r.requesting_physician || r.requested_by) ? [{
+            title: "Solicitante",
+            key: "requesting_physician",
+            width: 220,
+            filters: requestingPhysicianFilters.length > 0 ? requestingPhysicianFilters : undefined,
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => record.requesting_physician?.id === value,
+            sorter: (a: OrdersListResponse["orders"][number], b: OrdersListResponse["orders"][number]) => {
+                const nameA = a.requesting_physician?.full_name || a.requested_by || "";
+                const nameB = b.requesting_physician?.full_name || b.requested_by || "";
+                return nameA.localeCompare(nameB);
+            },
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
+                if (r.requesting_physician) {
+                    return (
+                        <div>
+                            <a
+                                href={`/requesting-physicians/${r.requesting_physician.id}`}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
+                                }}
+                                style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block", textDecoration: "none", cursor: "pointer" }}
+                            >
+                                {r.requesting_physician.full_name}
+                            </a>
+                            <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
+                        </div>
+                    );
+                }
+                return r.requested_by ? <span>{r.requested_by}</span> : <span style={{ color: "#888" }}>—</span>;
+            },
+        }] : []),
+        {
+            title: "Estado",
+            dataIndex: "status",
+            key: "status",
             width: 120,
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
             onFilter: (value, record) => record.status === value,
             sorter: stringSorter("status"),
         },
-        ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
+        ...(rows.some((r) => r.labels && r.labels.length > 0) ? [{
             title: "Etiquetas",
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
-                return record.labels?.some(label => label.id === value) || false;
-            },
-            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) =>
+                record.labels?.some((label) => label.id === value) || false,
+            render: (_: unknown, r: OrdersListResponse["orders"][number]) =>
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        { 
-            title: "Reporte", 
-            dataIndex: "has_report", 
-            key: "has_report", 
+        {
+            title: "Reporte",
+            dataIndex: "has_report",
+            key: "has_report",
             width: 110,
             align: "center" as const,
             render: (v: boolean) => v ? (
@@ -236,24 +287,23 @@ export default function PatientDetailPage() {
             ],
             onFilter: (value, record) => record.has_report === value,
         },
-        ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
+        ...(rows.some((r) => r.assignees && r.assignees.length > 0) ? [{
             title: "Asignados",
             key: "assignees",
             width: 140,
             filters: assigneeFilters,
-            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
-                return record.assignees?.some(user => user.id === value) || false;
-            },
+            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) =>
+                record.assignees?.some((user) => user.id === value) || false,
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">
-                        {r.assignees.map(user => (
+                        {r.assignees.map((user) => (
                             <Tooltip key={user.id} title={user.name}>
-                                <Avatar 
+                                <Avatar
                                     size={24}
                                     src={user.avatar_url}
-                                    style={{ 
+                                    style={{
                                         backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
                                         fontSize: 10,
                                     }}
@@ -273,129 +323,109 @@ export default function PatientDetailPage() {
             <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/home"} onNavigate={(k) => navigate(k)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                    .patient-header { display: flex; align-items: flex-start; gap: 32px; }
-                    .patient-avatar-section { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-                    .patient-info-section { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-                    .patient-stats { display: flex; gap: 40px; margin-top: 20px; }
-                    .patient-stat { text-align: center; }
-                    .patient-details { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+                    .pd-badge { display: flex; gap: 24px; align-items: flex-start; }
+                    .pd-badge-info { flex: 1; min-width: 0; }
+                    .pd-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
+                    .pd-footer { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-top: 18px; }
+                    .pd-stats { display: flex; align-items: stretch; margin-left: -18px; }
+                    .pd-stat-divider { width: 1px; background: #eef1f0; }
                     @media (max-width: 640px) {
-                        .patient-header { flex-direction: column; align-items: center; text-align: center; }
-                        .patient-info-section { align-items: center; }
-                        .patient-stats { justify-content: center; gap: 24px; }
-                        .patient-details { justify-content: center; }
+                        .pd-badge { flex-direction: column; align-items: center; text-align: center; }
+                        .pd-meta { justify-content: center; }
+                        .pd-name-row { justify-content: center; }
+                        .pd-footer { justify-content: center; }
+                        .pd-stats { margin-left: 0; }
                     }
                 `}</style>
 
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    {/* Patient Profile Card */}
-                    <Card style={cardStyle} loading={loading}>
+                    <Card
+                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative" }}
+                        loading={loading}
+                    >
                         {!loading && patient && (
-                            <div className="patient-header">
-                                {/* Avatar Section */}
-                                <div className="patient-avatar-section">
+                            <>
+                                <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center" }}>
+                                    <span style={codeChipStyle}>{patient.patient_code}</span>
+                                </div>
+                                <div className="pd-badge">
                                     <Avatar
-                                        size={140}
+                                        size={104}
                                         src={patient.avatar_url}
                                         style={{
-                                            backgroundColor: patient.avatar_url ? "transparent" : avatarColor,
-                                            fontSize: 52,
+                                            backgroundColor: patient.avatar_url ? undefined : avatarColor,
+                                            fontSize: 38,
                                             fontWeight: 700,
-                                            border: "3px solid #e5e7eb",
+                                            border: "2px solid #d1d5db",
+                                            flexShrink: 0,
                                         }}
                                     >
                                         {initials}
                                     </Avatar>
-
-                                    {/* Name under avatar */}
-                                    <h1 style={{ margin: "16px 0 0 0", fontFamily: tokens.titleFont, fontSize: 24, fontWeight: 800, color: tokens.textPrimary }}>
-                                        {fullName || "Sin nombre"}
-                                    </h1>
-                                    <Tag color={tokens.primary} style={{ marginTop: 8, fontSize: 13, padding: "2px 12px", borderRadius: 12 }}>
-                                        {patient.patient_code}
-                                    </Tag>
-                                </div>
-
-                                {/* Info Section */}
-                                <div className="patient-info-section">
-                                    {/* Details Row */}
-                                    <div className="patient-details">
-                                        {patient.sex && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                {patient.sex === "M" ? (
-                                                    <ManOutlined style={{ fontSize: 18, color: "#3b82f6" }} />
-                                                ) : (
-                                                    <WomanOutlined style={{ fontSize: 18, color: "#ec4899" }} />
-                                                )}
-                                                <span>{patient.sex === "M" ? "Masculino" : "Femenino"}</span>
-                                            </div>
-                                        )}
-                                        {patient.dob && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <CalendarOutlined style={{ fontSize: 16, color: tokens.primary }} />
-                                                <span>{age !== null ? `${age} años` : ""} · {new Date(patient.dob).toLocaleDateString("es-MX")}</span>
-                                            </div>
-                                        )}
-                                        {patient.phone && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <PhoneOutlined style={{ fontSize: 16, color: tokens.primary }} />
-                                                <span>{patient.phone}</span>
-                                            </div>
-                                        )}
-                                        {patient.email && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: tokens.textSecondary }}>
-                                                <MailOutlined style={{ fontSize: 16, color: tokens.primary }} />
-                                                <span>{patient.email}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Stats */}
-                                    <div className="patient-stats">
-                                        <div className="patient-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: tokens.primary, fontFamily: tokens.titleFont }}>{totalOrders}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Órdenes</div>
+                                    <div className="pd-badge-info">
+                                        <div className="pd-name-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                                            <h1 style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1 }}>
+                                                {fullName || "Sin nombre"}
+                                            </h1>
                                         </div>
-                                        <div className="patient-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: "#22c55e", fontFamily: tokens.titleFont }}>{totalReports}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Reportes</div>
+                                        <div className="pd-meta">
+                                            {patient.sex && (
+                                                <MetaItem icon={patient.sex === "M" ? <ManOutlined /> : <WomanOutlined />}>
+                                                    {patient.sex === "M" ? "Masculino" : "Femenino"}
+                                                </MetaItem>
+                                            )}
+                                            {patient.dob && (
+                                                <MetaItem icon={<CalendarOutlined />}>
+                                                    {age !== null ? `${age} años · ` : ""}{new Date(patient.dob).toLocaleDateString("es-MX")}
+                                                </MetaItem>
+                                            )}
+                                            {patient.phone && <MetaItem icon={<PhoneOutlined />}>{patient.phone}</MetaItem>}
+                                            {patient.email && <MetaItem icon={<MailOutlined />}>{patient.email}</MetaItem>}
                                         </div>
-                                        <div className="patient-stat">
-                                            <div style={{ fontSize: 26, fontWeight: 700, color: "#f59e0b", fontFamily: tokens.titleFont }}>{totalSamples}</div>
-                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>Muestras</div>
+                                        <div className="pd-footer">
+                                            <div className="pd-stats">
+                                                <Stat value={totalOrders} label="Órdenes" color={tokens.primary} />
+                                                <div className="pd-stat-divider" />
+                                                <Stat value={totalReports} label="Reportes" color="#22c55e" />
+                                                <div className="pd-stat-divider" />
+                                                <Stat value={totalSamples} label="Muestras" color="#f59e0b" />
+                                            </div>
+                                            {canEdit && (
+                                                <ActionButtonPanel
+                                                    actions={[
+                                                        {
+                                                            icon: <EditOutlined />,
+                                                            tooltip: "Editar paciente",
+                                                            ariaLabel: "Editar",
+                                                            onClick: () => navigate(`/patients/${patient.id}/edit`),
+                                                        },
+                                                    ]}
+                                                />
+                                            )}
                                         </div>
                                     </div>
-
-                                    {canEdit && (
-                                        <div style={{ marginTop: 16 }}>
-                                            <AntButton icon={<EditOutlined />} onClick={() => navigate(`/patients/${patient.id}/edit`)}>
-                                                Editar
-                                            </AntButton>
-                                        </div>
-                                    )}
                                 </div>
-                            </div>
+                            </>
                         )}
+                        {error && <ErrorText>{error}</ErrorText>}
                     </Card>
 
-                    {/* Orders Table Card */}
                     <Card
                         title={<span style={cardTitleStyle}>Historial de Órdenes</span>}
                         loading={loading}
                         style={cardStyle}
                         extra={!loading && patient ? (
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en órdenes"
+                            <Space size={10}>
+                                <SearchField
+                                    small
                                     value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 300 }}
+                                    onChange={setSearch}
+                                    placeholder="Buscar en órdenes"
+                                    style={{ width: 240 }}
                                 />
-                                <AntButton type="primary" onClick={() => navigate(`/orders/register?patientId=${patient.id}`)}>
+                                <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?patientId=${patient.id}`)}>
                                     Registrar Orden
-                            </AntButton>
+                                </CelumaButton>
                             </Space>
                         ) : null}
                     >

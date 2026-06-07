@@ -2,17 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout } from "antd";
+import { Layout, Card } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
-import SelectField from "../components/ui/select_field";
-import DateField from "../components/ui/date_field";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import FloatingCaptionDate from "../components/ui/floating_caption_date";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
@@ -85,23 +86,17 @@ type PatientDetailResponse = {
     branch_id: string;
 };
 
-const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: tokens.cardPadding }}>
-            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
-        </div>
-        <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
-            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
-            {children}
-        </div>
-    </div>
-);
-
-const RequiredFieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div style={{ fontSize: 13, fontWeight: 700, color: tokens.textPrimary, marginBottom: 6 }}>
-        {children}<span style={{ color: "#ef4444" }}> *</span>
-    </div>
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h3 style={{
+        margin: 0,
+        fontFamily: tokens.titleFont,
+        fontSize: 18,
+        fontWeight: 700,
+        color: tokens.textPrimary,
+        letterSpacing: "-0.01em",
+    }}>
+        {children}
+    </h3>
 );
 
 export default function PatientForm() {
@@ -197,51 +192,49 @@ export default function PatientForm() {
             <SidebarCeluma selectedKey="/patients" onNavigate={(key) => navigate(key)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                  .pf-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-                  .pf-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-                  .pf-required-note { color: ${tokens.textSecondary}; font-size: 12px; margin: -4px 0 4px; }
+                  .pf-grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+                  .pf-grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
                   @media (max-width: 768px) {
                     .pf-grid-2, .pf-grid-3 { grid-template-columns: 1fr; }
                   }
                 `}</style>
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <FormCard
+                    <PageHeader
                         title={isEditing ? "Editar Paciente" : "Registrar Paciente"}
-                        description="Administre los datos del paciente."
-                    >
-                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
-                            <div className="pf-required-note"><span style={{ color: "#ef4444" }}>*</span> Campos obligatorios</div>
+                        subtitle="Administra los datos del paciente para usarlo en las órdenes del laboratorio."
+                    />
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Sucursal</h3>
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Información general</SectionTitle>
                                 <div className="pf-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(props) => (
-                                            <div>
-                                                <RequiredFieldLabel>Sucursal</RequiredFieldLabel>
-                                                <SelectField
-                                                    value={typeof props.value === "string" ? props.value : undefined}
-                                                    onChange={(value) => props.onChange(value)}
-                                                    placeholder="Seleccione la sucursal"
-                                                    options={branches.map((b) => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
-                                                    showSearch
-                                                    error={props.error}
-                                                />
-                                            </div>
+                                            <FloatingCaptionSelect
+                                                label="Sucursal"
+                                                requiredMark
+                                                value={typeof props.value === "string" ? props.value : undefined}
+                                                onChange={(value) => props.onChange(value ?? "")}
+                                                placeholder="Seleccione la sucursal"
+                                                options={branches.map((branch) => ({ value: branch.id, label: `${branch.code ?? ""} ${branch.name ?? ""}`.trim() }))}
+                                                showSearch
+                                                error={props.error}
+                                            />
                                         )}
                                     />
                                 </div>
-                            </section>
-
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Paciente</h3>
                                 {!isEditing && (
                                     <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
                                         El código de paciente se asignará automáticamente al guardar.
                                     </div>
                                 )}
+                            </section>
+
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Datos del paciente</SectionTitle>
                                 <div className="pf-grid-2">
                                     <FormField control={control} name="first_name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Nombre" requiredMark />} />
                                     <FormField control={control} name="last_name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Apellido" requiredMark />} />
@@ -251,10 +244,10 @@ export default function PatientForm() {
                                         control={control}
                                         name="dob"
                                         render={(props) => (
-                                            <DateField
+                                            <FloatingCaptionDate
+                                                label="Fecha de nacimiento"
                                                 value={typeof props.value === "string" ? props.value : ""}
                                                 onChange={(v) => props.onChange(v)}
-                                                placeholder="Fecha de nacimiento"
                                                 error={props.error}
                                             />
                                         )}
@@ -263,35 +256,61 @@ export default function PatientForm() {
                                         control={control}
                                         name="sex"
                                         render={(props) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Sexo"
                                                 value={typeof props.value === "string" ? props.value : undefined}
                                                 onChange={(val) => props.onChange(val)}
-                                                placeholder="Sexo"
+                                                placeholder="Seleccione el sexo"
                                                 options={[
                                                     { value: "M", label: "Masculino" },
                                                     { value: "F", label: "Femenino" },
                                                 ]}
+                                                error={props.error}
                                             />
                                         )}
                                     />
                                 </div>
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Contacto</h3>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Contacto</SectionTitle>
                                 <div className="pf-grid-2">
-                                    <FormField control={control} name="phone" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Teléfono" />} />
+                                    <FormField
+                                        control={control}
+                                        name="phone"
+                                        render={(props) => (
+                                            <FloatingCaptionInput
+                                                label="Teléfono"
+                                                value={String(props.value ?? "")}
+                                                inputMode="numeric"
+                                                maxLength={15}
+                                                onBlur={props.onBlur}
+                                                onChange={(e) => props.onChange(e.target.value.replace(/\D/g, ""))}
+                                                error={props.error}
+                                            />
+                                        )}
+                                    />
                                     <FormField control={control} name="email" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Email" />} />
                                 </div>
                             </section>
 
-                            <Button htmlType="submit" type="primary" fullWidth loading={loading}>
-                                {isEditing ? "Guardar cambios" : "Registrar"}
-                            </Button>
-                        </form>
+                            {serverError && <ErrorText>{serverError}</ErrorText>}
 
-                        <ErrorText>{serverError}</ErrorText>
-                    </FormCard>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                                    Los campos marcados con <span style={{ color: "#e5484d", fontWeight: 700 }}>*</span> son obligatorios.
+                                </div>
+                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                                    <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
+                                        Cancelar
+                                    </Button>
+                                    <Button htmlType="submit" type="primary" loading={loading}>
+                                        {isEditing ? "Guardar cambios" : "Registrar"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </form>
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>
