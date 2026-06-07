@@ -342,10 +342,15 @@ export default function RequestingPhysicianDetailPage() {
 
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <Card
-                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}` }}
+                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative" }}
                         loading={loading}
                     >
                         {!loading && physician && (
+                            <>
+                                <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center" }}>
+                                    <span style={codeChipStyle}>{physician.physician_code}</span>
+                                    <span style={statusChipStyle(physician.is_active)}>{physician.is_active ? "Activo" : "Inactivo"}</span>
+                                </div>
                             <div className="rp-badge">
                                 <Avatar
                                     size={104}
@@ -364,8 +369,6 @@ export default function RequestingPhysicianDetailPage() {
                                         <h1 style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1 }}>
                                             {physician.full_name}
                                         </h1>
-                                        <span style={codeChipStyle}>{physician.physician_code}</span>
-                                        <span style={statusChipStyle(physician.is_active)}>{physician.is_active ? "Activo" : "Inactivo"}</span>
                                     </div>
                                     <div className="rp-meta">
                                         {physician.specialty && <MetaItem icon={<MedicineBoxOutlined />}>{physician.specialty}</MetaItem>}
@@ -403,6 +406,7 @@ export default function RequestingPhysicianDetailPage() {
                                     </div>
                                 </div>
                             </div>
+                            </>
                         )}
                         {error && <ErrorText>{error}</ErrorText>}
                     </Card>

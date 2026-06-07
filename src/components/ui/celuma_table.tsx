@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Table, Empty } from "antd";
 import type { TableProps, TablePaginationConfig } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { tokens } from "../design/tokens";
+import CelumaPagination from "./celuma_pagination";
 
 // Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
 const SORTER_TOOLTIP = {
@@ -31,12 +32,13 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
 
 /**
  * CelumaTable - Reusable table component with consistent styling and behavior
- * 
+ *
  * Features:
  * - Consistent styling with Céluma design tokens
  * - Default sorting support
  * - Row click navigation
- * - Standardized pagination
+ * - Custom Céluma pagination (CelumaPagination) — antd stays the paging engine
+ *   while its default control is hidden and replaced with our own segmented pill
  * - Empty state handling
  */
 export function CelumaTable<T>({
@@ -49,68 +51,106 @@ export function CelumaTable<T>({
     pagination,
     emptyText = "Sin datos",
     className,
+    onChange,
     ...rest
 }: CelumaTableProps<T>) {
-    
+
     // Apply default sorting to data if specified
     const sortedData = useMemo(() => {
         if (!defaultSort || !dataSource) return dataSource;
-        
+
         const sorted = [...dataSource].sort((a, b) => {
             const aValue = (a as Record<string, unknown>)[defaultSort.field];
             const bValue = (b as Record<string, unknown>)[defaultSort.field];
-            
+
             // Handle null/undefined values
             if (!aValue && !bValue) return 0;
             if (!aValue) return 1;
             if (!bValue) return -1;
-            
+
             // Try date comparison first
             if (typeof aValue === 'string' && typeof bValue === 'string') {
                 const aDate = new Date(aValue).getTime();
                 const bDate = new Date(bValue).getTime();
-                
+
                 if (!isNaN(aDate) && !isNaN(bDate)) {
                     return defaultSort.order === 'ascend' ? aDate - bDate : bDate - aDate;
                 }
             }
-            
+
             // Fall back to string comparison
             const aStr = String(aValue);
             const bStr = String(bValue);
             const comparison = aStr.localeCompare(bStr);
-            
+
             return defaultSort.order === 'ascend' ? comparison : -comparison;
         });
-        
+
         return sorted;
     }, [dataSource, defaultSort]);
 
-    // Default pagination config - spread pagination first so defaults don't override passed props
-    const defaultPagination: TablePaginationConfig | false = pagination !== false ? {
-        pageSize: 10,
+    const isPaginated = pagination !== false;
+    const pageSize = (typeof pagination === 'object' && pagination?.pageSize) || 10;
+
+    // Controlled current page + total visible rows. antd still slices the data;
+    // we just drive `current` and mirror it with our own CelumaPagination.
+    const [current, setCurrent] = useState(1);
+    const [total, setTotal] = useState(sortedData.length);
+
+    // Reset when the underlying data changes (e.g. an external search filter).
+    useEffect(() => {
+        setTotal(sortedData.length);
+        setCurrent(1);
+    }, [sortedData]);
+
+    // Hidden antd pagination (keeps the paging engine: slices to the current page).
+    const mergedPagination: TablePaginationConfig | false = isPaginated ? {
+        pageSize,
         showSizeChanger: false,
         ...(typeof pagination === 'object' ? pagination : {}),
+        current,
+        total,
     } : false;
 
+    // Wrap antd onChange so column filters/sorters keep our total + page in range.
+    const handleChange: TableProps<T>['onChange'] = (pag, filters, sorter, extra) => {
+        const nextTotal = extra.currentDataSource.length;
+        setTotal(nextTotal);
+        setCurrent((c) => Math.min(c, Math.max(1, Math.ceil(nextTotal / pageSize))));
+        onChange?.(pag, filters, sorter, extra);
+    };
+
     return (
-        <Table<T>
-            className={["celuma-table", className].filter(Boolean).join(" ")}
-            loading={loading}
-            dataSource={sortedData}
-            rowKey={rowKey}
-            columns={columns}
-            pagination={defaultPagination}
-            scroll={{ x: "max-content" }}
-            showSorterTooltip={SORTER_TOOLTIP}
-            locale={{
-                emptyText: <Empty description={emptyText} />
-            }}
-            onRow={(record) => ({
-                onClick: () => onRowClick?.(record),
-                style: { cursor: onRowClick ? "pointer" : "default" },
-            })}
-            {...rest}
-        />
+        <div>
+            <Table<T>
+                className={["celuma-table", className].filter(Boolean).join(" ")}
+                loading={loading}
+                dataSource={sortedData}
+                rowKey={rowKey}
+                columns={columns}
+                pagination={mergedPagination}
+                onChange={handleChange}
+                scroll={{ x: "max-content" }}
+                showSorterTooltip={SORTER_TOOLTIP}
+                locale={{
+                    emptyText: <Empty description={emptyText} />
+                }}
+                onRow={(record) => ({
+                    onClick: () => onRowClick?.(record),
+                    style: { cursor: onRowClick ? "pointer" : "default" },
+                })}
+                {...rest}
+            />
+            {isPaginated && total > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                    <CelumaPagination
+                        current={current}
+                        pageSize={pageSize}
+                        total={total}
+                        onChange={setCurrent}
+                    />
+                </div>
+            )}
+        </div>
     );
 }

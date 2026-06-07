@@ -377,6 +377,7 @@ export default function OrdersList() {
                     <Card style={cardStyle}>
                         <div style={{ marginBottom: 16 }}>
                             <SearchField
+                                small
                                 value={search}
                                 onChange={setSearch}
                                 placeholder="Buscar en órdenes"

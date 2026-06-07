@@ -198,55 +198,9 @@ html, body {
   background: #f1f9f8;
 }
 
-/* Pagination — one Céluma "Panel" container holding borderless tinted buttons
-   (same look as the icon-button group in the detail badge). */
+/* Pagination — antd stays the paging engine but its default control is hidden;
+   the visible pagination is rendered by our own <CelumaPagination /> component
+   (segmented Céluma pill), kept in sync via controlled `current`. */
 .celuma-table .ant-table-pagination.ant-pagination {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  width: fit-content;
-  margin-left: auto;
-  margin-right: 0;
-  padding: 5px;
-  background: #fafbfc;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-}
-.celuma-table .ant-pagination-item,
-.celuma-table .ant-pagination-prev,
-.celuma-table .ant-pagination-next,
-.celuma-table .ant-pagination-prev .ant-pagination-item-link,
-.celuma-table .ant-pagination-next .ant-pagination-item-link {
-  margin: 0 !important;
-  min-width: 30px;
-  height: 30px;
-  line-height: 28px;
-  border: none !important;
-  background: transparent !important;
-  border-radius: 8px !important;
-  transition: color .15s, background .15s;
-}
-.celuma-table .ant-pagination-item a {
-  color: #374151;
-  font-weight: 600;
-}
-.celuma-table .ant-pagination-item:hover,
-.celuma-table .ant-pagination-prev:hover .ant-pagination-item-link,
-.celuma-table .ant-pagination-next:hover .ant-pagination-item-link {
-  background: #eaf7f5 !important;
-  color: #49b6ad !important;
-}
-.celuma-table .ant-pagination-item:hover a {
-  color: #49b6ad;
-}
-.celuma-table .ant-pagination-item-active {
-  background: #eaf7f5 !important;
-}
-.celuma-table .ant-pagination-item-active a {
-  color: #49b6ad !important;
-}
-.celuma-table .ant-pagination-disabled .ant-pagination-item-link,
-.celuma-table .ant-pagination-disabled:hover .ant-pagination-item-link {
-  background: transparent !important;
-  color: #cbd5e1 !important;
+  display: none !important;
 }
