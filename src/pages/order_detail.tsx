@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip, Input } from "antd";
+import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip } from "antd";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
@@ -13,6 +13,10 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import ActionButtonPanel, { type ActionButtonItem } from "../components/ui/action_button_panel";
+import CelumaButton from "../components/ui/button";
+import Panel from "../components/ui/panel";
+import CelumaTextArea from "../components/ui/textarea_field";
 import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
 import { getReport } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
@@ -151,6 +155,44 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
+
+// ── Céluma "ficha" header helpers (shared visual language with patient/physician detail) ──
+const codeChipStyle: React.CSSProperties = {
+    background: tokens.secondary,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "3px 12px",
+    borderRadius: 999,
+    lineHeight: 1.5,
+};
+
+const statusChipStyle = (cfg: { color: string; bg: string }): React.CSSProperties => ({
+    background: cfg.bg,
+    color: cfg.color,
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "3px 12px",
+    borderRadius: 999,
+    lineHeight: 1.5,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+});
+
+const MetaItem = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: tokens.textSecondary, fontSize: 14 }}>
+        <span style={{ color: tokens.primary, fontSize: 16, display: "inline-flex" }}>{icon}</span>
+        {children}
+    </span>
+);
+
+const Stat = ({ value, label, color }: { value: number; label: string; color: string }) => (
+    <div style={{ textAlign: "center", padding: "0 18px" }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: tokens.titleFont, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
+    </div>
+);
 
 export default function OrderDetail() {
     const navigate = useNavigate();
@@ -1022,7 +1064,7 @@ export default function OrderDetail() {
                     <style>{`
                         .order-detail-grid {
                             display: grid;
-                            grid-template-columns: 1fr 280px;
+                            grid-template-columns: minmax(0, 1fr) 280px;
                             gap: ${tokens.gap}px;
                             align-items: start;
                         }
@@ -1049,220 +1091,175 @@ export default function OrderDetail() {
                                 display: block;
                             }
                         }
+
+                        /* Order ficha (header badge) */
+                        .od-badge { display: flex; gap: 24px; align-items: stretch; }
+                        .od-badge-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+                        .od-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
+                        .od-stats { display: flex; align-items: stretch; margin-left: -18px; }
+                        .od-stat-divider { width: 1px; background: #eef1f0; }
+                        /* Right rail — action panel (left) + alert (right), pinned to the bottom and sharing the same baseline.
+                           gap matches the vertical spacing down to the description panel (20px). */
+                        .od-rail { display: flex; flex-direction: row; align-items: flex-end; justify-content: flex-end; gap: 20px; flex-shrink: 0; align-self: flex-end; }
+                        @media (max-width: 640px) {
+                            .od-badge { flex-direction: column; align-items: center; text-align: center; }
+                            .od-meta { justify-content: center; }
+                            .od-name-row { justify-content: center; }
+                            .od-stats { margin-left: 0; justify-content: center; }
+                            .od-rail { width: 100%; flex-wrap: wrap; justify-content: center; align-self: auto; }
+                        }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="order-detail-grid">
                         {/* Left Column - Main Content */}
                         <div style={{ display: "grid", gap: tokens.gap }}>
-                            {/* Order Header Card */}
+                            {/* Order Header Card — Céluma ficha */}
                     <Card
-                                title={
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                        <span style={cardTitleStyle}>Detalle de Orden</span>
-                                        {data && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                <span style={{ 
-                                                    fontFamily: tokens.titleFont, 
-                                                    fontSize: 16, 
-                                                    fontWeight: 700,
-                                                    color: tokens.textPrimary
-                                                }}>
-                                                    {data.order.order_code}
-                                                </span>
-                                                <div style={{ 
-                                                    padding: "4px 10px",
-                                                    borderRadius: 12,
-                                                    background: statusConfig.bg,
-                                                    color: statusConfig.color,
-                                                    fontWeight: 600,
-                                                    fontSize: 11,
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 4
-                                                }}>
-                                                    {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
-                                                    {statusConfig.label}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                }
                         loading={loading}
-                                style={cardStyle}
+                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative" }}
                     >
                         {data && (
                             <>
-                                        {/* Billed Lock Warning */}
-                                {data.order.billed_lock && hasPermission("billing:read") && (
-                                    <div style={{ 
-                                                padding: "12px 16px", 
-                                        background: "#fff7e6", 
-                                        border: "1px solid #ffd591", 
-                                                borderRadius: 8,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 12,
-                                                marginBottom: 20
-                                            }}>
-                                                <ExclamationCircleOutlined style={{ color: "#d48806", fontSize: 18 }} />
-                                                <div style={{ flex: 1 }}>
-                                                    <span style={{ fontWeight: 600, color: "#ad6800" }}>Retenido por Pago Pendiente</span>
-                                                    <span style={{ color: "#ad6800", marginLeft: 8 }}>
-                                                        — El acceso al reporte está bloqueado.
-                                                    </span>
-                                        </div>
-                                        {hasPermission("billing:read") && (
-                                            <AntButton
-                                                size="small"
-                                                onClick={() => navigate(`/billing/${data.order.id}`)}
-                                            >
-                                                Ver Facturación
-                                            </AntButton>
-                                        )}
-                                    </div>
-                                )}
-
-                                        {/* Patient Info */}
-                                        {data.patient ? (
-                                            <Tooltip title="Ver perfil del paciente">
-                                                <div 
-                                                    onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
-                                                    style={{ 
-                                                        display: "inline-flex", 
-                                                        alignItems: "center", 
-                                                        gap: 10,
-                                                        cursor: "pointer",
-                                                        padding: "8px 12px",
-                                                        borderRadius: 8,
-                                                        marginLeft: -12,
-                                                        marginBottom: 16,
-                                                        transition: "background 0.15s ease"
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                                                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                                                >
-                                                    <Avatar 
-                                                        size={40}
-                                                        style={{ 
+                                {/* Top-right: order code + status chips */}
+                                <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                    <span style={codeChipStyle}>{data.order.order_code}</span>
+                                    <span style={statusChipStyle(statusConfig)}>
+                                        {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                                        {statusConfig.label}
+                                    </span>
+                                </div>
+                                        {/* Order ficha — patient badge + meta + stats */}
+                                        <div className="od-badge">
+                                            {data.patient ? (
+                                                <Tooltip title="Ver perfil del paciente">
+                                                    <Avatar
+                                                        size={104}
+                                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                                        style={{
                                                             backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
-                                                            fontSize: 15,
-                                                            fontWeight: 600,
-                                                            flexShrink: 0
+                                                            fontSize: 38,
+                                                            fontWeight: 700,
+                                                            border: "2px solid #d1d5db",
+                                                            flexShrink: 0,
+                                                            cursor: "pointer",
                                                         }}
                                                     >
                                                         {getInitials(fullName || data.patient.patient_code)}
                                                     </Avatar>
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
-                                                            {fullName || data.patient.patient_code}
-                                                        </div>
-                                                        <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                            {data.patient.patient_code}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </Tooltip>
-                                        ) : (
-                                            <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 13 }}>
-                                                Orden sin paciente asociado.
-                                            </div>
-                                        )}
-
-                                        {/* Invoice Link */}
-                                        {data.order.invoice_id && hasPermission("billing:read") && (
-                                            <div style={{ marginBottom: 16 }}>
-                                                <AntButton
-                                                    type="default"
-                                                    size="small"
-                                                    icon={<DollarOutlined />}
-                                                    onClick={() => navigate(`/billing/${data.order.id}`)}
-                                                    style={{
-                                                        borderColor: tokens.primary,
-                                                        color: tokens.primary,
-                                                    }}
-                                                >
-                                                    Ver Factura
-                                                </AntButton>
-                                            </div>
-                                        )}
-
-                                        {/* Meta Info Row */}
-                                        <div style={{ 
-                                            display: "flex", 
-                                            flexWrap: "wrap",
-                                            alignItems: "center", 
-                                            gap: "12px 20px",
-                                            color: tokens.textSecondary,
-                                            fontSize: 13,
-                                            marginBottom: 16
-                                        }}>
-                                            {(data.order.requesting_physician || data.order.requested_by) && (
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                    <UserOutlined />
-                                                    <span>Solicitante:</span>
-                                                    {data.order.requesting_physician ? (
-                                                        <a
-                                                            href={`/requesting-physicians/${data.order.requesting_physician.id}`}
-                                                            onClick={(event) => {
-                                                                event.preventDefault();
-                                                                navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
-                                                            }}
-                                                            style={{ fontWeight: 500, color: tokens.primary }}
-                                                        >
-                                                            {data.order.requesting_physician.full_name}
-                                                        </a>
-                                                    ) : (
-                                                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                </Tooltip>
+                                            ) : (
+                                                <Avatar
+                                                    size={104}
+                                                    icon={<FileTextOutlined />}
+                                                    style={{ backgroundColor: tokens.primary, fontSize: 38, border: "2px solid #d1d5db", flexShrink: 0 }}
+                                                />
+                                            )}
+                                            <div className="od-badge-info">
+                                                <div className="od-name-row" style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                                                    <h1
+                                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                                        style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: data.patient ? "pointer" : "default" }}
+                                                    >
+                                                        {fullName || data.patient?.patient_code || "Orden sin paciente"}
+                                                    </h1>
+                                                    {data.patient && (
+                                                        <span style={{ fontSize: 13, color: tokens.textSecondary }}>{data.patient.patient_code}</span>
                                                     )}
                                                 </div>
-                                            )}
-
-                                            {data.order.created_at && (
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                    <CalendarOutlined />
-                                                    <span>{new Date(data.order.created_at).toLocaleDateString("es-MX", { 
-                                                        year: "numeric", 
-                                                        month: "short", 
-                                                        day: "numeric" 
-                                                    })}</span>
+                                                <div className="od-meta">
+                                                    {(data.order.requesting_physician || data.order.requested_by) && (
+                                                        <MetaItem icon={<UserOutlined />}>
+                                                            <span style={{ marginRight: 4 }}>Solicitante:</span>
+                                                            {data.order.requesting_physician ? (
+                                                                <a
+                                                                    href={`/requesting-physicians/${data.order.requesting_physician.id}`}
+                                                                    onClick={(event) => {
+                                                                        event.preventDefault();
+                                                                        navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
+                                                                    }}
+                                                                    style={{ fontWeight: 600, color: tokens.primary }}
+                                                                >
+                                                                    {data.order.requesting_physician.full_name}
+                                                                </a>
+                                                            ) : (
+                                                                <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                                            )}
+                                                        </MetaItem>
+                                                    )}
+                                                    {data.order.created_at && (
+                                                        <MetaItem icon={<CalendarOutlined />}>
+                                                            {new Date(data.order.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                                                        </MetaItem>
+                                                    )}
                                                 </div>
-                                            )}
-
-                                            <Tooltip title="Ver muestras">
-                                                <div 
-                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                                    onClick={handleGoToSamples}
-                                                >
-                                                    <ExperimentOutlined />
-                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
-                                                        {data.samples.length} muestra{data.samples.length !== 1 ? "s" : ""}
-                                                    </span>
+                                                <div className="od-stats" style={{ marginTop: 18 }}>
+                                                    <div style={{ cursor: "pointer" }} onClick={handleGoToSamples}>
+                                                        <Stat value={data.samples.length} label="Muestras" color={tokens.primary} />
+                                                    </div>
+                                                    <div className="od-stat-divider" />
+                                                    <Stat value={reportId ? 1 : 0} label="Reporte" color="#22c55e" />
+                                                    {data.order.invoice_id && (
+                                                        <>
+                                                            <div className="od-stat-divider" />
+                                                            <Stat value={1} label="Factura" color="#f59e0b" />
+                                                        </>
+                                                    )}
                                                 </div>
-                                            </Tooltip>
+                                            </div>
+                                            {/* Right rail: action panel (left) + payment warning (right), in the white space between the chips and the description */}
+                                            <div className="od-rail">
+                                                {(() => {
+                                                    const actions: ActionButtonItem[] = [];
+                                                    if (data.order.invoice_id && hasPermission("billing:read")) {
+                                                        actions.push({ icon: <DollarOutlined />, tooltip: "Ver factura", ariaLabel: "Ver factura", onClick: () => navigate(`/billing/${data.order.id}`) });
+                                                    }
+                                                    if (!reportId && hasPermission("reports:create")) {
+                                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Crear reporte", ariaLabel: "Crear reporte", onClick: handleCreateReport });
+                                                    } else if (reportId && hasPermission("reports:read")) {
+                                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Ver reporte", ariaLabel: "Ver reporte", onClick: () => navigate(`/reports/${reportId}`) });
+                                                    }
+                                                    return actions.length > 0 ? <ActionButtonPanel actions={actions} /> : null;
+                                                })()}
+                                                {data.order.billed_lock && hasPermission("billing:read") && (
+                                                    <Panel style={{
+                                                        background: "#fffbeb",
+                                                        border: "2px solid #fde68a",
+                                                        display: "flex",
+                                                        alignItems: "flex-start",
+                                                        gap: 10,
+                                                        padding: 12,
+                                                        width: "fit-content",
+                                                        maxWidth: 260,
+                                                    }}>
+                                                        <ExclamationCircleOutlined style={{ color: "#d97706", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
+                                                        <div style={{ minWidth: 0 }}>
+                                                            <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13 }}>Retenido por Pago Pendiente</div>
+                                                            <div style={{ color: "#b45309", fontSize: 12.5, marginTop: 3, lineHeight: 1.45 }}>
+                                                                El reporte no será visible para los solicitantes hasta liquidar el pago.
+                                                            </div>
+                                                        </div>
+                                                    </Panel>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        {/* Description - at the bottom */}
-                                            <div style={{ 
-                                                padding: 16, 
-                                                background: "#f9fafb", 
-                                                borderRadius: 8,
-                                                border: "1px solid #e5e7eb"
-                                            }}>
-                                                <div style={{ 
-                                                    fontSize: 12, 
-                                                    fontWeight: 600, 
-                                                    color: tokens.textSecondary, 
-                                                    marginBottom: 8,
-                                                    textTransform: "uppercase",
+                                        {/* Description - at the bottom (Céluma panel) */}
+                                        <Panel style={{ marginTop: 20 }}>
+                                            <div style={{
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                color: tokens.textSecondary,
+                                                marginBottom: editingNotes ? 10 : 8,
+                                                textTransform: "uppercase",
                                                 letterSpacing: "0.5px",
                                                 display: "flex",
                                                 justifyContent: "space-between",
-                                                alignItems: "center"
+                                                alignItems: "center",
                                             }}>
                                                 <span>Descripción</span>
                                                 {!editingNotes && (
-                                                    <EditOutlined 
+                                                    <EditOutlined
                                                         style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
                                                         onClick={() => {
                                                             setNotesValue(data.order.notes || "");
@@ -1270,46 +1267,48 @@ export default function OrderDetail() {
                                                         }}
                                                     />
                                                 )}
-                                                </div>
+                                            </div>
                                             {editingNotes ? (
                                                 <div style={{ display: "grid", gap: 8 }}>
-                                                    <Input.TextArea
+                                                    <CelumaTextArea
                                                         value={notesValue}
-                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        onChange={setNotesValue}
                                                         placeholder="Agregar descripción o notas de la orden..."
                                                         rows={4}
                                                         maxLength={500}
+                                                        autoFocus
                                                     />
                                                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                                        <AntButton 
-                                                            size="small" 
+                                                        <CelumaButton
+                                                            size="xsmall"
+                                                            danger
                                                             onClick={() => setEditingNotes(false)}
                                                             disabled={savingNotes}
                                                         >
                                                             Cancelar
-                                                        </AntButton>
-                                                        <AntButton 
-                                                            type="primary" 
-                                                            size="small" 
+                                                        </CelumaButton>
+                                                        <CelumaButton
+                                                            type="primary"
+                                                            size="xsmall"
                                                             onClick={updateNotes}
                                                             loading={savingNotes}
                                                         >
                                                             Guardar
-                                                        </AntButton>
+                                                        </CelumaButton>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div style={{ 
-                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary, 
+                                                <div style={{
+                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary,
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
                                                     whiteSpace: "pre-wrap",
-                                                    fontStyle: data.order.notes ? "normal" : "italic"
+                                                    fontStyle: data.order.notes ? "normal" : "italic",
                                                 }}>
                                                     {data.order.notes || "Sin descripción"}
-                                            </div>
-                                        )}
-                                        </div>
+                                                </div>
+                                            )}
+                                        </Panel>
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
