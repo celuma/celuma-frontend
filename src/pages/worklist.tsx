@@ -6,7 +6,7 @@
  * - Revisiones pendientes (reportes que el usuario necesita aprobar/rechazar)
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Layout, Card, Tooltip, Input } from "antd";
+import { Layout, Card, Tooltip } from "antd";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import { 
@@ -27,7 +27,6 @@ function Worklist() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);
-    const [search, setSearch] = useState("");
     const [statusFilteredValue, setStatusFilteredValue] = useState<React.Key[] | null>(null);
 
     const loadWorklist = useCallback(async () => {
@@ -145,22 +144,11 @@ function Worklist() {
         return completedStatuses.includes(status);
     }, []);
 
-    // Filter items based on search only
-    const filteredItems = useMemo(() => {
-        let result = items;
-        
-        // Filter by search
-        if (search.trim()) {
-            const q = search.trim().toLowerCase();
-            result = result.filter(item => 
-                [item.display_id, item.patient_name, item.patient_code, item.order_code]
-                    .filter(Boolean)
-                    .some(v => String(v).toLowerCase().includes(q))
-            );
-        }
-        
-        return result;
-    }, [items, search]);
+    // Search predicate (query arrives trimmed + lowercased from CelumaTable).
+    const searchFilter = (item: WorklistItem, q: string) =>
+        [item.display_id, item.patient_name, item.patient_code, item.order_code]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
 
     // Get unique kinds and types for filters (from all items, not filtered)
     const kindFilters = useMemo(() => {
@@ -203,7 +191,7 @@ function Worklist() {
     // Get unique patients for filters
     const patientFilters = useMemo(() => {
         const patients = new Map<string, string>();
-        filteredItems.forEach(item => {
+        items.forEach(item => {
             if (item.patient_id && item.patient_name) {
                 patients.set(item.patient_id, item.patient_name);
             }
@@ -214,7 +202,7 @@ function Worklist() {
                 text: name,
                 value: id,
             }));
-    }, [filteredItems]);
+    }, [items]);
 
     const columns: ColumnsType<WorklistItem> = [
         {
@@ -306,22 +294,15 @@ function Worklist() {
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <PageHeader title="Mi Lista de Trabajo" subtitle="Tus asignaciones y revisiones pendientes" />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en lista de trabajo"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: "100%", maxWidth: 320 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filteredItems}
+                            dataSource={items}
                             columns={columns}
                             rowKey="id"
                             loading={loading}
                             onRowClick={(record) => navigate(record.link as string)}
+                            searchable
+                            searchPlaceholder="Buscar en lista de trabajo"
+                            searchFilter={searchFilter}
                             onChange={(_pagination, filters) => {
                                 // Handle filter changes
                                 if (filters.item_status !== undefined) {

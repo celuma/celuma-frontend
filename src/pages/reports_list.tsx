@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar, Tooltip } from "antd";
+import { Layout, Card, Avatar, Tooltip } from "antd";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -65,7 +65,6 @@ export default function ReportsList() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<ReportsListResponse["reports"]>([]);
-    const [search, setSearch] = useState("");
     // Status filter, optionally seeded from the URL (?status=DRAFT) e.g. when arriving from the dashboard cards
     const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
         const s = searchParams.get("status");
@@ -87,23 +86,13 @@ export default function ReportsList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in reviewers
-            const reviewerMatch = r.reviewers?.some(reviewer => 
-                reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || reviewerMatch;
-        });
-    }, [rows, search]);
+    const searchFilter = (r: ReportsListResponse["reports"][number], q: string) => {
+        const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const reviewerMatch = r.reviewers?.some((reviewer) => reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)) || false;
+        return basicFields || reviewerMatch;
+    };
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {
@@ -256,24 +245,17 @@ export default function ReportsList() {
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <PageHeader title="Reportes" subtitle="Consulta y gestiona los reportes generados" />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en reportes"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: "100%", maxWidth: 320 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/reports/${record.id}`)}
                             onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin reportes"
+                            searchable
+                            searchPlaceholder="Buscar en reportes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',

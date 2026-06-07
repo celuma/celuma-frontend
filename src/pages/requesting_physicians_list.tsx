@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar } from "antd";
+import { useEffect, useState } from "react";
+import { Layout, Card, Avatar } from "antd";
 import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -53,7 +53,6 @@ export default function RequestingPhysiciansList() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<RequestingPhysicianRow[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         (async () => {
@@ -70,15 +69,10 @@ export default function RequestingPhysiciansList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((row) =>
-            [row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone]
-                .filter(Boolean)
-                .some((value) => String(value).toLowerCase().includes(q))
-        );
-    }, [rows, search]);
+    const searchFilter = (row: RequestingPhysicianRow, q: string) =>
+        [row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(q));
 
     const columns: ColumnsType<RequestingPhysicianRow> = [
         {
@@ -154,23 +148,16 @@ export default function RequestingPhysiciansList() {
                         }
                     />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar médicos solicitantes"
-                                value={search}
-                                onChange={(event) => setSearch(event.target.value)}
-                                onSearch={(value) => setSearch(value)}
-                                style={{ width: "100%", maxWidth: 320 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(row) => row.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/requesting-physicians/${record.id}`)}
                             emptyText="Sin médicos solicitantes"
+                            searchable
+                            searchPlaceholder="Buscar médicos solicitantes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}

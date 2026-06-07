@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
-import SearchField from "../components/ui/search_field";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -66,7 +65,6 @@ export default function OrdersList() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
-    const [search, setSearch] = useState("");
     // Status filter, optionally seeded from the URL (?status=RECEIVED,PROCESSING) e.g. when arriving from the dashboard cards
     const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
         const s = searchParams.get("status");
@@ -88,28 +86,15 @@ export default function OrdersList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in labels
-            const labelMatch = r.labels?.some(label => 
-                label.name.toLowerCase().includes(q)
-            ) || false;
-            
-            // Search in assignees
-            const assigneeMatch = r.assignees?.some(user => 
-                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || labelMatch || assigneeMatch;
-        });
-    }, [rows, search]);
+    // Search predicate (query arrives trimmed + lowercased from CelumaTable).
+    const searchFilter = (r: OrdersListResponse["orders"][number], q: string) => {
+        const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
+        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
+        return basicFields || labelMatch || assigneeMatch;
+    };
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {
@@ -375,23 +360,17 @@ export default function OrdersList() {
                         }
                     />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <SearchField
-                                small
-                                value={search}
-                                onChange={setSearch}
-                                placeholder="Buscar en órdenes"
-                                style={{ maxWidth: 320 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/orders/${record.id}`)}
                             onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin casos"
+                            searchable
+                            searchPlaceholder="Buscar en órdenes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',

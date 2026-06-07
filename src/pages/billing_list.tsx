@@ -172,6 +172,13 @@ function BillingList() {
                             pagination={{ pageSize: 10 }}
                             onRowClick={(record) => navigate(`/billing/${record.order_id}`)}
                             emptyText="Sin facturas"
+                            searchable
+                            searchPlaceholder="Buscar en facturas"
+                            searchFilter={(r, q) =>
+                                [r.invoice_number, r.order_id, r.status]
+                                    .filter(Boolean)
+                                    .some((v) => String(v).toLowerCase().includes(q))
+                            }
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',

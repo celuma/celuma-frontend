@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar, Tooltip } from "antd";
+import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -79,7 +79,6 @@ export default function SamplesList() {
     const [error, setError] = useState<string | null>(null);
     type Row = SamplesListResponse["samples"][number] & { patient_name?: string; patient_id?: string; patient_code?: string; requested_by?: string | null };
     const [rows, setRows] = useState<Row[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         (async () => {
@@ -115,28 +114,14 @@ export default function SamplesList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in labels
-            const labelMatch = r.labels?.some(label => 
-                label.name.toLowerCase().includes(q)
-            ) || false;
-            
-            // Search in assignees
-            const assigneeMatch = r.assignees?.some(user => 
-                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || labelMatch || assigneeMatch;
-        });
-    }, [rows, search]);
+    const searchFilter = (r: Row, q: string) => {
+        const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
+        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
+        return basicFields || labelMatch || assigneeMatch;
+    };
 
     // Get unique states and types for filters
     const stateFilters = useMemo(() => {
@@ -353,23 +338,16 @@ export default function SamplesList() {
                         }
                     />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en muestras"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: "100%", maxWidth: 400 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/samples/${record.id}`)}
                             emptyText="Sin muestras"
+                            searchable
+                            searchPlaceholder="Buscar en muestras"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',

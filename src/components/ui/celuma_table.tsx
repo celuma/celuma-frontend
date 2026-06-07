@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Table, Empty } from "antd";
 import type { TableProps, TablePaginationConfig } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { tokens } from "../design/tokens";
 import CelumaPagination from "./celuma_pagination";
+import SearchField from "./search_field";
 
 // Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
 const SORTER_TOOLTIP = {
@@ -18,6 +19,23 @@ const SORTER_TOOLTIP = {
     },
 } as const;
 
+/**
+ * Generic search matcher — walks every string/number leaf of a record and tests
+ * the (already normalized, lowercased) query against it. Used when a table opts
+ * into search without supplying its own `searchFilter`.
+ */
+function defaultSearchMatch(record: unknown, query: string): boolean {
+    const visit = (value: unknown): boolean => {
+        if (value == null) return false;
+        if (typeof value === "string") return value.toLowerCase().includes(query);
+        if (typeof value === "number") return String(value).includes(query);
+        if (Array.isArray(value)) return value.some(visit);
+        if (typeof value === "object") return Object.values(value as Record<string, unknown>).some(visit);
+        return false;
+    };
+    return visit(record);
+}
+
 export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {
     dataSource: T[];
     columns: ColumnsType<T>;
@@ -28,6 +46,20 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
         order: 'ascend' | 'descend';
     };
     emptyText?: string;
+    /** Show the built-in search field above the table (default false). */
+    searchable?: boolean;
+    /** Placeholder for the search field. */
+    searchPlaceholder?: string;
+    /**
+     * Custom predicate used to filter rows against the search query. The query is
+     * passed already trimmed and lowercased. When omitted, a generic matcher scans
+     * every string/number value of the row.
+     */
+    searchFilter?: (record: T, query: string) => boolean;
+    /** Optional content rendered to the right of the search field (e.g. an action button). */
+    searchExtra?: ReactNode;
+    /** Max width of the search field. Defaults to 420 (it grows to fill, capped here). */
+    searchWidth?: number | string;
 }
 
 /**
@@ -35,6 +67,7 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
  *
  * Features:
  * - Consistent styling with Céluma design tokens
+ * - Optional built-in search field (`searchable`) shared across all list views
  * - Default sorting support
  * - Row click navigation
  * - Custom Céluma pagination (CelumaPagination) — antd stays the paging engine
@@ -52,6 +85,11 @@ export function CelumaTable<T>({
     emptyText = "Sin datos",
     className,
     onChange,
+    searchable = false,
+    searchPlaceholder = "Buscar",
+    searchFilter,
+    searchExtra,
+    searchWidth = 420,
     ...rest
 }: CelumaTableProps<T>) {
 
@@ -89,19 +127,30 @@ export function CelumaTable<T>({
         return sorted;
     }, [dataSource, defaultSort]);
 
+    // Built-in search — filters the data before it reaches antd.
+    const [search, setSearch] = useState("");
+    const searchedData = useMemo(() => {
+        if (!searchable) return sortedData;
+        const q = search.trim().toLowerCase();
+        if (!q) return sortedData;
+        return sortedData.filter((record) =>
+            searchFilter ? searchFilter(record, q) : defaultSearchMatch(record, q)
+        );
+    }, [sortedData, searchable, search, searchFilter]);
+
     const isPaginated = pagination !== false;
     const pageSize = (typeof pagination === 'object' && pagination?.pageSize) || 10;
 
     // Controlled current page + total visible rows. antd still slices the data;
     // we just drive `current` and mirror it with our own CelumaPagination.
     const [current, setCurrent] = useState(1);
-    const [total, setTotal] = useState(sortedData.length);
+    const [total, setTotal] = useState(searchedData.length);
 
-    // Reset when the underlying data changes (e.g. an external search filter).
+    // Reset when the visible data changes (search/external filter/data load).
     useEffect(() => {
-        setTotal(sortedData.length);
+        setTotal(searchedData.length);
         setCurrent(1);
-    }, [sortedData]);
+    }, [searchedData]);
 
     // Hidden antd pagination (keeps the paging engine: slices to the current page).
     const mergedPagination: TablePaginationConfig | false = isPaginated ? {
@@ -122,10 +171,22 @@ export function CelumaTable<T>({
 
     return (
         <div>
+            {searchable && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                    <SearchField
+                        small
+                        value={search}
+                        onChange={setSearch}
+                        placeholder={searchPlaceholder}
+                        style={{ flex: 1, minWidth: 220, maxWidth: searchWidth }}
+                    />
+                    {searchExtra}
+                </div>
+            )}
             <Table<T>
                 className={["celuma-table", className].filter(Boolean).join(" ")}
                 loading={loading}
-                dataSource={sortedData}
+                dataSource={searchedData}
                 rowKey={rowKey}
                 columns={columns}
                 pagination={mergedPagination}

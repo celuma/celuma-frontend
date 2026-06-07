@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar } from "antd";
+import { Layout, Card, Avatar } from "antd";
 import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -58,7 +58,6 @@ export default function PatientsList() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<PatientRow[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         (async () => {
@@ -75,15 +74,10 @@ export default function PatientsList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) =>
-            [r.patient_code, r.first_name, r.last_name, r.email, r.phone]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q))
-        );
-    }, [rows, search]);
+    const searchFilter = (r: PatientRow, q: string) =>
+        [r.patient_code, r.first_name, r.last_name, r.email, r.phone]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
 
     // Sex filter
     const sexFilters = useMemo(() => {
@@ -199,23 +193,16 @@ export default function PatientsList() {
                         }
                     />
                     <Card style={cardStyle}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en pacientes"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: "100%", maxWidth: 320 }}
-                            />
-                        </div>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/patients/${record.id}`)}
                             emptyText="Sin pacientes"
+                            searchable
+                            searchPlaceholder="Buscar en pacientes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',
