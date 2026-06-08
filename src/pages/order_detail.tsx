@@ -145,7 +145,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; 
     DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico", icon: <SolutionOutlined /> },
     REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión", icon: <AuditOutlined /> },
     RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada", icon: <SendOutlined /> },
-    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada", icon: <LockOutlined /> },
+    CLOSED: { color: "#0891b2", bg: "#ecfeff", label: "Cerrada", icon: <LockOutlined /> },
     CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada", icon: <CloseCircleOutlined /> },
 };
 
@@ -1357,12 +1357,16 @@ export default function OrderDetail() {
                                         ) : (
                                             <CelumaSteps
                                                 current={getCurrentStep(data.order.status)}
-                                                steps={ORDER_STEPS.map<CelumaStep>((step) => ({
-                                                    key: step.key,
-                                                    title: step.title,
-                                                    icon: step.icon,
-                                                    color: (STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED).color,
-                                                }))}
+                                                steps={ORDER_STEPS.map<CelumaStep>((step) => {
+                                                    const cfg = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
+                                                    return {
+                                                        key: step.key,
+                                                        title: step.title,
+                                                        icon: step.icon,
+                                                        color: cfg.color,
+                                                        bg: cfg.bg,
+                                                    };
+                                                })}
                                             />
                                         )}
                                     </div>
