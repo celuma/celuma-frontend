@@ -8,7 +8,7 @@ export const ORDER_STATUS_CONFIG: Record<string, { color: string; bg: string; la
     DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico" },
     REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión" },
     RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada" },
-    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada" },
+    CLOSED: { color: "#0891b2", bg: "#ecfeff", label: "Cerrada" },
     CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
 };
 

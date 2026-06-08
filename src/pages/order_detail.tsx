@@ -37,7 +37,7 @@ import {
     updateOrderLabels 
 } from "../services/collaboration_service";
 import CommentInput from "../components/comments/comment_input";
-import CommentList from "../components/comments/comment_list";
+import ConversationThread from "../components/comments/conversation_thread";
 import type { CommentData } from "../components/comments/comment_item";
 import { 
     getInitials, 
@@ -45,7 +45,7 @@ import {
     formatLocalDateTime,
     renderUserMention 
 } from "../components/comments/comment_utils";
-import { renderLabels } from "../components/ui/table_helpers";
+import { renderLabels, renderStatusChip } from "../components/ui/table_helpers";
 import { getSampleTypeConfig } from "../components/ui/table_helpers";
 import { showCelumaApiError } from "../lib/celuma_feedback";
 
@@ -637,33 +637,30 @@ export default function OrderDetail() {
     const SamplesContent = () => (
         <div>
             {/* Header */}
-            <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between", 
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: 16
+                marginBottom: 16,
+                gap: 12,
+                flexWrap: "wrap",
             }}>
-                <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
+                <span style={{ fontWeight: 700, color: tokens.textPrimary, fontSize: 15 }}>
                     {data?.samples.length || 0} muestra{(data?.samples.length || 0) !== 1 ? "s" : ""} registrada{(data?.samples.length || 0) !== 1 ? "s" : ""}
                 </span>
-                <AntButton 
-                    type="primary" 
+                <CelumaButton
+                    type="primary"
                     size="small"
                     icon={<PlusOutlined />}
                     onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
                 >
                     Agregar Muestra
-                </AntButton>
+                </CelumaButton>
             </div>
-            
+
             {data && data.samples.length > 0 ? (
-                <div style={{ 
-                    border: "1px solid #e5e7eb", 
-                    borderRadius: tokens.radius, 
-                    overflow: "hidden" 
-                }}>
-                    {data.samples.map((sample, index) => {
-                        const stateConfig = SAMPLE_STATE_CONFIG[sample.state] || { color: "#6b7280", bg: "#f3f4f6", label: sample.state, icon: <CheckCircleOutlined /> };
+                <div style={{ display: "grid", gap: 10 }}>
+                    {data.samples.map((sample) => {
                         const typeConfig = getSampleTypeConfig(sample.type);
                         return (
                             <div
@@ -672,74 +669,64 @@ export default function OrderDetail() {
                                 style={{
                                     padding: "14px 16px",
                                     cursor: "pointer",
-                                    borderBottom: index < data.samples.length - 1 ? "1px solid #e5e7eb" : "none",
-                                    transition: "background 0.15s ease",
-                                    background: "#fff"
+                                    border: "2px solid #eef1f0",
+                                    borderRadius: 12,
+                                    background: "#fff",
+                                    transition: "background .15s ease, border-color .15s ease",
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = "#f9fafb"}
-                                onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#f7fcfb"; e.currentTarget.style.borderColor = "#cfe9e6"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#eef1f0"; }}
                             >
-                                {/* Top Row: Avatar, Code/Type, and State */}
-                                <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+                                {/* Top Row: type avatar, code/type, state */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                     <Avatar
-                                        size={36}
+                                        size={38}
                                         icon={typeConfig.icon}
-                                        style={{ 
-                                            backgroundColor: typeConfig.color,
+                                        style={{
+                                            backgroundColor: `${typeConfig.color}1a`,
+                                            color: typeConfig.color,
+                                            border: `2px solid ${typeConfig.color}33`,
                                             fontSize: 16,
-                                            marginRight: 14,
-                                            flexShrink: 0
+                                            flexShrink: 0,
                                         }}
                                     />
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, color: tokens.primary, fontSize: 14 }}>
                                             {sample.sample_code}
                                         </div>
                                         <div style={{ fontSize: 13, color: tokens.textSecondary }}>
-                                            {sample.type}
+                                            {typeConfig.label}
                                         </div>
                                     </div>
-                                    <div style={{
-                                        backgroundColor: stateConfig.bg,
-                                        color: stateConfig.color,
-                                        borderRadius: 12,
-                                        fontSize: 11,
-                                        fontWeight: 500,
-                                        padding: "4px 10px",
-                                        display: "inline-block",
-                                    }}>
-                                        {stateConfig.label}
-                                    </div>
+                                    {renderStatusChip(sample.state, "sample")}
                                 </div>
-                                
-                                {/* Bottom Row: Labels and Assignees */}
+
+                                {/* Bottom Row: labels and assignees */}
                                 {((sample.labels && sample.labels.length > 0) || (sample.assignees && sample.assignees.length > 0)) && (
-                                    <div style={{ 
-                                        display: "flex", 
-                                        gap: 16, 
-                                        marginLeft: 50,
+                                    <div style={{
+                                        display: "flex",
+                                        gap: 16,
+                                        marginLeft: 52,
+                                        marginTop: 10,
                                         flexWrap: "wrap",
-                                        alignItems: "center"
+                                        alignItems: "center",
                                     }}>
-                                        {/* Labels */}
                                         {sample.labels && sample.labels.length > 0 && (
                                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Etiquetas:</span>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 600 }}>Etiquetas:</span>
                                                 {renderLabels(sample.labels)}
                                             </div>
                                         )}
-                                        
-                                        {/* Assignees */}
                                         {sample.assignees && sample.assignees.length > 0 && (
                                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Asignados:</span>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 600 }}>Asignados:</span>
                                                 <Avatar.Group maxCount={3} size="small">
                                                     {sample.assignees.map(user => (
                                                         <Tooltip key={user.id} title={user.name}>
-                                                            <Avatar 
+                                                            <Avatar
                                                                 size={24}
                                                                 src={user.avatar_url}
-                                                                style={{ 
+                                                                style={{
                                                                     backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
                                                                     fontSize: 10,
                                                                 }}
@@ -758,15 +745,9 @@ export default function OrderDetail() {
                     })}
                 </div>
             ) : (
-                <div style={{ 
-                    padding: 40,
-                    textAlign: "center",
-                    background: "#f9fafb",
-                    borderRadius: tokens.radius,
-                    border: "1px solid #e5e7eb"
-                }}>
+                <Panel style={{ padding: 40, textAlign: "center", display: "grid", justifyItems: "center", gap: 8 }}>
                     <Empty description="Sin muestras registradas" />
-                </div>
+                </Panel>
             )}
         </div>
     );
@@ -777,61 +758,63 @@ export default function OrderDetail() {
             {reportId ? (
                 <div style={{ display: "grid", gap: 16 }}>
                     {/* Report header */}
-                    <div style={{ 
-                        display: "flex", 
-                        justifyContent: "space-between", 
+                    <Panel style={{
+                        display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
-                        padding: "14px 16px",
-                        background: "#f9fafb",
-                        borderRadius: tokens.radius,
-                        border: "1px solid #e5e7eb"
+                        gap: 16,
+                        flexWrap: "wrap",
                     }}>
-                        <div 
-                            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
+                        <div
+                            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", minWidth: 0 }}
                             onClick={() => navigate(`/reports/${reportId}`)}
                         >
                             <Avatar
-                                size={40}
-                                style={{ 
-                                    backgroundColor: "#10b981",
-                                    fontSize: 16
+                                size={42}
+                                style={{
+                                    backgroundColor: "#eaf7f5",
+                                    color: tokens.primary,
+                                    border: `2px solid ${tokens.primary}33`,
+                                    fontSize: 17,
+                                    flexShrink: 0,
                                 }}
                                 icon={<FileTextOutlined />}
                             />
-                            <div>
-                                <div style={{ fontWeight: 600, color: tokens.primary }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: tokens.primary, fontSize: 15 }}>
                                     {latestReport?.title || "Reporte"}
                                 </div>
-                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                    {latestReport?.status === "DRAFT" ? "Borrador" : 
-                                     latestReport?.status === "PUBLISHED" ? "Publicado" : 
-                                     latestReport?.status || "—"}
+                                <div style={{ marginTop: 4 }}>
+                                    {latestReport?.status
+                                        ? renderStatusChip(latestReport.status, "report")
+                                        : <span style={{ fontSize: 12, color: tokens.textSecondary }}>—</span>}
                                 </div>
                             </div>
                         </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <AntButton 
-                                type="text" 
-                                icon={<ReloadOutlined />} 
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <CelumaButton
+                                size="small"
+                                icon={<ReloadOutlined />}
                                 onClick={() => reportId && loadLatestReport(reportId)}
                                 loading={reportLoading}
                             >
                                 Actualizar
-                            </AntButton>
-                            <AntButton 
-                                type="primary" 
+                            </CelumaButton>
+                            <CelumaButton
+                                size="small"
+                                type="primary"
                                 icon={<FilePdfOutlined />}
                                 onClick={() => previewRef.current?.exportPDF()}
                             >
                                 Exportar PDF
-                            </AntButton>
+                            </CelumaButton>
                         </div>
-                    </div>
-                    
+                    </Panel>
+
                     {latestReport && (
-                        <ReportPreview 
+                        <ReportPreview
                             ref={previewRef}
-                            report={latestReport} 
+                            report={latestReport}
                             loading={reportLoading}
                             style={{ margin: 0 }}
                             signerLookup={(data?.order.reviewers ?? []).map((r) => ({
@@ -842,32 +825,37 @@ export default function OrderDetail() {
                     )}
                 </div>
             ) : (
-                <div style={{ 
-                    padding: 60, 
-                    textAlign: "center",
-                    background: "#f9fafb",
-                    borderRadius: tokens.radius,
-                    border: "1px solid #e5e7eb"
-                }}>
-                    <FileTextOutlined style={{ fontSize: 48, color: "#9ca3af", marginBottom: 16 }} />
-                    <div style={{ fontSize: 16, fontWeight: 600, color: tokens.textPrimary, marginBottom: 8 }}>
+                <Panel style={{ padding: "48px 24px", textAlign: "center", display: "grid", justifyItems: "center", gap: 10 }}>
+                    <div style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: "50%",
+                        background: "#eaf7f5",
+                        color: tokens.primary,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 28,
+                    }}>
+                        <FileTextOutlined />
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.textPrimary, fontFamily: tokens.titleFont }}>
                         Sin reporte
                     </div>
-                    <div style={{ color: tokens.textSecondary, marginBottom: 16 }}>
+                    <div style={{ color: tokens.textSecondary, marginBottom: 6 }}>
                         No hay un reporte asociado a esta orden
                     </div>
-                    <AntButton type="primary" icon={<PlusOutlined />} onClick={handleCreateReport}>
-                        Crear Reporte
-                    </AntButton>
-                </div>
+                    {hasPermission("reports:create") && (
+                        <CelumaButton type="primary" icon={<PlusOutlined />} onClick={handleCreateReport}>
+                            Crear Reporte
+                        </CelumaButton>
+                    )}
+                </Panel>
             )}
         </div>
     );
 
-    // Current user info for comment input
-    const currentUserName = currentUserProfile?.full_name || "Usuario";
-    const currentUserAvatar = currentUserProfile?.avatar_url || null;
-    
+
     // Convert conversation to CommentData format
     const conversationData: CommentData[] = useMemo(() => {
         return conversation.map(c => ({
@@ -884,50 +872,38 @@ export default function OrderDetail() {
 
     // Conversation content JSX (not a function component to avoid re-renders)
     const conversationContentJSX = (
-        <div 
-            style={{ 
-                display: "flex", 
-                flexDirection: "column", 
-                height: "100%"
+        <div
+            style={{
+                border: "2px solid #eef1f0",
+                borderRadius: tokens.radius,
+                background: "#fff",
+                height: 600,
+                maxHeight: "72vh",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
             }}
         >
-            {/* Comments List with scroll */}
-            <CommentList
+            {/* Chat-style grouped message thread */}
+            <ConversationThread
                 ref={conversationScrollRef}
-                comments={conversationData}
+                messages={conversationData}
+                currentUserId={currentUserProfile?.id}
                 loading={loadingConversation}
-                emptyMessage="Sin comentarios"
-                emptyDescription="Sé el primero en comentar sobre esta orden"
             />
 
-            {/* Comment Input Form - At bottom */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <Avatar 
-                        size={36}
-                        src={currentUserAvatar}
-                        style={{ 
-                            backgroundColor: currentUserAvatar ? undefined : getAvatarColor(currentUserName),
-                            fontSize: 14,
-                            flexShrink: 0
-                        }}
-                    >
-                        {!currentUserAvatar && getInitials(currentUserName)}
-                    </Avatar>
-                    <CommentInput
-                        value={commentText}
-                        onChange={setCommentText}
-                        onSubmit={addComment}
-                        loading={submittingComment}
-                        placeholder="Escribe un comentario... Usa @ para mencionar a alguien"
-                        rows={3}
-                    />
-                </div>
-            </Card>
+            {/* Composer — unified within the same panel, Telegram-style integrated send */}
+            <div style={{ borderTop: "1px solid #eef1f0", padding: "12px 14px", background: "#fbfdfc", display: "flex" }}>
+                <CommentInput
+                    variant="chat"
+                    value={commentText}
+                    onChange={setCommentText}
+                    onSubmit={addComment}
+                    loading={submittingComment}
+                    placeholder="Escribe un mensaje… Usa @ para mencionar a alguien"
+                    rows={1}
+                />
+            </div>
         </div>
     );
 
@@ -1400,10 +1376,10 @@ export default function OrderDetail() {
                                                             navigate(`/samples/${sampleId}`);
                                                         }}
                                                         style={{
-                                                            color: "#0f8b8d",
+                                                            color: "#49b6ad",
                                                             fontWeight: 600,
                                                             textDecoration: "none",
-                                                            borderBottom: "1px dashed #0f8b8d",
+                                                            borderBottom: "1px dashed #49b6ad",
                                                         }}
                                                     >
                                                         {sampleCode}
@@ -1489,10 +1465,10 @@ export default function OrderDetail() {
                                                                         navigate(`/samples/${sampleId}`);
                                                                     }}
                                                                     style={{
-                                                                        color: "#0f8b8d",
+                                                                        color: "#49b6ad",
                                                                         fontWeight: 600,
                                                                         textDecoration: "none",
-                                                                        borderBottom: "1px dashed #0f8b8d",
+                                                                        borderBottom: "1px dashed #49b6ad",
                                                                     }}
                                                                 >
                                                                     {sampleCode}
@@ -1513,10 +1489,10 @@ export default function OrderDetail() {
                                                                 navigate(`/samples/${sampleId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             {sampleCode}
@@ -1534,10 +1510,10 @@ export default function OrderDetail() {
                                                                 navigate(`/samples/${sampleId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             {sampleCode}
@@ -1556,10 +1532,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1579,10 +1555,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1602,10 +1578,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1628,10 +1604,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1660,10 +1636,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1691,10 +1667,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1803,10 +1779,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -1838,10 +1814,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -1872,10 +1848,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -2004,10 +1980,10 @@ export default function OrderDetail() {
                                                                             navigate(`/samples/${sampleId}`);
                                                                         }}
                                                                         style={{
-                                                                            color: "#0f8b8d",
+                                                                            color: "#49b6ad",
                                                                             fontWeight: 600,
                                                                             textDecoration: "none",
-                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                            borderBottom: "1px dashed #49b6ad",
                                                                         }}
                                                                     >
                                                                         {sampleCodeMeta}
@@ -2059,10 +2035,10 @@ export default function OrderDetail() {
                                                                             navigate(`/samples/${sampleId}`);
                                                                         }}
                                                                         style={{
-                                                                            color: "#0f8b8d",
+                                                                            color: "#49b6ad",
                                                                             fontWeight: 600,
                                                                             textDecoration: "none",
-                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                            borderBottom: "1px dashed #49b6ad",
                                                                         }}
                                                                     >
                                                                         {sampleCodeMeta}
@@ -2106,14 +2082,14 @@ export default function OrderDetail() {
                                         children: (
                                             <div style={{ marginLeft: 4 }}>
                                                 {!isSameUserAsPrevious && (
-                                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                                    <div style={{ fontWeight: 700, marginBottom: 4, color: tokens.textPrimary }}>
                                                         {userName}
                                                     </div>
                                                 )}
-                                                <div style={{ color: "#666", lineHeight: 1.5, marginBottom: 4 }}>
+                                                <div style={{ color: tokens.textSecondary, lineHeight: 1.55, marginBottom: 4 }}>
                                                     {actionText}
                                                 </div>
-                                                <div style={{ fontSize: 12, color: "#888" }}>
+                                                <div style={{ fontSize: 12, color: "#94a3b8" }}>
                                                     {formatLocalDateTime(event.created_at)}
                                                 </div>
                                             </div>

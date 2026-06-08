@@ -12,6 +12,11 @@ type Props = {
     autoFocus?: boolean;
     /** Show a live character counter (only when `maxLength` is set). Default true. */
     showCount?: boolean;
+    /** Optional control rendered inside the box, bottom-right (e.g. a send button). */
+    action?: React.ReactNode;
+    /** Ref to the underlying textarea (e.g. for cursor position / focus). */
+    inputRef?: React.Ref<HTMLTextAreaElement>;
+    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
     style?: React.CSSProperties;
 };
 
@@ -31,6 +36,9 @@ export default function CelumaTextArea({
     error,
     autoFocus,
     showCount = true,
+    action,
+    inputRef,
+    onKeyDown,
     style,
 }: Props) {
     const [hovered, setHovered] = useState(false);
@@ -67,24 +75,30 @@ export default function CelumaTextArea({
                     transition: "border-color .2s, box-shadow .2s",
                     opacity: disabled ? 0.6 : 1,
                     padding: "10px 12px",
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: 8,
                 }}
             >
                 <textarea
+                    ref={inputRef}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
+                    onKeyDown={onKeyDown}
                     rows={rows}
                     placeholder={placeholder}
                     maxLength={maxLength}
                     disabled={disabled}
                     autoFocus={autoFocus}
                     style={{
-                        width: "100%",
+                        flex: 1,
+                        minWidth: 0,
                         border: "none",
                         outline: "none",
                         background: "transparent",
-                        resize: "vertical",
+                        resize: "none",
                         fontSize: 14,
                         lineHeight: 1.6,
                         color: colors.text,
@@ -92,6 +106,7 @@ export default function CelumaTextArea({
                         display: "block",
                     }}
                 />
+                {action}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1 }}>{error && <ErrorText>{error}</ErrorText>}</div>
