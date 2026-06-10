@@ -1,8 +1,8 @@
-import { Card, Spin, Button } from "antd";
+import { Spin, Button } from "antd";
 import React, { useRef, forwardRef, useImperativeHandle } from "react";
 import { FilePdfOutlined } from "@ant-design/icons";
 import type { ReportEnvelope } from "../../models/report";
-import { tokens } from "../design/tokens";
+import Panel from "../ui/panel";
 import ReportPreviewPages, { type ReportPreviewPagesRef, type SignerLookupEntry } from "./report_preview_pages";
 import { usePdfExport } from "../../hooks/use_pdf_export";
 
@@ -32,46 +32,28 @@ const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report
 
     if (loading) {
         return (
-            <Card
-                style={{
-                    ...style,
-                    background: tokens.cardBg,
-                    borderRadius: tokens.radius,
-                    boxShadow: tokens.shadow,
-                }}
-            >
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
-                    <Spin size="large" />
-                </div>
-            </Card>
+            <Panel style={{ ...style, display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
+                <Spin size="large" />
+            </Panel>
         );
     }
 
     return (
-        <Card
-            style={{
-                ...style,
-                background: tokens.cardBg,
-                borderRadius: tokens.radius,
-                boxShadow: tokens.shadow,
-            }}
-        >
-            <div style={{ padding: 16, overflowY: "auto", maxHeight: 600 }}>
-                <div style={{ marginBottom: 12 }}>
-                    <Button 
-                        type="primary" 
-                        icon={<FilePdfOutlined />}
-                        onClick={handleExportPDF}
-                        size="small"
-                        data-pdf-export
-                        style={{ display: "none" }} // Hidden since we're using external button
-                    >
-                        Exportar PDF
-                    </Button>
-                </div>
-                <ReportPreviewPages ref={previewPagesRef} report={report} signerLookup={signerLookup} />
+        <Panel style={{ ...style, padding: 16, overflowY: "auto", maxHeight: 600 }}>
+            <div style={{ marginBottom: 12 }}>
+                <Button
+                    type="primary"
+                    icon={<FilePdfOutlined />}
+                    onClick={handleExportPDF}
+                    size="small"
+                    data-pdf-export
+                    style={{ display: "none" }} // Hidden since we're using external button
+                >
+                    Exportar PDF
+                </Button>
             </div>
-        </Card>
+            <ReportPreviewPages ref={previewPagesRef} report={report} signerLookup={signerLookup} />
+        </Panel>
     );
 });
 

@@ -1253,32 +1253,37 @@ export default function OrderDetail() {
                                 {data && (
                                     <div style={{ marginBottom: 24 }}>
                                         {data.order.status === "CANCELLED" ? (
-                                            <Panel style={{
-                                                background: STATUS_CONFIG.CANCELLED.bg,
-                                                border: "2px solid #fecaca",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                gap: 10,
-                                                padding: "16px",
-                                            }}>
-                                                <CloseCircleOutlined style={{ fontSize: 22, color: STATUS_CONFIG.CANCELLED.color }} />
-                                                <span style={{ fontSize: 16, fontWeight: 700, color: "#b91c1c", fontFamily: tokens.titleFont }}>Orden Cancelada</span>
+                                            // Red-tinted panel with a single-step timeline, mirroring the
+                                            // normal steps' layout for visual cohesion. White circle so it
+                                            // pops against the soft-red panel.
+                                            <Panel style={{ background: STATUS_CONFIG.CANCELLED.bg, border: "2px solid #fecaca" }}>
+                                                <CelumaSteps
+                                                    current={0}
+                                                    steps={[{
+                                                        key: "CANCELLED",
+                                                        title: "Cancelada",
+                                                        icon: <CloseCircleOutlined />,
+                                                        color: STATUS_CONFIG.CANCELLED.color,
+                                                        bg: "#fff",
+                                                    }]}
+                                                />
                                             </Panel>
                                         ) : (
-                                            <CelumaSteps
-                                                current={getCurrentStep(data.order.status)}
-                                                steps={ORDER_STEPS.map<CelumaStep>((step) => {
-                                                    const cfg = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
-                                                    return {
-                                                        key: step.key,
-                                                        title: step.title,
-                                                        icon: step.icon,
-                                                        color: cfg.color,
-                                                        bg: cfg.bg,
-                                                    };
-                                                })}
-                                            />
+                                            <Panel>
+                                                <CelumaSteps
+                                                    current={getCurrentStep(data.order.status)}
+                                                    steps={ORDER_STEPS.map<CelumaStep>((step) => {
+                                                        const cfg = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
+                                                        return {
+                                                            key: step.key,
+                                                            title: step.title,
+                                                            icon: step.icon,
+                                                            color: cfg.color,
+                                                            bg: cfg.bg,
+                                                        };
+                                                    })}
+                                                />
+                                            </Panel>
                                         )}
                                     </div>
                                 )}
