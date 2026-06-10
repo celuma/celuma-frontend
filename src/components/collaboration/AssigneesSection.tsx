@@ -70,7 +70,13 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
                 trigger={
                     <Dropdown
                         open={dropdownOpen}
-                        onOpenChange={setDropdownOpen}
+                        onOpenChange={(open) => {
+                            setDropdownOpen(open);
+                            // Sync selection with what's currently applied on open (props may have
+                            // loaded/changed after mount), so applying never wipes existing assignees.
+                            if (open) setSelectedIds(new Set(assignees.map(a => a.id)));
+                            else setSearchTerm("");
+                        }}
                         trigger={["click"]}
                         dropdownRender={() => (
                             <UserPickerDropdown

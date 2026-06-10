@@ -900,8 +900,12 @@ export default function OrderDetail() {
         </div>
     );
 
-    // Sidebar content component (for reuse in responsive layout)
-    const SidebarContent = () => (
+    // Sidebar content as a JSX value (NOT a nested component). Rendering it as a
+    // component (`<SidebarContent/>`) gave it a fresh identity on every OrderDetail
+    // re-render, remounting the rail and resetting the section dropdowns' state
+    // (e.g. closing the labels picker mid-create). As a value it's reconciled by
+    // position, so the sections keep their state across re-renders.
+    const sidebarContent = (
         <div style={{ display: "grid", gap: tokens.gap }}>
             {/* Reviewers */}
             <Card 
@@ -2077,13 +2081,13 @@ export default function OrderDetail() {
 
                             {/* Mobile Sidebar - Shows below main content on small screens */}
                             <div className="order-detail-sidebar-mobile">
-                                <SidebarContent />
+                                {sidebarContent}
                                     </div>
                             </div>
 
                         {/* Right Column - Sidebar (Desktop only) */}
                         <div className="order-detail-sidebar-desktop">
-                            <SidebarContent />
+                            {sidebarContent}
                                 </div>
                             </div>
                 </div>

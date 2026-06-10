@@ -74,7 +74,14 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                 trigger={
                     <Dropdown
                         open={dropdownOpen}
-                        onOpenChange={setDropdownOpen}
+                        onOpenChange={(open) => {
+                            setDropdownOpen(open);
+                            // Sync the selection with what's currently applied each time we open,
+                            // so it reflects the latest order state (props may have loaded/changed
+                            // after mount). Otherwise applying would wipe existing reviewers.
+                            if (open) setSelectedIds(new Set(reviewers.map(r => r.id)));
+                            else setSearchTerm("");
+                        }}
                         trigger={["click"]}
                         dropdownRender={() => (
                             <UserPickerDropdown
