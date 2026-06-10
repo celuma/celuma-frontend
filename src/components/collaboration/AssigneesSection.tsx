@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { Avatar, Dropdown, Input, Button as AntButton, Spin } from "antd";
-import { SettingOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
+import { Avatar, Dropdown, Spin } from "antd";
+import { TeamOutlined } from "@ant-design/icons";
 import type { UserRef, LabUser } from "../../services/collaboration_service";
 import { tokens } from "../design/tokens";
+import { getInitials, getAvatarColor } from "../comments/comment_utils";
+import { RailSectionHeader, RailConfigButton } from "./RailSectionHeader";
+import UserPickerDropdown from "./UserPickerDropdown";
+import ConfirmDialog from "../ui/confirm_dialog";
 
 type AssigneesSectionProps = {
     assignees: UserRef[];
@@ -11,38 +15,23 @@ type AssigneesSectionProps = {
     disabled?: boolean;
 };
 
-const getInitials = (name: string): string => {
-    const parts = name.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "U";
-};
-
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
 export default function AssigneesSection({ assignees, allUsers, onUpdate, disabled }: AssigneesSectionProps) {
     const [loading, setLoading] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [confirmClearOpen, setConfirmClearOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(
         new Set(assignees.map(a => a.id))
     );
 
-    const filteredUsers = allUsers.filter(user => 
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const handleToggle = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     const handleApply = async () => {
         setLoading(true);
@@ -57,11 +46,12 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
         }
     };
 
-    const handleClear = async () => {
+    const handleClearConfirmed = async () => {
         setLoading(true);
         try {
             await onUpdate([]);
             setSelectedIds(new Set());
+            setConfirmClearOpen(false);
             setDropdownOpen(false);
         } catch (error) {
             console.error("Failed to clear assignees:", error);
@@ -70,270 +60,38 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
         }
     };
 
-    const dropdownMenu = (
-        <div style={{ 
-            background: "#fff", 
-            borderRadius: 8, 
-            boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
-            padding: "8px 0",
-            minWidth: 300,
-            maxWidth: 320,
-        }}>
-            <div style={{ padding: "0 12px 8px 12px" }}>
-                <Input
-                    placeholder="Buscar usuario..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ 
-                        borderRadius: 6,
-                        fontSize: 14,
-                    }}
-                    autoFocus
-                />
-            </div>
-
-            {/* Clear Button */}
-            {selectedIds.size > 0 && (
-                <div
-                    style={{
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        borderBottom: "1px solid #e5e7eb",
-                        transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                    onClick={handleClear}
-                >
-                    <CloseOutlined style={{ fontSize: 14, color: tokens.textSecondary }} />
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>
-                        Limpiar asignados
-                    </span>
-                </div>
-            )}
-
-            <div style={{ 
-                maxHeight: 300, 
-                overflowY: "auto",
-                padding: "4px 0",
-            }}>
-                {/* Selected users first */}
-                {filteredUsers.filter(user => selectedIds.has(user.id)).map(user => {
-                    const isSelected = true;
-                    return (
-                        <div
-                            key={user.id}
-                            style={{
-                                padding: "6px 12px",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                transition: "background 0.15s",
-                                position: "relative",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                            onClick={() => {
-                                setSelectedIds(prev => {
-                                    const newSet = new Set(prev);
-                                    newSet.delete(user.id);
-                                    return newSet;
-                                });
-                            }}
-                        >
-                            {/* Checkmark Icon */}
-                            <div style={{ 
-                                width: 16, 
-                                height: 16,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}>
-                                {isSelected && (
-                                    <CheckOutlined style={{ 
-                                        fontSize: 14, 
-                                        color: tokens.primary,
-                                        fontWeight: 700,
-                                    }} />
-                                )}
-                            </div>
-
-                            <Avatar
-                                size={28}
-                                src={user.avatar_url}
-                                style={{
-                                    backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
-                                    fontSize: 12,
-                                }}
-                            >
-                                {!user.avatar_url && getInitials(user.name)}
-                            </Avatar>
-
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ 
-                                    fontWeight: 500, 
-                                    fontSize: 14,
-                                    color: tokens.textPrimary,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                }}>
-                                    {user.name}
-                                </div>
-                                <div style={{ 
-                                    fontSize: 12, 
-                                    color: tokens.textSecondary,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                }}>
-                                    @{user.username || user.email.split("@")[0]}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-
-                {/* Separator if there are both selected and unselected */}
-                {filteredUsers.filter(user => selectedIds.has(user.id)).length > 0 &&
-                 filteredUsers.filter(user => !selectedIds.has(user.id)).length > 0 && (
-                    <div style={{ 
-                        borderBottom: "1px solid #e5e7eb",
-                        margin: "4px 0",
-                    }} />
-                )}
-
-                {/* Unselected users */}
-                {filteredUsers.filter(user => !selectedIds.has(user.id)).map(user => {
-                    const isSelected = false;
-                    return (
-                        <div
-                            key={user.id}
-                            style={{
-                                padding: "6px 12px",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                transition: "background 0.15s",
-                                position: "relative",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                            onClick={() => {
-                                setSelectedIds(prev => {
-                                    const newSet = new Set(prev);
-                                    newSet.add(user.id);
-                                    return newSet;
-                                });
-                            }}
-                        >
-                            {/* Checkmark Icon */}
-                            <div style={{ 
-                                width: 16, 
-                                height: 16,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}>
-                                {isSelected && (
-                                    <CheckOutlined style={{ 
-                                        fontSize: 14, 
-                                        color: tokens.primary,
-                                        fontWeight: 700,
-                                    }} />
-                                )}
-                            </div>
-
-                            <Avatar
-                                size={28}
-                                src={user.avatar_url}
-                                style={{
-                                    backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
-                                    fontSize: 12,
-                                }}
-                            >
-                                {!user.avatar_url && getInitials(user.name)}
-                            </Avatar>
-
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ 
-                                    fontWeight: 500, 
-                                    fontSize: 14,
-                                    color: tokens.textPrimary,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                }}>
-                                    {user.name}
-                                </div>
-                                <div style={{ 
-                                    fontSize: 12, 
-                                    color: tokens.textSecondary,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                }}>
-                                    @{user.username || user.email.split("@")[0]}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-                {filteredUsers.length === 0 && (
-                    <div style={{ 
-                        padding: 20, 
-                        textAlign: "center", 
-                        color: tokens.textSecondary,
-                        fontSize: 13,
-                    }}>
-                        No se encontraron usuarios
-                    </div>
-                )}
-            </div>
-
-            <div style={{ 
-                borderTop: "1px solid #e5e7eb",
-                padding: "8px 12px",
-                display: "flex", 
-                gap: 8, 
-                justifyContent: "flex-end" 
-            }}>
-                <AntButton size="small" onClick={() => setDropdownOpen(false)}>
-                    Cancelar
-                </AntButton>
-                <AntButton size="small" type="primary" onClick={handleApply} loading={loading}>
-                    Aplicar
-                </AntButton>
-            </div>
-        </div>
-    );
-
     return (
         <>
-            <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between", 
-                alignItems: "center",
-                marginBottom: 12
-            }}>
-                <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Asignados
-                </span>
-                <Dropdown
-                    open={dropdownOpen}
-                    onOpenChange={setDropdownOpen}
-                    trigger={["click"]}
-                    dropdownRender={() => dropdownMenu}
-                    disabled={disabled}
-                >
-                    <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                </Dropdown>
-            </div>
+            <RailSectionHeader
+                icon={<TeamOutlined />}
+                color={tokens.primary}
+                title="Asignados"
+                count={assignees.length}
+                trigger={
+                    <Dropdown
+                        open={dropdownOpen}
+                        onOpenChange={setDropdownOpen}
+                        trigger={["click"]}
+                        dropdownRender={() => (
+                            <UserPickerDropdown
+                                users={allUsers}
+                                selectedIds={selectedIds}
+                                searchTerm={searchTerm}
+                                onSearchChange={setSearchTerm}
+                                onToggle={handleToggle}
+                                onClear={() => setConfirmClearOpen(true)}
+                                onApply={handleApply}
+                                onCancel={() => setDropdownOpen(false)}
+                                loading={loading}
+                                clearLabel="Limpiar asignados"
+                            />
+                        )}
+                        disabled={disabled}
+                    >
+                        <RailConfigButton disabled={disabled} />
+                    </Dropdown>
+                }
+            />
 
             {loading ? (
                 <div style={{ display: "flex", justifyContent: "center", padding: 16 }}>
@@ -360,9 +118,9 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
                             >
                                 {!assignee.avatar_url && getInitials(assignee.name)}
                             </Avatar>
-                            <span style={{ 
-                                flex: 1, 
-                                fontSize: 13, 
+                            <span style={{
+                                flex: 1,
+                                fontSize: 13,
                                 fontWeight: 500,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
@@ -374,10 +132,31 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
                     ))}
                 </div>
             ) : (
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                <div style={{
+                    fontSize: 12.5,
+                    lineHeight: 1.45,
+                    textAlign: "center",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    background: "#fafbfc",
+                    border: "1px dashed #e5e7eb",
+                    color: tokens.textSecondary,
+                }}>
                     Sin asignar
                 </div>
             )}
+
+            <ConfirmDialog
+                open={confirmClearOpen}
+                danger
+                title="Quitar asignados"
+                description="Se quitarán todas las personas asignadas a esta orden."
+                confirmText="Quitar"
+                cancelText="Cancelar"
+                loading={loading}
+                onConfirm={handleClearConfirmed}
+                onCancel={() => setConfirmClearOpen(false)}
+            />
         </>
     );
 }

@@ -1,8 +1,14 @@
 import { useState } from "react";
-import { Dropdown, Input, Button as AntButton, Spin, Modal, Tooltip } from "antd";
-import { SettingOutlined, PlusOutlined, LinkOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
+import { Dropdown, Input, Spin, Modal, Tooltip } from "antd";
+import { PlusOutlined, LinkOutlined, CheckOutlined, DeleteOutlined, TagsOutlined } from "@ant-design/icons";
 import type { Label, LabelWithInheritance } from "../../services/collaboration_service";
 import { tokens } from "../design/tokens";
+import { RailSectionHeader, RailConfigButton } from "./RailSectionHeader";
+import SearchField from "../ui/search_field";
+import SelectionCheckbox from "../ui/selection_checkbox";
+import CelumaButton from "../ui/button";
+import ActionButtonPanel, { type ActionButtonItem } from "../ui/action_button_panel";
+import ConfirmDialog from "../ui/confirm_dialog";
 
 type LabelsSectionProps = {
     labels: (Label | LabelWithInheritance)[];
@@ -13,18 +19,19 @@ type LabelsSectionProps = {
     showInheritance?: boolean;
 };
 
-export default function LabelsSection({ 
-    labels, 
-    allLabels, 
-    onUpdate, 
-    onLabelsRefresh, 
+export default function LabelsSection({
+    labels,
+    allLabels,
+    onUpdate,
+    onLabelsRefresh,
     disabled,
     showInheritance = false
 }: LabelsSectionProps) {
     const [loading, setLoading] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    
+    const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
     // Get only the "own" labels (not inherited) for selectedIds
     const ownLabels = labels.filter(label => !showInheritance || !("inherited" in label) || !label.inherited);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -63,9 +70,18 @@ export default function LabelsSection({
     // Filter out inherited labels from available labels
     const availableLabels = allLabels.filter(label => !inheritedLabelIds.has(label.id));
 
-    const filteredLabels = availableLabels.filter(label => 
+    const filteredLabels = availableLabels.filter(label =>
         label.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const handleToggle = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     const handleApply = async () => {
         setLoading(true);
@@ -80,11 +96,12 @@ export default function LabelsSection({
         }
     };
 
-    const handleClear = async () => {
+    const handleClearConfirmed = async () => {
         setLoading(true);
         try {
             await onUpdate([]);
             setSelectedIds(new Set());
+            setConfirmClearOpen(false);
             setDropdownOpen(false);
         } catch (error) {
             console.error("Failed to clear labels:", error);
@@ -93,22 +110,43 @@ export default function LabelsSection({
         }
     };
 
+    const labelActions: ActionButtonItem[] = [
+        {
+            icon: <PlusOutlined />,
+            tooltip: "Nueva etiqueta",
+            ariaLabel: "Nueva etiqueta",
+            onClick: (e) => {
+                e.stopPropagation(); // keep the picker dropdown open behind the modal
+                setCreateModalOpen(true);
+            },
+        },
+    ];
+    if (selectedIds.size > 0) {
+        labelActions.push({
+            icon: <DeleteOutlined />,
+            tooltip: "Limpiar etiquetas",
+            ariaLabel: "Limpiar etiquetas",
+            danger: true,
+            onClick: () => setConfirmClearOpen(true),
+        });
+    }
+
     const handleCreateLabel = async () => {
         if (!newLabelName.trim()) return;
-        
+
         setCreating(true);
         try {
             const { createLabel } = await import("../../services/collaboration_service");
             const newLabel = await createLabel({ name: newLabelName.trim(), color: newLabelColor });
             await onLabelsRefresh();
-            
+
             // Auto-select the newly created label
             setSelectedIds(prev => {
                 const newSet = new Set(prev);
                 newSet.add(newLabel.id);
                 return newSet;
             });
-            
+
             setCreateModalOpen(false);
             setNewLabelName("");
             setNewLabelColor("#3b82f6");
@@ -119,35 +157,75 @@ export default function LabelsSection({
         }
     };
 
-    const dropdownMenu = (
-        <div style={{ 
-            background: "#fff", 
-            borderRadius: 8, 
-            boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
-            padding: "8px 0",
-            minWidth: 300,
-            maxWidth: 320,
-        }}>
-            <div style={{ padding: "0 12px 8px 12px" }}>
-                <Input
-                    placeholder="Buscar etiqueta..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ 
+    const renderLabelRow = (label: Label) => {
+        const isSelected = selectedIds.has(label.id);
+        const colorConfig = predefinedColors.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
+        const baseBg = isSelected ? "#eaf7f5" : "transparent";
+        return (
+            <div
+                key={label.id}
+                role="button"
+                onClick={() => handleToggle(label.id)}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1faf8")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = baseBg)}
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    background: baseBg,
+                    transition: "background .15s ease",
+                }}
+            >
+                <SelectionCheckbox checked={isSelected} />
+
+                <div
+                    style={{
+                        padding: "2px 8px",
                         borderRadius: 6,
-                        fontSize: 14,
+                        background: colorConfig.bg,
+                        color: colorConfig.color,
+                        fontWeight: 600,
+                        fontSize: 11,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        whiteSpace: "nowrap",
                     }}
-                    autoFocus
-                />
+                >
+                    {label.name}
+                </div>
+            </div>
+        );
+    };
+
+    const selectedRows = filteredLabels.filter(label => selectedIds.has(label.id));
+    const unselectedRows = filteredLabels.filter(label => !selectedIds.has(label.id));
+
+    const dropdownMenu = (
+        <div
+            style={{
+                background: "#fff",
+                borderRadius: 14,
+                boxShadow: tokens.shadow,
+                border: "1px solid #eef1f0",
+                width: 320,
+                maxWidth: "92vw",
+                overflow: "hidden",
+            }}
+        >
+            <div style={{ padding: "12px 12px 8px" }}>
+                <SearchField small value={searchTerm} onChange={setSearchTerm} placeholder="Buscar etiqueta…" />
             </div>
 
             {/* Info message if there are inherited labels */}
             {inheritedLabelIds.size > 0 && (
                 <div
                     style={{
-                        padding: "8px 12px",
-                        background: "#f0f9ff",
-                        borderBottom: "1px solid #e5e7eb",
+                        padding: "8px 14px",
+                        background: "#eff6ff",
+                        borderBottom: "1px solid #eef1f0",
                         fontSize: 12,
                         color: "#0369a1",
                         display: "flex",
@@ -160,200 +238,61 @@ export default function LabelsSection({
                 </div>
             )}
 
-            {/* Clear Button */}
-            {selectedIds.size > 0 && (
-                <div
-                    style={{
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        borderBottom: "1px solid #e5e7eb",
-                        transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                    onClick={handleClear}
-                >
-                    <CloseOutlined style={{ fontSize: 14, color: tokens.textSecondary }} />
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>
-                        Limpiar etiquetas
-                    </span>
-                </div>
-            )}
-
-            <div style={{ 
-                maxHeight: 300, 
-                overflowY: "auto",
-                padding: "4px 0",
-            }}>
-                {/* Selected labels first */}
-                {filteredLabels.filter(label => selectedIds.has(label.id)).map(label => {
-                    const isSelected = true;
-                    const colorConfig = predefinedColors.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
-                    return (
-                        <div
-                            key={label.id}
-                            style={{
-                                padding: "6px 12px",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                transition: "background 0.15s",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                            onClick={() => {
-                                setSelectedIds(prev => {
-                                    const newSet = new Set(prev);
-                                    newSet.delete(label.id);
-                                    return newSet;
-                                });
-                            }}
-                        >
-                            {/* Checkmark Icon */}
-                            <div style={{ 
-                                width: 16, 
-                                height: 16,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}>
-                                {isSelected && (
-                                    <CheckOutlined style={{ 
-                                        fontSize: 14, 
-                                        color: tokens.primary,
-                                        fontWeight: 700,
-                                    }} />
-                                )}
-                            </div>
-
-                            <div
-                                style={{ 
-                                    padding: "2px 8px",
-                                    borderRadius: 4,
-                                    background: colorConfig.bg,
-                                    color: colorConfig.color,
-                                    fontWeight: 600,
-                                    fontSize: 11,
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    whiteSpace: "nowrap",
-                                }}
-                            >
-                                {label.name}
-                            </div>
-                        </div>
-                    );
-                })}
-
-                {/* Separator if there are both selected and unselected */}
-                {filteredLabels.filter(label => selectedIds.has(label.id)).length > 0 &&
-                 filteredLabels.filter(label => !selectedIds.has(label.id)).length > 0 && (
-                    <div style={{ 
-                        borderBottom: "1px solid #e5e7eb",
-                        margin: "4px 0",
-                    }} />
+            <div style={{ maxHeight: 288, overflowY: "auto", padding: "6px 8px", display: "grid", gap: 2 }}>
+                {selectedRows.map(renderLabelRow)}
+                {selectedRows.length > 0 && unselectedRows.length > 0 && (
+                    <div style={{ borderBottom: "1px solid #eef1f0", margin: "4px 6px" }} />
                 )}
-
-                {/* Unselected labels */}
-                {filteredLabels.filter(label => !selectedIds.has(label.id)).map(label => {
-                    const isSelected = false;
-                    const colorConfig = predefinedColors.find(c => c.color === label.color) || { color: label.color, bg: label.color + "20" };
-                    return (
-                        <div
-                            key={label.id}
+                {unselectedRows.map(renderLabelRow)}
+                {filteredLabels.length === 0 && (
+                    <div
+                        style={{
+                            display: "grid",
+                            justifyItems: "center",
+                            gap: 8,
+                            padding: "22px 12px",
+                            color: tokens.textSecondary,
+                        }}
+                    >
+                        <span
                             style={{
-                                padding: "6px 12px",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                transition: "background 0.15s",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                            onClick={() => {
-                                setSelectedIds(prev => {
-                                    const newSet = new Set(prev);
-                                    newSet.add(label.id);
-                                    return newSet;
-                                });
-                            }}
-                        >
-                            {/* Checkmark Icon */}
-                            <div style={{ 
-                                width: 16, 
-                                height: 16,
-                                display: "flex",
+                                width: 40,
+                                height: 40,
+                                borderRadius: "50%",
+                                background: "#f5f3ff",
+                                color: "#8b5cf6",
+                                display: "inline-flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                            }}>
-                                {isSelected && (
-                                    <CheckOutlined style={{ 
-                                        fontSize: 14, 
-                                        color: tokens.primary,
-                                        fontWeight: 700,
-                                    }} />
-                                )}
-                            </div>
-
-                            <div
-                                style={{ 
-                                    padding: "2px 8px",
-                                    borderRadius: 4,
-                                    background: colorConfig.bg,
-                                    color: colorConfig.color,
-                                    fontWeight: 600,
-                                    fontSize: 11,
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    whiteSpace: "nowrap",
-                                }}
-                            >
-                                {label.name}
-                            </div>
-                        </div>
-                    );
-                })}
-                {filteredLabels.length === 0 && (
-                    <div style={{ 
-                        padding: 20, 
-                        textAlign: "center", 
-                        color: tokens.textSecondary,
-                        fontSize: 13,
-                    }}>
-                        No se encontraron etiquetas
+                                fontSize: 18,
+                            }}
+                        >
+                            <TagsOutlined />
+                        </span>
+                        <span style={{ fontSize: 13 }}>No se encontraron etiquetas</span>
                     </div>
                 )}
             </div>
 
-            <div style={{ 
-                borderTop: "1px solid #e5e7eb",
-                padding: "8px 12px",
-                display: "flex", 
-                gap: 8, 
-                justifyContent: "space-between",
-            }}>
-                <AntButton 
-                    size="small" 
-                    icon={<PlusOutlined />}
-                    onClick={(e) => {
-                        e.stopPropagation(); // Prevent dropdown from closing
-                        setCreateModalOpen(true);
-                    }}
-                >
-                    Nueva
-                </AntButton>
+            <div
+                style={{
+                    borderTop: "1px solid #eef1f0",
+                    padding: "10px 12px",
+                    display: "flex",
+                    gap: 8,
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    background: "#fbfdfc",
+                }}
+            >
+                <ActionButtonPanel size="xsmall" actions={labelActions} />
                 <div style={{ display: "flex", gap: 8 }}>
-                    <AntButton size="small" onClick={() => setDropdownOpen(false)}>
+                    <CelumaButton size="xsmall" danger onClick={() => setDropdownOpen(false)}>
                         Cancelar
-                    </AntButton>
-                    <AntButton size="small" type="primary" onClick={handleApply} loading={loading}>
+                    </CelumaButton>
+                    <CelumaButton size="xsmall" type="primary" onClick={handleApply} loading={loading}>
                         Aplicar
-                    </AntButton>
+                    </CelumaButton>
                 </div>
             </div>
         </div>
@@ -361,25 +300,23 @@ export default function LabelsSection({
 
     return (
         <>
-            <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 12,
-            }}>
-                <span style={{ fontWeight: 600, fontSize: 12, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Etiquetas
-                </span>
-                <Dropdown
-                    open={dropdownOpen}
-                    onOpenChange={setDropdownOpen}
-                    trigger={["click"]}
-                    dropdownRender={() => dropdownMenu}
-                    disabled={disabled}
-                >
-                    <SettingOutlined style={{ color: tokens.textSecondary, cursor: "pointer" }} />
-                </Dropdown>
-            </div>
+            <RailSectionHeader
+                icon={<TagsOutlined />}
+                color="#8b5cf6"
+                title="Etiquetas"
+                count={labels.length}
+                trigger={
+                    <Dropdown
+                        open={dropdownOpen}
+                        onOpenChange={setDropdownOpen}
+                        trigger={["click"]}
+                        dropdownRender={() => dropdownMenu}
+                        disabled={disabled}
+                    >
+                        <RailConfigButton disabled={disabled} />
+                    </Dropdown>
+                }
+            />
 
             {loading ? (
                 <div style={{ display: "flex", justifyContent: "center", padding: 16 }}>
@@ -400,7 +337,7 @@ export default function LabelsSection({
                         return (
                             <div
                                 key={label.id}
-                                style={{ 
+                                style={{
                                     padding: "2px 8px",
                                     borderRadius: 4,
                                     background: colorConfig.bg,
@@ -423,8 +360,17 @@ export default function LabelsSection({
                     })}
                 </div>
             ) : (
-                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                    Ninguna
+                <div style={{
+                    fontSize: 12.5,
+                    lineHeight: 1.45,
+                    textAlign: "center",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    background: "#fafbfc",
+                    border: "1px dashed #e5e7eb",
+                    color: tokens.textSecondary,
+                }}>
+                    Sin etiquetas
                 </div>
             )}
 
@@ -451,9 +397,9 @@ export default function LabelsSection({
             >
                 <div style={{ display: "grid", gap: 16 }}>
                     <div>
-                        <label style={{ 
-                            display: "block", 
-                            marginBottom: 8, 
+                        <label style={{
+                            display: "block",
+                            marginBottom: 8,
                             fontWeight: 500,
                             fontSize: 13,
                         }}>
@@ -468,16 +414,16 @@ export default function LabelsSection({
                         />
                     </div>
                     <div>
-                        <label style={{ 
-                            display: "block", 
-                            marginBottom: 8, 
+                        <label style={{
+                            display: "block",
+                            marginBottom: 8,
                             fontWeight: 500,
                             fontSize: 13,
                         }}>
                             Color
                         </label>
-                        <div style={{ 
-                            display: "grid", 
+                        <div style={{
+                            display: "grid",
                             gridTemplateColumns: "repeat(4, 1fr)",
                             gap: 8,
                         }}>
@@ -521,7 +467,7 @@ export default function LabelsSection({
                         </div>
                         <div style={{ marginTop: 12 }}>
                             <div
-                                style={{ 
+                                style={{
                                     padding: "2px 8px",
                                     borderRadius: 4,
                                     background: predefinedColors.find(c => c.color === newLabelColor)?.bg || newLabelColor + "20",
@@ -538,6 +484,18 @@ export default function LabelsSection({
                     </div>
                 </div>
             </Modal>
+
+            <ConfirmDialog
+                open={confirmClearOpen}
+                danger
+                title="Quitar etiquetas"
+                description="Se quitarán todas las etiquetas de esta orden."
+                confirmText="Quitar"
+                cancelText="Cancelar"
+                loading={loading}
+                onConfirm={handleClearConfirmed}
+                onCancel={() => setConfirmClearOpen(false)}
+            />
         </>
     );
 }

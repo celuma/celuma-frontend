@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type MouseEvent } from "react";
 import Panel from "./panel";
 import Tooltip from "./tooltip";
+
+type PanelSize = "default" | "xsmall";
 
 // Céluma palette (mirrors the button system so the whole UI speaks one language).
 const TEAL = { base: "#49b6ad", tint: "#eaf7f5" };
@@ -25,17 +27,24 @@ export type ActionButtonItem =
           /** Disabled — muted, non-interactive. */
           disabled?: boolean;
           /** Click handler. */
-          onClick?: () => void;
+          onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
           /** aria-label for accessibility (falls back to tooltip). */
           ariaLabel?: string;
       };
 
-type PanelButtonProps = Exclude<ActionButtonItem, { divider: true }>;
+type PanelButtonProps = Exclude<ActionButtonItem, { divider: true }> & { size?: PanelSize };
+
+// Per-size metrics so the pill can line up with `default` / `xsmall` buttons.
+const SIZES = {
+    default: { h: 30, minW: 30, font: 13, radius: 8, padX: 10 },
+    xsmall: { h: 22, minW: 22, font: 12, radius: 6, padX: 8 },
+} as const;
 
 /** A single borderless, tinted button that lives inside the segmented pill. */
-function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, ariaLabel }: PanelButtonProps) {
+function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, ariaLabel, size = "default" }: PanelButtonProps) {
     const [hover, setHover] = useState(false);
     const pal = danger ? RED : TEAL;
+    const sz = SIZES[size];
 
     let background = "transparent";
     let color = NEUTRAL.text;
@@ -60,9 +69,9 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
             onMouseEnter={() => !disabled && setHover(true)}
             onMouseLeave={() => setHover(false)}
             style={{
-                height: 30,
-                minWidth: 30,
-                padding: label != null ? "0 10px" : 0,
+                height: sz.h,
+                minWidth: sz.minW,
+                padding: label != null ? `0 ${sz.padX}px` : 0,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -70,8 +79,8 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
                 border: "none",
                 background,
                 color,
-                borderRadius: 8,
-                fontSize: 13,
+                borderRadius: sz.radius,
+                fontSize: sz.font,
                 fontWeight: active ? 700 : 600,
                 fontFamily: "inherit",
                 lineHeight: 1,
@@ -87,8 +96,8 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
     return tooltip ? <Tooltip title={tooltip}>{button}</Tooltip> : button;
 }
 
-const Divider = () => (
-    <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: "4px 2px" }} />
+const Divider = ({ size = "default" }: { size?: PanelSize }) => (
+    <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: size === "xsmall" ? "3px 2px" : "4px 2px" }} />
 );
 
 type Props = {
@@ -99,6 +108,8 @@ type Props = {
      * via `{ divider: true }` items (e.g. pagination groups its arrows).
      */
     autoDividers?: boolean;
+    /** `xsmall` shrinks the pill to line up with `size="xsmall"` buttons. */
+    size?: PanelSize;
 };
 
 /**
@@ -114,24 +125,24 @@ type Props = {
  * ]} />
  * ```
  */
-export default function ActionButtonPanel({ actions, autoDividers = true }: Props) {
+export default function ActionButtonPanel({ actions, autoDividers = true, size = "default" }: Props) {
     const rendered: ReactNode[] = [];
     let realCount = 0;
 
     actions.forEach((action, index) => {
         if (action.divider) {
-            rendered.push(<Divider key={`divider-${index}`} />);
+            rendered.push(<Divider key={`divider-${index}`} size={size} />);
             return;
         }
         if (autoDividers && realCount > 0) {
-            rendered.push(<Divider key={`auto-divider-${index}`} />);
+            rendered.push(<Divider key={`auto-divider-${index}`} size={size} />);
         }
         realCount += 1;
-        rendered.push(<PanelButton key={index} {...action} />);
+        rendered.push(<PanelButton key={index} size={size} {...action} />);
     });
 
     return (
-        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 5 }}>
+        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: size === "xsmall" ? "2px 3px" : 5 }}>
             {rendered}
         </Panel>
     );

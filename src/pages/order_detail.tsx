@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Tabs, Badge, Tooltip } from "antd";
+import { Layout, Card, Avatar, Empty, message, Timeline, Tabs, Badge, Tooltip } from "antd";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
@@ -291,13 +291,16 @@ export default function OrderDetail() {
         }
     };
 
-    // Function to refresh order data
-    const refresh = useCallback(async () => {
+    // Function to refresh order data.
+    // `silent` re-fetches without flipping the page skeleton (`loading`) or reloading
+    // the report preview — used after collaboration edits so the whole page doesn't flash.
+    const refresh = useCallback(async (opts?: { silent?: boolean }) => {
         if (!orderId) return;
-            setLoading(true);
+            const silent = opts?.silent ?? false;
+            if (!silent) setLoading(true);
             setError(null);
             let foundReportId: string | null = null;
-            
+
             try {
                 const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
                 setData(full);
@@ -324,14 +327,16 @@ export default function OrderDetail() {
                 foundReportId = full.order.report_id ?? full.report?.id ?? null;
                     setReportId(foundReportId);
 
-                // Load latest report for preview if reportId exists
-                if (foundReportId) {
+                // Load latest report for preview if reportId exists.
+                // Skipped on silent refreshes (collaboration edits don't touch the report
+                // and reloading the preview would cause a visible flash).
+                if (foundReportId && !silent) {
                     await loadLatestReport(foundReportId);
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!silent) setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             } finally {
-                setLoading(false);
+                if (!silent) setLoading(false);
             }
     }, [orderId]);
 
@@ -386,40 +391,37 @@ export default function OrderDetail() {
         if (!orderId) return;
         try {
             await updateOrderAssignees(orderId, userIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Assignees actualizados");
+            await refresh({ silent: true });
+            message.success("Asignados actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
+            message.error(err instanceof Error ? err.message : "Error al actualizar asignados");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     const handleUpdateReviewers = useCallback(async (userIds: string[]) => {
         if (!orderId) return;
         try {
             await updateOrderReviewers(orderId, userIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Reviewers actualizados");
+            await refresh({ silent: true });
+            message.success("Revisores actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar reviewers");
+            message.error(err instanceof Error ? err.message : "Error al actualizar revisores");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     const handleUpdateLabels = useCallback(async (labelIds: string[]) => {
         if (!orderId) return;
         try {
             await updateOrderLabels(orderId, labelIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Labels actualizados");
+            await refresh({ silent: true });
+            message.success("Etiquetas actualizadas");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
+            message.error(err instanceof Error ? err.message : "Error al actualizar etiquetas");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     // Load conversation with smart scroll behavior
     const loadConversation = useCallback(async (options?: { forceScrollToBottom?: boolean; silent?: boolean }) => {
@@ -586,15 +588,6 @@ export default function OrderDetail() {
             setSavingNotes(false);
         }
     }, [orderId, savingNotes, notesValue, refresh]);
-
-    // Handle quick action to add comment - switch to conversation tab
-    const handleGoToComment = useCallback(() => {
-        setActiveTab("conversation");
-        // Scroll to tabs container
-        if (tabsContainerRef.current) {
-            tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-    }, []);
 
     // Handle navigation to samples tab
     const handleGoToSamples = useCallback(() => {
@@ -950,74 +943,6 @@ export default function OrderDetail() {
                     onLabelsRefresh={loadCollaborationData}
                 />
             </Card>
-
-            {/* Quick Actions */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle, padding: 0 }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 12, 
-                    color: tokens.textSecondary, 
-                    textTransform: "uppercase", 
-                    letterSpacing: "0.5px",
-                    marginBottom: 12
-                }}>
-                    Acciones Rápidas
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                    <AntButton 
-                        block 
-                        size="small"
-                        icon={<MessageOutlined />}
-                        onClick={handleGoToComment}
-                    >
-                        Hacer Comentario
-                    </AntButton>
-                    <AntButton 
-                        block 
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
-                    >
-                        Agregar Muestra
-                    </AntButton>
-                    {data?.order?.invoice_id && hasPermission("billing:read") && (
-                        <AntButton
-                            block
-                            size="small"
-                            icon={<DollarOutlined />}
-                            onClick={() => data && navigate(`/billing/${data.order.id}`)}
-                            style={{ borderColor: tokens.primary, color: tokens.primary }}
-                        >
-                            Ver Factura
-                        </AntButton>
-                    )}
-                    {!reportId && hasPermission("reports:create") && (
-                        <AntButton
-                            block
-                            size="small"
-                            type="primary"
-                            icon={<FileTextOutlined />}
-                            onClick={handleCreateReport}
-                        >
-                            Crear Reporte
-                        </AntButton>
-                    )}
-                    {reportId && hasPermission("reports:read") && (
-                        <AntButton
-                            block
-                            size="small"
-                            icon={<FileTextOutlined />}
-                            onClick={() => navigate(`/reports/${reportId}`)}
-                        >
-                            Editar Reporte
-                        </AntButton>
-                    )}
-                </div>
-            </Card>
         </div>
     );
 
@@ -1042,6 +967,10 @@ export default function OrderDetail() {
                         .order-detail-grid > * {
                             min-width: 0;
                         }
+                        /* Inner cards of the main column must be allowed to shrink below their
+                           content width, otherwise the ficha overflows its track and overlaps the rail. */
+                        .od-main { display: grid; gap: ${tokens.gap}px; min-width: 0; }
+                        .od-main > * { min-width: 0; }
                         .order-detail-sidebar-desktop {
                             display: block;
                             position: sticky;
@@ -1063,15 +992,17 @@ export default function OrderDetail() {
                             }
                         }
 
-                        /* Order ficha (header badge) */
-                        .od-badge { display: flex; gap: 24px; align-items: stretch; }
-                        .od-badge-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+                        /* Order ficha (header badge) — fluid: the action/alert rail wraps below
+                           the patient info when the column gets narrow, instead of overflowing. */
+                        .od-badge { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: stretch; }
+                        .od-badge-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; }
                         .od-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
-                        .od-stats { display: flex; align-items: stretch; margin-left: -18px; }
+                        .od-stats { display: flex; flex-wrap: wrap; align-items: stretch; margin-left: -18px; }
                         .od-stat-divider { width: 1px; background: #eef1f0; }
-                        /* Right rail — action panel (left) + alert (right), pinned to the bottom and sharing the same baseline.
-                           gap matches the vertical spacing down to the description panel (20px). */
-                        .od-rail { display: flex; flex-direction: row; align-items: flex-end; justify-content: flex-end; gap: 20px; flex-shrink: 0; align-self: flex-end; }
+                        /* Right rail — action panel + alert. Sits to the right of the info on wide
+                           columns (margin-left:auto), drops to its own line and stays right-aligned
+                           when wrapped. Items wrap internally so the amber alert never forces overflow. */
+                        .od-rail { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 12px 20px; margin-left: auto; align-self: flex-end; }
                         /* Céluma tabs — teal active ink + label */
                         .od-tabs .ant-tabs-tab .ant-tabs-tab-btn { font-weight: 600; color: ${tokens.textSecondary}; }
                         .od-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn { color: #3da8a0; }
@@ -1088,14 +1019,14 @@ export default function OrderDetail() {
                             .od-meta { justify-content: center; }
                             .od-name-row { justify-content: center; }
                             .od-stats { margin-left: 0; justify-content: center; }
-                            .od-rail { width: 100%; flex-wrap: wrap; justify-content: center; align-self: auto; }
+                            .od-rail { width: 100%; flex-wrap: wrap; justify-content: center; align-self: auto; margin-left: 0; }
                         }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="order-detail-grid">
                         {/* Left Column - Main Content */}
-                        <div style={{ display: "grid", gap: tokens.gap }}>
+                        <div className="od-main">
                             {/* Order Header Card — Céluma ficha */}
                     <Card
                         loading={loading}
