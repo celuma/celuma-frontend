@@ -1,6 +1,7 @@
 import React from "react";
 import { Card } from "antd";
 import { tokens } from "../design/tokens";
+import Panel from "./panel";
 
 interface SummaryStats {
     total_patients: number;
@@ -60,18 +61,10 @@ function ProgressRow({ label, value, total, color }: { label: string; value: num
 
 function StatChip({ label, value, color }: { label: string; value: number; color: string }) {
     return (
-        <div
-            style={{
-                flex: 1,
-                background: "#fafbfc",
-                border: "1px solid #eef0f2",
-                borderRadius: 10,
-                padding: "12px 14px",
-            }}
-        >
+        <Panel style={{ flex: 1, padding: "12px 14px" }}>
             <div style={{ fontFamily: tokens.titleFont, fontSize: 22, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{label}</div>
-        </div>
+        </Panel>
     );
 }
 

@@ -8,6 +8,7 @@ import RecentActivity from "../components/ui/recent_activity";
 import DashboardSummary from "../components/ui/dashboard_summary";
 import PageHeader from "../components/ui/page_header";
 import ErrorText from "../components/ui/error_text";
+import CelumaButton from "../components/ui/button";
 import { useDashboardData } from "../hooks/use_dashboard_data";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -182,41 +183,22 @@ const Home: React.FC = () => {
                                     }}>
                                         Acciones Rápidas
                                     </h3>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                                         {([
                                             { perm: PERMS.CREATE_PATIENT, route: "/patients/register", label: "Registrar Nuevo Paciente", icon: <UserOutlined /> },
                                             { perm: PERMS.CREATE_ORDER,   route: "/orders/register",   label: "Crear Nueva Orden",        icon: <PlusOutlined /> },
                                             { perm: PERMS.REPORTS_READ,   route: "/reports",            label: "Ver Todos los Reportes",   icon: <UnorderedListOutlined /> },
                                         ] as const).filter(({ perm }) => hasPermission(perm)).map(({ route, label, icon }) => (
-                                            <button
+                                            <CelumaButton
                                                 key={route}
+                                                size="small"
+                                                fullWidth
+                                                icon={icon}
                                                 onClick={() => nav(route)}
-                                                style={{
-                                                    padding: "12px 16px",
-                                                    border: "1px solid #e5e7eb",
-                                                    borderRadius: 8,
-                                                    background: "#fff",
-                                                    cursor: "pointer",
-                                                    textAlign: "left",
-                                                    fontSize: 14,
-                                                    fontWeight: 500,
-                                                    color: "#374151",
-                                                    transition: "all 0.2s",
-                                                }}
-                                                onMouseEnter={(e) => {
-                                                    e.currentTarget.style.background = "#f9fafb";
-                                                    e.currentTarget.style.borderColor = "#0f8b8d";
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                    e.currentTarget.style.background = "#fff";
-                                                    e.currentTarget.style.borderColor = "#e5e7eb";
-                                                }}
+                                                style={{ textAlign: "left", justifyContent: "flex-start" }}
                                             >
-                                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                    <span style={{ color: "#0f8b8d" }}>{icon}</span>
-                                                    {label}
-                                                </span>
-                                            </button>
+                                                {label}
+                                            </CelumaButton>
                                         ))}
                                     </div>
                                 </Card>
