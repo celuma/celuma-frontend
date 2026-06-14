@@ -1,12 +1,12 @@
-import { useState, type ReactNode, type MouseEvent } from "react";
+import { useState, type ReactNode, type MouseEvent, type CSSProperties } from "react";
 import Panel from "./panel";
 import Tooltip from "./tooltip";
 
-type PanelSize = "default" | "xsmall";
+type PanelSize = "default" | "xsmall" | "xxsmall";
 
 // Céluma palette (mirrors the button system so the whole UI speaks one language).
 const TEAL = { base: "#49b6ad", tint: "#eaf7f5" };
-const RED = { base: "#e5484d", tint: "#fef2f2" };
+const RED = { base: "#e5484d", tint: "#fef2f2", tintHover: "#fde2e2" };
 const NEUTRAL = { text: "#374151", disabled: "#9ca3af" };
 
 /** A single action inside the panel — either a button or a thin divider. */
@@ -38,12 +38,12 @@ type PanelButtonProps = Exclude<ActionButtonItem, { divider: true }> & { size?: 
 const SIZES = {
     default: { h: 30, minW: 30, font: 13, radius: 8, padX: 10 },
     xsmall: { h: 22, minW: 22, font: 12, radius: 6, padX: 8 },
+    xxsmall: { h: 16, minW: 16, font: 11, radius: 3, padX: 6 },
 } as const;
 
 /** A single borderless, tinted button that lives inside the segmented pill. */
 function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, ariaLabel, size = "default" }: PanelButtonProps) {
     const [hover, setHover] = useState(false);
-    const pal = danger ? RED : TEAL;
     const sz = SIZES[size];
 
     let background = "transparent";
@@ -54,9 +54,14 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
         // Soft teal anchor — present but not saturated, so it doesn't shout.
         background = TEAL.tint;
         color = TEAL.base;
+    } else if (danger) {
+        // "Negative" affordance: persistently red-tinted (like a danger button) so the
+        // destructiveness reads at rest, deepening on hover — not just a neutral icon.
+        background = hover ? RED.tintHover : RED.tint;
+        color = RED.base;
     } else if (hover) {
-        background = pal.tint;
-        color = pal.base;
+        background = TEAL.tint;
+        color = TEAL.base;
     }
 
     const button = (
@@ -97,7 +102,7 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
 }
 
 const Divider = ({ size = "default" }: { size?: PanelSize }) => (
-    <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: size === "xsmall" ? "3px 2px" : "4px 2px" }} />
+    <span style={{ width: 1, alignSelf: "stretch", background: "#e2e8f0", margin: size === "default" ? "4px 2px" : "3px 2px" }} />
 );
 
 type Props = {
@@ -141,8 +146,15 @@ export default function ActionButtonPanel({ actions, autoDividers = true, size =
         rendered.push(<PanelButton key={index} size={size} {...action} />);
     });
 
+    // Tighten the outer pill for the smaller sizes so it lines up with chips/labels.
+    // xxsmall also drops to a 1px border so its total height matches a label/date chip.
+    const panelPadding = size === "xxsmall" ? "1px 2px" : size === "xsmall" ? "2px 3px" : 5;
+    const panelRadius = size === "xxsmall" ? 5 : size === "xsmall" ? 10 : undefined;
+    const panelExtra: CSSProperties =
+        size === "xxsmall" ? { borderWidth: 1, borderRadius: panelRadius } : panelRadius ? { borderRadius: panelRadius } : {};
+
     return (
-        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: size === "xsmall" ? "2px 3px" : 5 }}>
+        <Panel style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: panelPadding, ...panelExtra }}>
             {rendered}
         </Panel>
     );
