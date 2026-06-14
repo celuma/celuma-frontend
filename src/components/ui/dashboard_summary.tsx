@@ -85,7 +85,7 @@ export default function DashboardSummary({ stats, loading = false }: DashboardSu
             </div>
 
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-                <StatChip label="Pacientes" value={s.total_patients} color="#8b5cf6" />
+                <StatChip label="Pacientes registrados" value={s.total_patients} color="#8b5cf6" />
                 <StatChip label="Muestras procesadas" value={s.total_samples} color="#f59e0b" />
             </div>
         </Card>
