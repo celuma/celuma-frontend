@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
+import { Layout, Card, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- shared chip styles + sub-parts intentionally co-located with RecordCard */
 import React from "react";
 import { Card } from "antd";
 import { tokens, cardStyle } from "../design/tokens";

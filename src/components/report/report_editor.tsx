@@ -453,7 +453,6 @@ const ReportEditor: React.FC = () => {
                 setLoadingData(false);
             }
         })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reportId, prefilledOrderId]);
 
     // User role fetched via useUserProfile hook above (no separate effect needed)

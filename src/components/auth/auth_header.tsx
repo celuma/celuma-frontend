@@ -11,6 +11,7 @@ type Props = {
 };
 
 export default function AuthHeader(_props: Props) {
+    void _props;
     return (
         <Header
             style={{

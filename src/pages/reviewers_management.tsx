@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-    Layout, Card, Table, Button, Modal, Select, message,
+    Layout, Card, Button, Modal, Select, message,
     Space, Popconfirm, Spin, Avatar,
 } from "antd";
 import {
-    DeleteOutlined, SafetyCertificateOutlined,
+    DeleteOutlined,
     CheckCircleFilled, MinusCircleOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
