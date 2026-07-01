@@ -158,7 +158,7 @@ const SidebarConfig: React.FC = () => {
                                 onClick={() => navigate(key)}
                             >
                                 <span className="tab-icon">{(item as { icon?: React.ReactNode }).icon}</span>
-                                {item.label as string}
+                                {(item as { label?: React.ReactNode }).label}
                             </button>
                         );
                     })}
