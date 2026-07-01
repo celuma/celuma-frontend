@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Layout, Card, Avatar, Empty, message, Timeline, Tabs, Badge, Tooltip } from "antd";
+import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
@@ -18,6 +18,8 @@ import CelumaButton from "../components/ui/button";
 import Panel from "../components/ui/panel";
 import CelumaSteps, { type CelumaStep } from "../components/ui/celuma_steps";
 import CelumaTextArea from "../components/ui/textarea_field";
+import CelumaTabs from "../components/ui/celuma_tabs";
+import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { getReport } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
@@ -158,43 +160,6 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
 
-// ── Céluma "ficha" header helpers (shared visual language with patient/physician detail) ──
-const codeChipStyle: React.CSSProperties = {
-    background: tokens.secondary,
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 600,
-    padding: "3px 12px",
-    borderRadius: 999,
-    lineHeight: 1.5,
-};
-
-const statusChipStyle = (cfg: { color: string; bg: string }): React.CSSProperties => ({
-    background: cfg.bg,
-    color: cfg.color,
-    fontSize: 13,
-    fontWeight: 600,
-    padding: "3px 12px",
-    borderRadius: 999,
-    lineHeight: 1.5,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-});
-
-const MetaItem = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: tokens.textSecondary, fontSize: 14 }}>
-        <span style={{ color: tokens.primary, fontSize: 16, display: "inline-flex" }}>{icon}</span>
-        {children}
-    </span>
-);
-
-const Stat = ({ value, label, color }: { value: number; label: string; color: string }) => (
-    <div style={{ textAlign: "center", padding: "0 18px" }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: tokens.titleFont, lineHeight: 1.1 }}>{value}</div>
-        <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
-    </div>
-);
 
 export default function OrderDetail() {
     const navigate = useNavigate();
@@ -996,172 +961,147 @@ export default function OrderDetail() {
                             }
                         }
 
-                        /* Order ficha (header badge) — fluid: the action/alert rail wraps below
-                           the patient info when the column gets narrow, instead of overflowing. */
-                        .od-badge { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: stretch; }
-                        .od-badge-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; }
-                        .od-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
-                        .od-stats { display: flex; flex-wrap: wrap; align-items: stretch; margin-left: -18px; }
-                        .od-stat-divider { width: 1px; background: #eef1f0; }
-                        /* Right rail — action panel + alert. Sits to the right of the info on wide
-                           columns (margin-left:auto), drops to its own line and stays right-aligned
-                           when wrapped. Items wrap internally so the amber alert never forces overflow. */
-                        .od-rail { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 12px 20px; margin-left: auto; align-self: flex-end; }
-                        /* Céluma tabs — teal active ink + label */
-                        .od-tabs .ant-tabs-tab .ant-tabs-tab-btn { font-weight: 600; color: ${tokens.textSecondary}; }
-                        .od-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn { color: #3da8a0; }
-                        .od-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: ${tokens.primary}; }
-                        .od-tabs .ant-tabs-ink-bar { background: ${tokens.primary}; height: 3px; border-radius: 3px; }
-                        .od-tabs .ant-tabs-nav::before { border-bottom-color: #eef1f0; }
                         /* Céluma timeline — soft connector + comfortable spacing */
                         .od-timeline { padding-top: 4px; }
                         .od-timeline .ant-timeline-item-tail { border-inline-start: 2px solid #eef1f0; }
                         .od-timeline .ant-timeline-item { padding-bottom: 22px; }
                         .od-timeline .ant-timeline-item-head { background: transparent; }
-                        @media (max-width: 640px) {
-                            .od-badge { flex-direction: column; align-items: center; text-align: center; }
-                            .od-meta { justify-content: center; }
-                            .od-name-row { justify-content: center; }
-                            .od-stats { margin-left: 0; justify-content: center; }
-                            .od-rail { width: 100%; flex-wrap: wrap; justify-content: center; align-self: auto; margin-left: 0; }
-                        }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="order-detail-grid">
                         {/* Left Column - Main Content */}
                         <div className="od-main">
-                            {/* Order Header Card — Céluma ficha */}
-                    <Card
+                            {/* Order Header — Céluma ficha */}
+                    <RecordCard
                         loading={loading}
-                        style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative" }}
+                        avatar={data && (
+                            data.patient ? (
+                                <Tooltip title="Ver perfil del paciente">
+                                    <Avatar
+                                        size={104}
+                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                        style={{
+                                            backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
+                                            fontSize: 38,
+                                            fontWeight: 700,
+                                            border: "2px solid #d1d5db",
+                                            flexShrink: 0,
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        {getInitials(fullName || data.patient.patient_code)}
+                                    </Avatar>
+                                </Tooltip>
+                            ) : (
+                                <Avatar
+                                    size={104}
+                                    icon={<FileTextOutlined />}
+                                    style={{ backgroundColor: tokens.primary, fontSize: 38, border: "2px solid #d1d5db", flexShrink: 0 }}
+                                />
+                            )
+                        )}
+                        chips={data && (
+                            <>
+                                <span style={codeChipStyle}>{data.order.order_code}</span>
+                                <span style={statusChipStyle(statusConfig)}>
+                                    {statusConfig.icon}
+                                    {statusConfig.label}
+                                </span>
+                            </>
+                        )}
+                        title={data && (
+                            <h1
+                                onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: data.patient ? "pointer" : "default" }}
+                            >
+                                {fullName || data.patient?.patient_code || "Orden sin paciente"}
+                            </h1>
+                        )}
+                        subtitle={data?.patient ? data.patient.patient_code : undefined}
+                        meta={data && (
+                            <>
+                                {(data.order.requesting_physician || data.order.requested_by) && (
+                                    <MetaItem icon={<UserOutlined />}>
+                                        <span style={{ marginRight: 4 }}>Solicitante:</span>
+                                        {data.order.requesting_physician ? (
+                                            <a
+                                                href={`/requesting-physicians/${data.order.requesting_physician.id}`}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
+                                                }}
+                                                style={{ fontWeight: 600, color: tokens.primary }}
+                                            >
+                                                {data.order.requesting_physician.full_name}
+                                            </a>
+                                        ) : (
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                        )}
+                                    </MetaItem>
+                                )}
+                                {data.order.created_at && (
+                                    <MetaItem icon={<CalendarOutlined />}>
+                                        {new Date(data.order.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                                    </MetaItem>
+                                )}
+                            </>
+                        )}
+                        stats={data && (
+                            <>
+                                <div style={{ cursor: "pointer" }} onClick={handleGoToSamples}>
+                                    <Stat value={data.samples.length} label="Muestras" color={tokens.primary} />
+                                </div>
+                                <StatDivider />
+                                <Stat value={reportId ? 1 : 0} label="Reporte" color="#22c55e" />
+                                {data.order.invoice_id && (
+                                    <>
+                                        <StatDivider />
+                                        <Stat value={1} label="Factura" color="#f59e0b" />
+                                    </>
+                                )}
+                            </>
+                        )}
+                        rail={data && (
+                            <>
+                                {(() => {
+                                    const actions: ActionButtonItem[] = [];
+                                    if (data.order.invoice_id && hasPermission("billing:read")) {
+                                        actions.push({ icon: <DollarOutlined />, tooltip: "Ver factura", ariaLabel: "Ver factura", onClick: () => navigate(`/billing/${data.order.id}`) });
+                                    }
+                                    if (!reportId && hasPermission("reports:create")) {
+                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Crear reporte", ariaLabel: "Crear reporte", onClick: handleCreateReport });
+                                    } else if (reportId && hasPermission("reports:read")) {
+                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Ver reporte", ariaLabel: "Ver reporte", onClick: () => navigate(`/reports/${reportId}`) });
+                                    }
+                                    return actions.length > 0 ? <ActionButtonPanel actions={actions} /> : null;
+                                })()}
+                                {data.order.billed_lock && hasPermission("billing:read") && (
+                                    <Panel style={{
+                                        background: "#fffbeb",
+                                        border: "2px solid #fde68a",
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        gap: 10,
+                                        padding: 12,
+                                        width: "fit-content",
+                                        maxWidth: 260,
+                                    }}>
+                                        <ExclamationCircleOutlined style={{ color: "#d97706", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13 }}>Retenido por Pago Pendiente</div>
+                                            <div style={{ color: "#b45309", fontSize: 12.5, marginTop: 3, lineHeight: 1.45 }}>
+                                                El reporte no será visible para los solicitantes hasta liquidar el pago.
+                                            </div>
+                                        </div>
+                                    </Panel>
+                                )}
+                            </>
+                        )}
                     >
                         {data && (
                             <>
-                                {/* Top-right: order code + status chips */}
-                                <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                    <span style={codeChipStyle}>{data.order.order_code}</span>
-                                    <span style={statusChipStyle(statusConfig)}>
-                                        {statusConfig.icon}
-                                        {statusConfig.label}
-                                    </span>
-                                </div>
-                                        {/* Order ficha — patient badge + meta + stats */}
-                                        <div className="od-badge">
-                                            {data.patient ? (
-                                                <Tooltip title="Ver perfil del paciente">
-                                                    <Avatar
-                                                        size={104}
-                                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
-                                                        style={{
-                                                            backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
-                                                            fontSize: 38,
-                                                            fontWeight: 700,
-                                                            border: "2px solid #d1d5db",
-                                                            flexShrink: 0,
-                                                            cursor: "pointer",
-                                                        }}
-                                                    >
-                                                        {getInitials(fullName || data.patient.patient_code)}
-                                                    </Avatar>
-                                                </Tooltip>
-                                            ) : (
-                                                <Avatar
-                                                    size={104}
-                                                    icon={<FileTextOutlined />}
-                                                    style={{ backgroundColor: tokens.primary, fontSize: 38, border: "2px solid #d1d5db", flexShrink: 0 }}
-                                                />
-                                            )}
-                                            <div className="od-badge-info">
-                                                <div className="od-name-row" style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                                                    <h1
-                                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
-                                                        style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: data.patient ? "pointer" : "default" }}
-                                                    >
-                                                        {fullName || data.patient?.patient_code || "Orden sin paciente"}
-                                                    </h1>
-                                                    {data.patient && (
-                                                        <span style={{ fontSize: 13, color: tokens.textSecondary }}>{data.patient.patient_code}</span>
-                                                    )}
-                                                </div>
-                                                <div className="od-meta">
-                                                    {(data.order.requesting_physician || data.order.requested_by) && (
-                                                        <MetaItem icon={<UserOutlined />}>
-                                                            <span style={{ marginRight: 4 }}>Solicitante:</span>
-                                                            {data.order.requesting_physician ? (
-                                                                <a
-                                                                    href={`/requesting-physicians/${data.order.requesting_physician.id}`}
-                                                                    onClick={(event) => {
-                                                                        event.preventDefault();
-                                                                        navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
-                                                                    }}
-                                                                    style={{ fontWeight: 600, color: tokens.primary }}
-                                                                >
-                                                                    {data.order.requesting_physician.full_name}
-                                                                </a>
-                                                            ) : (
-                                                                <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{data.order.requested_by}</span>
-                                                            )}
-                                                        </MetaItem>
-                                                    )}
-                                                    {data.order.created_at && (
-                                                        <MetaItem icon={<CalendarOutlined />}>
-                                                            {new Date(data.order.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
-                                                        </MetaItem>
-                                                    )}
-                                                </div>
-                                                <div className="od-stats" style={{ marginTop: 18 }}>
-                                                    <div style={{ cursor: "pointer" }} onClick={handleGoToSamples}>
-                                                        <Stat value={data.samples.length} label="Muestras" color={tokens.primary} />
-                                                    </div>
-                                                    <div className="od-stat-divider" />
-                                                    <Stat value={reportId ? 1 : 0} label="Reporte" color="#22c55e" />
-                                                    {data.order.invoice_id && (
-                                                        <>
-                                                            <div className="od-stat-divider" />
-                                                            <Stat value={1} label="Factura" color="#f59e0b" />
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {/* Right rail: action panel (left) + payment warning (right), in the white space between the chips and the description */}
-                                            <div className="od-rail">
-                                                {(() => {
-                                                    const actions: ActionButtonItem[] = [];
-                                                    if (data.order.invoice_id && hasPermission("billing:read")) {
-                                                        actions.push({ icon: <DollarOutlined />, tooltip: "Ver factura", ariaLabel: "Ver factura", onClick: () => navigate(`/billing/${data.order.id}`) });
-                                                    }
-                                                    if (!reportId && hasPermission("reports:create")) {
-                                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Crear reporte", ariaLabel: "Crear reporte", onClick: handleCreateReport });
-                                                    } else if (reportId && hasPermission("reports:read")) {
-                                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Ver reporte", ariaLabel: "Ver reporte", onClick: () => navigate(`/reports/${reportId}`) });
-                                                    }
-                                                    return actions.length > 0 ? <ActionButtonPanel actions={actions} /> : null;
-                                                })()}
-                                                {data.order.billed_lock && hasPermission("billing:read") && (
-                                                    <Panel style={{
-                                                        background: "#fffbeb",
-                                                        border: "2px solid #fde68a",
-                                                        display: "flex",
-                                                        alignItems: "flex-start",
-                                                        gap: 10,
-                                                        padding: 12,
-                                                        width: "fit-content",
-                                                        maxWidth: 260,
-                                                    }}>
-                                                        <ExclamationCircleOutlined style={{ color: "#d97706", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
-                                                        <div style={{ minWidth: 0 }}>
-                                                            <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13 }}>Retenido por Pago Pendiente</div>
-                                                            <div style={{ color: "#b45309", fontSize: 12.5, marginTop: 3, lineHeight: 1.45 }}>
-                                                                El reporte no será visible para los solicitantes hasta liquidar el pago.
-                                                            </div>
-                                                        </div>
-                                                    </Panel>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Description - at the bottom (Céluma panel) */}
+                                {/* Description - at the bottom (Céluma panel) */}
                                         <Panel style={{ marginTop: 20 }}>
                                             <div style={{
                                                 fontSize: 12,
@@ -1229,15 +1169,14 @@ export default function OrderDetail() {
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
-                    </Card>
+                    </RecordCard>
 
                             {/* Tabs Card — "Línea de Tiempo" is the default tab so users don't have to scroll to find it */}
                             <div ref={tabsContainerRef}>
                             <Card loading={loading} style={cardStyle}>
-                                <Tabs
+                                <CelumaTabs
                                     activeKey={activeTab}
                                     onChange={setActiveTab}
-                                    className="od-tabs"
                                     items={[
                                         {
                                             key: "timeline",

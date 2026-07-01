@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Dropdown, Tabs, Badge, Empty } from "antd";
+import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Dropdown, Badge, Empty } from "antd";
 import type { UploadProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import {
@@ -15,11 +15,13 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import CelumaButton from "../components/ui/button";
 import Panel from "../components/ui/panel";
-import ActionButtonPanel, { type ActionButtonItem } from "../components/ui/action_button_panel";
+import ActionButtonPanel from "../components/ui/action_button_panel";
 import CelumaTextArea from "../components/ui/textarea_field";
 import UploadDropzone from "../components/ui/upload_dropzone";
 import ImageGalleryCard from "../components/ui/image_gallery_card";
 import ConfirmDialog from "../components/ui/confirm_dialog";
+import CelumaTabs from "../components/ui/celuma_tabs";
+import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
 import AssigneesSection from "../components/collaboration/AssigneesSection";
 import LabelsSection from "../components/collaboration/LabelsSection";
@@ -61,44 +63,6 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
 
 // All valid sample states for the dropdown
 const SAMPLE_STATES = ["RECEIVED", "PROCESSING", "READY", "DAMAGED", "CANCELLED"] as const;
-
-// ── Céluma "ficha" header helpers (shared visual language with order/patient detail) ──
-const codeChipStyle: React.CSSProperties = {
-    background: tokens.secondary,
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 600,
-    padding: "3px 12px",
-    borderRadius: 999,
-    lineHeight: 1.5,
-};
-
-const statusChipStyle = (cfg: { color: string; bg: string }): React.CSSProperties => ({
-    background: cfg.bg,
-    color: cfg.color,
-    fontSize: 13,
-    fontWeight: 600,
-    padding: "3px 12px",
-    borderRadius: 999,
-    lineHeight: 1.5,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-});
-
-const MetaItem = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: tokens.textSecondary, fontSize: 14 }}>
-        <span style={{ color: tokens.primary, fontSize: 16, display: "inline-flex" }}>{icon}</span>
-        {children}
-    </span>
-);
-
-const Stat = ({ value, label, color }: { value: number; label: string; color: string }) => (
-    <div style={{ textAlign: "center", padding: "0 18px" }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: tokens.titleFont, lineHeight: 1.1 }}>{value}</div>
-        <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 2 }}>{label}</div>
-    </div>
-);
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -997,130 +961,104 @@ export default function SampleDetailPage() {
                             }
                         }
 
-                        /* Sample ficha (header badge) — fluid: the action rail wraps below the
-                           sample info when the column gets narrow, instead of overflowing. */
-                        .sd-badge { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: stretch; }
-                        .sd-badge-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; }
-                        .sd-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
-                        .sd-stats { display: flex; flex-wrap: wrap; align-items: stretch; margin-left: -18px; }
-                        .sd-stat-divider { width: 1px; background: #eef1f0; }
-                        .sd-rail { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 12px 20px; margin-left: auto; align-self: flex-end; }
-                        /* Céluma tabs — teal active ink + label */
-                        .sd-tabs .ant-tabs-tab .ant-tabs-tab-btn { font-weight: 600; color: ${tokens.textSecondary}; }
-                        .sd-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn { color: #3da8a0; }
-                        .sd-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: ${tokens.primary}; }
-                        .sd-tabs .ant-tabs-ink-bar { background: ${tokens.primary}; height: 3px; border-radius: 3px; }
-                        .sd-tabs .ant-tabs-nav::before { border-bottom-color: #eef1f0; }
                         /* Céluma timeline — soft connector + comfortable spacing */
                         .sd-timeline { padding-top: 4px; }
                         .sd-timeline .ant-timeline-item-tail { border-inline-start: 2px solid #eef1f0; }
                         .sd-timeline .ant-timeline-item { padding-bottom: 22px; }
                         .sd-timeline .ant-timeline-item-head { background: transparent; }
-                        @media (max-width: 640px) {
-                            .sd-badge { flex-direction: column; align-items: center; text-align: center; }
-                            .sd-meta { justify-content: center; }
-                            .sd-name-row { justify-content: center; }
-                            .sd-stats { margin-left: 0; justify-content: center; }
-                            .sd-rail { width: 100%; flex-wrap: wrap; justify-content: center; align-self: auto; margin-left: 0; }
-                        }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="sample-detail-grid">
                         {/* Left Column - Main Content */}
                         <div className="sd-main">
-                            {/* Sample Header Card — Céluma ficha */}
-                            <Card
+                            {/* Sample Header — Céluma ficha */}
+                            <RecordCard
                                 loading={loading}
-                                style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative" }}
+                                avatar={detail && (
+                                    <Tooltip title="Ver perfil del paciente">
+                                        <Avatar
+                                            size={104}
+                                            onClick={() => navigate(`/patients/${detail.patient.id}`)}
+                                            style={{
+                                                backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
+                                                fontSize: 38,
+                                                fontWeight: 700,
+                                                border: "2px solid #d1d5db",
+                                                flexShrink: 0,
+                                                cursor: "pointer",
+                                            }}
+                                        >
+                                            {getInitials(detail.patient.full_name || detail.patient.patient_code)}
+                                        </Avatar>
+                                    </Tooltip>
+                                )}
+                                chips={detail && (
+                                    <>
+                                        <span style={codeChipStyle}>{detail.sample_code}</span>
+                                        <span style={statusChipStyle(stateConfig)}>
+                                            {stateConfig.icon}
+                                            {stateConfig.label}
+                                        </span>
+                                    </>
+                                )}
+                                title={detail && (
+                                    <h1
+                                        onClick={() => navigate(`/patients/${detail.patient.id}`)}
+                                        style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: "pointer" }}
+                                    >
+                                        {detail.patient.full_name || detail.patient.patient_code}
+                                    </h1>
+                                )}
+                                subtitle={detail?.patient.patient_code}
+                                meta={detail && (
+                                    <>
+                                        <MetaItem icon={typeConfig.icon}>
+                                            <span style={{ marginRight: 4 }}>Tipo:</span>
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeConfig.label}</span>
+                                        </MetaItem>
+                                        <MetaItem icon={<ContainerOutlined />}>
+                                            <span style={{ marginRight: 4 }}>Orden:</span>
+                                            <a
+                                                href={`/orders/${detail.order.id}`}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    navigate(`/orders/${detail.order.id}`);
+                                                }}
+                                                style={{ fontWeight: 600, color: tokens.primary }}
+                                            >
+                                                {detail.order.order_code}
+                                            </a>
+                                        </MetaItem>
+                                        {detail.received_at && (
+                                            <MetaItem icon={<CalendarOutlined />}>
+                                                <span style={{ marginRight: 4 }}>Recibida:</span>
+                                                {new Date(detail.received_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                                            </MetaItem>
+                                        )}
+                                        <MetaItem icon={<InboxOutlined />}>
+                                            <span style={{ marginRight: 4 }}>Sucursal:</span>
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
+                                                {`${detail.branch.code ?? ""} ${detail.branch.name ?? ""}`.trim() || "—"}
+                                            </span>
+                                        </MetaItem>
+                                    </>
+                                )}
+                                stats={detail && (
+                                    <div style={{ cursor: "pointer" }} onClick={handleGoToGallery}>
+                                        <Stat value={images?.images.length || 0} label="Imágenes" color={tokens.primary} />
+                                    </div>
+                                )}
+                                rail={detail && (
+                                    <ActionButtonPanel
+                                        actions={[
+                                            { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`) },
+                                        ]}
+                                    />
+                                )}
                             >
                                 {detail && (
                                     <>
-                                        {/* Top-right: sample code + state chips (read-only; state is changed from the rail card) */}
-                                        <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                            <span style={codeChipStyle}>{detail.sample_code}</span>
-                                            <span style={statusChipStyle(stateConfig)}>
-                                                {stateConfig.icon}
-                                                {stateConfig.label}
-                                            </span>
-                                        </div>
-
-                                        {/* Sample ficha — patient badge + meta + stats + action rail */}
-                                        <div className="sd-badge">
-                                            <Tooltip title="Ver perfil del paciente">
-                                                <Avatar
-                                                    size={104}
-                                                    onClick={() => navigate(`/patients/${detail.patient.id}`)}
-                                                    style={{
-                                                        backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
-                                                        fontSize: 38,
-                                                        fontWeight: 700,
-                                                        border: "2px solid #d1d5db",
-                                                        flexShrink: 0,
-                                                        cursor: "pointer",
-                                                    }}
-                                                >
-                                                    {getInitials(detail.patient.full_name || detail.patient.patient_code)}
-                                                </Avatar>
-                                            </Tooltip>
-                                            <div className="sd-badge-info">
-                                                <div className="sd-name-row" style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                                                    <h1
-                                                        onClick={() => navigate(`/patients/${detail.patient.id}`)}
-                                                        style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: "pointer" }}
-                                                    >
-                                                        {detail.patient.full_name || detail.patient.patient_code}
-                                                    </h1>
-                                                    <span style={{ fontSize: 13, color: tokens.textSecondary }}>{detail.patient.patient_code}</span>
-                                                </div>
-                                                <div className="sd-meta">
-                                                    <MetaItem icon={typeConfig.icon}>
-                                                        <span style={{ marginRight: 4 }}>Tipo:</span>
-                                                        <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeConfig.label}</span>
-                                                    </MetaItem>
-                                                    <MetaItem icon={<ContainerOutlined />}>
-                                                        <span style={{ marginRight: 4 }}>Orden:</span>
-                                                        <a
-                                                            href={`/orders/${detail.order.id}`}
-                                                            onClick={(event) => {
-                                                                event.preventDefault();
-                                                                navigate(`/orders/${detail.order.id}`);
-                                                            }}
-                                                            style={{ fontWeight: 600, color: tokens.primary }}
-                                                        >
-                                                            {detail.order.order_code}
-                                                        </a>
-                                                    </MetaItem>
-                                                    {detail.received_at && (
-                                                        <MetaItem icon={<CalendarOutlined />}>
-                                                            <span style={{ marginRight: 4 }}>Recibida:</span>
-                                                            {new Date(detail.received_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
-                                                        </MetaItem>
-                                                    )}
-                                                    <MetaItem icon={<InboxOutlined />}>
-                                                        <span style={{ marginRight: 4 }}>Sucursal:</span>
-                                                        <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
-                                                            {`${detail.branch.code ?? ""} ${detail.branch.name ?? ""}`.trim() || "—"}
-                                                        </span>
-                                                    </MetaItem>
-                                                </div>
-                                                <div className="sd-stats" style={{ marginTop: 18 }}>
-                                                    <div style={{ cursor: "pointer" }} onClick={handleGoToGallery}>
-                                                        <Stat value={images?.images.length || 0} label="Imágenes" color={tokens.primary} />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {/* Right rail: action panel */}
-                                            <div className="sd-rail">
-                                                {(() => {
-                                                    const actions: ActionButtonItem[] = [
-                                                        { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`) },
-                                                    ];
-                                                    return <ActionButtonPanel actions={actions} />;
-                                                })()}
-                                            </div>
-                                        </div>
-
                                         {/* Description - at the bottom (Céluma panel) */}
                                         <Panel style={{ marginTop: 20 }}>
                                             <div style={{
@@ -1192,15 +1130,14 @@ export default function SampleDetailPage() {
                                     </>
                                 )}
                                 <ErrorText>{error}</ErrorText>
-                            </Card>
+                            </RecordCard>
 
                             {/* Tabs Card — "Línea de Tiempo" is the default tab */}
                             <div ref={galleryRef}>
                                 <Card loading={loading} style={cardStyle}>
-                                    <Tabs
+                                    <CelumaTabs
                                         activeKey={activeTab}
                                         onChange={setActiveTab}
-                                        className="sd-tabs"
                                         items={[
                                             {
                                                 key: "timeline",

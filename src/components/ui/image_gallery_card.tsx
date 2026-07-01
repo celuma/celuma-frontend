@@ -3,6 +3,8 @@ import { Image } from "antd";
 import { DeleteOutlined, LoadingOutlined } from "@ant-design/icons";
 import Panel from "./panel";
 import ActionButtonPanel from "./action_button_panel";
+import SelectionCheckbox from "./selection_checkbox";
+import { tokens } from "../design/tokens";
 
 type Props = {
     /** Thumbnail/displayed source. */
@@ -22,6 +24,12 @@ type Props = {
     deleteDisabled?: boolean;
     /** When provided, renders the xsmall delete action floating over the image. */
     onDelete?: () => void;
+    /** Selectable mode: shows a floating checkbox and a teal ring when selected. */
+    selectable?: boolean;
+    /** Whether the card is currently selected (selectable mode). */
+    selected?: boolean;
+    /** Toggle handler for selectable mode. */
+    onToggleSelect?: (selected: boolean) => void;
 };
 
 /**
@@ -41,6 +49,9 @@ export default function ImageGalleryCard({
     deleting,
     deleteDisabled,
     onDelete,
+    selectable,
+    selected,
+    onToggleSelect,
 }: Props) {
     const dateText = date ? new Date(date).toLocaleDateString("es-MX") : null;
 
@@ -54,7 +65,18 @@ export default function ImageGalleryCard({
     }, [previewSrc, src]);
 
     return (
-        <Panel style={{ padding: 0, overflow: "hidden", position: "relative", height: imageHeight, background: "#f1f5f9" }}>
+        <Panel
+            style={{
+                padding: 0,
+                overflow: "hidden",
+                position: "relative",
+                height: imageHeight,
+                background: "#f1f5f9",
+                ...(selected
+                    ? { borderColor: tokens.primary, boxShadow: `0 0 0 3px ${tokens.primary}33` }
+                    : {}),
+            }}
+        >
             <Image
                 src={src}
                 alt={alt}
@@ -63,6 +85,30 @@ export default function ImageGalleryCard({
                 wrapperStyle={{ width: "100%", height: "100%", display: "block" }}
                 style={{ width: "100%", height: imageHeight, objectFit: "cover", cursor: "pointer", display: "block" }}
             />
+
+            {/* Selection checkbox — floats top-left; clicking it toggles without opening the lightbox. */}
+            {selectable && (
+                <div
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleSelect?.(!selected); }}
+                    style={{
+                        position: "absolute",
+                        top: 8,
+                        left: 8,
+                        zIndex: 3,
+                        background: "rgba(255,255,255,0.9)",
+                        backdropFilter: "blur(4px)",
+                        WebkitBackdropFilter: "blur(4px)",
+                        borderRadius: 8,
+                        padding: 3,
+                        display: "inline-flex",
+                        cursor: "pointer",
+                        boxShadow: "0 1px 2px rgba(0,0,0,.12)",
+                    }}
+                >
+                    <SelectionCheckbox checked={!!selected} />
+                </div>
+            )}
 
             {isPrimary && (
                 <span

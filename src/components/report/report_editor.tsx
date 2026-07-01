@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-    message, Button, Tabs, Tag, Typography, Input, Popconfirm, Card, Image, Modal, Avatar, Divider, Form, Switch,
+    message, Typography, Card, Image, Modal, Avatar, Divider, Form,
 } from "antd";
 import {
-    UserOutlined, FileTextOutlined, ExperimentOutlined,
+    UserOutlined, FileTextOutlined,
     DeleteOutlined, FilePdfOutlined, SaveOutlined, EditOutlined, SafetyCertificateOutlined,
+    ExclamationCircleOutlined, CalendarOutlined, ContainerOutlined,
+    AuditOutlined, CheckCircleOutlined, SendOutlined,
 } from "@ant-design/icons";
-import ReactQuill from "react-quill-new";
-import "react-quill-new/dist/quill.snow.css";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import {
@@ -42,11 +42,23 @@ import {
     resolveSignatureMetadata,
 } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
-import StatsCard from "../ui/stats_card";
+import RecordCard, { codeChipStyle, statusChipStyle, MetaItem } from "../ui/record_card";
+import CelumaTabs from "../ui/celuma_tabs";
+import CelumaButton from "../ui/button";
+import ActionButtonPanel from "../ui/action_button_panel";
+import CelumaSteps, { type CelumaStep } from "../ui/celuma_steps";
+import CelumaModal from "../ui/celuma_modal";
+import Panel from "../ui/panel";
+import EmptyState from "../ui/empty_state";
+import CelumaTextArea from "../ui/textarea_field";
+import CelumaRichText from "../ui/celuma_rich_text";
+import CelumaSwitch from "../ui/celuma_switch";
+import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
 import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
-import { renderStatusChip } from "../ui/table_helpers";
+import { renderStatusChip, getSampleTypeConfig } from "../ui/table_helpers";
+import { getInitials, getAvatarColor } from "../comments/comment_utils";
 import CommentInput from "../comments/comment_input";
 import { useUserProfile } from "../../hooks/use_user_profile";
 import { PERMS } from "../../lib/rbac";
@@ -56,10 +68,6 @@ import { PERMS } from "../../lib/rbac";
 // ---------------------------------------------------------------------------
 
 const NOTE_MAX_LENGTH = 25;
-const NOTE_CONTROL_KEYS = new Set([
-    "Backspace","Delete","ArrowLeft","ArrowRight","ArrowUp","ArrowDown",
-    "Tab","Escape","Home","End","PageUp","PageDown",
-]);
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -88,25 +96,24 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
-function getInitials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() ?? "";
-    const last = parts.length > 1 ? (parts[parts.length - 1]?.[0]?.toUpperCase() ?? "") : "";
-    return first + last;
-}
-
-function getAvatarColor(name: string): string {
-    const colors = ["#0f8b8d","#0c6f71","#2563eb","#7c3aed","#b45309","#065f46","#be185d","#1d4ed8"];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return colors[Math.abs(hash) % colors.length];
-}
-
 function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
     return (f as ReportBaseFieldCustom).is_custom === true;
 }
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
+
+// Report lifecycle for the CelumaSteps bar (colors mirror REPORT_STATUS_CONFIG chips).
+const REPORT_STEPS: CelumaStep[] = [
+    { key: "DRAFT", title: "Borrador", icon: <EditOutlined />, color: "#f59e0b", bg: "#fffbeb" },
+    { key: "IN_REVIEW", title: "En Revisión", icon: <AuditOutlined />, color: "#3b82f6", bg: "#eff6ff" },
+    { key: "APPROVED", title: "Aprobado", icon: <CheckCircleOutlined />, color: "#10b981", bg: "#ecfdf5" },
+    { key: "PUBLISHED", title: "Publicado", icon: <SendOutlined />, color: "#22c55e", bg: "#f0fdf4" },
+];
+
+function getReportStep(status?: string): number {
+    const i = REPORT_STEPS.findIndex((s) => s.key === status);
+    return i >= 0 ? i : 0;
+}
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -149,20 +156,9 @@ const cardTitleStyle: CSSProperties = {
     fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a",
 };
 
-// ---------------------------------------------------------------------------
-// Quill toolbar with table support
-// ---------------------------------------------------------------------------
-
-const QUILL_MODULES_RICH = {
-    toolbar: {
-        container: [
-            [{ header: [1, 2, 3, false] }],
-            ["bold", "italic", "underline"],
-            [{ list: "ordered" }, { list: "bullet" }],
-            ["link"],
-            ["clean"],
-        ],
-    },
+// Caption above a content field (section label), Céluma form language.
+const fieldCaptionStyle: CSSProperties = {
+    fontSize: 13, fontWeight: 600, color: tokens.textPrimary, marginBottom: 8,
 };
 
 // ---------------------------------------------------------------------------
@@ -196,7 +192,6 @@ const ReportEditor: React.FC = () => {
 
     // Images per section (derived from sectionContent for type=images)
     const [reportImages, setReportImages] = useState<ReportImage[]>([]);
-    const [reportPreview, setReportPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
 
     // Existing envelope (for editing)
     const [envelope, setEnvelope] = useState<ReportEnvelope | null>(null);
@@ -470,15 +465,6 @@ const ReportEditor: React.FC = () => {
         setReportImages(imgs.map((i) => ({ id: i.id, url: i.url, caption: i.caption, thumbnailUrl: i.url })));
     }, [imagesSectionKey, sectionContent]);
 
-    // Sync reportPreview index with images count
-    useEffect(() => {
-        setReportPreview((prev) => {
-            if (reportImages.length === 0) return { visible: false, index: 0 };
-            if (prev.index >= reportImages.length) return { ...prev, index: reportImages.length - 1 };
-            return prev;
-        });
-    }, [reportImages.length]);
-
     // ---------------------------------------------------------------------------
     // Build envelope for save/preview
     // ---------------------------------------------------------------------------
@@ -741,31 +727,29 @@ const ReportEditor: React.FC = () => {
 
     if (loadError) {
         return (
-            <div style={{ padding: 24 }}>
-                <Typography.Text type="danger">{loadError}</Typography.Text>
-            </div>
+            <EmptyState
+                icon={<ExclamationCircleOutlined />}
+                color="#e5484d"
+                title="No se pudo cargar el reporte"
+                description={loadError}
+                action={<CelumaButton onClick={() => navigate("/reports")}>Ver reportes</CelumaButton>}
+            />
         );
     }
 
     if (!fullData && !reportId && !prefilledOrderId) {
         return (
-            <div style={{
-                display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
-                minHeight: 400, gap: 16, padding: 40,
-            }}>
-                <FileTextOutlined style={{ fontSize: 48, color: "#d1d5db" }} />
-                <Typography.Title level={4} style={{ color: "#6b7280", margin: 0 }}>
-                    No hay reporte seleccionado
-                </Typography.Title>
-                <Typography.Text type="secondary" style={{ textAlign: "center", maxWidth: 400 }}>
-                    Para crear un reporte, dirígete a una orden y selecciona la opción de crear reporte desde ahí.
-                    También puedes acceder a un reporte existente desde la lista de reportes.
-                </Typography.Text>
-                <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                    <Button type="primary" onClick={() => navigate("/orders")}>Ver órdenes</Button>
-                    <Button onClick={() => navigate("/reports")}>Ver reportes</Button>
-                </div>
-            </div>
+            <EmptyState
+                icon={<FileTextOutlined />}
+                title="No hay reporte seleccionado"
+                description="Para crear un reporte, dirígete a una orden y selecciona la opción de crear reporte desde ahí. También puedes acceder a un reporte existente desde la lista de reportes."
+                action={
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <CelumaButton type="primary" onClick={() => navigate("/orders")}>Ver órdenes</CelumaButton>
+                        <CelumaButton onClick={() => navigate("/reports")}>Ver reportes</CelumaButton>
+                    </div>
+                }
+            />
         );
     }
 
@@ -793,113 +777,108 @@ const ReportEditor: React.FC = () => {
             <div style={{ display: "grid", gap: tokens.gap }}>
 
                 {/* ============================================================
-                    CARD 1 — Detalles del reporte
+                    CARD 1 — Reporte (Céluma ficha)
                 ============================================================ */}
-                <StatsCard
-                    title="Detalles del reporte"
-                    extra={
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                            {order?.order_code && (
-                                <span style={{ fontFamily: tokens.titleFont, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
-                                    {order.order_code}
-                                </span>
-                            )}
+                <RecordCard
+                    avatar={
+                        <Avatar
+                            size={104}
+                            onClick={() => patient?.id && navigate(`/patients/${patient.id}`)}
+                            style={{
+                                backgroundColor: getAvatarColor(patientName || "P"),
+                                fontSize: 38,
+                                fontWeight: 700,
+                                border: "2px solid #d1d5db",
+                                flexShrink: 0,
+                                cursor: patient?.id ? "pointer" : "default",
+                            }}
+                            icon={!patientName ? <UserOutlined /> : undefined}
+                        >
+                            {patientName ? getInitials(patientName) : undefined}
+                        </Avatar>
+                    }
+                    chips={
+                        <>
+                            {order?.order_code && <span style={codeChipStyle}>{order.order_code}</span>}
+                            {(() => {
+                                const cfg = { color: "#0d9488", bg: "#f0fdfa" };
+                                return renderStatusChip(envelope?.status ?? "DRAFT", "report") ?? (
+                                    <span style={statusChipStyle(cfg)}>Borrador</span>
+                                );
+                            })()}
+                        </>
+                    }
+                    title={
+                        <h1
+                            onClick={() => patient?.id && navigate(`/patients/${patient.id}`)}
+                            style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: patient?.id ? "pointer" : "default" }}
+                        >
+                            {patientName || "Sin paciente"}
+                        </h1>
+                    }
+                    subtitle={[patient?.patient_code, patientAge !== null ? `${patientAge} años` : null].filter(Boolean).join(" · ") || undefined}
+                    meta={
+                        <>
                             {studyTypeName && (
-                                <div style={{ padding: "4px 10px", borderRadius: 12, background: "#f3f4f6", color: "#374151", fontWeight: 600, fontSize: 11, display: "flex", alignItems: "center" }}>
-                                    {studyTypeName}
-                                </div>
+                                <MetaItem icon={<FileTextOutlined />}>
+                                    <span style={{ marginRight: 4 }}>Estudio:</span>
+                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{studyTypeName}</span>
+                                </MetaItem>
                             )}
-                            {renderStatusChip(envelope?.status ?? "DRAFT", "report")}
-                        </div>
+                            {order?.requested_by && (
+                                <MetaItem icon={<UserOutlined />}>
+                                    <span style={{ marginRight: 4 }}>Solicitante:</span>
+                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{order.requested_by}</span>
+                                </MetaItem>
+                            )}
+                            {order?.id && (
+                                <MetaItem icon={<ContainerOutlined />}>
+                                    <a
+                                        href={`/orders/${order.id}`}
+                                        onClick={(e) => { e.preventDefault(); navigate(`/orders/${order.id}`); }}
+                                        style={{ fontWeight: 600, color: tokens.primary }}
+                                    >
+                                        Ver orden
+                                    </a>
+                                </MetaItem>
+                            )}
+                        </>
                     }
                 >
-                    {/* Patient row — clicable */}
-                        <div
-                            style={{
-                                display: "inline-flex", alignItems: "center", gap: 10,
-                                cursor: patient?.id ? "pointer" : "default",
-                                padding: "8px 12px", borderRadius: 8,
-                                marginLeft: -12, marginBottom: 16,
-                                transition: "background 0.15s ease",
-                            }}
-                            onClick={() => patient?.id && navigate(`/patients/${patient.id}`)}
-                            title={patient?.id ? "Ver paciente" : undefined}
-                            onMouseEnter={(e) => { if (patient?.id) e.currentTarget.style.background = "#f3f4f6"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                        >
-                            <Avatar
-                                size={40}
-                                style={{ backgroundColor: getAvatarColor(patientName || "P"), flexShrink: 0, fontSize: 15, fontWeight: 600 }}
-                                icon={!patientName ? <UserOutlined /> : undefined}
-                            >
-                                {patientName ? getInitials(patientName) : undefined}
-                            </Avatar>
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: 14, color: tokens.primary }}>
-                                    {patientName || <em style={{ color: "#9ca3af" }}>Sin paciente</em>}
-                                </div>
-                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                    {[patient?.patient_code, patientAge !== null ? `${patientAge} años` : null].filter(Boolean).join(" · ")}
-                                </div>
-                            </div>
-                        </div>
-
-                    {/* Info rows */}
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 20px", color: tokens.textSecondary, fontSize: 13 }}>
-                        {order?.requested_by && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <UserOutlined />
-                                <span>Solicitante:</span>
-                                <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{order.requested_by}</span>
-                            </div>
+                    {/* Workflow — progress steps + status actions, integrated in the header */}
+                    <Divider style={{ margin: "18px 0 16px" }} />
+                    <CelumaSteps steps={REPORT_STEPS} current={getReportStep(envelope?.status)} />
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+                        {!isReadOnly && (
+                            <CelumaButton type="primary" size="small" icon={<SaveOutlined />} onClick={handleSave}>
+                                Guardar reporte
+                            </CelumaButton>
                         )}
-                        {order?.id && (
-                            <div
-                                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                onClick={() => navigate(`/orders/${order.id}`)}
-                            >
-                                <FileTextOutlined />
-                                <span style={{ fontWeight: 500, color: tokens.primary }}>Ver orden</span>
-                            </div>
+                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleExportPDF}>
+                            Exportar a PDF
+                        </CelumaButton>
+                        {envelope?.status === "DRAFT" && (
+                            <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
+                                Enviar a Revisión
+                            </CelumaButton>
                         )}
-                        {order?.id && (
-                            <div
-                                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                onClick={() => navigate(`/orders/${order.id}#samples`)}
-                            >
-                                <ExperimentOutlined />
-                                <span style={{ fontWeight: 500, color: tokens.primary }}>Ver muestras</span>
-                            </div>
+                        {envelope?.status === "IN_REVIEW" && userHasPermission(PERMS.REPORTS_APPROVE) && (
+                            <>
+                                <CelumaButton type="primary" size="small" icon={<CheckCircleOutlined />} onClick={() => setIsApproveModalVisible(true)}>
+                                    Aprobar
+                                </CelumaButton>
+                                <CelumaButton danger size="small" icon={<EditOutlined />} onClick={() => setIsChangesModalVisible(true)}>
+                                    Solicitar Cambios
+                                </CelumaButton>
+                            </>
+                        )}
+                        {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
+                            <CelumaButton type="primary" size="small" icon={<SafetyCertificateOutlined />} onClick={handleSign}>
+                                Firmar y Publicar
+                            </CelumaButton>
                         )}
                     </div>
-                </StatsCard>
-
-                {/* ============================================================
-                    CARD 2 — Detalles del estudio (solo si hay campos custom)
-                ============================================================ */}
-                {hasCustomFields && (
-                    <div style={cardStyle}>
-                        <div style={{ padding: "16px 24px", borderBottom: "1px solid #f0f0f0" }}>
-                            <h2 style={{ ...cardTitleStyle, marginBottom: 0 }}>Detalles del estudio</h2>
-                        </div>
-                        <div style={{ padding: "16px 24px 20px 24px" }}>
-                            <div className="re-grid-2">
-                                {customBaseFields.map(({ key, field }) => (
-                                    <FloatingCaptionInput
-                                        key={key}
-                                        label={field.label}
-                                        value={baseValues[key] ?? ""}
-                                        disabled={isReadOnly}
-                                        type={field.type === "numeric" ? "number" : "text"}
-                                        onChange={(e) =>
-                                            setBaseValues((prev) => ({ ...prev, [key]: e.target.value }))
-                                        }
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                </RecordCard>
 
                 {/* ============================================================
                     CARD 3 — Muestras
@@ -910,24 +889,31 @@ const ReportEditor: React.FC = () => {
                             <h2 style={{ ...cardTitleStyle, marginBottom: 0 }}>Muestras</h2>
                         </div>
                         <div style={{ padding: "16px 24px 20px 24px" }}>
-                            <Tabs
+                            <CelumaTabs
                                 destroyInactiveTabPane
-                                items={samples.map((s, idx) => ({
+                                items={samples.map((s, idx) => {
+                                    const typeCfg = getSampleTypeConfig(s.type);
+                                    return {
                                     key: s.id,
-                                    label: `Muestra ${idx + 1} · ${s.sample_code}`,
+                                    label: (
+                                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span style={{ color: typeCfg.color, display: "inline-flex" }}>{typeCfg.icon}</span>
+                                            {`Muestra ${idx + 1} · ${s.sample_code}`}
+                                        </span>
+                                    ),
                                     children: (
                                         <div style={{ display: "grid", gap: 12 }}>
-                                            <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                                                <span><b>Código:</b> {s.sample_code}</span>
-                                                <span><b>Tipo:</b> {s.type}</span>
-                                                <span>
-                                                    <b>Fecha recepción:</b>{" "}
+                                            <Panel style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+                                                <MetaItem icon={typeCfg.icon}>
+                                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeCfg.label}</span>
+                                                </MetaItem>
+                                                <MetaItem icon={<CalendarOutlined />}>
                                                     {s.received_at
                                                         ? new Date(s.received_at).toLocaleDateString("es-MX")
-                                                        : <em style={{ color: "#9ca3af" }}>Sin especificar</em>}
-                                                </span>
-                                                <span><b>Estado:</b> <Tag color="#94a3b8">{s.state}</Tag></span>
-                                            </div>
+                                                        : <em style={{ color: "#9ca3af" }}>Sin fecha</em>}
+                                                </MetaItem>
+                                                {renderStatusChip(s.state, "sample")}
+                                            </Panel>
                                             {imagesSectionKey && (
                                                 <SampleImagesPicker
                                                     sampleId={s.id}
@@ -952,7 +938,8 @@ const ReportEditor: React.FC = () => {
                                             )}
                                         </div>
                                     ),
-                                }))}
+                                    };
+                                })}
                             />
                         </div>
                     </div>
@@ -970,22 +957,50 @@ const ReportEditor: React.FC = () => {
                             style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
                         >
                             {isReadOnly && (
-                                <div style={{ marginBottom: 16, padding: 12, background: "#f0f0f0", borderRadius: 8 }}>
-                                    <Typography.Text type="secondary">
-                                        Este reporte está en modo solo lectura porque se encuentra en revisión o ya ha sido publicado.
-                                    </Typography.Text>
-                                </div>
+                                <Panel style={{
+                                    marginBottom: 16,
+                                    background: "#fffbeb",
+                                    border: "2px solid #fde68a",
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: 10,
+                                    padding: 12,
+                                }}>
+                                    <ExclamationCircleOutlined style={{ color: "#d97706", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
+                                    <div style={{ fontSize: 13, color: "#92400e", lineHeight: 1.45 }}>
+                                        Este reporte está en <b>modo solo lectura</b> porque se encuentra en revisión o ya ha sido publicado.
+                                    </div>
+                                </Panel>
                             )}
 
                             <Form layout="vertical" style={{ display: "grid", gap: 20 }}>
-                                {/* Report title */}
+                                {/* Detalles del reporte — report name + custom base fields, grouped */}
                                 <div>
-                                    <FloatingCaptionInput
-                                        label="Nombre del reporte"
-                                        value={reportTitle}
-                                        disabled={isReadOnly}
-                                        onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); }}
-                                    />
+                                    <SectionTitle style={{ marginBottom: 12 }}>Detalles del reporte</SectionTitle>
+                                    <div style={{ display: "grid", gap: 16 }}>
+                                        <FloatingCaptionInput
+                                            label="Nombre del reporte"
+                                            value={reportTitle}
+                                            disabled={isReadOnly}
+                                            onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); }}
+                                        />
+                                        {hasCustomFields && (
+                                            <div className="re-grid-2">
+                                                {customBaseFields.map(({ key, field }) => (
+                                                    <FloatingCaptionInput
+                                                        key={key}
+                                                        label={field.label}
+                                                        value={baseValues[key] ?? ""}
+                                                        disabled={isReadOnly}
+                                                        type={field.type === "numeric" ? "number" : "text"}
+                                                        onChange={(e) =>
+                                                            setBaseValues((prev) => ({ ...prev, [key]: e.target.value }))
+                                                        }
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Dynamic sections */}
@@ -995,37 +1010,38 @@ const ReportEditor: React.FC = () => {
 
                                     if (section.type === "richtext") {
                                         return (
-                                            <Form.Item key={key} label={section.label} style={{ marginBottom: 0 }}>
-                                                <ReactQuill
-                                                    theme="snow"
+                                            <div key={key}>
+                                                <div style={fieldCaptionStyle}>{section.label}</div>
+                                                <CelumaRichText
                                                     value={val}
                                                     onChange={(html) =>
                                                         setSectionContent((prev) => ({ ...prev, [key]: html }))
                                                     }
-                                                    modules={QUILL_MODULES_RICH}
                                                     readOnly={isReadOnly}
+                                                    placeholder={`Escribe ${section.label.toLowerCase()}…`}
                                                 />
-                                            </Form.Item>
+                                            </div>
                                         );
                                     }
 
                                     if (section.type === "table") {
                                         return (
-                                            <Form.Item key={key} label={section.label} style={{ marginBottom: 0 }}>
-                                                <div>
+                                            <div key={key}>
+                                                <div style={fieldCaptionStyle}>{section.label}</div>
+                                                <Panel>
                                                     {val ? (
                                                         <div
-                                                            style={{ marginBottom: 8, fontSize: 13, overflowX: "auto" }}
+                                                            style={{ marginBottom: 10, fontSize: 13, overflowX: "auto" }}
                                                             dangerouslySetInnerHTML={{ __html: markdownTableToHtml(val) }}
                                                         />
                                                     ) : (
-                                                        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8, fontSize: 13 }}>
+                                                        <div style={{ marginBottom: 10, fontSize: 13, color: tokens.textSecondary }}>
                                                             Sin datos. Abre el editor para añadir contenido.
-                                                        </Typography.Text>
+                                                        </div>
                                                     )}
                                                     {!isReadOnly && (
-                                                        <Button
-                                                            size="small"
+                                                        <CelumaButton
+                                                            size="xsmall"
                                                             icon={<EditOutlined />}
                                                             onClick={() => {
                                                                 setTableDraft(val);
@@ -1033,32 +1049,35 @@ const ReportEditor: React.FC = () => {
                                                             }}
                                                         >
                                                             {val ? "Editar tabla" : "Crear tabla"}
-                                                        </Button>
+                                                        </CelumaButton>
                                                     )}
-                                                </div>
-                                            </Form.Item>
+                                                </Panel>
+                                            </div>
                                         );
                                     }
 
                                     if (section.type === "text") {
                                         return (
-                                            <Form.Item key={key} label={section.label} style={{ marginBottom: 0 }}>
-                                                <Input.TextArea
+                                            <div key={key}>
+                                                <div style={fieldCaptionStyle}>{section.label}</div>
+                                                <CelumaTextArea
                                                     value={val}
                                                     disabled={isReadOnly}
-                                                    autoSize={{ minRows: 3, maxRows: 8 }}
-                                                    onChange={(e) =>
-                                                        setSectionContent((prev) => ({ ...prev, [key]: e.target.value }))
+                                                    rows={3}
+                                                    onChange={(v) =>
+                                                        setSectionContent((prev) => ({ ...prev, [key]: v }))
                                                     }
+                                                    placeholder={`Escribe ${section.label.toLowerCase()}…`}
                                                 />
-                                            </Form.Item>
+                                            </div>
                                         );
                                     }
 
                                     if (section.type === "numeric") {
                                         return (
-                                            <Form.Item key={key} label={section.label} style={{ marginBottom: 0 }}>
-                                                <Input
+                                            <div key={key}>
+                                                <FloatingCaptionInput
+                                                    label={section.label}
                                                     type="number"
                                                     value={val}
                                                     disabled={isReadOnly}
@@ -1066,111 +1085,74 @@ const ReportEditor: React.FC = () => {
                                                         setSectionContent((prev) => ({ ...prev, [key]: e.target.value }))
                                                     }
                                                 />
-                                            </Form.Item>
+                                            </div>
                                         );
                                     }
 
                                     return null;
                                 })}
 
-                                {/* Image gallery for the images section */}
+                                {/* Image gallery for the images section — Céluma figure cards */}
                                 {imagesSectionKey && (
                                     <div>
-                                        <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
+                                        <SectionTitle style={{ marginBottom: 4 }}>
                                             {template?.sections[imagesSectionKey]?.label ?? "Imágenes"}
-                                        </Typography.Text>
-                                        <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+                                        </SectionTitle>
+                                        <div style={{ fontSize: 12.5, color: tokens.textSecondary, marginBottom: 12 }}>
                                             Selecciona imágenes desde las muestras. Eliminar aquí las desasocia del reporte.
-                                        </Typography.Text>
+                                        </div>
 
                                         {reportImages.length > 0 ? (
-                                            <Image.PreviewGroup
-                                                preview={{
-                                                    visible: reportPreview.visible,
-                                                    current: reportPreview.index,
-                                                    onVisibleChange: (v) => setReportPreview((p) => ({ ...p, visible: v })),
-                                                    onChange: (c) => setReportPreview((p) => ({ ...p, index: c })),
-                                                    toolbarRender: (_node, info) => {
-                                                        const ci = typeof info.current === "number" ? info.current : reportPreview.index;
-                                                        return (
-                                                            <div className="ant-image-preview-operations" style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                                                                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                                                    {info.icons.zoomOutIcon}
-                                                                    {info.icons.zoomInIcon}
-                                                                </div>
-                                                                {imagesSectionKey && reportImages[ci] && (
-                                                                    <Popconfirm title="Quitar imagen" okText="Sí" cancelText="No"
-                                                                        onConfirm={() => removeImage(imagesSectionKey, ci)}>
-                                                                        <Button size="small" type="text" icon={<DeleteOutlined />}
-                                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                                                                            Eliminar
-                                                                        </Button>
-                                                                    </Popconfirm>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    },
-                                                }}
-                                            >
-                                                <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}>
+                                            <Image.PreviewGroup>
+                                                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
                                                     {reportImages.map((img, idx) => {
                                                         const note = img.caption ?? "";
-                                                        const counterId = `img-note-${img.id ?? idx}`;
                                                         return (
-                                                            <Card key={img.id ?? idx} size="small" hoverable
-                                                                style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #e2e8f0" }}
-                                                                bodyStyle={{ padding: 0 }}>
-                                                                <div style={{ display: "flex", gap: 12, padding: 12, alignItems: "center" }}>
-                                                                    <div style={{ flex: "0 0 25%", aspectRatio: "1/1", borderRadius: 10, overflow: "hidden", background: "#0f172a" }}>
-                                                                        <Image
-                                                                            src={img.thumbnailUrl || img.url}
-                                                                            alt={img.caption || `Figura ${idx + 1}`}
-                                                                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                                                            fallback={img.url}
-                                                                            preview={{ src: img.url }}
-                                                                            onClick={() => setReportPreview({ visible: true, index: idx })}
-                                                                        />
-                                                                    </div>
-                                                                    <div style={{ flex: "1 1 0", minWidth: 0, background: "#f8fafc", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 6, border: "1px solid #e2e8f0" }}>
-                                                                        <Typography.Text strong>{`Figura ${idx + 1}`}</Typography.Text>
-                                                                        <Input.TextArea
-                                                                            placeholder="Nota para esta imagen"
-                                                                            autoSize={{ minRows: 1, maxRows: 2 }}
-                                                                            maxLength={NOTE_MAX_LENGTH}
-                                                                            aria-describedby={counterId}
-                                                                            value={note}
-                                                                            onChange={(e) => {
-                                                                                if (imagesSectionKey) updateImageCaption(imagesSectionKey, idx, e.target.value.slice(0, NOTE_MAX_LENGTH));
-                                                                            }}
-                                                                            onKeyDown={(e) => {
-                                                                                if (e.metaKey || e.ctrlKey || e.altKey) return;
-                                                                                if (note.length < NOTE_MAX_LENGTH) return;
-                                                                                if (NOTE_CONTROL_KEYS.has(e.key)) return;
-                                                                                e.preventDefault();
-                                                                            }}
-                                                                            style={{ background: "#fff", fontSize: 13 }}
-                                                                        />
-                                                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-                                                                            <span id={counterId} style={{ fontSize: 12, color: "#475569" }}>{note.length}/{NOTE_MAX_LENGTH}</span>
-                                                                            {imagesSectionKey && (
-                                                                                <Popconfirm title="Quitar imagen" okText="Sí" cancelText="No"
-                                                                                    onConfirm={() => removeImage(imagesSectionKey, idx)}>
-                                                                                    <Button danger type="text" icon={<DeleteOutlined />}
-                                                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                                                                                        Eliminar
-                                                                                    </Button>
-                                                                                </Popconfirm>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
+                                                            <Panel key={img.id ?? idx} style={{ display: "flex", gap: 12, padding: 12, alignItems: "stretch" }}>
+                                                                <div style={{ flex: "0 0 30%", aspectRatio: "1/1", borderRadius: 10, overflow: "hidden", background: "#f1f5f9", flexShrink: 0 }}>
+                                                                    <Image
+                                                                        src={img.thumbnailUrl || img.url}
+                                                                        alt={img.caption || `Figura ${idx + 1}`}
+                                                                        wrapperStyle={{ width: "100%", height: "100%", display: "block" }}
+                                                                        style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer", display: "block" }}
+                                                                        fallback={img.url}
+                                                                        preview={{ src: img.url }}
+                                                                    />
                                                                 </div>
-                                                            </Card>
+                                                                <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                                                                        <span style={{ fontWeight: 700, color: tokens.textPrimary, fontFamily: tokens.titleFont }}>{`Figura ${idx + 1}`}</span>
+                                                                        {!isReadOnly && (
+                                                                            <ActionButtonPanel
+                                                                                size="xxsmall"
+                                                                                actions={[{
+                                                                                    icon: <DeleteOutlined />,
+                                                                                    tooltip: "Quitar del reporte",
+                                                                                    ariaLabel: "Quitar imagen",
+                                                                                    danger: true,
+                                                                                    onClick: () => imagesSectionKey && removeImage(imagesSectionKey, idx),
+                                                                                }]}
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                    <CelumaTextArea
+                                                                        value={note}
+                                                                        disabled={isReadOnly}
+                                                                        rows={2}
+                                                                        maxLength={NOTE_MAX_LENGTH}
+                                                                        placeholder="Nota para esta imagen"
+                                                                        onChange={(v) => {
+                                                                            if (imagesSectionKey) updateImageCaption(imagesSectionKey, idx, v.slice(0, NOTE_MAX_LENGTH));
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </Panel>
                                                         );
                                                     })}
                                                 </div>
                                             </Image.PreviewGroup>
                                         ) : (
-                                            <Typography.Text type="secondary">No hay imágenes seleccionadas.</Typography.Text>
+                                            <div style={{ fontSize: 13, color: tokens.textSecondary }}>No hay imágenes seleccionadas.</div>
                                         )}
                                     </div>
                                 )}
@@ -1179,36 +1161,18 @@ const ReportEditor: React.FC = () => {
 
                                 {/* Signature configuration (T7) */}
                                 <div style={{ marginBottom: 16 }}>
-                                    <h3 style={{
-                                        ...cardTitleStyle,
-                                        fontSize: 16,
-                                        marginBottom: 12,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                    }}>
-                                        <SafetyCertificateOutlined style={{ color: tokens.primary }} />
-                                        Firma
-                                    </h3>
-                                    <div style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 12,
-                                        padding: "12px 14px",
-                                        borderRadius: 8,
-                                        background: "#fafafa",
-                                        border: "1px solid #f0f0f0",
-                                    }}>
+                                    <SectionTitle icon={<SafetyCertificateOutlined />}>Firma</SectionTitle>
+                                    <Panel style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                                         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                                             <div style={{ minWidth: 0 }}>
-                                                <div style={{ fontWeight: 500, color: tokens.textPrimary }}>
+                                                <div style={{ fontWeight: 600, color: tokens.textPrimary }}>
                                                     Incluir sección de firma en el reporte
                                                 </div>
-                                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                <div style={{ fontSize: 12.5, color: tokens.textSecondary, marginTop: 2 }}>
                                                     Agrega un bloque al final del informe con espacio para la firma del revisor.
                                                 </div>
                                             </div>
-                                            <Switch
+                                            <CelumaSwitch
                                                 checked={showSignatureSection}
                                                 disabled={isReadOnly}
                                                 onChange={(checked) => {
@@ -1219,49 +1183,20 @@ const ReportEditor: React.FC = () => {
                                         </div>
                                         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, opacity: showSignatureSection ? 1 : 0.5 }}>
                                             <div style={{ minWidth: 0 }}>
-                                                <div style={{ fontWeight: 500, color: tokens.textPrimary }}>
+                                                <div style={{ fontWeight: 600, color: tokens.textPrimary }}>
                                                     Firma digital (imagen PNG)
                                                 </div>
-                                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                <div style={{ fontSize: 12.5, color: tokens.textSecondary, marginTop: 2 }}>
                                                     Inserta la firma digital del revisor al firmar el reporte.
                                                 </div>
                                             </div>
-                                            <Switch
+                                            <CelumaSwitch
                                                 checked={requireDigitalSignature}
                                                 disabled={isReadOnly || !showSignatureSection}
                                                 onChange={setRequireDigitalSignature}
                                             />
                                         </div>
-                                    </div>
-                                </div>
-
-                                <Divider />
-
-                                {/* Action buttons */}
-                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                                    {!isReadOnly && (
-                                        <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>
-                                            Guardar reporte
-                                        </Button>
-                                    )}
-                                    <Button icon={<FilePdfOutlined />} onClick={handleExportPDF}>
-                                        Exportar a PDF
-                                    </Button>
-                                    {envelope?.status === "DRAFT" && (
-                                        <Button onClick={handleSubmit}>Enviar a Revisión</Button>
-                                    )}
-                                    {envelope?.status === "IN_REVIEW" && userHasPermission(PERMS.REPORTS_APPROVE) && (
-                                        <>
-                                            <Button style={{ background: "#52c41a", color: "white", borderColor: "#52c41a" }}
-                                                onClick={() => setIsApproveModalVisible(true)}>Aprobar</Button>
-                                            <Button style={{ background: "#f59e0b", color: "white", borderColor: "#f59e0b" }}
-                                                onClick={() => setIsChangesModalVisible(true)}>Solicitar Cambios</Button>
-                                        </>
-                                    )}
-                                    {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
-                                        <Button style={{ background: "#1890ff", color: "white", borderColor: "#1890ff" }}
-                                            onClick={handleSign}>Firmar y Publicar</Button>
-                                    )}
+                                    </Panel>
                                 </div>
                             </Form>
                         </Card>
@@ -1292,66 +1227,60 @@ const ReportEditor: React.FC = () => {
             </div>
 
             {/* Table section edit modal */}
-            <Modal
+            <CelumaModal
                 title={`Editar tabla — ${tableModal?.label ?? ""}`}
                 open={tableModal !== null}
                 onCancel={() => setTableModal(null)}
-                onOk={() => {
-                    if (tableModal) {
-                        setSectionContent((prev) => ({ ...prev, [tableModal.key]: tableDraft }));
-                    }
-                    setTableModal(null);
-                }}
-                okText="Guardar"
-                cancelText="Cancelar"
                 width={720}
                 destroyOnClose
+                footer={[
+                    <CelumaButton key="cancel" size="small" danger onClick={() => setTableModal(null)}>Cancelar</CelumaButton>,
+                    <CelumaButton key="save" size="small" type="primary" onClick={() => {
+                        if (tableModal) setSectionContent((prev) => ({ ...prev, [tableModal.key]: tableDraft }));
+                        setTableModal(null);
+                    }}>Guardar</CelumaButton>,
+                ]}
             >
-                <div style={{ marginTop: 16 }}>
-                    <TableEditor
-                        value={tableDraft}
-                        onChange={setTableDraft}
-                    />
-                </div>
-            </Modal>
+                <TableEditor value={tableDraft} onChange={setTableDraft} />
+            </CelumaModal>
 
             {/* Approve modal */}
-            <Modal
-                title={<div style={{ fontSize: 18, fontWeight: 600 }}>Aprobar Reporte</div>}
+            <CelumaModal
+                title="Aprobar Reporte"
                 open={isApproveModalVisible}
                 onCancel={() => { setIsApproveModalVisible(false); setApproveComment(""); }}
                 width={600}
                 footer={[
-                    <Button key="cancel" onClick={() => { setIsApproveModalVisible(false); setApproveComment(""); }}>Cancelar</Button>,
-                    <Button key="approve" type="primary" onClick={handleApprove}
-                        style={{ background: "#52c41a", borderColor: "#52c41a" }}>Aprobar</Button>,
+                    <CelumaButton key="cancel" size="small" danger onClick={() => { setIsApproveModalVisible(false); setApproveComment(""); }}>Cancelar</CelumaButton>,
+                    <CelumaButton key="approve" size="small" type="primary" icon={<CheckCircleOutlined />} onClick={handleApprove}>Aprobar</CelumaButton>,
                 ]}
             >
-                <Typography.Paragraph style={{ color: "#475569", marginBottom: 16 }}>
+                <div style={{ color: tokens.textSecondary, marginBottom: 16 }}>
                     Puedes agregar un comentario opcional al aprobar el reporte:
-                </Typography.Paragraph>
+                </div>
                 <CommentInput value={approveComment} onChange={setApproveComment}
                     onSubmit={async (text) => setApproveComment(text)}
                     placeholder="Comentario opcional..." rows={4} hideSubmitButton />
-            </Modal>
+            </CelumaModal>
 
             {/* Request changes modal */}
-            <Modal
-                title={<div style={{ fontSize: 18, fontWeight: 600 }}>Solicitar Cambios</div>}
+            <CelumaModal
+                title="Solicitar Cambios"
                 open={isChangesModalVisible}
                 onCancel={() => { setIsChangesModalVisible(false); setChangesComment(""); }}
                 width={600}
                 footer={[
-                    <Button key="cancel" onClick={() => { setIsChangesModalVisible(false); setChangesComment(""); }}>Cancelar</Button>,
-                    <Button key="send" type="primary" disabled={!changesComment.trim()}
-                        style={{ background: "#f59e0b", borderColor: "#f59e0b" }}
-                        onClick={handleRequestChanges}>Solicitar Cambios</Button>,
+                    <CelumaButton key="cancel" size="small" danger onClick={() => { setIsChangesModalVisible(false); setChangesComment(""); }}>Cancelar</CelumaButton>,
+                    <CelumaButton key="send" size="small" type="primary" disabled={!changesComment.trim()} onClick={handleRequestChanges}>Solicitar Cambios</CelumaButton>,
                 ]}
             >
+                <div style={{ color: tokens.textSecondary, marginBottom: 16 }}>
+                    Describe los cambios necesarios para que el autor pueda ajustar el reporte:
+                </div>
                 <CommentInput value={changesComment} onChange={setChangesComment}
                     onSubmit={async (text) => setChangesComment(text)}
                     placeholder="Describe los cambios necesarios..." rows={4} hideSubmitButton />
-            </Modal>
+            </CelumaModal>
         </>
     );
 };
