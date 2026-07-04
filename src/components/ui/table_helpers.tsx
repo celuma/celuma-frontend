@@ -157,6 +157,41 @@ export const renderCodeWithSubtext = (
 };
 
 /**
+ * Shared Active/Inactive chip — the Céluma "soft tint + ink" pattern (green =
+ * active, red = inactive). Replaces the inline `<div>`/antd `<Tag>` variants
+ * that used to be duplicated across the configuration lists.
+ */
+export const renderActiveChip = (isActive: boolean) => {
+    const cfg = isActive
+        ? { bg: "#ecfdf5", ink: "#10b981", label: "Activo" }
+        : { bg: "#fef2f2", ink: "#ef4444", label: "Inactivo" };
+    return (
+        <span
+            style={{
+                backgroundColor: cfg.bg,
+                color: cfg.ink,
+                borderRadius: 12,
+                fontSize: 11,
+                fontWeight: 500,
+                padding: "4px 10px",
+                display: "inline-block",
+            }}
+        >
+            {cfg.label}
+        </span>
+    );
+};
+
+/** Standard antd column `filters`/`onFilter` pair for an Activo/Inactivo boolean field. */
+export const activeFilter = <T extends { is_active: boolean } = { is_active: boolean }>() => ({
+    filters: [
+        { text: "Activo", value: true },
+        { text: "Inactivo", value: false },
+    ],
+    onFilter: (value: boolean | React.Key, record: T) => record.is_active === value,
+});
+
+/**
  * Component for rendering a patient cell with avatar and name, clickeable to patient detail
  */
 export const PatientCell: React.FC<{

@@ -11,6 +11,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -86,15 +87,19 @@ export default function OrdersList() {
         })();
     }, []);
 
-    // Search predicate (query arrives trimmed + lowercased from CelumaTable).
-    const searchFilter = (r: OrdersListResponse["orders"][number], q: string) => {
-        const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
-        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
-        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
-        return basicFields || labelMatch || assigneeMatch;
-    };
+    // Search predicate — normalized, separator-insensitive and typo-tolerant via matchesQuery.
+    const searchFilter = (r: OrdersListResponse["orders"][number], q: string) =>
+        matchesQuery([
+            r.order_code,
+            r.patient?.full_name,
+            r.patient?.patient_code,
+            r.requesting_physician?.full_name,
+            r.requesting_physician?.physician_code,
+            r.requested_by,
+            r.notes,
+            r.labels?.map((label) => label.name),
+            r.assignees?.map((user) => [user.name, user.email]),
+        ], q);
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {

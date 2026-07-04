@@ -18,6 +18,7 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -31,7 +32,7 @@ const getInitials = (fullName?: string | null): string => {
 };
 
 const getAvatarColor = (name: string): string => {
-    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
+    const colors = ["#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
@@ -485,6 +486,9 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
                     emptyText="Sin usuarios registrados"
+                    searchable
+                    searchPlaceholder="Buscar usuarios"
+                    searchFilter={(r, q) => matchesQuery([r.full_name, r.email, r.username, r.roles?.map((code) => [code, roleDisplayName(code)])], q)}
                 />
             </Card>
 
@@ -537,7 +541,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                         <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: tokens.primary }}>
                                 Rol <span style={{ color: "#b91c1c" }}>*</span>
                             </span>
                             <Controller
@@ -582,7 +586,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     {/* Branch selector hidden for full-access roles */}
                     {watchedRole !== "admin" && watchedRole !== "superuser" ? (
                         <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: tokens.primary }}>
                                 Sucursales asignadas
                             </span>
                             <Controller

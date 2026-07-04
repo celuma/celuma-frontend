@@ -9,6 +9,8 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
+import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 
 const { TextArea } = Input;
@@ -208,12 +210,15 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             dataIndex: "code",
             key: "code",
             width: 150,
-            render: (code: string) => <span style={{ fontWeight: 600, color: "#0f8b8d" }}>{code}</span>,
+            sorter: (a, b) => a.code.localeCompare(b.code),
+            defaultSortOrder: "ascend",
+            render: (code: string) => <span style={{ fontWeight: 600, color: tokens.primary }}>{code}</span>,
         },
         {
             title: "Nombre",
             dataIndex: "name",
             key: "name",
+            sorter: (a, b) => a.name.localeCompare(b.name),
             render: (name: string) => <span style={{ fontWeight: 500 }}>{name}</span>,
         },
         {
@@ -250,34 +255,16 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
-            filters: [
-                { text: "Activo", value: true },
-                { text: "Inactivo", value: false },
-            ],
-            onFilter: (value, record) => record.is_active === value,
-            render: (is_active: boolean) => (
-                <div style={{
-                    backgroundColor: is_active ? "#ecfdf5" : "#fef2f2",
-                    color: is_active ? "#10b981" : "#ef4444",
-                    borderRadius: 12,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    padding: "4px 10px",
-                    display: "inline-block",
-                }}>
-                    {is_active ? "Activo" : "Inactivo"}
-                </div>
-            ),
+            ...activeFilter(),
+            render: (is_active: boolean) => renderActiveChip(is_active),
         },
         {
             title: "Fecha de creación",
             dataIndex: "created_at",
             key: "created_at",
             width: 150,
-            render: (date: string) => {
-                const d = new Date(date);
-                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-            },
+            sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+            render: (date: string) => renderDateCell(date),
         },
         {
             title: "Acciones",
@@ -331,6 +318,9 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                         loading={loading}
                         pagination={{ pageSize: 10 }}
                         emptyText="Sin tipos de estudio"
+                        searchable
+                        searchPlaceholder="Buscar tipos de estudio"
+                        searchFilter={(r, q) => matchesQuery([r.code, r.name, r.description, r.default_template?.name], q)}
                     />
                 </Card>
             </div>

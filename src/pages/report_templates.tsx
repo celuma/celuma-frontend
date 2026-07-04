@@ -11,6 +11,9 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
+import SearchField from "../components/ui/search_field";
+import { renderActiveChip } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
 import type {
     ReportTemplateListItem,
@@ -355,6 +358,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     // ---- Lista ----
     const [loadingList, setLoadingList] = useState(false);
     const [templates, setTemplates] = useState<ReportTemplateListItem[]>([]);
+    const [templateSearch, setTemplateSearch] = useState("");
 
     // ---- Panel derecho ----
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -705,14 +709,32 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             styles={{ body: { overflowY: "auto", flex: 1 } }}
         >
             <Spin spinning={loadingList}>
+                <SearchField
+                    small
+                    value={templateSearch}
+                    onChange={setTemplateSearch}
+                    placeholder="Buscar plantillas"
+                    style={{ marginBottom: 12 }}
+                />
                 {templates.length === 0 && !loadingList ? (
                     <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description="Sin plantillas aún"
                     />
                 ) : (
+                    (() => {
+                        const visibleTemplates = templates.filter((t) => matchesQuery([t.name, t.description], templateSearch));
+                        if (visibleTemplates.length === 0) {
+                            return (
+                                <Empty
+                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                    description="Sin coincidencias"
+                                />
+                            );
+                        }
+                        return (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {templates.map((t) => (
+                        {visibleTemplates.map((t) => (
                             <div
                                 key={t.id}
                                 style={{
@@ -734,17 +756,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                         <FileTextOutlined style={{ color: tokens.primary }} />
                                         <Text strong ellipsis style={{ maxWidth: 160 }}>{t.name}</Text>
-                                        <div style={{
-                                            backgroundColor: t.is_active ? "#ecfdf5" : "#f3f4f6",
-                                            color: t.is_active ? "#10b981" : "#6b7280",
-                                            borderRadius: 12,
-                                            fontSize: 10,
-                                            fontWeight: 500,
-                                            padding: "2px 8px",
-                                            display: "inline-block",
-                                        }}>
-                                            {t.is_active ? "Activo" : "Inactivo"}
-                                        </div>
+                                        {renderActiveChip(t.is_active)}
                                     </div>
                                     {t.description && (
                                         <Text
@@ -784,6 +796,8 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             </div>
                         ))}
                     </div>
+                        );
+                    })()
                 )}
             </Spin>
         </Card>

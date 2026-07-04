@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Input, Space, Button, Tag } from "antd";
+import { Layout, Card } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
+import CelumaButton from "../components/ui/button";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/table";
-import { stringSorter } from "../components/ui/table_helpers";
+import { stringSorter, renderActiveChip, activeFilter } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
@@ -50,7 +52,6 @@ function BranchesList({ embedded = false }: Props) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<BranchRow[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         setLoading(true);
@@ -59,14 +60,6 @@ function BranchesList({ embedded = false }: Props) {
             .catch((err) => setError(err instanceof Error ? err.message : "Ocurrió un error inesperado."))
             .finally(() => setLoading(false));
     }, []);
-
-    const filtered = rows.filter((r) => {
-        const q = search.trim().toLowerCase();
-        if (!q) return true;
-        return [r.code, r.name, r.city, r.state]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
-    });
 
     const basePath = embedded ? "/config/branches" : "/branches";
 
@@ -106,14 +99,8 @@ function BranchesList({ embedded = false }: Props) {
             dataIndex: "is_active",
             key: "is_active",
             width: 110,
-            filters: [
-                { text: "Activo", value: true },
-                { text: "Inactivo", value: false },
-            ],
-            onFilter: (value, record) => record.is_active === value,
-            render: (v: boolean) => (
-                <Tag color={v ? "green" : "default"}>{v ? "Activo" : "Inactivo"}</Tag>
-            ),
+            ...activeFilter(),
+            render: (v: boolean) => renderActiveChip(v),
         },
     ];
 
@@ -121,34 +108,23 @@ function BranchesList({ embedded = false }: Props) {
         <Card
             title={<span style={cardTitleStyle}>Sucursales</span>}
             style={cardStyle}
-            extra={
-                <Space>
-                    <Input.Search
-                        allowClear
-                        placeholder="Buscar sucursal"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onSearch={(v) => setSearch(v)}
-                        style={{ width: 260 }}
-                    />
-                    <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => navigate(`${basePath}/register`)}
-                    >
-                        Nueva sucursal
-                    </Button>
-                </Space>
-            }
         >
             <CelumaTable
-                dataSource={filtered}
+                dataSource={rows}
                 columns={columns}
                 rowKey={(r) => r.id}
                 loading={loading}
                 onRowClick={(record) => navigate(`${basePath}/${record.id}`)}
                 emptyText="Sin sucursales"
                 pagination={{ pageSize: 10 }}
+                searchable
+                searchPlaceholder="Buscar sucursal"
+                searchFilter={(r, q) => matchesQuery([r.code, r.name, r.city, r.state], q)}
+                searchExtra={
+                    <CelumaButton type="primary" icon={<PlusOutlined />} onClick={() => navigate(`${basePath}/register`)}>
+                        Nueva sucursal
+                    </CelumaButton>
+                }
                 locale={{
                     filterTitle: "Filtrar",
                     filterConfirm: "Aceptar",

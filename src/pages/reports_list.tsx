@@ -9,6 +9,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 
@@ -86,13 +87,16 @@ export default function ReportsList() {
         })();
     }, []);
 
-    const searchFilter = (r: ReportsListResponse["reports"][number], q: string) => {
-        const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
-        const reviewerMatch = r.reviewers?.some((reviewer) => reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)) || false;
-        return basicFields || reviewerMatch;
-    };
+    const searchFilter = (r: ReportsListResponse["reports"][number], q: string) =>
+        matchesQuery([
+            r.title,
+            r.diagnosis_text,
+            r.order.order_code,
+            r.order.patient?.full_name,
+            r.order.patient?.patient_code,
+            r.order.requested_by,
+            r.reviewers?.map((reviewer) => [reviewer.name, reviewer.email]),
+        ], q);
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {

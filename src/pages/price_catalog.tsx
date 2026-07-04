@@ -9,6 +9,8 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
+import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 
@@ -213,9 +215,11 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
         {
             title: "Tipo de Estudio",
             key: "study_type",
+            sorter: (a, b) => (a.study_type?.code || "").localeCompare(b.study_type?.code || ""),
+            defaultSortOrder: "ascend",
             render: (_, record) => (
                 <div>
-                    <div style={{ fontWeight: 600, color: "#0f8b8d" }}>
+                    <div style={{ fontWeight: 600, color: tokens.primary }}>
                         {record.study_type?.code || "—"}
                     </div>
                     <div style={{ fontSize: 12, color: "#666" }}>
@@ -229,6 +233,7 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
             dataIndex: "unit_price",
             key: "unit_price",
             width: 150,
+            sorter: (a, b) => a.unit_price - b.unit_price,
             render: (price: number) => (
                 <span style={{ fontWeight: 500 }}>${price.toFixed(2)} MXN</span>
             ),
@@ -238,46 +243,23 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
             dataIndex: "effective_from",
             key: "effective_from",
             width: 130,
-            render: (date?: string) => {
-                if (!date) return <span style={{ color: "#888" }}>—</span>;
-                const d = new Date(date);
-                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-            },
+            sorter: (a, b) => (a.effective_from ? new Date(a.effective_from).getTime() : 0) - (b.effective_from ? new Date(b.effective_from).getTime() : 0),
+            render: (date?: string) => date ? renderDateCell(date) : <span style={{ color: "#888" }}>—</span>,
         },
         {
             title: "Vigencia Hasta",
             dataIndex: "effective_to",
             key: "effective_to",
             width: 130,
-            render: (date?: string) => {
-                if (!date) return <span style={{ color: "#888" }}>—</span>;
-                const d = new Date(date);
-                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-            },
+            render: (date?: string) => date ? renderDateCell(date) : <span style={{ color: "#888" }}>—</span>,
         },
         {
             title: "Estado",
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
-            filters: [
-                { text: "Activo", value: true },
-                { text: "Inactivo", value: false },
-            ],
-            onFilter: (value, record) => record.is_active === value,
-            render: (is_active: boolean) => (
-                <div style={{
-                    backgroundColor: is_active ? "#ecfdf5" : "#fef2f2",
-                    color: is_active ? "#10b981" : "#ef4444",
-                    borderRadius: 12,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    padding: "4px 10px",
-                    display: "inline-block",
-                }}>
-                    {is_active ? "Activo" : "Inactivo"}
-                </div>
-            ),
+            ...activeFilter(),
+            render: (is_active: boolean) => renderActiveChip(is_active),
         },
         {
             title: "Acciones",
@@ -332,6 +314,9 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
                     emptyText="Sin precios registrados"
+                    searchable
+                    searchPlaceholder="Buscar precios"
+                    searchFilter={(r, q) => matchesQuery([r.study_type?.code, r.study_type?.name, r.unit_price], q)}
                 />
             </Card>
 
