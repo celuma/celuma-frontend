@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space, Avatar, Tag } from "antd";
+import { useEffect, useState } from "react";
+import { Layout, Card, Avatar } from "antd";
+import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 
@@ -51,7 +53,6 @@ export default function RequestingPhysiciansList() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<RequestingPhysicianRow[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         (async () => {
@@ -68,15 +69,10 @@ export default function RequestingPhysiciansList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((row) =>
-            [row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone]
-                .filter(Boolean)
-                .some((value) => String(value).toLowerCase().includes(q))
-        );
-    }, [rows, search]);
+    const searchFilter = (row: RequestingPhysicianRow, q: string) =>
+        [row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(q));
 
     const columns: ColumnsType<RequestingPhysicianRow> = [
         {
@@ -116,7 +112,19 @@ export default function RequestingPhysiciansList() {
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
-            render: (isActive: boolean) => <Tag color={isActive ? "green" : "default"}>{isActive ? "Activo" : "Inactivo"}</Tag>,
+            render: (isActive: boolean) => (
+                <div style={{
+                    backgroundColor: isActive ? "#ecfdf5" : "#f3f4f6",
+                    color: isActive ? "#10b981" : "#6b7280",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "4px 10px",
+                    display: "inline-block",
+                }}>
+                    {isActive ? "Activo" : "Inactivo"}
+                </div>
+            ),
             filters: [
                 { text: "Activo", value: true },
                 { text: "Inactivo", value: false },
@@ -129,33 +137,27 @@ export default function RequestingPhysiciansList() {
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/home"} onNavigate={(key) => navigate(key)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Médicos solicitantes</span>}
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <PageHeader
+                        title="Médicos Solicitantes"
+                        subtitle="Consulta y gestiona los médicos solicitantes"
                         extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar médicos solicitantes"
-                                    value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
-                                    onSearch={(value) => setSearch(value)}
-                                    style={{ width: 320 }}
-                                />
-                                <Button type="primary" onClick={() => navigate("/requesting-physicians/register")}>
-                                    Registrar Médico
-                                </Button>
-                            </Space>
+                            <CelumaButton type="primary" onClick={() => navigate("/requesting-physicians/register")}>
+                                Registrar Médico
+                            </CelumaButton>
                         }
-                        style={cardStyle}
-                    >
+                    />
+                    <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(row) => row.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/requesting-physicians/${record.id}`)}
                             emptyText="Sin médicos solicitantes"
+                            searchable
+                            searchPlaceholder="Buscar médicos solicitantes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                         />
                         {error && <ErrorText>{error}</ErrorText>}

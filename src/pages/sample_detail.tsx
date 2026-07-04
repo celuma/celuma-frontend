@@ -1,28 +1,40 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Layout, Card, Tag, Upload, Button as AntButton, Image, message, Avatar, Tooltip, Timeline, Typography, Dropdown, Input, Popconfirm, Spin } from "antd";
-import type { UploadProps, MenuProps } from "antd";
+import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Dropdown, Badge, Empty } from "antd";
+import type { UploadProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
-import { 
+import {
     ExperimentOutlined, CheckCircleOutlined,
-    CalendarOutlined, SettingOutlined, PlusOutlined, FileImageOutlined,
-    InboxOutlined, ContainerOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, DownOutlined
+    CalendarOutlined, SettingOutlined, FileImageOutlined,
+    InboxOutlined, ContainerOutlined, EditOutlined,
+    ClockCircleOutlined, CheckOutlined, FlagOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import CelumaButton from "../components/ui/button";
+import Panel from "../components/ui/panel";
+import ActionButtonPanel from "../components/ui/action_button_panel";
+import CelumaTextArea from "../components/ui/textarea_field";
+import UploadDropzone from "../components/ui/upload_dropzone";
+import ImageGalleryCard from "../components/ui/image_gallery_card";
+import ConfirmDialog from "../components/ui/confirm_dialog";
+import CelumaTabs from "../components/ui/celuma_tabs";
+import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat } from "../components/ui/record_card";
+import { tokens, cardStyle } from "../components/design/tokens";
 import AssigneesSection from "../components/collaboration/AssigneesSection";
 import LabelsSection from "../components/collaboration/LabelsSection";
+import { RailSectionHeader, RailConfigButton } from "../components/collaboration/RailSectionHeader";
 import type { Label, LabUser, LabelWithInheritance } from "../services/collaboration_service";
-import { 
-    getLabels, 
-    getLabUsers, 
-    updateSampleAssignees, 
-    updateSampleLabels 
+import {
+    getLabels,
+    getLabUsers,
+    updateSampleAssignees,
+    updateSampleLabels
 } from "../services/collaboration_service";
 import { getSampleTypeConfig } from "../components/ui/table_helpers";
+import { getInitials, getAvatarColor, formatLocalDateTime, renderUserMention } from "../components/comments/comment_utils";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -40,71 +52,6 @@ const LABEL_COLORS = [
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
 
-// Generate initials from full name
-const getInitials = (fullName?: string): string => {
-    if (!fullName) return "P";
-    const parts = fullName.trim().split(/\s+/);
-    const first = parts[0]?.[0]?.toUpperCase() || "";
-    const last = parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : "";
-    return first + last || "P";
-};
-
-// Generate a consistent color based on name
-const getAvatarColor = (name: string): string => {
-    const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
-        "#f59e0b", "#10b981", "#ef4444", "#6366f1"
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
-// Helper function to render user mention with tooltip (for timeline events)
-const renderUserMention = (user: {name: string; username?: string; avatar?: string | null}, key?: string | number): React.ReactNode => {
-    const username = user.username || user.name.toLowerCase().replace(/\s+/g, '');
-    
-    const tooltipContent = (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Avatar 
-                size={32}
-                src={user.avatar}
-                style={{ 
-                    backgroundColor: user.avatar ? undefined : getAvatarColor(user.name),
-                    fontSize: 12,
-                    flexShrink: 0
-                }}
-            >
-                {!user.avatar && getInitials(user.name)}
-            </Avatar>
-            <span style={{ fontWeight: 500 }}>{user.name}</span>
-        </div>
-    );
-    
-    return (
-        <Tooltip key={key} title={tooltipContent} placement="top">
-            <span 
-                style={{
-                    color: "#0f8b8d",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "color 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#0a6566";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "#0f8b8d";
-                }}
-            >
-                @{username}
-            </span>
-        </Tooltip>
-    );
-};
-
 // Sample state configuration - matches backend SampleState enum
 const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
     RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
@@ -116,22 +63,6 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
 
 // All valid sample states for the dropdown
 const SAMPLE_STATES = ["RECEIVED", "PROCESSING", "READY", "DAMAGED", "CANCELLED"] as const;
-
-// Format UTC datetime to local time
-const formatLocalDateTime = (utcDateString: string): string => {
-    // Ensure the date string is interpreted as UTC if it doesn't have a timezone
-    const dateStr = utcDateString.endsWith('Z') ? utcDateString : utcDateString + 'Z';
-    const date = new Date(dateStr);
-    
-    // Format in local timezone
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${day}/${month}/${year}, ${hours}:${minutes}`;
-};
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -203,15 +134,18 @@ export default function SampleDetailPage() {
     const [detail, setDetail] = useState<SampleDetail | null>(null);
     const [images, setImages] = useState<SampleImages | null>(null);
     const [uploading, setUploading] = useState(false);
-    const [preview, setPreview] = useState<{ visible: boolean; index: number }>({ visible: false, index: 0 });
     const [updatingState, setUpdatingState] = useState(false);
     const [events, setEvents] = useState<TimelineEvent[]>([]);
+    // Active tab in the content card ("timeline" by default so it shows first)
+    const [activeTab, setActiveTab] = useState<string>("timeline");
+    // State picker dropdown open state (controlled so it closes on selection)
+    const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+    // Image pending delete confirmation (null = dialog closed)
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     // Notes editing state
     const [editingNotes, setEditingNotes] = useState(false);
     const [notesValue, setNotesValue] = useState("");
     const [savingNotes, setSavingNotes] = useState(false);
-    // Drag and drop state
-    const [isDragging, setIsDragging] = useState(false);
     // Upload progress state
     const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
     // Deleting image state
@@ -389,8 +323,9 @@ export default function SampleDetailPage() {
         }
     }, [sampleId, deletingImageId, refresh]);
 
-    // Handle navigation to gallery
+    // Handle navigation to gallery (switch tab + scroll to the content card)
     const handleGoToGallery = useCallback(() => {
+        setActiveTab("gallery");
         if (galleryRef.current) {
             galleryRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
         }
@@ -443,45 +378,78 @@ export default function SampleDetailPage() {
                 });
             }
         },
-        onDrop: () => setIsDragging(false),
     } as const;
 
     const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
     const typeConfig = getSampleTypeConfig(detail?.type || "");
 
-    // Dropdown menu for state change with styled tags (no icons)
-    const stateMenuItems: MenuProps["items"] = SAMPLE_STATES.map((state) => {
-        const config = SAMPLE_STATE_CONFIG[state];
-        return {
-            key: state,
-            label: (
-                <div style={{
-                    backgroundColor: config.bg,
-                    color: config.color,
-                    borderRadius: 12,
-                    padding: "4px 10px",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    textAlign: "center",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 4,
-                }}>
-                    {config.label}
-                </div>
-            ),
-            disabled: detail?.state === state,
-            style: {
-                padding: "4px 6px",
-                margin: "2px 0",
-            }
-        };
-    });
-
-    const handleStateMenuClick: MenuProps["onClick"] = ({ key }) => {
-        updateState(key);
-    };
+    // State picker popup — same Céluma language as the Asignados/Etiquetas pickers:
+    // rounded card + brand shadow, soft-circle icon rows with navy labels, the
+    // current state highlighted in teal tint with a check.
+    const stateDropdownContent = (
+        <div
+            style={{
+                background: "#fff",
+                borderRadius: 14,
+                boxShadow: tokens.shadow,
+                border: "1px solid #eef1f0",
+                width: 260,
+                maxWidth: "92vw",
+                overflow: "hidden",
+                padding: "6px 8px",
+                display: "grid",
+                gap: 2,
+            }}
+        >
+            {SAMPLE_STATES.map((state) => {
+                const config = SAMPLE_STATE_CONFIG[state];
+                const active = detail?.state === state;
+                const baseBg = active ? "#eaf7f5" : "transparent";
+                return (
+                    <div
+                        key={state}
+                        role="button"
+                        onClick={() => {
+                            setStateDropdownOpen(false);
+                            if (!active) updateState(state);
+                        }}
+                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "#f1faf8"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = baseBg; }}
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "7px 10px",
+                            borderRadius: 10,
+                            cursor: active ? "default" : "pointer",
+                            background: baseBg,
+                            transition: "background .15s ease",
+                        }}
+                    >
+                        <span style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: `${config.color}1a`,
+                            color: config.color,
+                            border: `2px solid ${config.color}33`,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 13,
+                            flexShrink: 0,
+                        }}>
+                            {config.icon}
+                        </span>
+                        <span style={{ flex: 1, fontWeight: 600, fontSize: 13.5, color: tokens.textPrimary }}>
+                            {config.label}
+                        </span>
+                        {active && <CheckOutlined style={{ color: tokens.primary, fontSize: 13, flexShrink: 0 }} />}
+                    </div>
+                );
+            })}
+        </div>
+    );
 
     // Event type configuration for timeline display
     const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -793,12 +761,69 @@ export default function SampleDetailPage() {
         }
     }
 
-    // Sidebar content component
-    const SidebarContent = () => (
+    // Sidebar content as a JSX value (NOT a nested component). Rendering it as a
+    // component would give it a fresh identity on every re-render, remounting the
+    // rail and resetting the collaboration dropdowns' state mid-interaction. As a
+    // value it's reconciled by position and keeps its state across re-renders.
+    const sidebarContent = (
         <div style={{ display: "grid", gap: tokens.gap }}>
+            {/* Estado — change the sample state from a rail action card */}
+            <Card
+                size="small"
+                style={{ ...cardStyle, padding: 0 }}
+                bodyStyle={{ padding: 16 }}
+            >
+                <RailSectionHeader
+                    icon={<FlagOutlined />}
+                    color={tokens.primary}
+                    title="Estado"
+                    trigger={
+                        <Dropdown
+                            popupRender={() => stateDropdownContent}
+                            trigger={["click"]}
+                            disabled={updatingState}
+                            open={stateDropdownOpen}
+                            onOpenChange={setStateDropdownOpen}
+                            placement="bottomRight"
+                        >
+                            <RailConfigButton disabled={updatingState} />
+                        </Dropdown>
+                    }
+                />
+                {/* Current state shown the same way assignees are: soft-circle + label row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 7,
+                        background: `${stateConfig.color}1a`,
+                        color: stateConfig.color,
+                        border: `2px solid ${stateConfig.color}33`,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
+                        flexShrink: 0,
+                    }}>
+                        {updatingState ? <SettingOutlined spin /> : stateConfig.icon}
+                    </span>
+                    <span style={{
+                        flex: 1,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: tokens.textPrimary,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                    }}>
+                        {stateConfig.label}
+                    </span>
+                </div>
+            </Card>
+
             {/* Assignees */}
-            <Card 
-                size="small" 
+            <Card
+                size="small"
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
@@ -810,8 +835,8 @@ export default function SampleDetailPage() {
             </Card>
 
             {/* Labels */}
-            <Card 
-                size="small" 
+            <Card
+                size="small"
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
@@ -823,79 +848,73 @@ export default function SampleDetailPage() {
                     showInheritance={true}
                 />
             </Card>
+        </div>
+    );
 
-            {/* Quick Actions */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle, padding: 0 }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 12, 
-                    color: tokens.textSecondary, 
-                    textTransform: "uppercase", 
-                    letterSpacing: "0.5px",
-                    marginBottom: 12
-                }}>
-                    Acciones Rápidas
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                    <Upload {...uploadProps} style={{ display: "block", width: "100%" }}>
-                        <AntButton 
-                            block 
-                            icon={<PlusOutlined />}
-                            loading={uploading}
-                            style={{ width: "100%" }}
-                        >
-                            Subir Imagen
-                        </AntButton>
-                    </Upload>
-                    {detail && (
-                        <AntButton 
-                            block 
-                            icon={<ContainerOutlined />}
-                            onClick={() => navigate(`/orders/${detail.order.id}`)}
-                        >
-                            Ver Orden
-                        </AntButton>
-                    )}
-                </div>
-            </Card>
+    // ── Timeline tab content (Céluma styled connectors) ──
+    const timelineTabContent = timelineItems.length > 0 ? (
+        <Timeline className="sd-timeline" items={timelineItems} />
+    ) : (
+        <Empty description="Sin eventos registrados" />
+    );
 
-            {/* Sample Info */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle, padding: 0 }}
-                bodyStyle={{ padding: 16 }}
+    // ── Gallery tab content — reusable Céluma dropzone + image cards ──
+    const galleryTabContent = (
+        <div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                    gap: 12,
+                }}
             >
-                <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 12, 
-                    color: tokens.textSecondary, 
-                    textTransform: "uppercase", 
-                    letterSpacing: "0.5px",
-                    marginBottom: 12
-                }}>
-                    Información
+                <UploadDropzone
+                    customRequest={uploadProps.customRequest}
+                    accept="image/*"
+                    uploading={uploading}
+                    uploadingFiles={uploadingFiles}
+                />
+
+                {images && images.images.length > 0 && (
+                    <Image.PreviewGroup>
+                        {images.images.map((img, idx) => (
+                            <ImageGalleryCard
+                                key={img.id ?? idx}
+                                src={img.urls.thumbnail || img.urls.processed}
+                                previewSrc={img.urls.processed || img.urls.thumbnail}
+                                alt={img.label || `Imagen ${idx + 1}`}
+                                date={img.created_at}
+                                isPrimary={img.is_primary}
+                                deleting={deletingImageId === img.id}
+                                deleteDisabled={deletingImageId !== null}
+                                onDelete={() => setConfirmDeleteId(img.id)}
+                            />
+                        ))}
+                    </Image.PreviewGroup>
+                )}
+            </div>
+
+            {/* Empty state if no images */}
+            {(!images || images.images.length === 0) && (
+                <div style={{ marginTop: 12, padding: 24, textAlign: "center", color: tokens.textSecondary, fontSize: 13 }}>
+                    No hay imágenes adicionales. Usa el área de arriba para subir.
                 </div>
-                <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: tokens.textSecondary }}>Tipo</span>
-                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{detail?.type || "—"}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: tokens.textSecondary }}>Sucursal</span>
-                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>
-                            {detail ? `${detail.branch.code ?? ""} ${detail.branch.name ?? ""}`.trim() : "—"}
-                        </span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: tokens.textSecondary }}>Imágenes</span>
-                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{images?.images.length || 0}</span>
-                    </div>
-                </div>
-            </Card>
+            )}
+
+            <ConfirmDialog
+                open={confirmDeleteId !== null}
+                danger
+                title="Eliminar imagen"
+                description="¿Estás seguro de eliminar esta imagen? Esta acción no se puede deshacer."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                loading={deletingImageId !== null}
+                onConfirm={async () => {
+                    if (confirmDeleteId) await deleteImage(confirmDeleteId);
+                    setConfirmDeleteId(null);
+                }}
+                onCancel={() => setConfirmDeleteId(null)}
+            />
         </div>
     );
 
@@ -913,10 +932,15 @@ export default function SampleDetailPage() {
                     <style>{`
                         .sample-detail-grid {
                             display: grid;
-                            grid-template-columns: 1fr 280px;
+                            grid-template-columns: minmax(0, 1fr) 280px;
                             gap: ${tokens.gap}px;
                             align-items: start;
                         }
+                        .sample-detail-grid > * {
+                            min-width: 0;
+                        }
+                        .sd-main { display: grid; gap: ${tokens.gap}px; min-width: 0; }
+                        .sd-main > * { min-width: 0; }
                         .sample-detail-sidebar-desktop {
                             display: block;
                             position: sticky;
@@ -936,200 +960,121 @@ export default function SampleDetailPage() {
                                 display: block;
                             }
                         }
+
+                        /* Céluma timeline — soft connector + comfortable spacing */
+                        .sd-timeline { padding-top: 4px; }
+                        .sd-timeline .ant-timeline-item-tail { border-inline-start: 2px solid #eef1f0; }
+                        .sd-timeline .ant-timeline-item { padding-bottom: 22px; }
+                        .sd-timeline .ant-timeline-item-head { background: transparent; }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="sample-detail-grid">
                         {/* Left Column - Main Content */}
-                        <div style={{ display: "grid", gap: tokens.gap }}>
-                            {/* Sample Header Card */}
-                    <Card
-                                title={
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                        <span style={cardTitleStyle}>Detalle de Muestra</span>
-                                        {detail && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                <Avatar
-                                                    size={32}
-                                                    icon={typeConfig.icon}
-                                                    style={{ 
-                                                        backgroundColor: typeConfig.color,
-                                                        fontSize: 14,
-                                                        flexShrink: 0
-                                                    }}
-                                                />
-                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                    <span style={{ 
-                                                        fontFamily: tokens.titleFont, 
-                                                        fontSize: 16, 
-                                                        fontWeight: 700,
-                                                        color: tokens.textPrimary
-                                                    }}>
-                                                        {detail.sample_code}
-                                                    </span>
-                                                    <span style={{ fontSize: 13, color: tokens.textSecondary }}>
-                                                        {detail.type}
-                                                    </span>
-                                                </div>
-                                                <Dropdown 
-                                                    menu={{ 
-                                                        items: stateMenuItems, 
-                                                        onClick: handleStateMenuClick,
-                                                        style: {
-                                                            padding: "8px",
-                                                            borderRadius: "12px",
-                                                        }
-                                                    }} 
-                                                    trigger={["click"]}
-                                                    disabled={updatingState}
-                                                >
-                                                    <div style={{ 
-                                                        display: "flex", 
-                                                        alignItems: "center", 
-                                                        gap: 6,
-                                                        cursor: "pointer",
-                                                    }}>
-                                                        <div style={{ 
-                                                            padding: "4px 10px",
-                                                            borderRadius: 12,
-                                                            background: stateConfig.bg,
-                                                            color: stateConfig.color,
-                                                            fontWeight: 600,
-                                                            fontSize: 11,
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            gap: 4,
-                                                            transition: "all 0.15s ease",
-                                                            border: `1px solid transparent`,
-                                                        }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.borderColor = stateConfig.color}
-                                                            onMouseLeave={(e) => e.currentTarget.style.borderColor = "transparent"}
-                                                        >
-                                                            {updatingState ? (
-                                                                <SettingOutlined spin />
-                                                            ) : (
-                                                                stateConfig.icon
-                                                            )}
-                                                            {stateConfig.label}
-                                                        </div>
-                                                        <DownOutlined style={{ fontSize: 9, color: stateConfig.color }} />
-                                                    </div>
-                                                </Dropdown>
-                                            </div>
-                                        )}
-                                    </div>
-                                }
-                        loading={loading}
-                                style={cardStyle}
-                    >
-                        {detail && (
+                        <div className="sd-main">
+                            {/* Sample Header — Céluma ficha */}
+                            <RecordCard
+                                loading={loading}
+                                avatar={detail && (
+                                    <Tooltip title="Ver perfil del paciente">
+                                        <Avatar
+                                            size={104}
+                                            onClick={() => navigate(`/patients/${detail.patient.id}`)}
+                                            style={{
+                                                backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
+                                                fontSize: 38,
+                                                fontWeight: 700,
+                                                border: "2px solid #d1d5db",
+                                                flexShrink: 0,
+                                                cursor: "pointer",
+                                            }}
+                                        >
+                                            {getInitials(detail.patient.full_name || detail.patient.patient_code)}
+                                        </Avatar>
+                                    </Tooltip>
+                                )}
+                                chips={detail && (
                                     <>
-                                        {/* Patient Info */}
-                                        <Tooltip title="Ver perfil del paciente">
-                                            <div 
-                                                onClick={() => navigate(`/patients/${detail.patient.id}`)}
-                                                style={{ 
-                                                    display: "inline-flex", 
-                                                    alignItems: "center", 
-                                                    gap: 10,
-                                                    cursor: "pointer",
-                                                    padding: "8px 12px",
-                                                    borderRadius: 8,
-                                                    marginLeft: -12,
-                                                    marginBottom: 16,
-                                                    transition: "background 0.15s ease"
+                                        <span style={codeChipStyle}>{detail.sample_code}</span>
+                                        <span style={statusChipStyle(stateConfig)}>
+                                            {stateConfig.icon}
+                                            {stateConfig.label}
+                                        </span>
+                                    </>
+                                )}
+                                title={detail && (
+                                    <h1
+                                        onClick={() => navigate(`/patients/${detail.patient.id}`)}
+                                        style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: "pointer" }}
+                                    >
+                                        {detail.patient.full_name || detail.patient.patient_code}
+                                    </h1>
+                                )}
+                                subtitle={detail?.patient.patient_code}
+                                meta={detail && (
+                                    <>
+                                        <MetaItem icon={typeConfig.icon}>
+                                            <span style={{ marginRight: 4 }}>Tipo:</span>
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeConfig.label}</span>
+                                        </MetaItem>
+                                        <MetaItem icon={<ContainerOutlined />}>
+                                            <span style={{ marginRight: 4 }}>Orden:</span>
+                                            <a
+                                                href={`/orders/${detail.order.id}`}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    navigate(`/orders/${detail.order.id}`);
                                                 }}
-                                                onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                                                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                                                style={{ fontWeight: 600, color: tokens.primary }}
                                             >
-                                                <Avatar 
-                                                    size={40}
-                                                    style={{ 
-                                                        backgroundColor: getAvatarColor(detail.patient.full_name || detail.patient.patient_code),
-                                                        fontSize: 15,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0
-                                                    }}
-                                                >
-                                                    {getInitials(detail.patient.full_name || detail.patient.patient_code)}
-                                                </Avatar>
-                                                <div>
-                                                    <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
-                                                        {detail.patient.full_name || detail.patient.patient_code}
-                                                    </div>
-                                                    <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                        {detail.patient.patient_code}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </Tooltip>
-
-                                        {/* Meta Info Row */}
-                                        <div style={{ 
-                                            display: "flex", 
-                                            flexWrap: "wrap",
-                                            alignItems: "center", 
-                                            gap: "12px 20px",
-                                            color: tokens.textSecondary,
-                                            fontSize: 13,
-                                            marginBottom: 16
-                                        }}>
-                                            <Tooltip title="Ver orden">
-                                                <div 
-                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                                    onClick={() => navigate(`/orders/${detail.order.id}`)}
-                                                >
-                                                    <ContainerOutlined />
-                                                    <span>Orden:</span>
-                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>{detail.order.order_code}</span>
-                                                </div>
-                                            </Tooltip>
-
-                                            {detail.received_at && (
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                    <CalendarOutlined />
-                                                    <span>Recibida: {new Date(detail.received_at).toLocaleDateString("es-MX", { 
-                                                        year: "numeric", 
-                                                        month: "short", 
-                                                        day: "numeric" 
-                                                    })}</span>
-                                                </div>
-                                            )}
-
-                                            <Tooltip title="Ver galería">
-                                                <div 
-                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                                    onClick={handleGoToGallery}
-                                                >
-                                                    <FileImageOutlined />
-                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
-                                                        {images?.images.length || 0} imagen{(images?.images.length || 0) !== 1 ? "es" : ""}
-                                                    </span>
-                                                </div>
-                                            </Tooltip>
-                                        </div>
-
-                                        {/* Description - editable */}
-                                        <div style={{ 
-                                            padding: 16, 
-                                            background: "#f9fafb", 
-                                            borderRadius: 8,
-                                            border: "1px solid #e5e7eb"
-                                        }}>
-                                            <div style={{ 
-                                                fontSize: 12, 
-                                                fontWeight: 600, 
-                                                color: tokens.textSecondary, 
-                                                marginBottom: 8,
+                                                {detail.order.order_code}
+                                            </a>
+                                        </MetaItem>
+                                        {detail.received_at && (
+                                            <MetaItem icon={<CalendarOutlined />}>
+                                                <span style={{ marginRight: 4 }}>Recibida:</span>
+                                                {new Date(detail.received_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                                            </MetaItem>
+                                        )}
+                                        <MetaItem icon={<InboxOutlined />}>
+                                            <span style={{ marginRight: 4 }}>Sucursal:</span>
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
+                                                {`${detail.branch.code ?? ""} ${detail.branch.name ?? ""}`.trim() || "—"}
+                                            </span>
+                                        </MetaItem>
+                                    </>
+                                )}
+                                stats={detail && (
+                                    <div style={{ cursor: "pointer" }} onClick={handleGoToGallery}>
+                                        <Stat value={images?.images.length || 0} label="Imágenes" color={tokens.primary} />
+                                    </div>
+                                )}
+                                rail={detail && (
+                                    <ActionButtonPanel
+                                        actions={[
+                                            { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`) },
+                                        ]}
+                                    />
+                                )}
+                            >
+                                {detail && (
+                                    <>
+                                        {/* Description - at the bottom (Céluma panel) */}
+                                        <Panel style={{ marginTop: 20 }}>
+                                            <div style={{
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                color: tokens.textSecondary,
+                                                marginBottom: editingNotes ? 10 : 8,
                                                 textTransform: "uppercase",
                                                 letterSpacing: "0.5px",
                                                 display: "flex",
                                                 justifyContent: "space-between",
-                                                alignItems: "center"
+                                                alignItems: "center",
                                             }}>
                                                 <span>Descripción</span>
                                                 {!editingNotes && (
-                                                    <EditOutlined 
+                                                    <EditOutlined
                                                         style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
                                                         onClick={() => {
                                                             setNotesValue(detail.notes || "");
@@ -1140,16 +1085,18 @@ export default function SampleDetailPage() {
                                             </div>
                                             {editingNotes ? (
                                                 <div style={{ display: "grid", gap: 8 }}>
-                                                    <Input.TextArea
+                                                    <CelumaTextArea
                                                         value={notesValue}
-                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        onChange={setNotesValue}
                                                         placeholder="Escribe una descripción para esta muestra..."
                                                         rows={4}
                                                         maxLength={500}
+                                                        autoFocus
                                                     />
                                                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                                        <AntButton 
-                                                            size="small"
+                                                        <CelumaButton
+                                                            size="xsmall"
+                                                            danger
                                                             onClick={() => {
                                                                 setEditingNotes(false);
                                                                 setNotesValue(detail.notes || "");
@@ -1157,221 +1104,80 @@ export default function SampleDetailPage() {
                                                             disabled={savingNotes}
                                                         >
                                                             Cancelar
-                                                        </AntButton>
-                                                        <AntButton 
-                                                            size="small" 
+                                                        </CelumaButton>
+                                                        <CelumaButton
                                                             type="primary"
+                                                            size="xsmall"
                                                             onClick={updateNotes}
                                                             loading={savingNotes}
                                                         >
                                                             Guardar
-                                                        </AntButton>
+                                                        </CelumaButton>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div style={{ 
-                                                    color: detail.notes ? tokens.textPrimary : tokens.textSecondary, 
+                                                <div style={{
+                                                    color: detail.notes ? tokens.textPrimary : tokens.textSecondary,
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
                                                     whiteSpace: "pre-wrap",
-                                                    fontStyle: detail.notes ? "normal" : "italic"
+                                                    fontStyle: detail.notes ? "normal" : "italic",
                                                 }}>
                                                     {detail.notes || "Sin descripción"}
                                                 </div>
                                             )}
-                                        </div>
+                                        </Panel>
                                     </>
-                        )}
-                        <ErrorText>{error}</ErrorText>
-                    </Card>
+                                )}
+                                <ErrorText>{error}</ErrorText>
+                            </RecordCard>
 
-                            {/* Timeline Card */}
-                            {timelineItems.length > 0 && (
-                                <Card
-                                    title={<span style={cardTitleStyle}>Línea de Tiempo</span>}
-                                    loading={loading}
-                                    style={cardStyle}
-                                >
-                                    <Timeline items={timelineItems} />
-                                </Card>
-                            )}
-
-                            {/* Images Gallery Card */}
+                            {/* Tabs Card — "Línea de Tiempo" is the default tab */}
                             <div ref={galleryRef}>
-                                <Card
-                                    title={<span style={cardTitleStyle}>Galería de Imágenes</span>}
-                                    style={cardStyle}
-                                >
-                                <Typography.Paragraph type="secondary" style={{ margin: "0 0 16px 0" }}>
-                                    Arrastra o haz clic para subir imágenes de la muestra.
-                                </Typography.Paragraph>
-
-                                <div
-                                    style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                                        gap: 12,
-                                    }}
-                                >
-                                    {/* Drag and Drop Upload Area */}
-                                    <div
-                                        onDragEnter={() => setIsDragging(true)}
-                                        onDragLeave={(e) => {
-                                            // Only set to false if leaving the container entirely
-                                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                                setIsDragging(false);
-                                            }
-                                        }}
-                                        onDrop={() => setIsDragging(false)}
-                                    >
-                                        <Upload.Dragger
-                                            {...uploadProps}
-                                            style={{
-                                                borderRadius: tokens.radius,
-                                                border: isDragging ? "2px dashed #0f8b8d" : "1px dashed #d9d9d9",
-                                                background: isDragging ? "#e6f7f7" : "#fafafa",
-                                                padding: 12,
-                                                height: 160,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexDirection: "column",
-                                                color: isDragging ? "#0f8b8d" : "#8c8c8c",
-                                                transition: "all 0.2s ease",
-                                                transform: isDragging ? "scale(1.02)" : "scale(1)",
-                                            }}
-                                        >
-                                            {uploading ? (
-                                                <>
-                                                    <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
-                                                    <Typography.Text strong style={{ marginTop: 8 }}>
-                                                        Subiendo {uploadingFiles.length > 0 ? `(${uploadingFiles.length})` : "..."}
-                                                    </Typography.Text>
-                                                    {uploadingFiles.length > 0 && (
-                                                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 11 }}>
-                                                            {uploadingFiles.slice(0, 2).join(", ")}{uploadingFiles.length > 2 ? ` y ${uploadingFiles.length - 2} más` : ""}
-                                                        </Typography.Paragraph>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <PlusOutlined style={{ fontSize: 24, marginBottom: 8 }} />
-                                                    <Typography.Text strong>{isDragging ? "Suelta aquí" : "Agregar"}</Typography.Text>
-                                                    <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", textAlign: "center", fontSize: 12 }}>
-                                                        {isDragging ? "Suelta para subir" : "Clic o arrastra"}
-                                                    </Typography.Paragraph>
-                                                </>
-                                            )}
-                                        </Upload.Dragger>
-                                    </div>
-
-                                    {/* Images Grid */}
-                                    {images && images.images.length > 0 && (
-                                        <Image.PreviewGroup
-                                            preview={{
-                                                visible: preview.visible,
-                                                current: preview.index,
-                                                onVisibleChange: (visible) => setPreview((prev) => ({ ...prev, visible })),
-                                                onChange: (current: number) => setPreview((prev) => ({ ...prev, index: current })),
-                                            }}
-                                        >
-                                            {images.images.map((img, idx) => (
-                                    <Card
-                                                    key={img.id ?? idx}
-                                                    size="small"
-                                                    hoverable
-                                                    style={{
-                                                        width: "100%",
-                                                        borderRadius: tokens.radius,
-                                                        overflow: "hidden",
-                                                        border: "1px solid #e5e7eb",
-                                                        background: "#ffffff",
-                                                        display: "flex",
-                                                        flexDirection: "column",
-                                                        height: "100%",
-                                                        position: "relative",
-                                                    }}
-                                                    bodyStyle={{ padding: 0, display: "flex", flexDirection: "column" }}
-                                                >
-                                            <Image
-                                                src={img.urls.thumbnail || img.urls.processed}
-                                                        alt={img.label || `Imagen ${idx + 1}`}
-                                                        style={{ width: "100%", height: 110, objectFit: "cover", cursor: "pointer" }}
-                                                        fallback={img.urls.processed || img.urls.thumbnail}
-                                                preview={{ src: img.urls.processed || img.urls.thumbnail }}
-                                                    />
-                                                    <div style={{ 
-                                                        display: "flex", 
-                                                        alignItems: "center", 
-                                                        justifyContent: "space-between", 
-                                                        padding: "8px 10px", 
-                                                        gap: 6,
-                                                        borderTop: "1px solid #f0f0f0"
-                                                    }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                            <span style={{ color: tokens.textSecondary, fontSize: 11 }}>
-                                                                {new Date(img.created_at).toLocaleDateString("es-MX")}
-                                                            </span>
-                                                            {img.is_primary && (
-                                                                <Tag color="#10b981" style={{ margin: 0, fontSize: 10, borderRadius: 8 }}>
-                                                                    Principal
-                                                                </Tag>
-                                                            )}
-                                                        </div>
-                                                        <Popconfirm
-                                                            title="Eliminar imagen"
-                                                            description="¿Estás seguro de eliminar esta imagen?"
-                                                            okText="Sí, eliminar"
-                                                            cancelText="Cancelar"
-                                                            okButtonProps={{ danger: true }}
-                                                            onConfirm={() => deleteImage(img.id)}
-                                                        >
-                                                            <Tooltip title="Eliminar">
-                                                                <AntButton
-                                                                    size="small"
-                                                                    type="text"
-                                                                    danger
-                                                                    icon={deletingImageId === img.id ? <LoadingOutlined spin /> : <DeleteOutlined />}
-                                                                    disabled={deletingImageId !== null}
-                                                                    style={{ 
-                                                                        padding: "0 4px",
-                                                                        height: 20,
-                                                                        minWidth: 20
-                                                                    }}
-                                                                />
-                                                            </Tooltip>
-                                                        </Popconfirm>
-                                            </div>
-                                        </Card>
-                                            ))}
-                                        </Image.PreviewGroup>
-                                    )}
-                                </div>
-
-                                {/* Empty state if no images */}
-                                {(!images || images.images.length === 0) && (
-                                    <div style={{ 
-                                        marginTop: 12,
-                                        padding: 24,
-                                        textAlign: "center",
-                                        color: tokens.textSecondary,
-                                        fontSize: 13
-                                    }}>
-                                        No hay imágenes adicionales. Usa el área de arriba para subir.
-                                    </div>
-                        )}
-                    </Card>
+                                <Card loading={loading} style={cardStyle}>
+                                    <CelumaTabs
+                                        activeKey={activeTab}
+                                        onChange={setActiveTab}
+                                        items={[
+                                            {
+                                                key: "timeline",
+                                                label: (
+                                                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                        <ClockCircleOutlined />
+                                                        Línea de Tiempo
+                                                    </span>
+                                                ),
+                                                children: timelineTabContent,
+                                            },
+                                            {
+                                                key: "gallery",
+                                                label: (
+                                                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                        <FileImageOutlined />
+                                                        Galería de Imágenes
+                                                        <Badge
+                                                            count={images?.images.length || 0}
+                                                            style={{ backgroundColor: tokens.primary }}
+                                                            size="small"
+                                                        />
+                                                    </span>
+                                                ),
+                                                children: galleryTabContent,
+                                            },
+                                        ]}
+                                    />
+                                </Card>
                             </div>
 
                             {/* Mobile Sidebar */}
                             <div className="sample-detail-sidebar-mobile">
-                                <SidebarContent />
+                                {sidebarContent}
                             </div>
                         </div>
 
                         {/* Right Column - Sidebar (Desktop only) */}
                         <div className="sample-detail-sidebar-desktop">
-                            <SidebarContent />
+                            {sidebarContent}
                         </div>
                     </div>
                 </div>

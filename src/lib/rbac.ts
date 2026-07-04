@@ -140,7 +140,7 @@ export function permissionLabel(code: string): string {
 export function roleColor(code: string): { color: string; bg: string } {
     const palette: Record<string, { color: string; bg: string }> = {
         superuser: { color: "#7c3aed", bg: "#f5f3ff" },
-        admin:     { color: "#8b5cf6", bg: "#ede9fe" },
+        admin:     { color: "#7c3aed", bg: "#f5f3ff" },
         pathologist: { color: "#3b82f6", bg: "#eff6ff" },
         reviewer:  { color: "#0f8b8d", bg: "#f0fdfa" },
         lab_tech:  { color: "#10b981", bg: "#ecfdf5" },

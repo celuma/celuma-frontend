@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import {
-    Layout, Card, Table, Button, Modal, Select, message,
+    Layout, Card, Button, Modal, Select, message,
     Space, Popconfirm, Spin, Avatar,
 } from "antd";
 import {
-    PlusOutlined, DeleteOutlined, SafetyCertificateOutlined,
+    DeleteOutlined,
     CheckCircleFilled, MinusCircleOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
+import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -275,38 +278,28 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
     }
 
     const content = (
-        <div>
-            <Card
-                title={
-                    <Space>
-                        <SafetyCertificateOutlined style={{ color: "#0f8b8d" }} />
-                        <span style={cardTitleStyle}>Revisores</span>
-                    </Space>
-                }
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <PageHeader
+                title="Revisores"
+                subtitle="Usuarios autorizados para firmar y publicar informes patológicos"
                 extra={
-                    <Button
+                    <CelumaButton
                         type="primary"
-                        icon={<PlusOutlined />}
                         onClick={() => setAddModalOpen(true)}
                         disabled={eligibleUsers.length === 0}
                     >
                         Agregar Revisor
-                    </Button>
+                    </CelumaButton>
                 }
-                style={cardStyle}
-            >
-                <p style={{ color: tokens.textSecondary, marginTop: 0, marginBottom: 16, fontSize: 13 }}>
-                    Los revisores son los únicos usuarios autorizados para firmar y publicar
-                    informes patológicos. Cada revisor puede subir su firma digital desde
-                    su perfil.
-                </p>
-                <Table
+            />
+            <Card style={cardStyle}>
+                <CelumaTable
                     columns={columns}
                     dataSource={reviewers}
                     loading={loading}
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
-                    locale={{ emptyText: "Aún no hay revisores asignados" }}
+                    emptyText="Aún no hay revisores asignados"
                 />
             </Card>
 

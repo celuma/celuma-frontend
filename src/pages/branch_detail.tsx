@@ -7,7 +7,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { CelumaTable } from "../components/ui/table";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 

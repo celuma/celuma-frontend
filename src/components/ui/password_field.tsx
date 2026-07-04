@@ -19,12 +19,12 @@ export default function PasswordField({error, status, prefixNode, value, onChang
     const uid = useId();
     const finalStatus: Status = error ? "error" : status ?? "default";
     const colors = {
-        base: "#0f8b8d",
-        baseHover: "#0c6f71",
+        base: "#49b6ad",
+        baseHover: "#3da8a0",
         ringBase: "rgba(15,139,141,.18)",
         text: "#0d1b2a",
         placeholder: "#6b7280",
-        prefix: "#0f8b8d",
+        prefix: "#49b6ad",
         error: "#b91c1c",
         ringError: "rgba(185, 28, 28, .12)",
         warning: "#f59e0b",
@@ -125,7 +125,7 @@ export default function PasswordField({error, status, prefixNode, value, onChang
                     onClick={() => setVisible((v) => !v)}
                     style={toggleBtnStyle}
                 >
-                    {visible ? <EyeTwoTone twoToneColor="#0f8b8d" /> : <EyeInvisibleOutlined />}
+                    {visible ? <EyeTwoTone twoToneColor="#49b6ad" /> : <EyeInvisibleOutlined />}
                 </button>
             </div>
 

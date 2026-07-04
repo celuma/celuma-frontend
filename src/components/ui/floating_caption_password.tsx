@@ -1,7 +1,10 @@
-import React, { useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { Input } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
-import AlertText from "./error_text";
+import FieldMessage from "./field_message";
+
+/** How long a validation message stays on screen before auto-hiding. */
+const MESSAGE_AUTO_HIDE_MS = 5000;
 
 type Status = "default" | "error" | "warning" | "success";
 
@@ -27,38 +30,61 @@ export default function FloatingCaptionPassword({
     const [hovered, setHovered] = useState(false);
     const [focused, setFocused] = useState(false);
     const [visible, setVisible] = useState(false);
+    const [msgVisible, setMsgVisible] = useState(true);
     const uid = useId();
-    
+
     const finalStatus: Status = error ? "error" : status ?? "default";
+    const hasMessage = !!error || finalStatus === "warning" || finalStatus === "success";
+    const active = hovered || focused;
+    const shownRef = useRef(false);
+
+    // The chin appears once when a message is (re)triggered, then auto-hides. Hovering or
+    // focusing "focuses" the glow into the crisp ring and dismisses the chin for good — it
+    // won't pop back when the pointer leaves; it only returns if the error is provoked anew.
+    useEffect(() => {
+        if (!hasMessage) {
+            shownRef.current = false;
+            setMsgVisible(false);
+            return;
+        }
+        if (active) {
+            setMsgVisible(false);
+            return;
+        }
+        if (!shownRef.current) {
+            shownRef.current = true;
+            setMsgVisible(true);
+            const t = setTimeout(() => setMsgVisible(false), MESSAGE_AUTO_HIDE_MS);
+            return () => clearTimeout(t);
+        }
+    }, [error, finalStatus, hasMessage, active]);
     const isFloating = focused || (value && String(value).length > 0);
     
     const colors = {
-        base: "#0f8b8d",
-        baseHover: "#0c6f71",
-        ringBase: "rgba(15,139,141,.18)",
+        base: "#49b6ad",
+        baseHover: "#3da8a0",
+        ringBase: "rgba(73,182,173,.20)",
         text: "#0d1b2a",
         placeholder: "#6b7280",
-        prefix: "#0f8b8d",
-        error: "#b91c1c",
-        ringError: "rgba(185, 28, 28, .12)",
+        prefix: "#49b6ad",
+        error: "#e5484d",
+        ringError: "rgba(229, 72, 77, .20)",
+        glowError: "rgba(229, 72, 77, .28)",
         warning: "#f59e0b",
-        ringWarning: "rgba(245, 158, 11, .12)",
+        ringWarning: "rgba(245, 158, 11, .20)",
+        glowWarning: "rgba(245, 158, 11, .28)",
         success: "#059669",
-        ringSuccess: "rgba(5,150,105,.12)",
+        ringSuccess: "rgba(5,150,105,.20)",
+        glowSuccess: "rgba(5,150,105,.25)",
         bg: "#fff",
     };
 
+    // Attention glow when idle; crisp double-border ring when focused/hovered.
     const { borderColor, boxShadow } = (() => {
-        if (finalStatus === "error") {
-            return { borderColor: colors.error, boxShadow: `0 0 8px 2px rgba(185, 28, 28, 0.15)` };
-        }
-        if (finalStatus === "warning") {
-            return { borderColor: colors.warning, boxShadow: `0 0 8px 2px rgba(245, 158, 11, 0.15)` };
-        }
-        if (finalStatus === "success") {
-            return { borderColor: colors.success, boxShadow: `0 0 8px 2px rgba(5, 150, 105, 0.15)` };
-        }
-        const active = hovered || focused;
+        const shadow = (ringC: string, glowC: string) => (active ? `0 0 0 3px ${ringC}` : `0 0 8px 2px ${glowC}`);
+        if (finalStatus === "error") return { borderColor: colors.error, boxShadow: shadow(colors.ringError, colors.glowError) };
+        if (finalStatus === "warning") return { borderColor: colors.warning, boxShadow: shadow(colors.ringWarning, colors.glowWarning) };
+        if (finalStatus === "success") return { borderColor: colors.success, boxShadow: shadow(colors.ringSuccess, colors.glowSuccess) };
         return {
             borderColor: active ? colors.baseHover : colors.base,
             boxShadow: active ? `0 0 0 3px ${colors.ringBase}` : "none",
@@ -67,6 +93,7 @@ export default function FloatingCaptionPassword({
 
     const wrapperStyle: React.CSSProperties = {
         position: "relative",
+        zIndex: 2,
         border: `2px solid ${borderColor}`,
         borderRadius: 12,
         background: colors.bg,
@@ -118,10 +145,9 @@ export default function FloatingCaptionPassword({
         background: "transparent",
         border: "none",
         boxShadow: "none",
-        padding: isFloating ? "16px 12px 6px 12px" : "10px 12px",
+        padding: "10px 12px",
         color: colors.text,
         flex: 1,
-        transition: "padding 0.2s ease",
     };
 
     const toggleBtnStyle: React.CSSProperties = {
@@ -138,7 +164,7 @@ export default function FloatingCaptionPassword({
 
     return (
         <div
-            style={{ display: "grid", gap: 6, ...style }}
+            style={{ position: "relative", zIndex: active ? 30 : (finalStatus !== "default" ? 20 : 1), ...style }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -174,16 +200,18 @@ export default function FloatingCaptionPassword({
                     onClick={() => setVisible((v) => !v)}
                     style={toggleBtnStyle}
                 >
-                    {visible ? <EyeTwoTone twoToneColor="#0f8b8d" /> : <EyeInvisibleOutlined />}
+                    {visible ? <EyeTwoTone twoToneColor="#49b6ad" /> : <EyeInvisibleOutlined />}
                 </button>
             </div>
 
-            {error && <AlertText variant="error">{error}</AlertText>}
-            {!error && finalStatus === "warning" && (
-                <AlertText variant="warning">{rest["aria-describedby"] ?? "Advertencia"}</AlertText>
-            )}
-            {!error && finalStatus === "success" && (
-                <AlertText variant="success">{rest["aria-describedby"] ?? "¡Todo correcto!"}</AlertText>
+            {hasMessage && (
+                <FieldMessage variant={finalStatus === "default" ? "error" : finalStatus} open={msgVisible}>
+                    {error
+                        ? error
+                        : finalStatus === "warning"
+                            ? (rest["aria-describedby"] ?? "Advertencia")
+                            : (rest["aria-describedby"] ?? "¡Todo correcto!")}
+                </FieldMessage>
             )}
         </div>
     );

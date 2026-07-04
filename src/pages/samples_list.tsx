@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { Layout, Card, Avatar, Tooltip } from "antd";
+import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import { 
     PatientCell, 
     renderStatusChip, 
@@ -77,7 +79,6 @@ export default function SamplesList() {
     const [error, setError] = useState<string | null>(null);
     type Row = SamplesListResponse["samples"][number] & { patient_name?: string; patient_id?: string; patient_code?: string; requested_by?: string | null };
     const [rows, setRows] = useState<Row[]>([]);
-    const [search, setSearch] = useState("");
 
     useEffect(() => {
         (async () => {
@@ -113,28 +114,14 @@ export default function SamplesList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in labels
-            const labelMatch = r.labels?.some(label => 
-                label.name.toLowerCase().includes(q)
-            ) || false;
-            
-            // Search in assignees
-            const assigneeMatch = r.assignees?.some(user => 
-                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || labelMatch || assigneeMatch;
-        });
-    }, [rows, search]);
+    const searchFilter = (r: Row, q: string) => {
+        const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
+        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
+        return basicFields || labelMatch || assigneeMatch;
+    };
 
     // Get unique states and types for filters
     const stateFilters = useMemo(() => {
@@ -340,40 +327,34 @@ export default function SamplesList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Muestras</span>}
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <PageHeader
+                        title="Muestras"
+                        subtitle="Consulta y gestiona las muestras procesadas"
                         extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en muestras"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 400 }}
-                                />
-                                <Button type="primary" onClick={() => navigate("/samples/register")}>
-                                    Registrar Muestra
-                                </Button>
-                            </Space>
+                            <CelumaButton type="primary" onClick={() => navigate("/samples/register")}>
+                                Registrar Muestra
+                            </CelumaButton>
                         }
-                        style={cardStyle}
-                    >
+                    />
+                    <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/samples/${record.id}`)}
                             emptyText="Sin muestras"
+                            searchable
+                            searchPlaceholder="Buscar en muestras"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin muestras',
                                 selectAll: 'Seleccionar todo',

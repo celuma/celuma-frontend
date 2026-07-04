@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Layout, Card, Avatar, Empty, Button as AntButton, message, Timeline, Steps, Tabs, Badge, Tooltip, Input } from "antd";
+import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import { 
     ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
     FileTextOutlined, InboxOutlined, 
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
-    DollarOutlined
+    DollarOutlined, ClockCircleOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import ActionButtonPanel, { type ActionButtonItem } from "../components/ui/action_button_panel";
+import CelumaButton from "../components/ui/button";
+import Panel from "../components/ui/panel";
+import CelumaSteps, { type CelumaStep } from "../components/ui/celuma_steps";
+import CelumaTextArea from "../components/ui/textarea_field";
+import CelumaTabs from "../components/ui/celuma_tabs";
+import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { getReport } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
@@ -32,7 +39,7 @@ import {
     updateOrderLabels 
 } from "../services/collaboration_service";
 import CommentInput from "../components/comments/comment_input";
-import CommentList from "../components/comments/comment_list";
+import ConversationThread from "../components/comments/conversation_thread";
 import type { CommentData } from "../components/comments/comment_item";
 import { 
     getInitials, 
@@ -40,7 +47,7 @@ import {
     formatLocalDateTime,
     renderUserMention 
 } from "../components/comments/comment_utils";
-import { renderLabels } from "../components/ui/table_helpers";
+import { renderLabels, renderStatusChip } from "../components/ui/table_helpers";
 import { getSampleTypeConfig } from "../components/ui/table_helpers";
 import { showCelumaApiError } from "../lib/celuma_feedback";
 
@@ -132,15 +139,16 @@ type OrderFullResponse = {
     } | null;
 };
 
-// Status configuration
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida" },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso" },
-    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico" },
-    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión" },
-    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada" },
-    CLOSED: { color: "#6b7280", bg: "#f3f4f6", label: "Cerrada" },
-    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada" },
+// Status configuration — single source of truth for color + icon + label per status,
+// so the status chip and the Céluma steps bar stay visually in sync.
+const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
+    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <ExperimentOutlined /> },
+    DIAGNOSIS: { color: "#8b5cf6", bg: "#f5f3ff", label: "Diagnóstico", icon: <SolutionOutlined /> },
+    REVIEW: { color: "#ec4899", bg: "#fdf2f8", label: "Revisión", icon: <AuditOutlined /> },
+    RELEASED: { color: "#10b981", bg: "#ecfdf5", label: "Liberada", icon: <SendOutlined /> },
+    CLOSED: { color: "#0891b2", bg: "#ecfeff", label: "Cerrada", icon: <LockOutlined /> },
+    CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada", icon: <CloseCircleOutlined /> },
 };
 
 // Sample state configuration - matches backend SampleState enum
@@ -151,6 +159,7 @@ const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: st
     DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
     CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
 };
+
 
 export default function OrderDetail() {
     const navigate = useNavigate();
@@ -164,7 +173,7 @@ export default function OrderDetail() {
     const [latestReport, setLatestReport] = useState<ReportEnvelope | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
     const previewRef = useRef<ReportPreviewRef>(null);
-    const [activeTab, setActiveTab] = useState("samples");
+    const [activeTab, setActiveTab] = useState("timeline");
     const [timeline, setTimeline] = useState<Array<{
         id: string;
         event_type: string;
@@ -247,13 +256,16 @@ export default function OrderDetail() {
         }
     };
 
-    // Function to refresh order data
-    const refresh = useCallback(async () => {
+    // Function to refresh order data.
+    // `silent` re-fetches without flipping the page skeleton (`loading`) or reloading
+    // the report preview — used after collaboration edits so the whole page doesn't flash.
+    const refresh = useCallback(async (opts?: { silent?: boolean }) => {
         if (!orderId) return;
-            setLoading(true);
+            const silent = opts?.silent ?? false;
+            if (!silent) setLoading(true);
             setError(null);
             let foundReportId: string | null = null;
-            
+
             try {
                 const full = await getJSON<OrderFullResponse>(`/v1/laboratory/orders/${orderId}/full`);
                 setData(full);
@@ -280,14 +292,16 @@ export default function OrderDetail() {
                 foundReportId = full.order.report_id ?? full.report?.id ?? null;
                     setReportId(foundReportId);
 
-                // Load latest report for preview if reportId exists
-                if (foundReportId) {
+                // Load latest report for preview if reportId exists.
+                // Skipped on silent refreshes (collaboration edits don't touch the report
+                // and reloading the preview would cause a visible flash).
+                if (foundReportId && !silent) {
                     await loadLatestReport(foundReportId);
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!silent) setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             } finally {
-                setLoading(false);
+                if (!silent) setLoading(false);
             }
     }, [orderId]);
 
@@ -342,40 +356,37 @@ export default function OrderDetail() {
         if (!orderId) return;
         try {
             await updateOrderAssignees(orderId, userIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Assignees actualizados");
+            await refresh({ silent: true });
+            message.success("Asignados actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
+            message.error(err instanceof Error ? err.message : "Error al actualizar asignados");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     const handleUpdateReviewers = useCallback(async (userIds: string[]) => {
         if (!orderId) return;
         try {
             await updateOrderReviewers(orderId, userIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Reviewers actualizados");
+            await refresh({ silent: true });
+            message.success("Revisores actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar reviewers");
+            message.error(err instanceof Error ? err.message : "Error al actualizar revisores");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     const handleUpdateLabels = useCallback(async (labelIds: string[]) => {
         if (!orderId) return;
         try {
             await updateOrderLabels(orderId, labelIds);
-            await refresh();
-            await refreshTimeline();
-            message.success("Labels actualizados");
+            await refresh({ silent: true });
+            message.success("Etiquetas actualizadas");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
+            message.error(err instanceof Error ? err.message : "Error al actualizar etiquetas");
             throw err;
         }
-    }, [orderId, refresh, refreshTimeline]);
+    }, [orderId, refresh]);
 
     // Load conversation with smart scroll behavior
     const loadConversation = useCallback(async (options?: { forceScrollToBottom?: boolean; silent?: boolean }) => {
@@ -543,15 +554,6 @@ export default function OrderDetail() {
         }
     }, [orderId, savingNotes, notesValue, refresh]);
 
-    // Handle quick action to add comment - switch to conversation tab
-    const handleGoToComment = useCallback(() => {
-        setActiveTab("conversation");
-        // Scroll to tabs container
-        if (tabsContainerRef.current) {
-            tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-    }, []);
-
     // Handle navigation to samples tab
     const handleGoToSamples = useCallback(() => {
         setActiveTab("samples");
@@ -582,13 +584,6 @@ export default function OrderDetail() {
         return index >= 0 ? index : 0;
     };
 
-    const getStepStatus = (stepIndex: number, currentStep: number, orderStatus: string | undefined): "wait" | "process" | "finish" | "error" => {
-        if (orderStatus === "CANCELLED") return "error";
-        if (stepIndex < currentStep) return "finish";
-        if (stepIndex === currentStep) return "process";
-        return "wait";
-    };
-
     const handleCreateReport = () => {
         if (!data) return;
         navigate(`/reports/editor?orderId=${data.order.id}`);
@@ -600,33 +595,30 @@ export default function OrderDetail() {
     const SamplesContent = () => (
         <div>
             {/* Header */}
-            <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between", 
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: 16
+                marginBottom: 16,
+                gap: 12,
+                flexWrap: "wrap",
             }}>
-                <span style={{ fontWeight: 600, color: tokens.textPrimary }}>
+                <span style={{ fontWeight: 700, color: tokens.textPrimary, fontSize: 15 }}>
                     {data?.samples.length || 0} muestra{(data?.samples.length || 0) !== 1 ? "s" : ""} registrada{(data?.samples.length || 0) !== 1 ? "s" : ""}
                 </span>
-                <AntButton 
-                    type="primary" 
+                <CelumaButton
+                    type="primary"
                     size="small"
                     icon={<PlusOutlined />}
                     onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
                 >
                     Agregar Muestra
-                </AntButton>
+                </CelumaButton>
             </div>
-            
+
             {data && data.samples.length > 0 ? (
-                <div style={{ 
-                    border: "1px solid #e5e7eb", 
-                    borderRadius: tokens.radius, 
-                    overflow: "hidden" 
-                }}>
-                    {data.samples.map((sample, index) => {
-                        const stateConfig = SAMPLE_STATE_CONFIG[sample.state] || { color: "#6b7280", bg: "#f3f4f6", label: sample.state, icon: <CheckCircleOutlined /> };
+                <div style={{ display: "grid", gap: 10 }}>
+                    {data.samples.map((sample) => {
                         const typeConfig = getSampleTypeConfig(sample.type);
                         return (
                             <div
@@ -635,74 +627,64 @@ export default function OrderDetail() {
                                 style={{
                                     padding: "14px 16px",
                                     cursor: "pointer",
-                                    borderBottom: index < data.samples.length - 1 ? "1px solid #e5e7eb" : "none",
-                                    transition: "background 0.15s ease",
-                                    background: "#fff"
+                                    border: "2px solid #eef1f0",
+                                    borderRadius: 12,
+                                    background: "#fff",
+                                    transition: "background .15s ease, border-color .15s ease",
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = "#f9fafb"}
-                                onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#f7fcfb"; e.currentTarget.style.borderColor = "#cfe9e6"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#eef1f0"; }}
                             >
-                                {/* Top Row: Avatar, Code/Type, and State */}
-                                <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+                                {/* Top Row: type avatar, code/type, state */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                     <Avatar
-                                        size={36}
+                                        size={38}
                                         icon={typeConfig.icon}
-                                        style={{ 
-                                            backgroundColor: typeConfig.color,
+                                        style={{
+                                            backgroundColor: `${typeConfig.color}1a`,
+                                            color: typeConfig.color,
+                                            border: `2px solid ${typeConfig.color}33`,
                                             fontSize: 16,
-                                            marginRight: 14,
-                                            flexShrink: 0
+                                            flexShrink: 0,
                                         }}
                                     />
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, color: tokens.primary, fontSize: 14 }}>
                                             {sample.sample_code}
                                         </div>
                                         <div style={{ fontSize: 13, color: tokens.textSecondary }}>
-                                            {sample.type}
+                                            {typeConfig.label}
                                         </div>
                                     </div>
-                                    <div style={{
-                                        backgroundColor: stateConfig.bg,
-                                        color: stateConfig.color,
-                                        borderRadius: 12,
-                                        fontSize: 11,
-                                        fontWeight: 500,
-                                        padding: "4px 10px",
-                                        display: "inline-block",
-                                    }}>
-                                        {stateConfig.label}
-                                    </div>
+                                    {renderStatusChip(sample.state, "sample")}
                                 </div>
-                                
-                                {/* Bottom Row: Labels and Assignees */}
+
+                                {/* Bottom Row: labels and assignees */}
                                 {((sample.labels && sample.labels.length > 0) || (sample.assignees && sample.assignees.length > 0)) && (
-                                    <div style={{ 
-                                        display: "flex", 
-                                        gap: 16, 
-                                        marginLeft: 50,
+                                    <div style={{
+                                        display: "flex",
+                                        gap: 16,
+                                        marginLeft: 52,
+                                        marginTop: 10,
                                         flexWrap: "wrap",
-                                        alignItems: "center"
+                                        alignItems: "center",
                                     }}>
-                                        {/* Labels */}
                                         {sample.labels && sample.labels.length > 0 && (
                                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Etiquetas:</span>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 600 }}>Etiquetas:</span>
                                                 {renderLabels(sample.labels)}
                                             </div>
                                         )}
-                                        
-                                        {/* Assignees */}
                                         {sample.assignees && sample.assignees.length > 0 && (
                                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 500 }}>Asignados:</span>
+                                                <span style={{ fontSize: 11, color: tokens.textSecondary, fontWeight: 600 }}>Asignados:</span>
                                                 <Avatar.Group maxCount={3} size="small">
                                                     {sample.assignees.map(user => (
                                                         <Tooltip key={user.id} title={user.name}>
-                                                            <Avatar 
+                                                            <Avatar
                                                                 size={24}
                                                                 src={user.avatar_url}
-                                                                style={{ 
+                                                                style={{
                                                                     backgroundColor: user.avatar_url ? undefined : getAvatarColor(user.name),
                                                                     fontSize: 10,
                                                                 }}
@@ -721,15 +703,9 @@ export default function OrderDetail() {
                     })}
                 </div>
             ) : (
-                <div style={{ 
-                    padding: 40,
-                    textAlign: "center",
-                    background: "#f9fafb",
-                    borderRadius: tokens.radius,
-                    border: "1px solid #e5e7eb"
-                }}>
+                <Panel style={{ padding: 40, textAlign: "center", display: "grid", justifyItems: "center", gap: 8 }}>
                     <Empty description="Sin muestras registradas" />
-                </div>
+                </Panel>
             )}
         </div>
     );
@@ -740,61 +716,63 @@ export default function OrderDetail() {
             {reportId ? (
                 <div style={{ display: "grid", gap: 16 }}>
                     {/* Report header */}
-                    <div style={{ 
-                        display: "flex", 
-                        justifyContent: "space-between", 
+                    <Panel style={{
+                        display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
-                        padding: "14px 16px",
-                        background: "#f9fafb",
-                        borderRadius: tokens.radius,
-                        border: "1px solid #e5e7eb"
+                        gap: 16,
+                        flexWrap: "wrap",
                     }}>
-                        <div 
-                            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
+                        <div
+                            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", minWidth: 0 }}
                             onClick={() => navigate(`/reports/${reportId}`)}
                         >
                             <Avatar
-                                size={40}
-                                style={{ 
-                                    backgroundColor: "#10b981",
-                                    fontSize: 16
+                                size={42}
+                                style={{
+                                    backgroundColor: "#eaf7f5",
+                                    color: tokens.primary,
+                                    border: `2px solid ${tokens.primary}33`,
+                                    fontSize: 17,
+                                    flexShrink: 0,
                                 }}
                                 icon={<FileTextOutlined />}
                             />
-                            <div>
-                                <div style={{ fontWeight: 600, color: tokens.primary }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: tokens.primary, fontSize: 15 }}>
                                     {latestReport?.title || "Reporte"}
                                 </div>
-                                <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                    {latestReport?.status === "DRAFT" ? "Borrador" : 
-                                     latestReport?.status === "PUBLISHED" ? "Publicado" : 
-                                     latestReport?.status || "—"}
+                                <div style={{ marginTop: 4 }}>
+                                    {latestReport?.status
+                                        ? renderStatusChip(latestReport.status, "report")
+                                        : <span style={{ fontSize: 12, color: tokens.textSecondary }}>—</span>}
                                 </div>
                             </div>
                         </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <AntButton 
-                                type="text" 
-                                icon={<ReloadOutlined />} 
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <CelumaButton
+                                size="small"
+                                icon={<ReloadOutlined />}
                                 onClick={() => reportId && loadLatestReport(reportId)}
                                 loading={reportLoading}
                             >
                                 Actualizar
-                            </AntButton>
-                            <AntButton 
-                                type="primary" 
+                            </CelumaButton>
+                            <CelumaButton
+                                size="small"
+                                type="primary"
                                 icon={<FilePdfOutlined />}
                                 onClick={() => previewRef.current?.exportPDF()}
                             >
                                 Exportar PDF
-                            </AntButton>
+                            </CelumaButton>
                         </div>
-                    </div>
-                    
+                    </Panel>
+
                     {latestReport && (
-                        <ReportPreview 
+                        <ReportPreview
                             ref={previewRef}
-                            report={latestReport} 
+                            report={latestReport}
                             loading={reportLoading}
                             style={{ margin: 0 }}
                             signerLookup={(data?.order.reviewers ?? []).map((r) => ({
@@ -805,32 +783,37 @@ export default function OrderDetail() {
                     )}
                 </div>
             ) : (
-                <div style={{ 
-                    padding: 60, 
-                    textAlign: "center",
-                    background: "#f9fafb",
-                    borderRadius: tokens.radius,
-                    border: "1px solid #e5e7eb"
-                }}>
-                    <FileTextOutlined style={{ fontSize: 48, color: "#9ca3af", marginBottom: 16 }} />
-                    <div style={{ fontSize: 16, fontWeight: 600, color: tokens.textPrimary, marginBottom: 8 }}>
+                <Panel style={{ padding: "48px 24px", textAlign: "center", display: "grid", justifyItems: "center", gap: 10 }}>
+                    <div style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: "50%",
+                        background: "#eaf7f5",
+                        color: tokens.primary,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 28,
+                    }}>
+                        <FileTextOutlined />
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.textPrimary, fontFamily: tokens.titleFont }}>
                         Sin reporte
                     </div>
-                    <div style={{ color: tokens.textSecondary, marginBottom: 16 }}>
+                    <div style={{ color: tokens.textSecondary, marginBottom: 6 }}>
                         No hay un reporte asociado a esta orden
                     </div>
-                    <AntButton type="primary" icon={<PlusOutlined />} onClick={handleCreateReport}>
-                        Crear Reporte
-                    </AntButton>
-                </div>
+                    {hasPermission("reports:create") && (
+                        <CelumaButton type="primary" icon={<PlusOutlined />} onClick={handleCreateReport}>
+                            Crear Reporte
+                        </CelumaButton>
+                    )}
+                </Panel>
             )}
         </div>
     );
 
-    // Current user info for comment input
-    const currentUserName = currentUserProfile?.full_name || "Usuario";
-    const currentUserAvatar = currentUserProfile?.avatar_url || null;
-    
+
     // Convert conversation to CommentData format
     const conversationData: CommentData[] = useMemo(() => {
         return conversation.map(c => ({
@@ -847,55 +830,47 @@ export default function OrderDetail() {
 
     // Conversation content JSX (not a function component to avoid re-renders)
     const conversationContentJSX = (
-        <div 
-            style={{ 
-                display: "flex", 
-                flexDirection: "column", 
-                height: "100%"
+        <div
+            style={{
+                border: "2px solid #eef1f0",
+                borderRadius: tokens.radius,
+                background: "#fff",
+                height: 600,
+                maxHeight: "72vh",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
             }}
         >
-            {/* Comments List with scroll */}
-            <CommentList
+            {/* Chat-style grouped message thread */}
+            <ConversationThread
                 ref={conversationScrollRef}
-                comments={conversationData}
+                messages={conversationData}
+                currentUserId={currentUserProfile?.id}
                 loading={loadingConversation}
-                emptyMessage="Sin comentarios"
-                emptyDescription="Sé el primero en comentar sobre esta orden"
             />
 
-            {/* Comment Input Form - At bottom */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <Avatar 
-                        size={36}
-                        src={currentUserAvatar}
-                        style={{ 
-                            backgroundColor: currentUserAvatar ? undefined : getAvatarColor(currentUserName),
-                            fontSize: 14,
-                            flexShrink: 0
-                        }}
-                    >
-                        {!currentUserAvatar && getInitials(currentUserName)}
-                    </Avatar>
-                    <CommentInput
-                        value={commentText}
-                        onChange={setCommentText}
-                        onSubmit={addComment}
-                        loading={submittingComment}
-                        placeholder="Escribe un comentario... Usa @ para mencionar a alguien"
-                        rows={3}
-                    />
-                </div>
-            </Card>
+            {/* Composer — unified within the same panel, Telegram-style integrated send */}
+            <div style={{ borderTop: "1px solid #eef1f0", padding: "12px 14px", background: "#fbfdfc", display: "flex" }}>
+                <CommentInput
+                    variant="chat"
+                    value={commentText}
+                    onChange={setCommentText}
+                    onSubmit={addComment}
+                    loading={submittingComment}
+                    placeholder="Escribe un mensaje… Usa @ para mencionar a alguien"
+                    rows={1}
+                />
+            </div>
         </div>
     );
 
-    // Sidebar content component (for reuse in responsive layout)
-    const SidebarContent = () => (
+    // Sidebar content as a JSX value (NOT a nested component). Rendering it as a
+    // component (`<SidebarContent/>`) gave it a fresh identity on every OrderDetail
+    // re-render, remounting the rail and resetting the section dropdowns' state
+    // (e.g. closing the labels picker mid-create). As a value it's reconciled by
+    // position, so the sections keep their state across re-renders.
+    const sidebarContent = (
         <div style={{ display: "grid", gap: tokens.gap }}>
             {/* Reviewers */}
             <Card 
@@ -937,74 +912,6 @@ export default function OrderDetail() {
                     onLabelsRefresh={loadCollaborationData}
                 />
             </Card>
-
-            {/* Quick Actions */}
-            <Card 
-                size="small" 
-                style={{ ...cardStyle, padding: 0 }}
-                bodyStyle={{ padding: 16 }}
-            >
-                <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 12, 
-                    color: tokens.textSecondary, 
-                    textTransform: "uppercase", 
-                    letterSpacing: "0.5px",
-                    marginBottom: 12
-                }}>
-                    Acciones Rápidas
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                    <AntButton 
-                        block 
-                        size="small"
-                        icon={<MessageOutlined />}
-                        onClick={handleGoToComment}
-                    >
-                        Hacer Comentario
-                    </AntButton>
-                    <AntButton 
-                        block 
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
-                    >
-                        Agregar Muestra
-                    </AntButton>
-                    {data?.order?.invoice_id && hasPermission("billing:read") && (
-                        <AntButton
-                            block
-                            size="small"
-                            icon={<DollarOutlined />}
-                            onClick={() => data && navigate(`/billing/${data.order.id}`)}
-                            style={{ borderColor: tokens.primary, color: tokens.primary }}
-                        >
-                            Ver Factura
-                        </AntButton>
-                    )}
-                    {!reportId && hasPermission("reports:create") && (
-                        <AntButton
-                            block
-                            size="small"
-                            type="primary"
-                            icon={<FileTextOutlined />}
-                            onClick={handleCreateReport}
-                        >
-                            Crear Reporte
-                        </AntButton>
-                    )}
-                    {reportId && hasPermission("reports:read") && (
-                        <AntButton
-                            block
-                            size="small"
-                            icon={<FileTextOutlined />}
-                            onClick={() => navigate(`/reports/${reportId}`)}
-                        >
-                            Editar Reporte
-                        </AntButton>
-                    )}
-                </div>
-            </Card>
         </div>
     );
 
@@ -1022,10 +929,17 @@ export default function OrderDetail() {
                     <style>{`
                         .order-detail-grid {
                             display: grid;
-                            grid-template-columns: 1fr 280px;
+                            grid-template-columns: minmax(0, 1fr) 280px;
                             gap: ${tokens.gap}px;
                             align-items: start;
                         }
+                        .order-detail-grid > * {
+                            min-width: 0;
+                        }
+                        /* Inner cards of the main column must be allowed to shrink below their
+                           content width, otherwise the ficha overflows its track and overlaps the rail. */
+                        .od-main { display: grid; gap: ${tokens.gap}px; min-width: 0; }
+                        .od-main > * { min-width: 0; }
                         .order-detail-sidebar-desktop {
                             display: block;
                             position: sticky;
@@ -1046,220 +960,163 @@ export default function OrderDetail() {
                                 display: block;
                             }
                         }
+
+                        /* Céluma timeline — soft connector + comfortable spacing */
+                        .od-timeline { padding-top: 4px; }
+                        .od-timeline .ant-timeline-item-tail { border-inline-start: 2px solid #eef1f0; }
+                        .od-timeline .ant-timeline-item { padding-bottom: 22px; }
+                        .od-timeline .ant-timeline-item-head { background: transparent; }
                     `}</style>
 
                     {/* Main Grid Layout */}
                     <div className="order-detail-grid">
                         {/* Left Column - Main Content */}
-                        <div style={{ display: "grid", gap: tokens.gap }}>
-                            {/* Order Header Card */}
-                    <Card
-                                title={
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                        <span style={cardTitleStyle}>Detalle de Orden</span>
-                                        {data && (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                                <span style={{ 
-                                                    fontFamily: tokens.titleFont, 
-                                                    fontSize: 16, 
-                                                    fontWeight: 700,
-                                                    color: tokens.textPrimary
-                                                }}>
-                                                    {data.order.order_code}
-                                                </span>
-                                                <div style={{ 
-                                                    padding: "4px 10px",
-                                                    borderRadius: 12,
-                                                    background: statusConfig.bg,
-                                                    color: statusConfig.color,
-                                                    fontWeight: 600,
-                                                    fontSize: 11,
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 4
-                                                }}>
-                                                    {data.order.status === "CANCELLED" ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
-                                                    {statusConfig.label}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                }
+                        <div className="od-main">
+                            {/* Order Header — Céluma ficha */}
+                    <RecordCard
                         loading={loading}
-                                style={cardStyle}
+                        avatar={data && (
+                            data.patient ? (
+                                <Tooltip title="Ver perfil del paciente">
+                                    <Avatar
+                                        size={104}
+                                        onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                        style={{
+                                            backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
+                                            fontSize: 38,
+                                            fontWeight: 700,
+                                            border: "2px solid #d1d5db",
+                                            flexShrink: 0,
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        {getInitials(fullName || data.patient.patient_code)}
+                                    </Avatar>
+                                </Tooltip>
+                            ) : (
+                                <Avatar
+                                    size={104}
+                                    icon={<FileTextOutlined />}
+                                    style={{ backgroundColor: tokens.primary, fontSize: 38, border: "2px solid #d1d5db", flexShrink: 0 }}
+                                />
+                            )
+                        )}
+                        chips={data && (
+                            <>
+                                <span style={codeChipStyle}>{data.order.order_code}</span>
+                                <span style={statusChipStyle(statusConfig)}>
+                                    {statusConfig.icon}
+                                    {statusConfig.label}
+                                </span>
+                            </>
+                        )}
+                        title={data && (
+                            <h1
+                                onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
+                                style={{ margin: 0, fontFamily: tokens.titleFont, fontSize: 26, fontWeight: 800, color: tokens.textPrimary, lineHeight: 1.1, cursor: data.patient ? "pointer" : "default" }}
+                            >
+                                {fullName || data.patient?.patient_code || "Orden sin paciente"}
+                            </h1>
+                        )}
+                        subtitle={data?.patient ? data.patient.patient_code : undefined}
+                        meta={data && (
+                            <>
+                                {(data.order.requesting_physician || data.order.requested_by) && (
+                                    <MetaItem icon={<UserOutlined />}>
+                                        <span style={{ marginRight: 4 }}>Solicitante:</span>
+                                        {data.order.requesting_physician ? (
+                                            <a
+                                                href={`/requesting-physicians/${data.order.requesting_physician.id}`}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
+                                                }}
+                                                style={{ fontWeight: 600, color: tokens.primary }}
+                                            >
+                                                {data.order.requesting_physician.full_name}
+                                            </a>
+                                        ) : (
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{data.order.requested_by}</span>
+                                        )}
+                                    </MetaItem>
+                                )}
+                                {data.order.created_at && (
+                                    <MetaItem icon={<CalendarOutlined />}>
+                                        {new Date(data.order.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                                    </MetaItem>
+                                )}
+                            </>
+                        )}
+                        stats={data && (
+                            <>
+                                <div style={{ cursor: "pointer" }} onClick={handleGoToSamples}>
+                                    <Stat value={data.samples.length} label="Muestras" color={tokens.primary} />
+                                </div>
+                                <StatDivider />
+                                <Stat value={reportId ? 1 : 0} label="Reporte" color="#22c55e" />
+                                {data.order.invoice_id && (
+                                    <>
+                                        <StatDivider />
+                                        <Stat value={1} label="Factura" color="#f59e0b" />
+                                    </>
+                                )}
+                            </>
+                        )}
+                        rail={data && (
+                            <>
+                                {(() => {
+                                    const actions: ActionButtonItem[] = [];
+                                    if (data.order.invoice_id && hasPermission("billing:read")) {
+                                        actions.push({ icon: <DollarOutlined />, tooltip: "Ver factura", ariaLabel: "Ver factura", onClick: () => navigate(`/billing/${data.order.id}`) });
+                                    }
+                                    if (!reportId && hasPermission("reports:create")) {
+                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Crear reporte", ariaLabel: "Crear reporte", onClick: handleCreateReport });
+                                    } else if (reportId && hasPermission("reports:read")) {
+                                        actions.push({ icon: <FileTextOutlined />, tooltip: "Ver reporte", ariaLabel: "Ver reporte", onClick: () => navigate(`/reports/${reportId}`) });
+                                    }
+                                    return actions.length > 0 ? <ActionButtonPanel actions={actions} /> : null;
+                                })()}
+                                {data.order.billed_lock && hasPermission("billing:read") && (
+                                    <Panel style={{
+                                        background: "#fffbeb",
+                                        border: "2px solid #fde68a",
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        gap: 10,
+                                        padding: 12,
+                                        width: "fit-content",
+                                        maxWidth: 260,
+                                    }}>
+                                        <ExclamationCircleOutlined style={{ color: "#d97706", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 700, color: "#92400e", fontSize: 13 }}>Retenido por Pago Pendiente</div>
+                                            <div style={{ color: "#b45309", fontSize: 12.5, marginTop: 3, lineHeight: 1.45 }}>
+                                                El reporte no será visible para los solicitantes hasta liquidar el pago.
+                                            </div>
+                                        </div>
+                                    </Panel>
+                                )}
+                            </>
+                        )}
                     >
                         {data && (
                             <>
-                                        {/* Billed Lock Warning */}
-                                {data.order.billed_lock && hasPermission("billing:read") && (
-                                    <div style={{ 
-                                                padding: "12px 16px", 
-                                        background: "#fff7e6", 
-                                        border: "1px solid #ffd591", 
-                                                borderRadius: 8,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 12,
-                                                marginBottom: 20
-                                            }}>
-                                                <ExclamationCircleOutlined style={{ color: "#d48806", fontSize: 18 }} />
-                                                <div style={{ flex: 1 }}>
-                                                    <span style={{ fontWeight: 600, color: "#ad6800" }}>Retenido por Pago Pendiente</span>
-                                                    <span style={{ color: "#ad6800", marginLeft: 8 }}>
-                                                        — El acceso al reporte está bloqueado.
-                                                    </span>
-                                        </div>
-                                        {hasPermission("billing:read") && (
-                                            <AntButton
-                                                size="small"
-                                                onClick={() => navigate(`/billing/${data.order.id}`)}
-                                            >
-                                                Ver Facturación
-                                            </AntButton>
-                                        )}
-                                    </div>
-                                )}
-
-                                        {/* Patient Info */}
-                                        {data.patient ? (
-                                            <Tooltip title="Ver perfil del paciente">
-                                                <div 
-                                                    onClick={() => data.patient && navigate(`/patients/${data.patient.id}`)}
-                                                    style={{ 
-                                                        display: "inline-flex", 
-                                                        alignItems: "center", 
-                                                        gap: 10,
-                                                        cursor: "pointer",
-                                                        padding: "8px 12px",
-                                                        borderRadius: 8,
-                                                        marginLeft: -12,
-                                                        marginBottom: 16,
-                                                        transition: "background 0.15s ease"
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                                                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                                                >
-                                                    <Avatar 
-                                                        size={40}
-                                                        style={{ 
-                                                            backgroundColor: getAvatarColor(fullName || data.patient.patient_code),
-                                                            fontSize: 15,
-                                                            fontWeight: 600,
-                                                            flexShrink: 0
-                                                        }}
-                                                    >
-                                                        {getInitials(fullName || data.patient.patient_code)}
-                                                    </Avatar>
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, color: tokens.primary, fontSize: 14 }}>
-                                                            {fullName || data.patient.patient_code}
-                                                        </div>
-                                                        <div style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                                            {data.patient.patient_code}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </Tooltip>
-                                        ) : (
-                                            <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 13 }}>
-                                                Orden sin paciente asociado.
-                                            </div>
-                                        )}
-
-                                        {/* Invoice Link */}
-                                        {data.order.invoice_id && hasPermission("billing:read") && (
-                                            <div style={{ marginBottom: 16 }}>
-                                                <AntButton
-                                                    type="default"
-                                                    size="small"
-                                                    icon={<DollarOutlined />}
-                                                    onClick={() => navigate(`/billing/${data.order.id}`)}
-                                                    style={{
-                                                        borderColor: tokens.primary,
-                                                        color: tokens.primary,
-                                                    }}
-                                                >
-                                                    Ver Factura
-                                                </AntButton>
-                                            </div>
-                                        )}
-
-                                        {/* Meta Info Row */}
-                                        <div style={{ 
-                                            display: "flex", 
-                                            flexWrap: "wrap",
-                                            alignItems: "center", 
-                                            gap: "12px 20px",
-                                            color: tokens.textSecondary,
-                                            fontSize: 13,
-                                            marginBottom: 16
-                                        }}>
-                                            {(data.order.requesting_physician || data.order.requested_by) && (
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                    <UserOutlined />
-                                                    <span>Solicitante:</span>
-                                                    {data.order.requesting_physician ? (
-                                                        <a
-                                                            href={`/requesting-physicians/${data.order.requesting_physician.id}`}
-                                                            onClick={(event) => {
-                                                                event.preventDefault();
-                                                                navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
-                                                            }}
-                                                            style={{ fontWeight: 500, color: tokens.primary }}
-                                                        >
-                                                            {data.order.requesting_physician.full_name}
-                                                        </a>
-                                                    ) : (
-                                                        <span style={{ fontWeight: 500, color: tokens.textPrimary }}>{data.order.requested_by}</span>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {data.order.created_at && (
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                    <CalendarOutlined />
-                                                    <span>{new Date(data.order.created_at).toLocaleDateString("es-MX", { 
-                                                        year: "numeric", 
-                                                        month: "short", 
-                                                        day: "numeric" 
-                                                    })}</span>
-                                                </div>
-                                            )}
-
-                                            <Tooltip title="Ver muestras">
-                                                <div 
-                                                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                                    onClick={handleGoToSamples}
-                                                >
-                                                    <ExperimentOutlined />
-                                                    <span style={{ fontWeight: 500, color: tokens.primary }}>
-                                                        {data.samples.length} muestra{data.samples.length !== 1 ? "s" : ""}
-                                                    </span>
-                                                </div>
-                                            </Tooltip>
-                                        </div>
-
-                                        {/* Description - at the bottom */}
-                                            <div style={{ 
-                                                padding: 16, 
-                                                background: "#f9fafb", 
-                                                borderRadius: 8,
-                                                border: "1px solid #e5e7eb"
-                                            }}>
-                                                <div style={{ 
-                                                    fontSize: 12, 
-                                                    fontWeight: 600, 
-                                                    color: tokens.textSecondary, 
-                                                    marginBottom: 8,
-                                                    textTransform: "uppercase",
+                                {/* Description - at the bottom (Céluma panel) */}
+                                        <Panel style={{ marginTop: 20 }}>
+                                            <div style={{
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                color: tokens.textSecondary,
+                                                marginBottom: editingNotes ? 10 : 8,
+                                                textTransform: "uppercase",
                                                 letterSpacing: "0.5px",
                                                 display: "flex",
                                                 justifyContent: "space-between",
-                                                alignItems: "center"
+                                                alignItems: "center",
                                             }}>
                                                 <span>Descripción</span>
                                                 {!editingNotes && (
-                                                    <EditOutlined 
+                                                    <EditOutlined
                                                         style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
                                                         onClick={() => {
                                                             setNotesValue(data.order.notes || "");
@@ -1267,100 +1124,112 @@ export default function OrderDetail() {
                                                         }}
                                                     />
                                                 )}
-                                                </div>
+                                            </div>
                                             {editingNotes ? (
                                                 <div style={{ display: "grid", gap: 8 }}>
-                                                    <Input.TextArea
+                                                    <CelumaTextArea
                                                         value={notesValue}
-                                                        onChange={(e) => setNotesValue(e.target.value)}
+                                                        onChange={setNotesValue}
                                                         placeholder="Agregar descripción o notas de la orden..."
                                                         rows={4}
                                                         maxLength={500}
+                                                        autoFocus
                                                     />
                                                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                                        <AntButton 
-                                                            size="small" 
+                                                        <CelumaButton
+                                                            size="xsmall"
+                                                            danger
                                                             onClick={() => setEditingNotes(false)}
                                                             disabled={savingNotes}
                                                         >
                                                             Cancelar
-                                                        </AntButton>
-                                                        <AntButton 
-                                                            type="primary" 
-                                                            size="small" 
+                                                        </CelumaButton>
+                                                        <CelumaButton
+                                                            type="primary"
+                                                            size="xsmall"
                                                             onClick={updateNotes}
                                                             loading={savingNotes}
                                                         >
                                                             Guardar
-                                                        </AntButton>
+                                                        </CelumaButton>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div style={{ 
-                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary, 
+                                                <div style={{
+                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary,
                                                     fontSize: 14,
                                                     lineHeight: 1.6,
                                                     whiteSpace: "pre-wrap",
-                                                    fontStyle: data.order.notes ? "normal" : "italic"
+                                                    fontStyle: data.order.notes ? "normal" : "italic",
                                                 }}>
                                                     {data.order.notes || "Sin descripción"}
-                                            </div>
-                                        )}
-                                        </div>
+                                                </div>
+                                            )}
+                                        </Panel>
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
-                    </Card>
+                    </RecordCard>
 
-                            {/* Timeline Card */}
-                    <Card
-                                title={<span style={cardTitleStyle}>Línea de Tiempo</span>}
-                        loading={loading}
-                                style={cardStyle}
-                            >
-                                {/* Order Status Steps */}
+                            {/* Tabs Card — "Línea de Tiempo" is the default tab so users don't have to scroll to find it */}
+                            <div ref={tabsContainerRef}>
+                            <Card loading={loading} style={cardStyle}>
+                                <CelumaTabs
+                                    activeKey={activeTab}
+                                    onChange={setActiveTab}
+                                    items={[
+                                        {
+                                            key: "timeline",
+                                            label: (
+                                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <ClockCircleOutlined />
+                                                    Línea de Tiempo
+                                                </span>
+                                            ),
+                                            children: (
+                                                <>
+                                {/* Order Status Steps — Céluma styled */}
                                 {data && (
                                     <div style={{ marginBottom: 24 }}>
                                         {data.order.status === "CANCELLED" ? (
-                                            <div style={{ 
-                                                padding: 16, 
-                                                background: "#fff2f0", 
-                                                border: "1px solid #ffccc7", 
-                                                borderRadius: 8,
-                                                textAlign: "center"
-                                            }}>
-                                                <CloseCircleOutlined style={{ fontSize: 32, color: "#ff4d4f", marginBottom: 8 }} />
-                                                <div style={{ fontSize: 16, fontWeight: 600, color: "#cf1322" }}>Orden Cancelada</div>
-                                            </div>
+                                            // Red-tinted panel with a single-step timeline, mirroring the
+                                            // normal steps' layout for visual cohesion. White circle so it
+                                            // pops against the soft-red panel.
+                                            <Panel style={{ background: STATUS_CONFIG.CANCELLED.bg, border: "2px solid #fecaca" }}>
+                                                <CelumaSteps
+                                                    current={0}
+                                                    steps={[{
+                                                        key: "CANCELLED",
+                                                        title: "Cancelada",
+                                                        icon: <CloseCircleOutlined />,
+                                                        color: STATUS_CONFIG.CANCELLED.color,
+                                                        bg: "#fff",
+                                                    }]}
+                                                />
+                                            </Panel>
                                         ) : (
-                                            <Steps
-                                                current={getCurrentStep(data.order.status)}
-                                                size="small"
-                                                items={ORDER_STEPS.map((step, index) => {
-                                                    const stepStatus = getStepStatus(index, getCurrentStep(data.order.status), data.order.status);
-                                                    const stepConfig = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
-                                                    const isActive = stepStatus === "process" || stepStatus === "finish";
-                                                    
-                                                    return {
-                                                        title: step.title,
-                                                        icon: step.icon,
-                                                        status: stepStatus,
-                                                        styles: isActive ? {
-                                                            icon: {
-                                                                backgroundColor: stepConfig.color,
-                                                                borderColor: stepConfig.color,
-                                                            }
-                                                        } : undefined,
-                                                    };
-                                                })}
-                                                style={{ padding: "16px 0" }}
-                                            />
+                                            <Panel>
+                                                <CelumaSteps
+                                                    current={getCurrentStep(data.order.status)}
+                                                    steps={ORDER_STEPS.map<CelumaStep>((step) => {
+                                                        const cfg = STATUS_CONFIG[step.key] || STATUS_CONFIG.RECEIVED;
+                                                        return {
+                                                            key: step.key,
+                                                            title: step.title,
+                                                            icon: step.icon,
+                                                            color: cfg.color,
+                                                            bg: cfg.bg,
+                                                        };
+                                                    })}
+                                                />
+                                            </Panel>
                                         )}
                                     </div>
                                 )}
 
                         {timeline.length > 0 ? (
                             <Timeline
+                                className="od-timeline"
                                 items={timeline.map((event, index) => {
                                     // Check if previous event is from the same user
                                     const prevEvent = index > 0 ? timeline[index - 1] : null;
@@ -1386,10 +1255,10 @@ export default function OrderDetail() {
                                                             navigate(`/samples/${sampleId}`);
                                                         }}
                                                         style={{
-                                                            color: "#0f8b8d",
+                                                            color: "#49b6ad",
                                                             fontWeight: 600,
                                                             textDecoration: "none",
-                                                            borderBottom: "1px dashed #0f8b8d",
+                                                            borderBottom: "1px dashed #49b6ad",
                                                         }}
                                                     >
                                                         {sampleCode}
@@ -1475,10 +1344,10 @@ export default function OrderDetail() {
                                                                         navigate(`/samples/${sampleId}`);
                                                                     }}
                                                                     style={{
-                                                                        color: "#0f8b8d",
+                                                                        color: "#49b6ad",
                                                                         fontWeight: 600,
                                                                         textDecoration: "none",
-                                                                        borderBottom: "1px dashed #0f8b8d",
+                                                                        borderBottom: "1px dashed #49b6ad",
                                                                     }}
                                                                 >
                                                                     {sampleCode}
@@ -1499,10 +1368,10 @@ export default function OrderDetail() {
                                                                 navigate(`/samples/${sampleId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             {sampleCode}
@@ -1520,10 +1389,10 @@ export default function OrderDetail() {
                                                                 navigate(`/samples/${sampleId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             {sampleCode}
@@ -1542,10 +1411,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1565,10 +1434,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1588,10 +1457,10 @@ export default function OrderDetail() {
                                                                 navigate(`/reports/${reportId}`);
                                                             }}
                                                             style={{
-                                                                color: "#0f8b8d",
+                                                                color: "#49b6ad",
                                                                 fontWeight: 600,
                                                                 textDecoration: "none",
-                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                borderBottom: "1px dashed #49b6ad",
                                                             }}
                                                         >
                                                             reporte
@@ -1614,10 +1483,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1646,10 +1515,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1677,10 +1546,10 @@ export default function OrderDetail() {
                                                                     navigate(`/reports/${reportId}`);
                                                                 }}
                                                                 style={{
-                                                                    color: "#0f8b8d",
+                                                                    color: "#49b6ad",
                                                                     fontWeight: 600,
                                                                     textDecoration: "none",
-                                                                    borderBottom: "1px dashed #0f8b8d",
+                                                                    borderBottom: "1px dashed #49b6ad",
                                                                 }}
                                                             >
                                                                 reporte
@@ -1789,10 +1658,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -1824,10 +1693,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -1858,10 +1727,10 @@ export default function OrderDetail() {
                                                                                 navigate(`/samples/${sampleId}`);
                                                                             }}
                                                                             style={{
-                                                                                color: "#0f8b8d",
+                                                                                color: "#49b6ad",
                                                                                 fontWeight: 600,
                                                                                 textDecoration: "none",
-                                                                                borderBottom: "1px dashed #0f8b8d",
+                                                                                borderBottom: "1px dashed #49b6ad",
                                                                             }}
                                                                         >
                                                                             {sampleCodeMeta}
@@ -1990,10 +1859,10 @@ export default function OrderDetail() {
                                                                             navigate(`/samples/${sampleId}`);
                                                                         }}
                                                                         style={{
-                                                                            color: "#0f8b8d",
+                                                                            color: "#49b6ad",
                                                                             fontWeight: 600,
                                                                             textDecoration: "none",
-                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                            borderBottom: "1px dashed #49b6ad",
                                                                         }}
                                                                     >
                                                                         {sampleCodeMeta}
@@ -2045,10 +1914,10 @@ export default function OrderDetail() {
                                                                             navigate(`/samples/${sampleId}`);
                                                                         }}
                                                                         style={{
-                                                                            color: "#0f8b8d",
+                                                                            color: "#49b6ad",
                                                                             fontWeight: 600,
                                                                             textDecoration: "none",
-                                                                            borderBottom: "1px dashed #0f8b8d",
+                                                                            borderBottom: "1px dashed #49b6ad",
                                                                         }}
                                                                     >
                                                                         {sampleCodeMeta}
@@ -2092,14 +1961,14 @@ export default function OrderDetail() {
                                         children: (
                                             <div style={{ marginLeft: 4 }}>
                                                 {!isSameUserAsPrevious && (
-                                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                                    <div style={{ fontWeight: 700, marginBottom: 4, color: tokens.textPrimary }}>
                                                         {userName}
                                                     </div>
                                                 )}
-                                                <div style={{ color: "#666", lineHeight: 1.5, marginBottom: 4 }}>
+                                                <div style={{ color: tokens.textSecondary, lineHeight: 1.55, marginBottom: 4 }}>
                                                     {actionText}
                                                 </div>
-                                                <div style={{ fontSize: 12, color: "#888" }}>
+                                                <div style={{ fontSize: 12, color: "#94a3b8" }}>
                                                     {formatLocalDateTime(event.created_at)}
                                                 </div>
                                             </div>
@@ -2110,23 +1979,17 @@ export default function OrderDetail() {
                         ) : (
                             <Empty description="Sin eventos registrados" />
                         )}
-                    </Card>
-
-                            {/* Tabs Card - Samples, Report, Conversation */}
-                            <div ref={tabsContainerRef}>
-                                <Card style={cardStyle}>
-                                    <Tabs
-                                        activeKey={activeTab}
-                                        onChange={setActiveTab}
-                                    items={[
+                                                </>
+                                            ),
+                                        },
                                         {
                                             key: "samples",
                                             label: (
                                                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                                     <ExperimentOutlined />
                                                     Muestras
-                                                    <Badge 
-                                                        count={data?.samples.length || 0} 
+                                                    <Badge
+                                                        count={data?.samples.length || 0}
                                                         style={{ backgroundColor: tokens.primary }}
                                                         size="small"
                                                     />
@@ -2162,13 +2025,13 @@ export default function OrderDetail() {
 
                             {/* Mobile Sidebar - Shows below main content on small screens */}
                             <div className="order-detail-sidebar-mobile">
-                                <SidebarContent />
+                                {sidebarContent}
                                     </div>
                             </div>
 
                         {/* Right Column - Sidebar (Desktop only) */}
                         <div className="order-detail-sidebar-desktop">
-                            <SidebarContent />
+                            {sidebarContent}
                                 </div>
                             </div>
                 </div>

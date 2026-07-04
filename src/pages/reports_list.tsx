@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Card, Avatar, Tooltip } from "antd";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Layout, Card, Avatar, Tooltip } from "antd";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 
@@ -60,10 +61,15 @@ export default function ReportsList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const [searchParams] = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<ReportsListResponse["reports"]>([]);
-    const [search, setSearch] = useState("");
+    // Status filter, optionally seeded from the URL (?status=DRAFT) e.g. when arriving from the dashboard cards
+    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+        const s = searchParams.get("status");
+        return s ? s.split(",") : null;
+    });
 
     useEffect(() => {
         (async () => {
@@ -80,23 +86,13 @@ export default function ReportsList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in reviewers
-            const reviewerMatch = r.reviewers?.some(reviewer => 
-                reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || reviewerMatch;
-        });
-    }, [rows, search]);
+    const searchFilter = (r: ReportsListResponse["reports"][number], q: string) => {
+        const basicFields = [r.title, r.diagnosis_text, r.order.order_code, r.order.patient?.full_name, r.order.patient?.patient_code, r.order.requested_by]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const reviewerMatch = r.reviewers?.some((reviewer) => reviewer.name.toLowerCase().includes(q) || reviewer.email.toLowerCase().includes(q)) || false;
+        return basicFields || reviewerMatch;
+    };
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {
@@ -202,6 +198,7 @@ export default function ReportsList() {
             width: 120,
             render: (status: string) => renderStatusChip(status, "report"),
             filters: statusFilters,
+            filteredValue: statusFilter,
             onFilter: (value, record) => record.status === value,
             sorter: stringSorter("status"),
         },
@@ -245,35 +242,27 @@ export default function ReportsList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Reportes</span>}
-                        extra={
-                            <Input.Search
-                                allowClear
-                                placeholder="Buscar en reportes" 
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onSearch={(v) => setSearch(v)}
-                                style={{ width: 320 }}
-                            />
-                        }
-                        style={cardStyle}
-                    >
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <PageHeader title="Reportes" subtitle="Consulta y gestiona los reportes generados" />
+                    <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/reports/${record.id}`)}
+                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin reportes"
+                            searchable
+                            searchPlaceholder="Buscar en reportes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin reportes',
                                 selectAll: 'Seleccionar todo',

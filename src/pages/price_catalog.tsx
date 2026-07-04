@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, InputNumber, Modal, message, Space, Popconfirm, Switch, Select, DatePicker } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Layout, Card, Button, Form, InputNumber, Modal, message, Space, Popconfirm, Switch, Select, DatePicker } from "antd";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
+import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 
@@ -311,22 +314,24 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
     ];
 
     const content = (
-        <div>
-            <Card
-                title={<span style={cardTitleStyle}>Catálogo de Precios</span>}
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <PageHeader
+                title="Catálogo de Precios"
+                subtitle="Define los precios por tipo de estudio y vigencia"
                 extra={
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                    <CelumaButton type="primary" onClick={handleCreate}>
                         Nuevo Precio
-                    </Button>
+                    </CelumaButton>
                 }
-                style={cardStyle}
-            >
-                <Table
+            />
+            <Card style={cardStyle}>
+                <CelumaTable
                     columns={columns}
                     dataSource={prices}
                     loading={loading}
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
+                    emptyText="Sin precios registrados"
                 />
             </Card>
 

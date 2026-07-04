@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { MenuProps } from "antd";
-import { Layout, Menu, Button } from "antd";
+import { Layout, Menu, Button, Drawer } from "antd";
 import {
     HomeOutlined,
     FileTextOutlined,
@@ -48,8 +48,8 @@ const NAV_ITEMS: { key: CelumaKey; icon: React.ReactNode; label: string; permiss
 ];
 
 const itemsBottom: Required<MenuProps>["items"] = [
-    { key: "/config",  icon: <SettingOutlined />,  label: "Configuración", style: { margin: 0 }, title: "Configuración" },
-    { key: "/logout",  icon: <LogoutOutlined />,   label: "Cerrar Sesión", style: { margin: 0 }, title: "Cerrar Sesión" },
+    { key: "/config",  icon: <SettingOutlined />,  label: "Configuración", style: { margin: "0 0 4px 0" }, title: "Configuración" },
+    { key: "/logout",  icon: <LogoutOutlined />,   label: "Cerrar Sesión", style: { margin: 0 },           title: "Cerrar Sesión" },
 ];
 
 export interface SidebarCelumaProps {
@@ -66,9 +66,29 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
     title = "Céluma",
 }) => {
     const [collapsed, setCollapsed] = useState(() => {
-        const saved = localStorage.getItem("sidebar_collapsed");
+        if (typeof window === "undefined") return false;
+        // On narrow screens always start collapsed
+        if (window.matchMedia("(max-width: 1100px)").matches) return true;
+        // On wide screens respect user's saved preference
+        const saved = localStorage.getItem("sidebar_collapsed_wide");
         return saved ? JSON.parse(saved) : false;
     });
+
+    useEffect(() => {
+        const mq = window.matchMedia("(max-width: 1100px)");
+        const handler = (e: MediaQueryListEvent) => {
+            if (e.matches) {
+                setCollapsed(true);
+            } else {
+                // Restore wide-screen preference when expanding viewport
+                const saved = localStorage.getItem("sidebar_collapsed_wide");
+                setCollapsed(saved ? JSON.parse(saved) : false);
+            }
+        };
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+    }, []);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const navigate = useNavigate();
     const { hasPermission } = useUserProfile();
 
@@ -92,6 +112,7 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
             : [];
 
     const handleNavigate = (key: CelumaKey) => {
+        setDrawerOpen(false);
         if (key === "/logout") {
             localStorage.removeItem("auth_token");
             sessionStorage.removeItem("auth_token");
@@ -104,101 +125,132 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
     const toggleCollapsed = () => {
         const newCollapsed = !collapsed;
         setCollapsed(newCollapsed);
-        localStorage.setItem("sidebar_collapsed", JSON.stringify(newCollapsed));
+        // Only persist manual toggle on wide screens; narrow-screen collapses are always auto
+        if (!window.matchMedia("(max-width: 1100px)").matches) {
+            localStorage.setItem("sidebar_collapsed_wide", JSON.stringify(newCollapsed));
+        }
     };
+
+    const menuContent = (inDrawer = false) => (
+        <div style={{ ...styles.inner, height: inDrawer ? "100%" : "100vh" }}>
+            <div style={!inDrawer && collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
+                <div
+                    style={!inDrawer && collapsed ? styles.headerCollapsed : styles.header}
+                    onClick={() => handleNavigate("/home")}
+                >
+                    {logoSrc && (
+                        <img src={logoSrc} alt="logo" style={!inDrawer && collapsed ? styles.logoCollapsed : styles.logo} />
+                    )}
+                    {(inDrawer || !collapsed) && <span style={styles.brand}>{title}</span>}
+                </div>
+                {!inDrawer && (
+                    <Button
+                        type="text"
+                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                        onClick={toggleCollapsed}
+                        style={{
+                            ...styles.collapseButton,
+                            ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
+                        }}
+                    />
+                )}
+            </div>
+
+            <Menu
+                items={menuItems}
+                selectedKeys={selectedTop}
+                mode="inline"
+                theme="dark"
+                inlineCollapsed={!inDrawer && collapsed}
+                style={!inDrawer && collapsed ? styles.menuCollapsed : styles.menu}
+                onClick={(e) => handleNavigate(e.key as CelumaKey)}
+                inlineIndent={20}
+            />
+
+            <div style={!inDrawer && collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
+                <Menu
+                    items={itemsBottom}
+                    selectedKeys={selectedBottom}
+                    mode="inline"
+                    theme="dark"
+                    inlineCollapsed={!inDrawer && collapsed}
+                    style={!inDrawer && collapsed ? styles.menuBottomCollapsed : styles.menuBottom}
+                    onClick={(e) => handleNavigate(e.key as CelumaKey)}
+                    inlineIndent={20}
+                />
+            </div>
+        </div>
+    );
 
     return (
         <>
             <style>{`
-                body, html { 
-                    margin: 0; 
-                    padding: 0; 
-                    height: 100%;
-                    min-height: 100vh;
-                }
-                .ant-layout { 
-                    margin: 0; 
-                    padding: 0; 
-                    min-height: 100vh;
-                }
-                .ant-layout-sider { 
-                    margin: 0; 
-                    padding: 0; 
-                    min-height: 100vh;
-                }
-                #root {
-                    min-height: 100vh;
-                }
-                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-item:hover,
-                .ant-layout-sider .ant-menu-dark.ant-menu-inline .ant-menu-submenu-title:hover {
-                    background: rgba(0, 0, 0, 0.14) !important;
+                body, html { margin: 0; padding: 0; height: 100%; min-height: 100vh; }
+                .ant-layout { margin: 0; padding: 0; min-height: 100vh; }
+                .ant-layout-sider { margin: 0; padding: 0; min-height: 100vh; }
+                #root { min-height: 100vh; }
+                .ant-layout-sider .ant-menu-dark .ant-menu-item:hover,
+                .ant-layout-sider .ant-menu-dark .ant-menu-submenu-title:hover {
+                    background: rgba(255, 255, 255, 0.14) !important;
+                    border-radius: 8px !important;
                 }
                 .ant-layout-sider .ant-menu-dark .ant-menu-item-selected {
-                    background: rgba(0, 0, 0, 0.30) !important;
+                    background: rgba(255, 255, 255, 0.22) !important;
+                    border-radius: 8px !important;
+                }
+                .ant-layout-sider .ant-menu-dark .ant-menu-item {
+                    border-radius: 8px !important;
+                    margin-inline: 4px !important;
+                    margin-block: 4px !important;
+                    width: calc(100% - 8px) !important;
+                }
+                .celuma-drawer .ant-menu-dark .ant-menu-item:hover { background: rgba(255,255,255,0.14) !important; border-radius: 8px !important; }
+                .celuma-drawer .ant-menu-dark .ant-menu-item-selected { background: rgba(255,255,255,0.22) !important; border-radius: 8px !important; }
+                .celuma-drawer .ant-menu-dark .ant-menu-item { border-radius: 8px !important; }
+                .celuma-drawer .ant-drawer-body { padding: 0 !important; background: #49b6ad !important; }
+                .celuma-drawer .ant-drawer-header { display: none !important; }
+                /* Mobile: hide the sider, show hamburger */
+                @media (max-width: 767px) {
+                    .ant-layout-sider { display: none !important; }
+                    .celuma-mobile-hamburger { display: flex !important; }
+                }
+                /* Desktop: hide the mobile hamburger */
+                @media (min-width: 768px) {
+                    .celuma-mobile-hamburger { display: none !important; }
                 }
             `}</style>
+
+            {/* Mobile hamburger — shown via CSS on small screens */}
+            <button
+                className="celuma-mobile-hamburger"
+                onClick={() => setDrawerOpen(true)}
+                style={styles.mobileHamburger}
+                aria-label="Abrir menú"
+            >
+                <MenuUnfoldOutlined style={{ fontSize: 20, color: "#fff" }} />
+            </button>
+
+            {/* Mobile drawer */}
+            <Drawer
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                placement="left"
+                width={260}
+                className="celuma-drawer"
+                styles={{ body: { padding: 0, background: "#49b6ad" } }}
+            >
+                {menuContent(true)}
+            </Drawer>
+
+            {/* Desktop sider — hidden via CSS on small screens */}
             <Sider
                 width={260}
                 collapsible
                 collapsed={collapsed}
                 trigger={null}
                 style={styles.sider}
-                breakpoint="lg"
             >
-                <div style={styles.inner}>
-                    <div style={collapsed ? styles.headerContainerCollapsed : styles.headerContainer}>
-                        <div
-                            style={collapsed ? styles.headerCollapsed : styles.header}
-                            onClick={() => handleNavigate("/home")}
-                        >
-                            {logoSrc ? (
-                                <img
-                                    src={logoSrc}
-                                    alt="logo"
-                                    style={collapsed ? styles.logoCollapsed : styles.logo}
-                                />
-                            ) : (
-                                <div style={styles.logoDot} />
-                            )}
-                            {!collapsed && <span style={styles.brand}>{title}</span>}
-                        </div>
-                        <Button
-                            type="text"
-                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                            onClick={toggleCollapsed}
-                            style={{
-                                ...styles.collapseButton,
-                                ...(collapsed
-                                    ? styles.collapseButtonCollapsed
-                                    : styles.collapseButtonExpanded),
-                            }}
-                        />
-                    </div>
-
-                    <Menu
-                        items={menuItems}
-                        selectedKeys={selectedTop}
-                        mode="inline"
-                        theme="dark"
-                        inlineCollapsed={collapsed}
-                        style={styles.menu}
-                        onClick={(e) => handleNavigate(e.key as CelumaKey)}
-                        inlineIndent={collapsed ? 0 : 24}
-                    />
-
-                    <div style={collapsed ? styles.bottomWrapperCollapsed : styles.bottomWrapper}>
-                        <Menu
-                            items={itemsBottom}
-                            selectedKeys={selectedBottom}
-                            mode="inline"
-                            theme="dark"
-                            inlineCollapsed={collapsed}
-                            style={styles.menuBottom}
-                            onClick={(e) => handleNavigate(e.key as CelumaKey)}
-                            inlineIndent={collapsed ? 0 : 24}
-                        />
-                    </div>
-                </div>
+                {menuContent(false)}
             </Sider>
         </>
     );
@@ -225,7 +277,7 @@ const styles: Record<string, React.CSSProperties> = {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        fontFamily: "Nanito, sans-serif",
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
         overflow: "hidden",
     },
     headerContainer: {
@@ -279,17 +331,27 @@ const styles: Record<string, React.CSSProperties> = {
     },
     brand: {
         color: "#ffffff",
-        fontWeight: 900,
+        fontWeight: 800,
         fontSize: 26,
-        letterSpacing: 0.3,
-        fontFamily: "Nanito, sans-serif",
+        letterSpacing: -0.02,
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
         lineHeight: 1.1,
     },
     menu: {
         background: "transparent",
         borderInlineEnd: "none",
         flex: 1,
-        padding: "8px 16px 0 16px",
+        padding: "8px 10px 0 10px",
+        margin: 0,
+        color: "#fff",
+        overflowY: "auto",
+        minHeight: 0,
+    },
+    menuCollapsed: {
+        background: "transparent",
+        borderInlineEnd: "none",
+        flex: 1,
+        padding: "8px 0 0 0",
         margin: 0,
         color: "#fff",
         overflowY: "auto",
@@ -300,7 +362,7 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
-        padding: "16px 16px 20px 16px",
+        padding: "12px 0 20px 0",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     bottomWrapperCollapsed: {
@@ -308,15 +370,37 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
-        alignItems: "center",
-        padding: "16px 16px 20px 16px",
+        padding: "12px 0 20px 0",
         borderTop: "1px solid rgba(255, 255, 255, 0.1)",
     },
     menuBottom: {
         background: "transparent",
         borderInlineEnd: "none",
-        padding: 0,
+        padding: "0 10px",
         margin: 0,
         color: "#fff",
+    },
+    menuBottomCollapsed: {
+        background: "transparent",
+        borderInlineEnd: "none",
+        padding: "0",
+        margin: 0,
+        color: "#fff",
+    },
+    mobileHamburger: {
+        position: "fixed",
+        top: 12,
+        left: 12,
+        zIndex: 1000,
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: "#49b6ad",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
     },
 };

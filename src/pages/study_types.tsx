@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Table, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Layout, Card, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
+import CelumaButton from "../components/ui/button";
 import type { ColumnsType } from "antd/es/table";
 
 const { TextArea } = Input;
@@ -310,93 +313,58 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
 
     const content = (
         <>
-            <Card
-                        title={<span style={cardTitleStyle}>Tipos de Estudio</span>}
-                        style={cardStyle}
-                        extra={
-                            <Button
-                                type="primary"
-                                icon={<PlusOutlined />}
-                                onClick={handleCreate}
-                            >
-                                Nuevo Tipo de Estudio
-                            </Button>
-                        }
-                    >
-                        <Table
-                            columns={columns}
-                            dataSource={studyTypes}
-                            rowKey="id"
-                            loading={loading}
-                            pagination={{ pageSize: 10 }}
-                        />
-                    </Card>
+            <div style={{ display: "grid", gap: tokens.gap }}>
+                <PageHeader
+                    title="Tipos de Estudio"
+                    subtitle="Configura los tipos de estudio disponibles en el laboratorio"
+                    extra={
+                        <CelumaButton type="primary" onClick={handleCreate}>
+                            Nuevo Tipo de Estudio
+                        </CelumaButton>
+                    }
+                />
+                <Card style={cardStyle}>
+                    <CelumaTable
+                        columns={columns}
+                        dataSource={studyTypes}
+                        rowKey="id"
+                        loading={loading}
+                        pagination={{ pageSize: 10 }}
+                        emptyText="Sin tipos de estudio"
+                    />
+                </Card>
+            </div>
             <Modal
                 title={editingId ? "Editar Tipo de Estudio" : "Nuevo Tipo de Estudio"}
                 open={modalVisible}
-                onCancel={() => {
-                    setModalVisible(false);
-                    form.resetFields();
-                }}
+                onCancel={() => { setModalVisible(false); form.resetFields(); }}
                 footer={null}
                 width={600}
             >
                 <Form form={form} layout="vertical" onFinish={handleSave}>
-                    <Form.Item
-                        name="code"
-                        label="Código"
-                        rules={[
-                            { required: true, message: "Requerido" },
-                            { max: 50, message: "Máximo 50 caracteres" },
-                        ]}
-                    >
+                    <Form.Item name="code" label="Código" rules={[{ required: true, message: "Requerido" }, { max: 50, message: "Máximo 50 caracteres" }]}>
                         <Input placeholder="ej: BIOPSIA, CITOLOGIA" maxLength={50} />
                     </Form.Item>
-
-                    <Form.Item
-                        name="name"
-                        label="Nombre"
-                        rules={[
-                            { required: true, message: "Requerido" },
-                            { max: 255, message: "Máximo 255 caracteres" },
-                        ]}
-                    >
+                    <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Requerido" }, { max: 255, message: "Máximo 255 caracteres" }]}>
                         <Input placeholder="ej: Biopsia de tejido" maxLength={255} />
                     </Form.Item>
-
                     <Form.Item name="description" label="Descripción">
-                        <TextArea
-                            placeholder="Descripción opcional del tipo de estudio"
-                            rows={4}
-                            maxLength={1000}
-                        />
+                        <TextArea placeholder="Descripción opcional del tipo de estudio" rows={4} maxLength={1000} />
                     </Form.Item>
-
                     <Form.Item name="default_report_template_id" label="Plantilla de reporte por defecto (opcional)">
-                        <Select
-                            placeholder="Seleccionar template de reporte"
-                            allowClear
-                            showSearch
-                            optionFilterProp="children"
-                        >
+                        <Select placeholder="Seleccionar template de reporte" allowClear showSearch optionFilterProp="children">
                             {templates.map((template) => (
-                                <Select.Option key={template.id} value={template.id}>
-                                    {template.name}
-                                </Select.Option>
+                                <Select.Option key={template.id} value={template.id}>{template.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-
                     <Form.Item name="is_active" label="Estado" valuePropName="checked">
                         <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
                     </Form.Item>
-
                     <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
                         <Space>
                             <Button onClick={() => setModalVisible(false)}>Cancelar</Button>
-                            <Button type="primary" htmlType="submit">
-                                {editingId ? "Guardar Cambios" : "Crear"}
-                            </Button>
+                            <Button type="primary" htmlType="submit">{editingId ? "Guardar Cambios" : "Crear"}</Button>
                         </Space>
                     </Form.Item>
                 </Form>

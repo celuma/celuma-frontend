@@ -17,7 +17,7 @@ export const getInitials = (fullName?: string): string => {
 // Generate a consistent color based on name
 export const getAvatarColor = (name: string): string => {
     const colors = [
-        "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
+        "#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", 
         "#f59e0b", "#10b981", "#ef4444", "#6366f1"
     ];
     let hash = 0;
@@ -97,16 +97,16 @@ export const renderTextWithMentions = (
             <Tooltip key={key++} title={tooltipContent} placement="top">
                 <span 
                     style={{
-                        color: "#0f8b8d",
+                        color: "#49b6ad",
                         fontWeight: 600,
                         cursor: "pointer",
                         transition: "color 0.2s",
                     }}
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "#0a6566";
+                        e.currentTarget.style.color = "#3da8a0";
                     }}
                     onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "#0f8b8d";
+                        e.currentTarget.style.color = "#49b6ad";
                     }}
                 >
                     @{username}
@@ -153,16 +153,16 @@ export const renderUserMention = (
         <Tooltip key={key} title={tooltipContent} placement="top">
             <span 
                 style={{
-                    color: "#0f8b8d",
+                    color: "#49b6ad",
                     fontWeight: 600,
                     cursor: "pointer",
                     transition: "color 0.2s",
                 }}
                 onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#0a6566";
+                    e.currentTarget.style.color = "#3da8a0";
                 }}
                 onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "#0f8b8d";
+                    e.currentTarget.style.color = "#49b6ad";
                 }}
             >
                 @{username}

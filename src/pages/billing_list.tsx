@@ -6,8 +6,9 @@ import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
 
@@ -160,11 +161,9 @@ function BillingList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Facturación</span>}
-                        style={cardStyle}
-                    >
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <PageHeader title="Facturación" subtitle="Consulta y gestiona las facturas del laboratorio" />
+                    <Card style={cardStyle}>
                         <CelumaTable
                             columns={columns}
                             dataSource={invoices}
@@ -173,12 +172,19 @@ function BillingList() {
                             pagination={{ pageSize: 10 }}
                             onRowClick={(record) => navigate(`/billing/${record.order_id}`)}
                             emptyText="Sin facturas"
+                            searchable
+                            searchPlaceholder="Buscar en facturas"
+                            searchFilter={(r, q) =>
+                                [r.invoice_number, r.order_id, r.status]
+                                    .filter(Boolean)
+                                    .some((v) => String(v).toLowerCase().includes(q))
+                            }
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin facturas',
                                 selectAll: 'Seleccionar todo',

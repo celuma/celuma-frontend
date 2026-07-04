@@ -159,8 +159,15 @@ export default function RegisterAllOneClick() {
                 display: "grid",
                 gap: tokens.gap,
             }}>
-                <Card 
-                    title={<span style={cardTitleStyle}>Registro</span>}
+                <Card
+                    title={
+                        <div>
+                            <div style={{ ...cardTitleStyle, fontSize: 26 }}>Crear cuenta</div>
+                            <p style={{ margin: "4px 0 0 0", fontSize: 14, color: "#6b7280", fontWeight: 400 }}>
+                                Registra tu laboratorio para empezar a usar Céluma
+                            </p>
+                        </div>
+                    }
                     style={cardStyle}
                 >
                     <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
@@ -192,7 +199,7 @@ export default function RegisterAllOneClick() {
                         <section>
                             <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Sucursal</h3>
                             <p style={{ margin: "0 0 12px 0", color: "#6b7280", fontSize: 13 }}>
-                                Zona horaria detectada: <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: 4 }}>{timezone}</code>
+                                Zona horaria detectada: <code className="celuma-code">{timezone}</code>
                             </p>
                             <div style={{ display: "grid", gap: 12 }}>
                                 <FormField
@@ -282,7 +289,7 @@ export default function RegisterAllOneClick() {
                         </section>
 
                         {/* Submit */}
-                        <Button htmlType="submit" type="primary" fullWidth loading={loading}>
+                        <Button htmlType="submit" type="primary" fullWidth loading={loading} style={{ marginTop: 8 }}>
                             Registrarse
                         </Button>
 

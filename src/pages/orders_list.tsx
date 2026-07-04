@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Input, Button, Card, Space, Avatar, Tooltip } from "antd";
+import { Layout, Card, Avatar, Tooltip } from "antd";
+import CelumaButton from "../components/ui/button";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
-import { CelumaTable } from "../components/ui/celuma_table";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -58,11 +60,16 @@ export default function OrdersList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const [searchParams] = useSearchParams();
     const { hasPermission } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
-    const [search, setSearch] = useState("");
+    // Status filter, optionally seeded from the URL (?status=RECEIVED,PROCESSING) e.g. when arriving from the dashboard cards
+    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+        const s = searchParams.get("status");
+        return s ? s.split(",") : null;
+    });
 
     useEffect(() => {
         (async () => {
@@ -79,28 +86,15 @@ export default function OrdersList() {
         })();
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((r) => {
-            // Search in basic fields
-            const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
-                .filter(Boolean)
-                .some((v) => String(v).toLowerCase().includes(q));
-            
-            // Search in labels
-            const labelMatch = r.labels?.some(label => 
-                label.name.toLowerCase().includes(q)
-            ) || false;
-            
-            // Search in assignees
-            const assigneeMatch = r.assignees?.some(user => 
-                user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
-            ) || false;
-            
-            return basicFields || labelMatch || assigneeMatch;
-        });
-    }, [rows, search]);
+    // Search predicate (query arrives trimmed + lowercased from CelumaTable).
+    const searchFilter = (r: OrdersListResponse["orders"][number], q: string) => {
+        const basicFields = [r.order_code, r.patient?.full_name, r.patient?.patient_code, r.requesting_physician?.full_name, r.requesting_physician?.physician_code, r.requested_by, r.notes]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q));
+        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
+        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
+        return basicFields || labelMatch || assigneeMatch;
+    };
 
     // Get unique statuses for filter
     const statusFilters = useMemo(() => {
@@ -222,20 +216,20 @@ export default function OrdersList() {
             render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
                 if (r.requesting_physician) {
                     return (
-                        <a
-                            href={`/requesting-physicians/${r.requesting_physician.id}`}
-                            onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
-                            }}
-                            style={{ color: "inherit", textDecoration: "none" }}
-                        >
-                            <div style={{ fontWeight: 600, color: "#0f8b8d", borderBottom: "1px dashed #0f8b8d", display: "inline-block" }}>
+                        <div>
+                            <a
+                                href={`/requesting-physicians/${r.requesting_physician.id}`}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
+                                }}
+                                style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block", textDecoration: "none", cursor: "pointer" }}
+                            >
                                 {r.requesting_physician.full_name}
-                            </div>
+                            </a>
                             <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
-                        </a>
+                        </div>
                     );
                 }
                 return r.requested_by ? <span>{r.requested_by}</span> : <span style={{ color: "#888" }}>—</span>;
@@ -300,6 +294,7 @@ export default function OrdersList() {
             width: 120,
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
+            filteredValue: statusFilter,
             onFilter: (value, record) => record.status === value,
             sorter: stringSorter("status"),
         },
@@ -354,40 +349,35 @@ export default function OrdersList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto" }}>
-                    <Card
-                        title={<span style={cardTitleStyle}>Órdenes</span>}
+                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                    <PageHeader
+                        title="Órdenes"
+                        subtitle="Consulta y gestiona las órdenes de laboratorio"
                         extra={
-                            <Space>
-                                <Input.Search
-                                    allowClear
-                                    placeholder="Buscar en órdenes" 
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    onSearch={(v) => setSearch(v)}
-                                    style={{ width: 320 }}
-                                />
-                                <Button type="primary" onClick={() => navigate("/orders/register")}>
-                                    Nueva Orden
-                                </Button>
-                            </Space>
+                            <CelumaButton type="primary" onClick={() => navigate("/orders/register")}>
+                                Nueva Orden
+                            </CelumaButton>
                         }
-                        style={cardStyle}
-                    >
+                    />
+                    <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={filtered}
+                            dataSource={rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={loading}
                             onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin casos"
+                            searchable
+                            searchPlaceholder="Buscar en órdenes"
+                            searchFilter={searchFilter}
                             pagination={{ pageSize: 10 }}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',
                                 filterReset: 'Limpiar',
                                 filterEmptyText: 'Sin filtros',
-                                filterCheckall: 'Seleccionar todo',
+                                filterCheckAll: 'Seleccionar todo',
                                 filterSearchPlaceholder: 'Buscar en filtros',
                                 emptyText: 'Sin casos',
                                 selectAll: 'Seleccionar todo',

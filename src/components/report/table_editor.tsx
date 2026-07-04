@@ -1,7 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Button, Input, Tooltip } from "antd";
+import { Input } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { tokens } from "../design/tokens";
+import CelumaButton from "../ui/button";
+import ActionButtonPanel from "../ui/action_button_panel";
 import { parseMarkdownTable, serializeMarkdownTable } from "./table_utils";
 
 export type { TableEditorProps };
@@ -66,57 +68,41 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
         setRows(r); emit(headers, r);
     };
 
-    const borderCell: React.CSSProperties = { border: "1px solid #e8e8e8", padding: "2px 4px" };
-    const headerCell: React.CSSProperties = { ...borderCell, background: "#f5f5f5", minWidth: 90 };
+    const borderCell: React.CSSProperties = { border: "1px solid #eef1f0", padding: "3px 5px" };
+    const headerCell: React.CSSProperties = { ...borderCell, background: "#fafbfc", minWidth: 90 };
+    const cellInput: React.CSSProperties = { borderColor: "transparent", boxShadow: "none", background: "transparent" };
 
     return (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", border: "2px solid #e5e7eb", borderRadius: 12, padding: 6 }}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
                 <thead>
                     <tr>
                         {headers.map((h, ci) => (
                             <th key={ci} style={headerCell}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                     <Input
                                         size="small"
                                         value={h}
                                         disabled={readOnly}
                                         onChange={(e) => setHeader(ci, e.target.value)}
                                         placeholder={`Col ${ci + 1}`}
-                                        style={{
-                                            fontWeight: 600,
-                                            flex: 1,
-                                            borderColor: "transparent",
-                                            boxShadow: "none",
-                                            background: "transparent",
-                                        }}
+                                        style={{ ...cellInput, fontWeight: 700, flex: 1, color: tokens.textPrimary }}
                                     />
                                     {!readOnly && headers.length > 1 && (
-                                        <Tooltip title="Eliminar columna">
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                onClick={() => delCol(ci)}
-                                                style={{ flexShrink: 0, fontSize: 11 }}
-                                            />
-                                        </Tooltip>
+                                        <ActionButtonPanel
+                                            size="xxsmall"
+                                            actions={[{ icon: <DeleteOutlined />, tooltip: "Eliminar columna", ariaLabel: "Eliminar columna", danger: true, onClick: () => delCol(ci) }]}
+                                        />
                                     )}
                                 </div>
                             </th>
                         ))}
                         {!readOnly && (
-                            <th style={{ ...borderCell, background: "#f5f5f5", width: 36, textAlign: "center" }}>
-                                <Tooltip title="Añadir columna">
-                                    <Button
-                                        type="text"
-                                        size="small"
-                                        icon={<PlusOutlined />}
-                                        onClick={addCol}
-                                        style={{ color: tokens.primary }}
-                                    />
-                                </Tooltip>
+                            <th style={{ ...headerCell, width: 40, minWidth: 40, textAlign: "center" }}>
+                                <ActionButtonPanel
+                                    size="xxsmall"
+                                    actions={[{ icon: <PlusOutlined />, tooltip: "Añadir columna", ariaLabel: "Añadir columna", onClick: addCol }]}
+                                />
                             </th>
                         )}
                     </tr>
@@ -131,26 +117,17 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
                                         value={row[ci] ?? ""}
                                         disabled={readOnly}
                                         onChange={(e) => setCell(ri, ci, e.target.value)}
-                                        style={{
-                                            borderColor: "transparent",
-                                            boxShadow: "none",
-                                            background: "transparent",
-                                        }}
+                                        style={{ ...cellInput, color: tokens.textPrimary }}
                                     />
                                 </td>
                             ))}
                             {!readOnly && (
-                                <td style={{ ...borderCell, width: 36, textAlign: "center" }}>
+                                <td style={{ ...borderCell, width: 40, textAlign: "center" }}>
                                     {rows.length > 1 && (
-                                        <Tooltip title="Eliminar fila">
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                onClick={() => delRow(ri)}
-                                            />
-                                        </Tooltip>
+                                        <ActionButtonPanel
+                                            size="xxsmall"
+                                            actions={[{ icon: <DeleteOutlined />, tooltip: "Eliminar fila", ariaLabel: "Eliminar fila", danger: true, onClick: () => delRow(ri) }]}
+                                        />
                                     )}
                                 </td>
                             )}
@@ -159,15 +136,14 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
                     {!readOnly && (
                         <tr>
                             <td colSpan={headers.length + 1} style={{ padding: 6 }}>
-                                <Button
-                                    type="dashed"
+                                <CelumaButton
                                     size="small"
+                                    fullWidth
                                     icon={<PlusOutlined />}
                                     onClick={addRow}
-                                    style={{ width: "100%" }}
                                 >
                                     Añadir fila
-                                </Button>
+                                </CelumaButton>
                             </td>
                         </tr>
                     )}

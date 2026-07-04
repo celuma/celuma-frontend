@@ -3,10 +3,10 @@ import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-    Layout, Card, Table, Button, Form, Input, Select, Modal, message,
-    Space, Popconfirm, Switch, Spin, Avatar, Tag,
+    Layout, Card, Button, Form, Input, Select, Modal, message,
+    Space, Popconfirm, Switch, Spin, Avatar,
 } from "antd";
-import { PlusOutlined, DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
+import { DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
@@ -15,7 +15,9 @@ import CelumaButton from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { CelumaTable } from "../components/ui/table";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -329,7 +331,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Usuario", dataIndex: "username", key: "username", render: (text) => text || "—" },
         {
-            title: "Rol(es)",
+            title: "Roles",
             dataIndex: "roles",
             key: "roles",
             filters: roleFilterOptions,
@@ -365,7 +367,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             render: (ids: string[], record: User) => {
                 if (hasFullBranchAccess(record.roles)) {
                     return (
-                        <Tag color="gold">Todas</Tag>
+                        <div style={{ backgroundColor: "#fffbeb", color: "#d97706", borderRadius: 12, fontSize: 11, fontWeight: 500, padding: "4px 10px", display: "inline-block" }}>Todas</div>
                     );
                 }
                 if (!ids || ids.length === 0) {
@@ -374,13 +376,13 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                 const branchNames = ids.map((id) => branches.find((b) => b.id === id)?.name || id);
                 if (branchNames.length > 2) {
                     return (
-                        <Tag color="blue">{branchNames.length} sucursales</Tag>
+                        <div style={{ backgroundColor: "#eff6ff", color: "#3b82f6", borderRadius: 12, fontSize: 11, fontWeight: 500, padding: "4px 10px", display: "inline-block" }}>{branchNames.length} sucursales</div>
                     );
                 }
                 return (
                     <Space size={4} wrap>
                         {branchNames.map((name, i) => (
-                            <Tag key={i}>{name}</Tag>
+                            <div key={i} style={{ backgroundColor: "#f3f4f6", color: "#374151", borderRadius: 12, fontSize: 11, fontWeight: 500, padding: "4px 10px", display: "inline-block" }}>{name}</div>
                         ))}
                     </Space>
                 );
@@ -411,7 +413,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                 const isSelf = record.id === profile?.id;
                 if (isSelf) {
                     return (
-                        <Tag color="purple">Tú</Tag>
+                        <div style={{ backgroundColor: "#f5f3ff", color: "#7c3aed", borderRadius: 12, fontSize: 11, fontWeight: 500, padding: "4px 10px", display: "inline-block" }}>Tú</div>
                     );
                 }
                 return (
@@ -460,27 +462,29 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     ));
 
     const content = (
-        <div>
-            <Card
-                title={<span style={cardTitleStyle}>Gestión de Usuarios</span>}
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <PageHeader
+                title="Gestión de Usuarios"
+                subtitle="Administra los usuarios y sus permisos de acceso"
                 extra={
                     <Space>
                         <Button icon={<MailOutlined />} onClick={() => setInviteModalVisible(true)}>
                             Enviar Invitación
                         </Button>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+                        <CelumaButton type="primary" onClick={() => setCreateModalVisible(true)}>
                             Crear Usuario
-                        </Button>
+                        </CelumaButton>
                     </Space>
                 }
-                style={cardStyle}
-            >
-                <Table
+            />
+            <Card style={cardStyle}>
+                <CelumaTable
                     columns={columns}
                     dataSource={users}
                     loading={loading}
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
+                    emptyText="Sin usuarios registrados"
                 />
             </Card>
 
@@ -659,7 +663,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     </Form.Item>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <Form.Item name="roles" label="Rol(es)" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
+                        <Form.Item name="roles" label="Roles" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
                             <Select
                                 mode="multiple"
                                 placeholder="Seleccionar roles"

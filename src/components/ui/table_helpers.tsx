@@ -24,7 +24,7 @@ export const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: 
     "SANGRE": { icon: <MedicineBoxOutlined />, color: "#dc2626", label: "Sangre" },
     "LIQUIDO": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Líquido" },
     "ORINA": { icon: <ExperimentOutlined />, color: "#f59e0b", label: "Orina" },
-    "DEFAULT": { icon: <ExperimentOutlined />, color: "#0f8b8d", label: "Muestra" },
+    "DEFAULT": { icon: <ExperimentOutlined />, color: "#49b6ad", label: "Muestra" },
 };
 
 /**
@@ -63,7 +63,7 @@ export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
 
 // Item type configuration for worklist items
 export const ITEM_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-    "lab_order": { icon: <InboxOutlined />, color: "#0f8b8d", label: "Orden" },
+    "lab_order": { icon: <InboxOutlined />, color: "#49b6ad", label: "Orden" },
     "sample": { icon: <ExperimentOutlined />, color: "#3b82f6", label: "Muestra" },
     "report": { icon: <FileTextOutlined />, color: "#8b5cf6", label: "Reporte" },
     "DEFAULT": { icon: <FileTextOutlined />, color: "#6b7280", label: "Item" },
@@ -177,7 +177,7 @@ export const PatientCell: React.FC<{
 
     const getAvatarColor = (name: string): string => {
         const colors = [
-            "#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", 
+            "#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", 
             "#f59e0b", "#10b981", "#ef4444", "#6366f1"
         ];
         let hash = 0;
@@ -190,54 +190,53 @@ export const PatientCell: React.FC<{
     const initials = getInitials(patientName);
     const color = getAvatarColor(patientName);
 
+    // The cell itself is NOT a link: clicking the code/whitespace falls through to the row
+    // click (e.g. open the order). Both the monogram and the name navigate to the patient.
+    const goToPatient = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate(`/patients/${patientId}`);
+    };
+
     return (
-        <a
-            href={`/patients/${patientId}`}
-            onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                navigate(`/patients/${patientId}`);
-            }}
-            style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: 12, 
-                cursor: "pointer",
-                textDecoration: "none",
-                color: "inherit"
-            }}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "0.7";
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "1";
-            }}
-        >
-            <Avatar
-                size={32}
-                style={{
-                    backgroundColor: color,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    flexShrink: 0,
-                }}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <a
+                href={`/patients/${patientId}`}
+                onClick={goToPatient}
+                aria-label={patientName}
+                style={{ display: "inline-flex", flexShrink: 0, cursor: "pointer", borderRadius: "50%" }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
             >
-                {initials}
-            </Avatar>
-            <div>
-                <div style={{ 
-                    fontWeight: 600, 
-                    color: "#0f8b8d",
-                    borderBottom: "1px dashed #0f8b8d",
-                    display: "inline-block"
-                }}>
+                <Avatar
+                    size={32}
+                    style={{ backgroundColor: color, fontSize: 13, fontWeight: 600, flexShrink: 0 }}
+                >
+                    {initials}
+                </Avatar>
+            </a>
+            <div style={{ minWidth: 0 }}>
+                <a
+                    href={`/patients/${patientId}`}
+                    onClick={goToPatient}
+                    style={{
+                        fontWeight: 600,
+                        color: "#49b6ad",
+                        borderBottom: "1px dashed #49b6ad",
+                        display: "inline-block",
+                        textDecoration: "none",
+                        cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                >
                     {patientName}
-                </div>
+                </a>
                 {patientCode && (
                     <div style={{ fontSize: 11, color: "#888" }}>{patientCode}</div>
                 )}
             </div>
-        </a>
+        </div>
     );
 };
 

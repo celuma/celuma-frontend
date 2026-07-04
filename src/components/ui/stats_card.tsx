@@ -10,15 +10,17 @@ interface StatsCardProps {
     loading?: boolean;
     extra?: React.ReactNode;
     children?: React.ReactNode;
+    onClick?: () => void;
 }
 
-export default function StatsCard({ title, value, icon, color = "#0f8b8d", loading = false, extra, children }: StatsCardProps) {
+export default function StatsCard({ title, value, icon, color = "#0f8b8d", loading = false, extra, children, onClick }: StatsCardProps) {
     const baseCardStyle: React.CSSProperties = {
         borderRadius: tokens.radius,
         boxShadow: tokens.shadow,
         background: tokens.cardBg,
         border: "none",
         height: "100%",
+        cursor: onClick ? "pointer" : undefined,
     };
 
     const headerStyle: React.CSSProperties = {
@@ -49,6 +51,8 @@ export default function StatsCard({ title, value, icon, color = "#0f8b8d", loadi
         return (
             <Card
                 loading={loading}
+                hoverable={!!onClick}
+                onClick={onClick}
                 title={<span style={{ fontFamily: tokens.titleFont, fontSize: 20, fontWeight: 800, color: "#0d1b2a" }}>{title}</span>}
                 extra={extra}
                 style={baseCardStyle}
@@ -62,6 +66,8 @@ export default function StatsCard({ title, value, icon, color = "#0f8b8d", loadi
     return (
         <Card
             loading={loading}
+            hoverable={!!onClick}
+            onClick={onClick}
             style={baseCardStyle}
             styles={{ body: { padding: 20 } }}
         >

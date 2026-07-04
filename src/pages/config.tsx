@@ -27,6 +27,7 @@ const Config: React.FC = () => {
                 }}
             >
                 <div
+                    className="celuma-config-layout"
                     style={{
                         maxWidth: tokens.maxWidth,
                         margin: "0 auto",
@@ -35,7 +36,9 @@ const Config: React.FC = () => {
                         alignItems: "flex-start",
                     }}
                 >
-                    <SidebarConfig />
+                    <div className="celuma-config-sidebar">
+                        <SidebarConfig />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <Outlet />
                     </div>

@@ -30,8 +30,8 @@ export default function DateField({ value, onChange, error, status, disabled, st
     const finalStatus: Status = error ? "error" : status ?? "default";
 
     const colors = {
-        base: "#0f8b8d",
-        baseHover: "#0c6f71",
+        base: "#49b6ad",
+        baseHover: "#3da8a0",
         ringBase: "rgba(15,139,141,.18)",
         text: "#0d1b2a",
         placeholder: "#6b7280",

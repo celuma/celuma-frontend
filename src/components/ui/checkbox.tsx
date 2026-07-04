@@ -26,17 +26,17 @@ export default function Checkbox({ label, style, ...rest }: Props) {
                 .cb-${uid} .ant-checkbox .ant-checkbox-inner {
                   width: 18px;
                   height: 18px;
-                  border: 2px solid #0f8b8d !important;
+                  border: 2px solid #49b6ad !important;
                   border-radius: 4px;
                 }
 
                 .cb-${uid} .ant-checkbox:hover .ant-checkbox-inner {
-                  border-color: #0c6f71 !important;
+                  border-color: #3da8a0 !important;
                 }
 
                 .cb-${uid} .ant-checkbox-checked .ant-checkbox-inner {
-                  background-color: #0f8b8d !important;
-                  border-color: #0f8b8d !important;
+                  background-color: #49b6ad !important;
+                  border-color: #49b6ad !important;
                 }
 
                 .cb-${uid} .ant-checkbox-checked .ant-checkbox-inner::after {
