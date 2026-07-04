@@ -111,8 +111,9 @@ function termMatches(term: string, hay: Haystack, fuzzy: boolean): boolean {
     // 1. Separator/accent-insensitive substring ("ctm18" ⊂ "ctm18chospital...").
     if (hay.stripped.includes(needle)) return true;
 
-    // 2. Conservative typo tolerance against individual words.
-    if (!fuzzy) return false;
+    // 2. Conservative typo tolerance against individual words. Purely numeric
+    //    terms are never typo-corrected (e.g. "1500" must not match "100").
+    if (!fuzzy || /^[0-9]+$/.test(needle)) return false;
     const threshold = fuzzyThreshold(needle.length);
     if (threshold === 0) return false;
 

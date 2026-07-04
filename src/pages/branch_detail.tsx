@@ -8,6 +8,7 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 
@@ -190,6 +191,9 @@ function BranchDetail({ embedded = false }: Props) {
                     loading={loading}
                     emptyText="Sin usuarios asignados"
                     pagination={{ pageSize: 10 }}
+                    searchable
+                    searchPlaceholder="Buscar usuarios"
+                    searchFilter={(r, q) => matchesQuery([r.full_name, r.email, r.roles?.map((role) => [role.code, role.name])], q)}
                     locale={{
                         filterTitle: "Filtrar",
                         filterConfirm: "Aceptar",

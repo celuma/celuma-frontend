@@ -18,6 +18,7 @@ import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
+import { matchesQuery } from "../lib/search";
 import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
@@ -144,11 +145,9 @@ function Worklist() {
         return completedStatuses.includes(status);
     }, []);
 
-    // Search predicate (query arrives trimmed + lowercased from CelumaTable).
+    // Search predicate — normalized, separator-insensitive and typo-tolerant via matchesQuery.
     const searchFilter = (item: WorklistItem, q: string) =>
-        [item.display_id, item.patient_name, item.patient_code, item.order_code]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
+        matchesQuery([item.display_id, item.patient_name, item.patient_code, item.order_code, item.tags], q);
 
     // Get unique kinds and types for filters (from all items, not filtered)
     const kindFilters = useMemo(() => {

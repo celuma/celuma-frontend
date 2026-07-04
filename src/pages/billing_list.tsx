@@ -11,6 +11,7 @@ import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -174,11 +175,7 @@ function BillingList() {
                             emptyText="Sin facturas"
                             searchable
                             searchPlaceholder="Buscar en facturas"
-                            searchFilter={(r, q) =>
-                                [r.invoice_number, r.order_id, r.status]
-                                    .filter(Boolean)
-                                    .some((v) => String(v).toLowerCase().includes(q))
-                            }
+                            searchFilter={(r, q) => matchesQuery([r.invoice_number, r.status, r.total], q)}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',
