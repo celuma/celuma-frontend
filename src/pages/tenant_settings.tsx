@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Form, Input, Button, message, Upload, Image } from "antd";
-import { UploadOutlined, SaveOutlined } from "@ant-design/icons";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Layout, Card, Upload, Image, message } from "antd";
+import { UploadOutlined, LockOutlined, ShopOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { useUserProfile } from "../hooks/use_user_profile";
-import { tokens, cardTitleStyle, cardStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import FormField from "../components/ui/form_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import Panel from "../components/ui/panel";
+import Button from "../components/ui/button";
+import { tokens, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
 
 function getApiBase(): string {
@@ -42,6 +50,27 @@ interface TenantInfo {
     logo_url?: string;
 }
 
+const schema = z.object({
+    name: z.string().trim().nonempty("El nombre es requerido."),
+    legal_name: z.string().trim().optional(),
+    tax_id: z.string().trim().optional(),
+});
+
+type TenantFormData = z.infer<typeof schema>;
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h3 style={{
+        margin: 0,
+        fontFamily: tokens.titleFont,
+        fontSize: 18,
+        fontWeight: 700,
+        color: tokens.textPrimary,
+        letterSpacing: "-0.01em",
+    }}>
+        {children}
+    </h3>
+);
+
 interface TenantSettingsProps {
     embedded?: boolean;
 }
@@ -50,9 +79,16 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
     const navigate = useNavigate();
     const { canManageTenant } = useUserProfile();
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [tenant, setTenant] = useState<TenantInfo | null>(null);
     const [logoFile, setLogoFile] = useState<UploadFile | null>(null);
-    const [form] = Form.useForm();
+    const [uploading, setUploading] = useState(false);
+
+    const { control, handleSubmit, reset } = useForm<TenantFormData>({
+        resolver: zodResolver(schema),
+        defaultValues: { name: "", legal_name: "", tax_id: "" },
+        mode: "onTouched",
+    });
 
     useEffect(() => {
         loadTenant();
@@ -64,146 +100,173 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
         try {
             const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id");
             if (!tenantId) {
-                message.error("No tenant ID found");
+                message.error("No se encontró el identificador de la empresa");
                 return;
             }
-
             const data = await getJSON<TenantInfo>(`/v1/tenants/${tenantId}`);
             setTenant(data);
-            form.setFieldsValue({
-                name: data.name,
-                legal_name: data.legal_name,
-                tax_id: data.tax_id,
+            reset({
+                name: data.name || "",
+                legal_name: data.legal_name || "",
+                tax_id: data.tax_id || "",
             });
         } catch {
-            message.error("Error al cargar configuración");
+            message.error("Error al cargar la configuración");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async (values: Partial<TenantInfo>) => {
+    const onSubmit = handleSubmit(async (values) => {
         if (!tenant) return;
-        
-        setLoading(true);
+        setSaving(true);
         try {
-            await patchJSON(`/v1/tenants/${tenant.id}`, values);
+            await patchJSON(`/v1/tenants/${tenant.id}`, {
+                name: values.name,
+                legal_name: values.legal_name || undefined,
+                tax_id: values.tax_id || undefined,
+            });
             message.success("Configuración actualizada");
             await loadTenant();
         } catch {
-            message.error("Error al actualizar configuración");
+            message.error("Error al actualizar la configuración");
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
-    };
+    });
 
     const handleLogoUpload = async () => {
         if (!logoFile || !tenant) return;
-
-        const formData = new FormData();
         const fileObject = logoFile.originFileObj;
         if (!fileObject) return;
-        formData.append("file", fileObject);
 
+        const formData = new FormData();
+        formData.append("file", fileObject);
         const token = getAuthToken();
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = token;
 
+        setUploading(true);
         try {
             const res = await fetch(`${getApiBase()}/v1/tenants/${tenant.id}/logo`, {
                 method: "POST",
                 headers,
                 body: formData,
             });
-
             if (!res.ok) throw new Error("Upload failed");
-
             message.success("Logo actualizado");
             await loadTenant();
             setLogoFile(null);
         } catch {
-            message.error("Error al subir logo");
+            message.error("Error al subir el logo");
+        } finally {
+            setUploading(false);
         }
     };
 
-    const card = (
-        <Card
-            title={<span style={cardTitleStyle}>Configuración del Laboratorio</span>}
-            loading={loading}
-            style={cardStyle}
-        >
-            {!canManageTenant && (
-                <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7e6", border: "1px solid #ffe7ba", borderRadius: 8, color: "#ad6800", fontSize: 13 }}>
-                    Solo lectura — se requiere el permiso <strong>admin:manage_tenant</strong> para guardar cambios.
-                </div>
-            )}
-            <Form form={form} layout="vertical" onFinish={handleSave}>
-                <Form.Item name="name" label="Nombre del Laboratorio" rules={[{ required: true }]}>
-                    <Input placeholder="Laboratorio Central" disabled={!canManageTenant} />
-                </Form.Item>
+    const content = (
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <style>{`
+              .ts-grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+              @media (max-width: 768px) { .ts-grid-2 { grid-template-columns: 1fr; } }
+            `}</style>
+            <PageHeader
+                title="Empresa"
+                subtitle="Configura los datos y la identidad de tu laboratorio."
+            />
 
-                <Form.Item name="legal_name" label="Razón Social">
-                    <Input placeholder="Laboratorio Central S.A. de C.V." disabled={!canManageTenant} />
-                </Form.Item>
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }} loading={loading}>
+                <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
+                    {!canManageTenant && (
+                        <Panel style={{ background: "#fffbeb", border: "2px solid #fde68a", display: "flex", alignItems: "center", gap: 12 }}>
+                            <LockOutlined style={{ color: "#b45309", fontSize: 18 }} />
+                            <div style={{ fontSize: 13, color: "#92400e" }}>
+                                Solo lectura — se requiere el permiso <strong>admin:manage_tenant</strong> para guardar cambios.
+                            </div>
+                        </Panel>
+                    )}
 
-                <Form.Item name="tax_id" label="RFC / Tax ID">
-                    <Input placeholder="ABC123456XYZ" disabled={!canManageTenant} />
-                </Form.Item>
+                    <section style={{ display: "grid", gap: 16 }}>
+                        <SectionTitle>Datos de la empresa</SectionTitle>
+                        <div className="ts-grid-2">
+                            <FormField control={control} name="name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Nombre del laboratorio" requiredMark disabled={!canManageTenant} />} />
+                            <FormField control={control} name="legal_name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Razón social" disabled={!canManageTenant} />} />
+                        </div>
+                        <div className="ts-grid-2">
+                            <FormField control={control} name="tax_id" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="RFC / Tax ID" disabled={!canManageTenant} />} />
+                        </div>
+                    </section>
 
-                <Form.Item label="Logo">
-                    {tenant?.logo_url && (
-                        <div style={{ marginBottom: 12 }}>
-                            <Image
-                                src={tenant.logo_url}
-                                alt="Logo actual"
-                                style={{ maxWidth: 200, maxHeight: 100, objectFit: "contain" }}
-                            />
+                    <section style={{ display: "grid", gap: 16 }}>
+                        <SectionTitle>Logotipo</SectionTitle>
+                        <Panel style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                            <div style={{
+                                width: 120,
+                                height: 120,
+                                borderRadius: tokens.radius,
+                                border: "2px dashed #e5e7eb",
+                                background: "#fff",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                                overflow: "hidden",
+                            }}>
+                                {tenant?.logo_url ? (
+                                    <Image src={tenant.logo_url} alt="Logo actual" style={{ maxWidth: 110, maxHeight: 110, objectFit: "contain" }} />
+                                ) : (
+                                    <ShopOutlined style={{ fontSize: 34, color: "#cbd5e1" }} />
+                                )}
+                            </div>
+                            <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, color: tokens.textSecondary, maxWidth: 360 }}>
+                                    Sube el logotipo de tu laboratorio. Se mostrará en reportes y documentos. Formato de imagen recomendado con fondo transparente.
+                                </div>
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                    <Upload
+                                        beforeUpload={(file) => { setLogoFile(file); return false; }}
+                                        fileList={logoFile ? [logoFile] : []}
+                                        onRemove={() => setLogoFile(null)}
+                                        accept="image/*"
+                                        maxCount={1}
+                                        disabled={!canManageTenant}
+                                    >
+                                        <Button htmlType="button" icon={<UploadOutlined />} disabled={!canManageTenant}>
+                                            Seleccionar logo
+                                        </Button>
+                                    </Upload>
+                                    {logoFile && canManageTenant && (
+                                        <Button htmlType="button" type="primary" onClick={handleLogoUpload} loading={uploading}>
+                                            Subir logo
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </Panel>
+                    </section>
+
+                    {canManageTenant && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
+                            <Button htmlType="submit" type="primary" loading={saving}>
+                                Guardar cambios
+                            </Button>
                         </div>
                     )}
-                    <Upload
-                        beforeUpload={(file) => {
-                            setLogoFile(file);
-                            return false;
-                        }}
-                        fileList={logoFile ? [logoFile] : []}
-                        onRemove={() => setLogoFile(null)}
-                        accept="image/*"
-                        maxCount={1}
-                    >
-                        <Button icon={<UploadOutlined />}>Seleccionar Logo</Button>
-                    </Upload>
-                    {logoFile && (
-                        <Button
-                            type="primary"
-                            onClick={handleLogoUpload}
-                            style={{ marginTop: 8 }}
-                        >
-                            Subir Logo
-                        </Button>
-                    )}
-                </Form.Item>
-
-                {canManageTenant && (
-                    <Form.Item>
-                        <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
-                            Guardar Cambios
-                        </Button>
-                    </Form.Item>
-                )}
-            </Form>
-        </Card>
+                </form>
+            </Card>
+        </div>
     );
 
     if (embedded) {
-        return card;
+        return content;
     }
 
     return (
         <Layout style={{ minHeight: "100vh" }}>
-            <SidebarCeluma selectedKey="/home" onNavigate={(k) => navigate(k)} logoSrc={logo} />
-            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg }}>
-                <div style={{ maxWidth: 800, margin: "0 auto" }}>
-                    {card}
+            <SidebarCeluma selectedKey="/config" onNavigate={(k) => navigate(k)} logoSrc={logo} />
+            <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                <div style={{ maxWidth: 900, margin: "0 auto" }}>
+                    {content}
                 </div>
             </Layout.Content>
         </Layout>
@@ -211,4 +274,3 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
 }
 
 export default TenantSettings;
-

@@ -7,7 +7,8 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import CelumaButton from "../components/ui/button";
-import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
+import PageHeader from "../components/ui/page_header";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/table";
 import { stringSorter, renderActiveChip, activeFilter } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
@@ -71,12 +72,14 @@ function BranchesList({ embedded = false }: Props) {
             width: 120,
             sorter: stringSorter("code"),
             defaultSortOrder: "ascend",
+            render: (code: string) => <span style={{ fontWeight: 600, color: tokens.primary }}>{code}</span>,
         },
         {
             title: "Nombre",
             dataIndex: "name",
             key: "name",
             sorter: stringSorter("name"),
+            render: (name: string) => <span style={{ fontWeight: 500 }}>{name}</span>,
         },
         {
             title: "Ciudad",
@@ -105,27 +108,29 @@ function BranchesList({ embedded = false }: Props) {
     ];
 
     const content = (
-        <Card
-            title={<span style={cardTitleStyle}>Sucursales</span>}
-            style={cardStyle}
-        >
-            <CelumaTable
-                dataSource={rows}
-                columns={columns}
-                rowKey={(r) => r.id}
-                loading={loading}
-                onRowClick={(record) => navigate(`${basePath}/${record.id}`)}
-                emptyText="Sin sucursales"
-                pagination={{ pageSize: 10 }}
-                searchable
-                searchPlaceholder="Buscar sucursal"
-                searchFilter={(r, q) => matchesQuery([r.code, r.name, r.city, r.state], q)}
-                searchExtra={
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <PageHeader
+                title="Sucursales"
+                subtitle="Administra las sucursales del laboratorio"
+                extra={
                     <CelumaButton type="primary" icon={<PlusOutlined />} onClick={() => navigate(`${basePath}/register`)}>
                         Nueva sucursal
                     </CelumaButton>
                 }
-                locale={{
+            />
+            <Card style={cardStyle}>
+                <CelumaTable
+                    dataSource={rows}
+                    columns={columns}
+                    rowKey={(r) => r.id}
+                    loading={loading}
+                    onRowClick={(record) => navigate(`${basePath}/${record.id}`)}
+                    emptyText="Sin sucursales"
+                    pagination={{ pageSize: 10 }}
+                    searchable
+                    searchPlaceholder="Buscar sucursal"
+                    searchFilter={(r, q) => matchesQuery([r.code, r.name, r.city, r.state], q)}
+                    locale={{
                     filterTitle: "Filtrar",
                     filterConfirm: "Aceptar",
                     filterReset: "Limpiar",
@@ -142,11 +147,12 @@ function BranchesList({ embedded = false }: Props) {
                     collapse: "Colapsar fila",
                     triggerDesc: "Clic para ordenar descendente",
                     triggerAsc: "Clic para ordenar ascendente",
-                    cancelSort: "Clic para cancelar ordenamiento",
-                }}
-            />
-            {error && <ErrorText>{error}</ErrorText>}
-        </Card>
+                        cancelSort: "Clic para cancelar ordenamiento",
+                    }}
+                />
+                {error && <ErrorText>{error}</ErrorText>}
+            </Card>
+        </div>
     );
 
     if (embedded) return content;
