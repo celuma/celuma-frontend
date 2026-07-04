@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Layout, Card, Button, DatePicker, Form, Input, Modal, message, Space, Popconfirm, Switch, Checkbox, Select, Divider, Typography, Tag, Empty, Spin, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import dayjs from "dayjs";
@@ -12,6 +12,10 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import SearchField from "../components/ui/search_field";
+import CelumaSortableList from "../components/ui/celuma_sortable_list";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import CelumaTextArea from "../components/ui/textarea_field";
+import Panel from "../components/ui/panel";
 import { renderActiveChip } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
@@ -66,13 +70,6 @@ interface DraggableItem {
     cfg: ReportBaseFieldConfig | ReportSectionConfig;
 }
 
-function reorder<T>(list: T[], from: number, to: number): T[] {
-    const result = [...list];
-    const [removed] = result.splice(from, 1);
-    result.splice(to, 0, removed);
-    return result;
-}
-
 // Inline-edit row component
 interface EditableRowProps {
     itemKey: string;
@@ -83,7 +80,6 @@ interface EditableRowProps {
     effectiveType?: TemplateFieldType | "date";
     currentValue?: string;
     isSection?: boolean;
-    dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
     onToggleVisible: (key: string, checked: boolean) => void;
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
@@ -100,7 +96,6 @@ function EditableRow({
     effectiveType,
     currentValue,
     isSection = false,
-    dragHandleProps,
     onToggleVisible,
     onRename,
     onChangeType,
@@ -126,29 +121,11 @@ function EditableRow({
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: 8,
-                padding: "6px 8px",
-                borderRadius: 8,
-                background: "#fafafa",
-                border: "1px solid #f0f0f0",
-                transition: "background 0.15s",
+                width: "100%",
             }}
         >
-            {/* Grupo izquierdo: handle + checkbox + label */}
+            {/* Grupo izquierdo: checkbox + label */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", maxWidth: "100%" }}>
-                <span
-                    {...dragHandleProps}
-                    style={{
-                        cursor: "grab",
-                        color: "#bbb",
-                        fontSize: 14,
-                        lineHeight: 1,
-                        userSelect: "none",
-                        flexShrink: 0,
-                    }}
-                >
-                    <HolderOutlined />
-                </span>
-
                 <Checkbox
                     checked={isVisible}
                     onChange={(e) => onToggleVisible(itemKey, e.target.checked)}
@@ -264,30 +241,12 @@ function DraggableList({
     onRemove,
     onEditDefaultValue,
 }: DraggableListProps) {
-    const dragIndex = useRef<number | null>(null);
-    const dragOverIndex = useRef<number | null>(null);
-
-    const handleDragStart = (idx: number) => {
-        dragIndex.current = idx;
-    };
-
-    const handleDragEnter = (idx: number) => {
-        dragOverIndex.current = idx;
-    };
-
-    const handleDragEnd = () => {
-        const from = dragIndex.current;
-        const to = dragOverIndex.current;
-        if (from !== null && to !== null && from !== to) {
-            onReorder(reorder(items, from, to));
-        }
-        dragIndex.current = null;
-        dragOverIndex.current = null;
-    };
-
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {items.map((item, idx) => {
+        <CelumaSortableList
+            items={items}
+            onReorder={onReorder}
+            gap={8}
+            renderItem={(item) => {
                 const cfg = item.cfg;
                 const custom = cfg as ReportBaseFieldCustom & ReportSectionTextCustom;
                 const predefined = isPredefined(item.key);
@@ -315,34 +274,24 @@ function DraggableList({
                     : ((cfg as { value?: string }).value ?? "");
 
                 return (
-                    <div
-                        key={item.key}
-                        draggable
-                        onDragStart={() => handleDragStart(idx)}
-                        onDragEnter={() => handleDragEnter(idx)}
-                        onDragEnd={handleDragEnd}
-                        onDragOver={(e) => e.preventDefault()}
-                        style={{ opacity: dragIndex.current === idx ? 0.5 : 1 }}
-                    >
-                        <EditableRow
-                            itemKey={item.key}
-                            label={label}
-                            isVisible={cfg.is_visible}
-                            isPredefined={predefined}
-                            type={type}
-                            effectiveType={effectiveType}
-                            currentValue={currentValue}
-                            isSection={isSection}
-                            onToggleVisible={onToggleVisible}
-                            onRename={onRename}
-                            onChangeType={onChangeType}
-                            onRemove={onRemove}
-                            onEditDefaultValue={onEditDefaultValue}
-                        />
-                    </div>
+                    <EditableRow
+                        itemKey={item.key}
+                        label={label}
+                        isVisible={cfg.is_visible}
+                        isPredefined={predefined}
+                        type={type}
+                        effectiveType={effectiveType}
+                        currentValue={currentValue}
+                        isSection={isSection}
+                        onToggleVisible={onToggleVisible}
+                        onRename={onRename}
+                        onChangeType={onChangeType}
+                        onRemove={onRemove}
+                        onEditDefaultValue={onEditDefaultValue}
+                    />
                 );
-            })}
-        </div>
+            }}
+        />
     );
 }
 
@@ -368,6 +317,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
     // ---- Form ----
     const [form] = Form.useForm();
+    const isActiveWatch = Form.useWatch("is_active", form);
 
     // ---- template_json as ordered arrays ----
     const [baseItems, setBaseItems] = useState<DraggableItem[]>([]);
@@ -822,24 +772,29 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         {/* ---- Nombre / descripción / estado ---- */}
                         <Form.Item
                             name="name"
-                            label="Nombre"
                             rules={[{ required: true, message: "El nombre es requerido" }]}
+                            style={{ marginBottom: 16 }}
                         >
-                            <Input placeholder="Ej. Plantilla de Biopsia Estándar" maxLength={255} />
+                            <FloatingCaptionInput label="Nombre" requiredMark maxLength={255} />
                         </Form.Item>
 
-                        <Form.Item name="description" label="Descripción">
-                            <TextArea
-                                placeholder="Descripción opcional"
-                                rows={2}
-                                maxLength={1000}
-                            />
+                        <Form.Item name="description" style={{ marginBottom: 16 }}>
+                            <CelumaTextArea value="" onChange={() => {}} placeholder="Descripción opcional" rows={2} maxLength={1000} />
                         </Form.Item>
 
                         {editingId && (
-                            <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                                <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                            </Form.Item>
+                            <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+                                <div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                    <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si la plantilla está disponible para nuevos reportes.</div>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: isActiveWatch ? tokens.primary : tokens.textSecondary }}>{isActiveWatch ? "Activo" : "Inactivo"}</span>
+                                    <Form.Item name="is_active" valuePropName="checked" noStyle>
+                                        <Switch />
+                                    </Form.Item>
+                                </div>
+                            </Panel>
                         )}
 
                         <Divider />

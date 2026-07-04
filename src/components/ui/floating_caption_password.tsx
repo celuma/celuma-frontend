@@ -13,6 +13,7 @@ type Props = Omit<React.ComponentProps<typeof Input>, "status" | "type" | "onCha
     error?: string;
     status?: Exclude<Status, "default" | "error">;
     prefixNode?: React.ReactNode;
+    requiredMark?: boolean;
     onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 };
 
@@ -21,6 +22,7 @@ export default function FloatingCaptionPassword({
     error,
     status,
     prefixNode,
+    requiredMark = false,
     value,
     onChange,
     disabled,
@@ -173,6 +175,7 @@ export default function FloatingCaptionPassword({
 
                 <label htmlFor={`input-${uid}`} style={labelStyle}>
                     {label}
+                    {requiredMark && <span style={{ color: colors.error }}> *</span>}
                 </label>
 
                 <Input

@@ -82,7 +82,7 @@ export default function CelumaTextArea({
             >
                 <textarea
                     ref={inputRef}
-                    value={value}
+                    value={value ?? ""}
                     onChange={(e) => onChange(e.target.value)}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
@@ -112,7 +112,7 @@ export default function CelumaTextArea({
                 <div style={{ flex: 1 }}>{error && <ErrorText>{error}</ErrorText>}</div>
                 {maxLength && showCount && (
                     <span style={{ fontSize: 11, color: colors.counter, flexShrink: 0 }}>
-                        {value.length}/{maxLength}
+                        {(value ?? "").length}/{maxLength}
                     </span>
                 )}
             </div>

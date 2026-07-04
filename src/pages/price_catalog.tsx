@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, Button, Form, InputNumber, Modal, message, Space, Popconfirm, Switch, Select, DatePicker } from "antd";
+import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -9,10 +12,29 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
+import CelumaModal from "../components/ui/celuma_modal";
+import FormField from "../components/ui/form_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import FloatingCaptionDate from "../components/ui/floating_caption_date";
+import Panel from "../components/ui/panel";
+import ModalFormFooter from "../components/ui/modal_form_footer";
 import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
-import dayjs, { Dayjs } from "dayjs";
+
+const priceSchema = z.object({
+    study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
+    unit_price: z.string().trim().nonempty("El precio es requerido.").refine(
+        (v) => { const n = Number(v); return !isNaN(n) && n >= 0 && n <= 9999999999.99; },
+        "Precio inválido (0 – 9,999,999,999.99)",
+    ),
+    effective_from: z.string().optional(),
+    effective_to: z.string().optional(),
+    is_active: z.boolean().optional(),
+});
+
+type PriceFormData = z.infer<typeof priceSchema>;
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -122,7 +144,19 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
     const [studyTypes, setStudyTypes] = useState<StudyType[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+
+    const { control, handleSubmit, reset } = useForm<PriceFormData>({
+        resolver: zodResolver(priceSchema),
+        defaultValues: { study_type_id: "", unit_price: "", effective_from: "", effective_to: "", is_active: true },
+        mode: "onTouched",
+    });
+
+    const closeModal = () => {
+        setModalVisible(false);
+        setEditingId(null);
+        reset();
+    };
 
     useEffect(() => {
         loadPrices();
@@ -152,19 +186,18 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
 
     const handleCreate = () => {
         setEditingId(null);
-        form.resetFields();
-        form.setFieldsValue({ is_active: true });
+        reset({ study_type_id: "", unit_price: "", effective_from: "", effective_to: "", is_active: true });
         setModalVisible(true);
     };
 
     const handleEdit = (record: PriceCatalogEntry) => {
         setEditingId(record.id);
-        form.setFieldsValue({
+        reset({
             study_type_id: record.study_type_id,
-            unit_price: record.unit_price,
+            unit_price: String(record.unit_price),
             is_active: record.is_active,
-            effective_from: record.effective_from ? dayjs(record.effective_from) : null,
-            effective_to: record.effective_to ? dayjs(record.effective_to) : null,
+            effective_from: record.effective_from || "",
+            effective_to: record.effective_to || "",
         });
         setModalVisible(true);
     };
@@ -179,20 +212,15 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
         }
     };
 
-    const handleSubmit = async (values: {
-        study_type_id: string;
-        unit_price: number;
-        is_active: boolean;
-        effective_from?: Dayjs;
-        effective_to?: Dayjs;
-    }) => {
+    const onSubmit = handleSubmit(async (data) => {
+        setSubmitting(true);
         try {
             const payload = {
-                study_type_id: values.study_type_id,
-                unit_price: values.unit_price,
-                is_active: values.is_active,
-                effective_from: values.effective_from ? values.effective_from.toISOString() : null,
-                effective_to: values.effective_to ? values.effective_to.toISOString() : null,
+                study_type_id: data.study_type_id,
+                unit_price: Number(data.unit_price),
+                is_active: data.is_active ?? true,
+                effective_from: data.effective_from ? new Date(data.effective_from).toISOString() : null,
+                effective_to: data.effective_to ? new Date(data.effective_to).toISOString() : null,
             };
 
             if (editingId) {
@@ -202,14 +230,14 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                 await postJSON("/v1/price-catalog/", payload);
                 message.success("Precio creado");
             }
-            
-            setModalVisible(false);
-            form.resetFields();
+            closeModal();
             await loadPrices();
         } catch (error) {
             message.error(error instanceof Error ? error.message : "Error al guardar precio");
+        } finally {
+            setSubmitting(false);
         }
-    };
+    });
 
     const columns: ColumnsType<PriceCatalogEntry> = [
         {
@@ -320,78 +348,83 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                 />
             </Card>
 
-            <Modal
-                        title={editingId ? "Editar Precio" : "Nuevo Precio"}
-                        open={modalVisible}
-                        onCancel={() => {
-                            setModalVisible(false);
-                            form.resetFields();
+            <CelumaModal
+                title={editingId ? "Editar Precio" : "Nuevo Precio"}
+                open={modalVisible}
+                onCancel={closeModal}
+                footer={null}
+                width={600}
+                destroyOnHidden
+            >
+                <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 18 }}>
+                    <FormField
+                        control={control}
+                        name="study_type_id"
+                        render={(p) => (
+                            <FloatingCaptionSelect
+                                label="Tipo de estudio"
+                                requiredMark
+                                value={typeof p.value === "string" ? p.value : undefined}
+                                onChange={(v) => p.onChange(v ?? "")}
+                                placeholder="Seleccionar tipo de estudio"
+                                options={studyTypes.map((st) => ({ value: st.id, label: `${st.code} - ${st.name}` }))}
+                                showSearch
+                                error={p.error}
+                            />
+                        )}
+                    />
+                    <FormField
+                        control={control}
+                        name="unit_price"
+                        render={(p) => (
+                            <FloatingCaptionInput
+                                {...p}
+                                value={String(p.value ?? "")}
+                                label="Precio unitario (MXN)"
+                                requiredMark
+                                inputMode="decimal"
+                                prefixNode={<span style={{ color: tokens.textSecondary }}>$</span>}
+                            />
+                        )}
+                    />
+                    <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+                        <FormField
+                            control={control}
+                            name="effective_from"
+                            render={(p) => (
+                                <FloatingCaptionDate label="Vigencia desde" value={typeof p.value === "string" ? p.value : undefined} onChange={(v) => p.onChange(v)} error={p.error} />
+                            )}
+                        />
+                        <FormField
+                            control={control}
+                            name="effective_to"
+                            render={(p) => (
+                                <FloatingCaptionDate label="Vigencia hasta" value={typeof p.value === "string" ? p.value : undefined} onChange={(v) => p.onChange(v)} error={p.error} />
+                            )}
+                        />
+                    </div>
+                    <FormField
+                        control={control}
+                        name="is_active"
+                        render={(p) => {
+                            const active = p.value !== false;
+                            return (
+                                <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                                    <div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                        <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si el precio está vigente y disponible.</div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>{active ? "Activo" : "Inactivo"}</span>
+                                        <Switch checked={active} onChange={(checked) => p.onChange(checked)} />
+                                    </div>
+                                </Panel>
+                            );
                         }}
-                        footer={null}
-                        width={600}
-                    >
-                        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-                            <Form.Item
-                                name="study_type_id"
-                                label="Tipo de Estudio"
-                                rules={[{ required: true, message: "Requerido" }]}
-                            >
-                                <Select
-                                    placeholder="Seleccionar tipo de estudio"
-                                    showSearch
-                                    optionFilterProp="children"
-                                    filterOption={(input, option) =>
-                                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                                    }
-                                    options={studyTypes.map((st) => ({
-                                        value: st.id,
-                                        label: `${st.code} - ${st.name}`,
-                                    }))}
-                                />
-                            </Form.Item>
-
-                            <Form.Item
-                                name="unit_price"
-                                label="Precio Unitario (MXN)"
-                                rules={[
-                                    { required: true, message: "Requerido" },
-                                    { type: "number", min: 0, message: "Debe ser mayor o igual a 0" },
-                                    { type: "number", max: 9999999999.99, message: "El precio no puede superar $9,999,999,999.99" },
-                                ]}
-                            >
-                                <InputNumber
-                                    min={0}
-                                    max={9999999999.99}
-                                    step={0.01}
-                                    precision={2}
-                                    style={{ width: "100%" }}
-                                    placeholder="0.00"
-                                    prefix="$"
-                                />
-                            </Form.Item>
-
-                            <Form.Item name="effective_from" label="Vigencia Desde (opcional)">
-                                <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                            </Form.Item>
-
-                            <Form.Item name="effective_to" label="Vigencia Hasta (opcional)">
-                                <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                            </Form.Item>
-
-                            <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                                <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                            </Form.Item>
-
-                            <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                                <Space>
-                                    <Button onClick={() => setModalVisible(false)}>Cancelar</Button>
-                                    <Button type="primary" htmlType="submit">
-                                        {editingId ? "Guardar Cambios" : "Crear"}
-                                    </Button>
-                                </Space>
-                            </Form.Item>
-                        </Form>
-                    </Modal>
+                    />
+                    <ModalFormFooter onCancel={closeModal} submitLabel={editingId ? "Guardar cambios" : "Crear"} loading={submitting} />
+                </form>
+            </CelumaModal>
         </div>
     );
 
