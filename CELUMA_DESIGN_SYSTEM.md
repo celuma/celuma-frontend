@@ -178,9 +178,20 @@ styling inline**.
 - **`celuma_sortable_list.tsx` → `CelumaSortableList`**: generic **drag-to-reorder**
   list. Each row has a **teal handle on the left and only the handle initiates drag**,
   so checkboxes/inputs/buttons inside the row remain interactive (unlike making the
-  entire row `draggable`). While dragging, the row lifts with a teal ring and a **teal
-  indicator marks the drop position**. API:
-  `items` (with `key`), `onReorder`, `renderItem`. Used in the template editor.
+  entire row `draggable`). Built on **Pointer Events**, not the native HTML5 Drag &
+  Drop API (same approach as dnd-kit / Framer Motion `Reorder` / Trello) — HTML5 DnD
+  only reports position on `drop`, which reads as laggy and dead until release. Here
+  the grabbed row **tracks the cursor 1:1** via an un-transitioned `transform` (feels
+  instant regardless of drag distance), tilts and lifts (`scale(1.02) rotate(-0.4deg)`,
+  elevated shadow, teal ring), and the cursor switches to a **"grabbing" hand
+  globally** (not just over the handle). The list **reorders live** as the dragged
+  row's center crosses a neighbor's midpoint (closest-center collision), and the
+  displaced rows play a **FLIP transform animation** *during* the drag, not after —
+  so the rearrangement is visible the whole time. On release the grabbed row simply
+  eases its last bit of cursor offset back to zero (it's already in its final slot),
+  giving a quick "settle" instead of a second, disconnected animation. API: `items`
+  (with `key`), `onReorder`, `renderItem`. Used in the template editor (base fields
+  and sections).
 - **`celuma_pagination.tsx` → `CelumaPagination`**: pagination built on
   `ActionButtonPanel` (single pill: ‹ previous · numbers · next ›), with
   number window + ellipsis and active page in soft teal.
