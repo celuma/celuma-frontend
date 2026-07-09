@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 
@@ -70,9 +71,7 @@ export default function RequestingPhysiciansList() {
     }, []);
 
     const searchFilter = (row: RequestingPhysicianRow, q: string) =>
-        [row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone]
-            .filter(Boolean)
-            .some((value) => String(value).toLowerCase().includes(q));
+        matchesQuery([row.physician_code, row.full_name, row.specialty, row.professional_license, row.institution, row.email, row.phone], q);
 
     const columns: ColumnsType<RequestingPhysicianRow> = [
         {

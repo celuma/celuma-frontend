@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout } from "antd";
+import { Layout, Card, Switch } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
-import SelectField from "../components/ui/select_field";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import Panel from "../components/ui/panel";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 
 function getApiBase(): string {
@@ -81,7 +83,7 @@ const schema = z.object({
     state: z.string().trim().optional(),
     postal_code: z.string().trim().optional(),
     country: z.string().trim().optional(),
-    is_active: z.enum(["true", "false"]).optional(),
+    is_active: z.boolean().optional(),
 });
 
 type BranchFormData = z.infer<typeof schema>;
@@ -101,23 +103,17 @@ type BranchDetailResponse = {
     tenant_id: string;
 };
 
-const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: tokens.cardPadding }}>
-            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
-        </div>
-        <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
-            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
-            {children}
-        </div>
-    </div>
-);
-
-const RequiredFieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div style={{ fontSize: 13, fontWeight: 700, color: tokens.textPrimary, marginBottom: 6 }}>
-        {children}<span style={{ color: "#ef4444" }}> *</span>
-    </div>
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h3 style={{
+        margin: 0,
+        fontFamily: tokens.titleFont,
+        fontSize: 18,
+        fontWeight: 700,
+        color: tokens.textPrimary,
+        letterSpacing: "-0.01em",
+    }}>
+        {children}
+    </h3>
 );
 
 interface Props {
@@ -147,7 +143,7 @@ function BranchForm({ embedded = false }: Props) {
             state: "",
             postal_code: "",
             country: "MX",
-            is_active: "true",
+            is_active: true,
         },
         mode: "onTouched",
     });
@@ -167,7 +163,7 @@ function BranchForm({ embedded = false }: Props) {
                     state: detail.state || "",
                     postal_code: detail.postal_code || "",
                     country: detail.country || "MX",
-                    is_active: detail.is_active ? "true" : "false",
+                    is_active: detail.is_active,
                 });
             })
             .catch((err) => setServerError(err instanceof Error ? err.message : "No se pudo cargar la sucursal."))
@@ -178,36 +174,24 @@ function BranchForm({ embedded = false }: Props) {
         setServerError(null);
         setLoading(true);
         try {
+            const base = {
+                code: data.code,
+                name: data.name,
+                timezone: data.timezone,
+                address_line1: data.address_line1 || undefined,
+                address_line2: data.address_line2 || undefined,
+                city: data.city || undefined,
+                state: data.state || undefined,
+                postal_code: data.postal_code || undefined,
+                country: data.country || "MX",
+                is_active: data.is_active ?? true,
+            };
             if (isEditing && branchId) {
-                const payload = {
-                    code: data.code,
-                    name: data.name,
-                    timezone: data.timezone,
-                    address_line1: data.address_line1 || undefined,
-                    address_line2: data.address_line2 || undefined,
-                    city: data.city || undefined,
-                    state: data.state || undefined,
-                    postal_code: data.postal_code || undefined,
-                    country: data.country || "MX",
-                    is_active: data.is_active !== "false",
-                };
-                const saved = await requestJSON<typeof payload, BranchDetailResponse>("PUT", `/v1/branches/${branchId}`, payload);
+                const saved = await requestJSON<typeof base, BranchDetailResponse>("PUT", `/v1/branches/${branchId}`, base);
                 navigate(`${basePath}/${saved.id}`, { replace: true });
             } else {
                 if (!session.tenantId) throw new Error("Falta el contexto de tenant en la sesión.");
-                const payload = {
-                    tenant_id: session.tenantId,
-                    code: data.code,
-                    name: data.name,
-                    timezone: data.timezone,
-                    address_line1: data.address_line1 || undefined,
-                    address_line2: data.address_line2 || undefined,
-                    city: data.city || undefined,
-                    state: data.state || undefined,
-                    postal_code: data.postal_code || undefined,
-                    country: data.country || "MX",
-                    is_active: data.is_active !== "false",
-                };
+                const payload = { tenant_id: session.tenantId, ...base };
                 const saved = await requestJSON<typeof payload, BranchDetailResponse>("POST", "/v1/branches/", payload);
                 navigate(`${basePath}/${saved.id}`, { replace: true });
             }
@@ -219,106 +203,106 @@ function BranchForm({ embedded = false }: Props) {
     });
 
     const form = (
-        <FormCard
-            title={isEditing ? "Editar Sucursal" : "Nueva Sucursal"}
-            description="Configure los datos de la sucursal del laboratorio."
-        >
-            <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
-                <style>{`
-                  .bf-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-                  .bf-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-                  .bf-required-note { color: ${tokens.textSecondary}; font-size: 12px; margin: -4px 0 4px; }
-                  @media (max-width: 768px) {
-                    .bf-grid-2, .bf-grid-3 { grid-template-columns: 1fr; }
-                  }
-                `}</style>
-                <div className="bf-required-note"><span style={{ color: "#ef4444" }}>*</span> Campos obligatorios</div>
+        <div style={{ display: "grid", gap: tokens.gap }}>
+            <style>{`
+              .bf-grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+              .bf-grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+              @media (max-width: 768px) {
+                .bf-grid-2, .bf-grid-3 { grid-template-columns: 1fr; }
+              }
+            `}</style>
+            <PageHeader
+                title={isEditing ? "Editar Sucursal" : "Nueva Sucursal"}
+                subtitle="Configura los datos de la sucursal del laboratorio."
+            />
 
-                <section style={{ display: "grid", gap: 10 }}>
-                    <h3 style={{ margin: 0 }}>Información general</h3>
-                    <div className="bf-grid-2">
-                        <FormField
-                            control={control}
-                            name="code"
-                            render={(props) => (
-                                <div>
-                                    <RequiredFieldLabel>Código</RequiredFieldLabel>
-                                    <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Código" requiredMark />
-                                </div>
-                            )}
-                        />
-                        <FormField
-                            control={control}
-                            name="name"
-                            render={(props) => (
-                                <div>
-                                    <RequiredFieldLabel>Nombre</RequiredFieldLabel>
-                                    <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Nombre" requiredMark />
-                                </div>
-                            )}
-                        />
-                    </div>
-                    <div className="bf-grid-2">
-                        <FormField
-                            control={control}
-                            name="timezone"
-                            render={(props) => (
-                                <div>
-                                    <RequiredFieldLabel>Zona horaria</RequiredFieldLabel>
-                                    <SelectField
+            <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
+                    <section style={{ display: "grid", gap: 16 }}>
+                        <SectionTitle>Información general</SectionTitle>
+                        <div className="bf-grid-2">
+                            <FormField control={control} name="code" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Código" requiredMark />} />
+                            <FormField control={control} name="name" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Nombre" requiredMark />} />
+                        </div>
+                        <div className="bf-grid-2">
+                            <FormField
+                                control={control}
+                                name="timezone"
+                                render={(props) => (
+                                    <FloatingCaptionSelect
+                                        label="Zona horaria"
+                                        requiredMark
                                         value={typeof props.value === "string" ? props.value : undefined}
-                                        onChange={(val) => props.onChange(val)}
+                                        onChange={(value) => props.onChange(value ?? "")}
                                         placeholder="Seleccione la zona horaria"
                                         options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
                                         showSearch
                                         error={props.error}
                                     />
-                                </div>
-                            )}
-                        />
+                                )}
+                            />
+                        </div>
                         <FormField
                             control={control}
                             name="is_active"
-                            render={(props) => (
-                                <SelectField
-                                    value={typeof props.value === "string" ? props.value : undefined}
-                                    onChange={(val) => props.onChange(val)}
-                                    placeholder="Estado"
-                                    options={[
-                                        { value: "true", label: "Activo" },
-                                        { value: "false", label: "Inactivo" },
-                                    ]}
-                                />
-                            )}
+                            render={(props) => {
+                                const active = props.value !== false;
+                                return (
+                                    <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                                        <div>
+                                            <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado de la sucursal</div>
+                                            <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>
+                                                Define si está disponible para asignarse a nuevas órdenes y usuarios.
+                                            </div>
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>
+                                                {active ? "Activo" : "Inactivo"}
+                                            </span>
+                                            <Switch checked={active} onChange={(checked) => props.onChange(checked)} />
+                                        </div>
+                                    </Panel>
+                                );
+                            }}
                         />
-                    </div>
-                </section>
+                    </section>
 
-                <section style={{ display: "grid", gap: 10 }}>
-                    <h3 style={{ margin: 0 }}>Dirección</h3>
-                    <FormField control={control} name="address_line1" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Dirección línea 1" />} />
-                    <FormField control={control} name="address_line2" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Dirección línea 2" />} />
-                    <div className="bf-grid-3">
-                        <FormField control={control} name="city" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Ciudad" />} />
-                        <FormField control={control} name="state" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Estado" />} />
-                        <FormField control={control} name="postal_code" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Código postal" />} />
-                    </div>
-                    <div className="bf-grid-2">
-                        <FormField control={control} name="country" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="País (código ISO)" />} />
-                    </div>
-                </section>
+                    <section style={{ display: "grid", gap: 16 }}>
+                        <SectionTitle>Dirección</SectionTitle>
+                        <FormField control={control} name="address_line1" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Dirección línea 1" />} />
+                        <FormField control={control} name="address_line2" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Dirección línea 2" />} />
+                        <div className="bf-grid-3">
+                            <FormField control={control} name="city" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Ciudad" />} />
+                            <FormField control={control} name="state" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Estado" />} />
+                            <FormField control={control} name="postal_code" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="Código postal" />} />
+                        </div>
+                        <div className="bf-grid-2">
+                            <FormField control={control} name="country" render={(props) => <FloatingCaptionInput {...props} value={String(props.value ?? "")} label="País (código ISO)" />} />
+                        </div>
+                    </section>
 
-                <Button htmlType="submit" type="primary" fullWidth loading={loading}>
-                    {isEditing ? "Guardar cambios" : "Crear sucursal"}
-                </Button>
-            </form>
+                    {serverError && <ErrorText>{serverError}</ErrorText>}
 
-            <ErrorText>{serverError}</ErrorText>
-        </FormCard>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                        <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                            Los campos marcados con <span style={{ color: "#e5484d", fontWeight: 700 }}>*</span> son obligatorios.
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                            <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
+                                Cancelar
+                            </Button>
+                            <Button htmlType="submit" type="primary" loading={loading}>
+                                {isEditing ? "Guardar cambios" : "Crear sucursal"}
+                            </Button>
+                        </div>
+                    </div>
+                </form>
+            </Card>
+        </div>
     );
 
     if (embedded) {
-        return <div style={{ maxWidth: 900 }}>{form}</div>;
+        return form;
     }
 
     return (

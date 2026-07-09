@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-    Layout, Card, Button, Form, Input, Select, Modal, message,
+    Layout, Card, Button, message,
     Space, Popconfirm, Switch, Spin, Avatar,
 } from "antd";
 import { DeleteOutlined, MailOutlined, EditOutlined } from "@ant-design/icons";
@@ -11,6 +11,11 @@ import { useNavigate } from "react-router-dom";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import FloatingCaptionPassword from "../components/ui/floating_caption_password";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import FloatingCaptionMultiSelect from "../components/ui/floating_caption_multiselect";
+import CelumaModal from "../components/ui/celuma_modal";
+import Panel from "../components/ui/panel";
+import ModalFormFooter from "../components/ui/modal_form_footer";
 import CelumaButton from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -18,6 +23,7 @@ import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -31,18 +37,19 @@ const getInitials = (fullName?: string | null): string => {
 };
 
 const getAvatarColor = (name: string): string => {
-    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
+    const colors = ["#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
 };
 
 const createUserSchema = z.object({
+    first_name: z.string().trim().nonempty("El nombre es obligatorio."),
+    last_name: z.string().trim().nonempty("El apellido es obligatorio."),
     email: z.string().nonempty("El email es obligatorio.").email("Email inválido."),
     username: z.string().optional(),
-    first_name: z.string().nonempty("El nombre es obligatorio."),
-    last_name: z.string().nonempty("El apellido es obligatorio."),
-    role: z.string().nonempty("El rol es obligatorio."),
+    roles: z.array(z.string()).min(1, "Asigna al menos un rol."),
+    is_active: z.boolean().optional(),
     password: z
         .string()
         .nonempty("La contraseña es obligatoria.")
@@ -59,6 +66,27 @@ const createUserSchema = z.object({
 });
 
 type CreateUserFormData = z.infer<typeof createUserSchema>;
+
+const editUserSchema = z.object({
+    email: z.string().nonempty("El email es obligatorio.").email("Email inválido."),
+    username: z.string().optional(),
+    first_name: z.string().trim().nonempty("El nombre es obligatorio."),
+    last_name: z.string().trim().nonempty("El apellido es obligatorio."),
+    roles: z.array(z.string()).min(1, "Asigna al menos un rol."),
+    is_active: z.boolean().optional(),
+    password: z.string().optional().refine((v) => !v || v.length >= 8, "Mínimo 8 caracteres."),
+    branch_ids: z.array(z.string()).optional(),
+});
+
+type EditUserFormData = z.infer<typeof editUserSchema>;
+
+const inviteUserSchema = z.object({
+    email: z.string().nonempty("El email es obligatorio.").email("Email inválido."),
+    full_name: z.string().nonempty("El nombre es obligatorio."),
+    role: z.string().nonempty("El rol es obligatorio."),
+});
+
+type InviteUserFormData = z.infer<typeof inviteUserSchema>;
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -116,6 +144,8 @@ interface User {
     id: string;
     email: string;
     username?: string;
+    first_name?: string;
+    last_name?: string;
     full_name: string;
     roles: string[];
     is_active: boolean;
@@ -155,11 +185,12 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const createUserForm = useForm<CreateUserFormData>({
         resolver: zodResolver(createUserSchema),
         defaultValues: {
-            email: "",
-            username: "",
             first_name: "",
             last_name: "",
-            role: "",
+            email: "",
+            username: "",
+            roles: [],
+            is_active: true,
             password: "",
             confirmPassword: "",
             branch_ids: [],
@@ -167,10 +198,23 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         mode: "onTouched",
     });
     const [createError, setCreateError] = useState<string | null>(null);
-    const watchedRole = createUserForm.watch("role");
+    const watchedCreateRoles = createUserForm.watch("roles");
 
-    const [editForm] = Form.useForm();
-    const [inviteForm] = Form.useForm();
+    const editUserForm = useForm<EditUserFormData>({
+        resolver: zodResolver(editUserSchema),
+        defaultValues: { email: "", username: "", first_name: "", last_name: "", roles: [], is_active: true, password: "", branch_ids: [] },
+        mode: "onTouched",
+    });
+    const [editError, setEditError] = useState<string | null>(null);
+    const watchedEditRoles = editUserForm.watch("roles");
+
+    const inviteUserForm = useForm<InviteUserFormData>({
+        resolver: zodResolver(inviteUserSchema),
+        defaultValues: { email: "", full_name: "", role: "" },
+        mode: "onTouched",
+    });
+    const [inviteError, setInviteError] = useState<string | null>(null);
+
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
@@ -209,12 +253,28 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     const handleCreate = createUserForm.handleSubmit(async (data) => {
         setCreateError(null);
         try {
-            const { confirmPassword, ...rest } = data;
-            void confirmPassword;
-            await postJSON("/v1/users/", {
-                ...rest,
-                branch_ids: rest.branch_ids ?? [],
+            // Backend create takes first/last name + a single primary role.
+            const fullAccess = hasFullBranchAccess(data.roles);
+
+            const created = await postJSON<{ id: string }>("/v1/users/", {
+                email: data.email,
+                username: data.username || undefined,
+                first_name: data.first_name,
+                last_name: data.last_name,
+                role: data.roles[0],
+                password: data.password,
+                branch_ids: fullAccess ? [] : (data.branch_ids ?? []),
             });
+
+            // Assign any additional roles beyond the primary one via the RBAC endpoint.
+            if (created?.id && data.roles.length > 1) {
+                await putJSON(`/v1/rbac/users/${created.id}/roles`, { roles: data.roles });
+            }
+            // New users are active by default — only call toggle when created as inactive.
+            if (created?.id && data.is_active === false) {
+                await postJSON(`/v1/users/${created.id}/toggle-active`, {});
+            }
+
             message.success("Usuario creado");
             setCreateModalVisible(false);
             createUserForm.reset();
@@ -224,21 +284,23 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         }
     });
 
-    const handleEdit = async (values: Record<string, unknown>) => {
+    const handleEdit = editUserForm.handleSubmit(async (data) => {
         if (!editingUser) return;
+        setEditError(null);
         try {
             // Profile fields — never include role here; roles are managed via the RBAC endpoint
             await putJSON(`/v1/users/${editingUser.id}`, {
-                email: values.email,
-                username: values.username || null,
-                full_name: values.full_name,
-                is_active: values.is_active,
-                password: values.password || undefined,
-                branch_ids: values.branch_ids,
+                email: data.email,
+                username: data.username || null,
+                first_name: data.first_name,
+                last_name: data.last_name,
+                is_active: data.is_active,
+                password: data.password || undefined,
+                branch_ids: hasFullBranchAccess(data.roles) ? [] : (data.branch_ids ?? []),
             });
 
             // Separate RBAC call only when the role selection has actually changed
-            const newRoles = (values.roles as string[]) ?? [];
+            const newRoles = data.roles ?? [];
             const rolesChanged =
                 newRoles.length !== editingUser.roles.length ||
                 newRoles.some((r) => !editingUser.roles.includes(r));
@@ -249,37 +311,41 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
 
             message.success("Usuario actualizado");
             setEditModalVisible(false);
-            editForm.resetFields();
+            editUserForm.reset();
             setEditingUser(null);
             await loadData();
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "Error al actualizar usuario");
+            setEditError(e instanceof Error ? e.message : "Error al actualizar usuario");
         }
-    };
+    });
 
     const openEditModal = (user: User) => {
         setEditingUser(user);
-        editForm.setFieldsValue({
+        setEditError(null);
+        editUserForm.reset({
             email: user.email,
-            username: user.username,
-            full_name: user.full_name,
+            username: user.username || "",
+            first_name: user.first_name || "",
+            last_name: user.last_name || "",
             roles: user.roles,
             is_active: user.is_active,
+            password: "",
             branch_ids: user.branch_ids,
         });
         setEditModalVisible(true);
     };
 
-    const handleInvite = async (values: Record<string, unknown>) => {
+    const handleInvite = inviteUserForm.handleSubmit(async (data) => {
+        setInviteError(null);
         try {
-            await postJSON("/v1/users/invitations", values);
+            await postJSON("/v1/users/invitations", data);
             message.success("Invitación enviada por email");
             setInviteModalVisible(false);
-            inviteForm.resetFields();
-        } catch {
-            message.error("Error al enviar invitación");
+            inviteUserForm.reset();
+        } catch (e) {
+            setInviteError(e instanceof Error ? e.message : "Error al enviar invitación");
         }
-    };
+    });
 
     const handleToggleActive = async (userId: string, currentStatus: boolean) => {
         try {
@@ -456,10 +522,9 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
         );
     }
 
-    // Common role options for create/invite modals
-    const roleSelectOptions = availableRoles.map((r) => (
-        <Select.Option key={r.code} value={r.code}>{r.name}</Select.Option>
-    ));
+    // Common option lists for the form selects.
+    const roleOptions = availableRoles.map((r) => ({ value: r.code, label: r.name }));
+    const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.name} (${b.code})` }));
 
     const content = (
         <div style={{ display: "grid", gap: tokens.gap }}>
@@ -485,263 +550,224 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
                     emptyText="Sin usuarios registrados"
+                    searchable
+                    searchPlaceholder="Buscar usuarios"
+                    searchFilter={(r, q) => matchesQuery([r.full_name, r.email, r.username, r.roles?.map((code) => [code, roleDisplayName(code)])], q)}
                 />
             </Card>
 
             {/* ── Create User Modal ── */}
-            <Modal
+            <CelumaModal
                 title="Crear Usuario"
                 open={createModalVisible}
-                onCancel={() => {
-                    setCreateModalVisible(false);
-                    createUserForm.reset();
-                    setCreateError(null);
-                }}
+                onCancel={() => { setCreateModalVisible(false); createUserForm.reset(); setCreateError(null); }}
                 footer={null}
                 width={600}
+                destroyOnHidden
             >
-                <form onSubmit={handleCreate} noValidate style={{ display: "grid", gap: 16, paddingTop: 8 }}>
+                <form onSubmit={handleCreate} noValidate style={{ display: "grid", gap: 18 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <FormField
-                            control={createUserForm.control}
-                            name="first_name"
-                            render={(p) => (
-                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre(s)" />
-                            )}
-                        />
-                        <FormField
-                            control={createUserForm.control}
-                            name="last_name"
-                            render={(p) => (
-                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Apellidos" />
-                            )}
-                        />
+                        <FormField control={createUserForm.control} name="email" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" requiredMark />} />
+                        <FormField control={createUserForm.control} name="username" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Usuario" />} />
                     </div>
-
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <FormField
-                            control={createUserForm.control}
-                            name="email"
-                            render={(p) => (
-                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" />
-                            )}
-                        />
-                        <FormField
-                            control={createUserForm.control}
-                            name="username"
-                            render={(p) => (
-                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Usuario (opcional)" />
-                            )}
-                        />
+                        <FormField control={createUserForm.control} name="first_name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" requiredMark />} />
+                        <FormField control={createUserForm.control} name="last_name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Apellido" requiredMark />} />
                     </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
-                                Rol <span style={{ color: "#b91c1c" }}>*</span>
-                            </span>
-                            <Controller
-                                control={createUserForm.control}
-                                name="role"
-                                render={({ field, fieldState }) => (
-                                    <>
-                                        <Select
-                                            value={field.value || undefined}
-                                            onChange={field.onChange}
-                                            onBlur={field.onBlur}
-                                            placeholder="Seleccionar rol"
-                                            status={fieldState.error ? "error" : undefined}
-                                            style={{ width: "100%", height: 44 }}
-                                        >
-                                            {roleSelectOptions}
-                                        </Select>
-                                        {fieldState.error && (
-                                            <ErrorText>{fieldState.error.message}</ErrorText>
-                                        )}
-                                    </>
-                                )}
-                            />
-                        </div>
-                        <FormField
-                            control={createUserForm.control}
-                            name="password"
-                            render={(p) => (
-                                <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Contraseña" />
-                            )}
-                        />
-                    </div>
-
                     <FormField
                         control={createUserForm.control}
-                        name="confirmPassword"
+                        name="roles"
                         render={(p) => (
-                            <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Confirmar contraseña" />
+                            <FloatingCaptionMultiSelect
+                                label="Roles"
+                                requiredMark
+                                value={Array.isArray(p.value) ? p.value : []}
+                                onChange={(v) => p.onChange(v)}
+                                placeholder="Seleccionar roles"
+                                options={roleOptions}
+                                error={p.error}
+                            />
                         )}
                     />
+                    <FormField
+                        control={createUserForm.control}
+                        name="is_active"
+                        render={(p) => {
+                            const active = p.value !== false;
+                            return (
+                                <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                                    <div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                        <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si el usuario puede iniciar sesión.</div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>{active ? "Activo" : "Inactivo"}</span>
+                                        <Switch checked={active} onChange={(checked) => p.onChange(checked)} />
+                                    </div>
+                                </Panel>
+                            );
+                        }}
+                    />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <FormField control={createUserForm.control} name="password" render={(p) => <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Contraseña" requiredMark />} />
+                        <FormField control={createUserForm.control} name="confirmPassword" render={(p) => <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Confirmar contraseña" requiredMark />} />
+                    </div>
 
                     {/* Branch selector hidden for full-access roles */}
-                    {watchedRole !== "admin" && watchedRole !== "superuser" ? (
-                        <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f8b8d" }}>
-                                Sucursales asignadas
-                            </span>
-                            <Controller
-                                control={createUserForm.control}
-                                name="branch_ids"
-                                render={({ field }) => (
-                                    <Select
-                                        mode="multiple"
-                                        value={field.value ?? []}
-                                        onChange={field.onChange}
-                                        onBlur={field.onBlur}
-                                        placeholder="Seleccione sucursales"
-                                        allowClear
-                                        style={{ width: "100%" }}
-                                    >
-                                        {branches.map((b) => (
-                                            <Select.Option key={b.id} value={b.id}>
-                                                {b.name} ({b.code})
-                                            </Select.Option>
-                                        ))}
-                                    </Select>
-                                )}
-                            />
-                        </div>
+                    {!hasFullBranchAccess(watchedCreateRoles ?? []) ? (
+                        <FormField
+                            control={createUserForm.control}
+                            name="branch_ids"
+                            render={(p) => (
+                                <FloatingCaptionMultiSelect
+                                    label="Sucursales asignadas"
+                                    value={Array.isArray(p.value) ? p.value : []}
+                                    onChange={(v) => p.onChange(v)}
+                                    placeholder="Seleccione sucursales"
+                                    options={branchOptions}
+                                    error={p.error}
+                                />
+                            )}
+                        />
                     ) : (
-                        <div style={{ color: "#888", fontStyle: "italic", fontSize: 13 }}>
-                            * Este rol tiene acceso a todas las sucursales automáticamente.
-                        </div>
+                        <Panel style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                            Este rol tiene acceso a <strong>todas las sucursales</strong> automáticamente.
+                        </Panel>
                     )}
 
                     {createError && <ErrorText>{createError}</ErrorText>}
 
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-                        <Button
-                            onClick={() => {
-                                setCreateModalVisible(false);
-                                createUserForm.reset();
-                                setCreateError(null);
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <CelumaButton
-                            type="primary"
-                            htmlType="submit"
-                            loading={createUserForm.formState.isSubmitting}
-                            style={{ margin: 0 }}
-                        >
-                            Crear
-                        </CelumaButton>
-                    </div>
+                    <ModalFormFooter
+                        onCancel={() => { setCreateModalVisible(false); createUserForm.reset(); setCreateError(null); }}
+                        submitLabel="Crear"
+                        loading={createUserForm.formState.isSubmitting}
+                    />
                 </form>
-            </Modal>
+            </CelumaModal>
 
             {/* ── Edit User Modal ── */}
-            <Modal
+            <CelumaModal
                 title="Editar Usuario"
                 open={editModalVisible}
-                onCancel={() => {
-                    setEditModalVisible(false);
-                    editForm.resetFields();
-                    setEditingUser(null);
-                }}
+                onCancel={() => { setEditModalVisible(false); editUserForm.reset(); setEditingUser(null); setEditError(null); }}
                 footer={null}
                 width={600}
+                destroyOnHidden
             >
-                <Form form={editForm} layout="vertical" onFinish={handleEdit}>
+                <form onSubmit={handleEdit} noValidate style={{ display: "grid", gap: 18 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                            <Input />
-                        </Form.Item>
-                        <Form.Item name="username" label="Usuario">
-                            <Input />
-                        </Form.Item>
+                        <FormField control={editUserForm.control} name="email" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" requiredMark />} />
+                        <FormField control={editUserForm.control} name="username" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Usuario" />} />
                     </div>
-                    <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
-                        <Input />
-                    </Form.Item>
-
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <Form.Item name="roles" label="Roles" rules={[{ required: true, message: "Asigna al menos un rol" }]}>
-                            <Select
-                                mode="multiple"
+                        <FormField control={editUserForm.control} name="first_name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" requiredMark />} />
+                        <FormField control={editUserForm.control} name="last_name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Apellido" requiredMark />} />
+                    </div>
+                    <FormField
+                        control={editUserForm.control}
+                        name="roles"
+                        render={(p) => (
+                            <FloatingCaptionMultiSelect
+                                label="Roles"
+                                requiredMark
+                                value={Array.isArray(p.value) ? p.value : []}
+                                onChange={(v) => p.onChange(v)}
                                 placeholder="Seleccionar roles"
-                                options={availableRoles.map((r) => ({ value: r.code, label: r.name }))}
+                                options={roleOptions}
+                                error={p.error}
                             />
-                        </Form.Item>
-                        <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                            <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                        </Form.Item>
-                    </div>
-
-                    <Form.Item
-                        name="password"
-                        label="Nueva Contraseña (opcional)"
-                        help="Dejar en blanco para mantener la actual"
-                    >
-                        <Input.Password placeholder="Nueva contraseña" />
-                    </Form.Item>
-
-                    <Form.Item noStyle shouldUpdate={(prev, curr) => prev.roles !== curr.roles}>
-                        {({ getFieldValue }) => {
-                            const selectedRoles: string[] = getFieldValue("roles") ?? editingUser?.roles ?? [];
-                            const fullAccess = hasFullBranchAccess(selectedRoles);
-                            return fullAccess ? (
-                                <div style={{ marginBottom: 24, color: "#888", fontStyle: "italic" }}>
-                                    * Este rol tiene acceso a todas las sucursales automáticamente.
-                                </div>
-                            ) : (
-                                <Form.Item name="branch_ids" label="Sucursales asignadas">
-                                    <Select mode="multiple" placeholder="Seleccione sucursales" allowClear>
-                                        {branches.map((b) => (
-                                            <Select.Option key={b.id} value={b.id}>
-                                                {b.name} ({b.code})
-                                            </Select.Option>
-                                        ))}
-                                    </Select>
-                                </Form.Item>
+                        )}
+                    />
+                    <FormField
+                        control={editUserForm.control}
+                        name="is_active"
+                        render={(p) => {
+                            const active = p.value !== false;
+                            return (
+                                <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                                    <div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                        <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si el usuario puede iniciar sesión.</div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>{active ? "Activo" : "Inactivo"}</span>
+                                        <Switch checked={active} onChange={(checked) => p.onChange(checked)} />
+                                    </div>
+                                </Panel>
                             );
                         }}
-                    </Form.Item>
+                    />
+                    <FormField control={editUserForm.control} name="password" render={(p) => <FloatingCaptionPassword {...p} value={String(p.value ?? "")} label="Nueva contraseña (opcional)" />} />
 
-                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                        <Space>
-                            <Button onClick={() => setEditModalVisible(false)}>Cancelar</Button>
-                            <Button type="primary" htmlType="submit">Guardar Cambios</Button>
-                        </Space>
-                    </Form.Item>
-                </Form>
-            </Modal>
+                    {hasFullBranchAccess(watchedEditRoles ?? []) ? (
+                        <Panel style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                            Este rol tiene acceso a <strong>todas las sucursales</strong> automáticamente.
+                        </Panel>
+                    ) : (
+                        <FormField
+                            control={editUserForm.control}
+                            name="branch_ids"
+                            render={(p) => (
+                                <FloatingCaptionMultiSelect
+                                    label="Sucursales asignadas"
+                                    value={Array.isArray(p.value) ? p.value : []}
+                                    onChange={(v) => p.onChange(v)}
+                                    placeholder="Seleccione sucursales"
+                                    options={branchOptions}
+                                    error={p.error}
+                                />
+                            )}
+                        />
+                    )}
+
+                    {editError && <ErrorText>{editError}</ErrorText>}
+
+                    <ModalFormFooter
+                        onCancel={() => { setEditModalVisible(false); editUserForm.reset(); setEditingUser(null); setEditError(null); }}
+                        submitLabel="Guardar cambios"
+                        loading={editUserForm.formState.isSubmitting}
+                    />
+                </form>
+            </CelumaModal>
 
             {/* ── Invite User Modal ── */}
-            <Modal
+            <CelumaModal
                 title="Enviar Invitación"
                 open={inviteModalVisible}
-                onCancel={() => {
-                    setInviteModalVisible(false);
-                    inviteForm.resetFields();
-                }}
+                onCancel={() => { setInviteModalVisible(false); inviteUserForm.reset(); setInviteError(null); }}
                 footer={null}
+                width={520}
+                destroyOnHidden
             >
-                <Form form={inviteForm} layout="vertical" onFinish={handleInvite}>
-                    <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
-                        <Input placeholder="correo@ejemplo.com" />
-                    </Form.Item>
-                    <Form.Item name="full_name" label="Nombre Completo" rules={[{ required: true }]}>
-                        <Input placeholder="Juan Pérez" />
-                    </Form.Item>
-                    <Form.Item name="role" label="Rol" rules={[{ required: true }]}>
-                        <Select placeholder="Seleccionar rol">{roleSelectOptions}</Select>
-                    </Form.Item>
-                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                        <Space>
-                            <Button onClick={() => setInviteModalVisible(false)}>Cancelar</Button>
-                            <Button type="primary" htmlType="submit">Enviar Invitación</Button>
-                        </Space>
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <form onSubmit={handleInvite} noValidate style={{ display: "grid", gap: 18 }}>
+                    <FormField control={inviteUserForm.control} name="email" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Email" requiredMark />} />
+                    <FormField control={inviteUserForm.control} name="full_name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre completo" requiredMark />} />
+                    <FormField
+                        control={inviteUserForm.control}
+                        name="role"
+                        render={(p) => (
+                            <FloatingCaptionSelect
+                                label="Rol"
+                                requiredMark
+                                value={typeof p.value === "string" ? p.value : undefined}
+                                onChange={(v) => p.onChange(v ?? "")}
+                                placeholder="Seleccionar rol"
+                                options={roleOptions}
+                                showSearch
+                                error={p.error}
+                            />
+                        )}
+                    />
+
+                    {inviteError && <ErrorText>{inviteError}</ErrorText>}
+
+                    <ModalFormFooter
+                        onCancel={() => { setInviteModalVisible(false); inviteUserForm.reset(); setInviteError(null); }}
+                        submitLabel="Enviar invitación"
+                        loading={inviteUserForm.formState.isSubmitting}
+                    />
+                </form>
+            </CelumaModal>
         </div>
     );
 

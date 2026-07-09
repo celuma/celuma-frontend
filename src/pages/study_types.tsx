@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { Layout, Card, Button, Form, Input, Modal, message, Space, Popconfirm, Switch, Select } from "antd";
+import { useEffect, useState, type CSSProperties } from "react";
+import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -9,9 +12,29 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
+import CelumaModal from "../components/ui/celuma_modal";
+import FormField from "../components/ui/form_field";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import CelumaTextArea from "../components/ui/textarea_field";
+import Panel from "../components/ui/panel";
+import ModalFormFooter from "../components/ui/modal_form_footer";
+import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 
-const { TextArea } = Input;
+const captionLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: tokens.primary, marginBottom: 6 };
+
+const studyTypeSchema = z.object({
+    code: z.string().trim().nonempty("El código es requerido.").max(50, "Máximo 50 caracteres"),
+    name: z.string().trim().nonempty("El nombre es requerido.").max(255, "Máximo 255 caracteres"),
+    description: z.string().trim().max(1000, "Máximo 1000 caracteres").optional(),
+    default_report_template_id: z.string().optional(),
+    is_active: z.boolean().optional(),
+});
+
+type StudyTypeFormData = z.infer<typeof studyTypeSchema>;
+
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -124,7 +147,19 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const [templates, setTemplates] = useState<ReportTemplate[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+
+    const { control, handleSubmit, reset } = useForm<StudyTypeFormData>({
+        resolver: zodResolver(studyTypeSchema),
+        defaultValues: { code: "", name: "", description: "", default_report_template_id: undefined, is_active: true },
+        mode: "onTouched",
+    });
+
+    const closeModal = () => {
+        setModalVisible(false);
+        setEditingId(null);
+        reset();
+    };
 
     useEffect(() => {
         loadStudyTypes();
@@ -154,43 +189,48 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
 
     const handleCreate = () => {
         setEditingId(null);
-        form.resetFields();
-        form.setFieldsValue({ is_active: true });
+        reset({ code: "", name: "", description: "", default_report_template_id: undefined, is_active: true });
         setModalVisible(true);
     };
 
     const handleEdit = (record: StudyType) => {
         setEditingId(record.id);
-        form.setFieldsValue({
+        reset({
             code: record.code,
             name: record.name,
-            description: record.description,
+            description: record.description || "",
             is_active: record.is_active,
-            default_report_template_id: record.default_report_template_id,
+            default_report_template_id: record.default_report_template_id || undefined,
         });
         setModalVisible(true);
     };
 
-    const handleSave = async (values: Partial<StudyType>) => {
+    const handleSave = handleSubmit(async (data) => {
+        setSubmitting(true);
         try {
+            const payload = {
+                code: data.code,
+                name: data.name,
+                description: data.description || undefined,
+                default_report_template_id: data.default_report_template_id || undefined,
+                is_active: data.is_active ?? true,
+            };
             if (editingId) {
-                // Update
-                await putJSON(`/v1/study-types/${editingId}`, values);
+                await putJSON(`/v1/study-types/${editingId}`, payload);
                 message.success("Tipo de estudio actualizado");
             } else {
-                // Create
-                await postJSON("/v1/study-types/", values);
+                await postJSON("/v1/study-types/", payload);
                 message.success("Tipo de estudio creado");
             }
-            
-            setModalVisible(false);
-            form.resetFields();
+            closeModal();
             loadStudyTypes();
         } catch (err) {
             message.error("Error al guardar tipo de estudio");
             console.error(err);
+        } finally {
+            setSubmitting(false);
         }
-    };
+    });
 
     const handleDelete = async (id: string) => {
         try {
@@ -208,12 +248,15 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             dataIndex: "code",
             key: "code",
             width: 150,
-            render: (code: string) => <span style={{ fontWeight: 600, color: "#0f8b8d" }}>{code}</span>,
+            sorter: (a, b) => a.code.localeCompare(b.code),
+            defaultSortOrder: "ascend",
+            render: (code: string) => <span style={{ fontWeight: 600, color: tokens.primary }}>{code}</span>,
         },
         {
             title: "Nombre",
             dataIndex: "name",
             key: "name",
+            sorter: (a, b) => a.name.localeCompare(b.name),
             render: (name: string) => <span style={{ fontWeight: 500 }}>{name}</span>,
         },
         {
@@ -250,34 +293,16 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             dataIndex: "is_active",
             key: "is_active",
             width: 100,
-            filters: [
-                { text: "Activo", value: true },
-                { text: "Inactivo", value: false },
-            ],
-            onFilter: (value, record) => record.is_active === value,
-            render: (is_active: boolean) => (
-                <div style={{
-                    backgroundColor: is_active ? "#ecfdf5" : "#fef2f2",
-                    color: is_active ? "#10b981" : "#ef4444",
-                    borderRadius: 12,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    padding: "4px 10px",
-                    display: "inline-block",
-                }}>
-                    {is_active ? "Activo" : "Inactivo"}
-                </div>
-            ),
+            ...activeFilter(),
+            render: (is_active: boolean) => renderActiveChip(is_active),
         },
         {
             title: "Fecha de creación",
             dataIndex: "created_at",
             key: "created_at",
             width: 150,
-            render: (date: string) => {
-                const d = new Date(date);
-                return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-            },
+            sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+            render: (date: string) => renderDateCell(date),
         },
         {
             title: "Acciones",
@@ -331,44 +356,72 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                         loading={loading}
                         pagination={{ pageSize: 10 }}
                         emptyText="Sin tipos de estudio"
+                        searchable
+                        searchPlaceholder="Buscar tipos de estudio"
+                        searchFilter={(r, q) => matchesQuery([r.code, r.name, r.description, r.default_template?.name], q)}
                     />
                 </Card>
             </div>
-            <Modal
+            <CelumaModal
                 title={editingId ? "Editar Tipo de Estudio" : "Nuevo Tipo de Estudio"}
                 open={modalVisible}
-                onCancel={() => { setModalVisible(false); form.resetFields(); }}
+                onCancel={closeModal}
                 footer={null}
                 width={600}
+                destroyOnHidden
             >
-                <Form form={form} layout="vertical" onFinish={handleSave}>
-                    <Form.Item name="code" label="Código" rules={[{ required: true, message: "Requerido" }, { max: 50, message: "Máximo 50 caracteres" }]}>
-                        <Input placeholder="ej: BIOPSIA, CITOLOGIA" maxLength={50} />
-                    </Form.Item>
-                    <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Requerido" }, { max: 255, message: "Máximo 255 caracteres" }]}>
-                        <Input placeholder="ej: Biopsia de tejido" maxLength={255} />
-                    </Form.Item>
-                    <Form.Item name="description" label="Descripción">
-                        <TextArea placeholder="Descripción opcional del tipo de estudio" rows={4} maxLength={1000} />
-                    </Form.Item>
-                    <Form.Item name="default_report_template_id" label="Plantilla de reporte por defecto (opcional)">
-                        <Select placeholder="Seleccionar template de reporte" allowClear showSearch optionFilterProp="children">
-                            {templates.map((template) => (
-                                <Select.Option key={template.id} value={template.id}>{template.name}</Select.Option>
-                            ))}
-                        </Select>
-                    </Form.Item>
-                    <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                        <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                    </Form.Item>
-                    <Form.Item style={{ marginBottom: 0, textAlign: "right" }}>
-                        <Space>
-                            <Button onClick={() => setModalVisible(false)}>Cancelar</Button>
-                            <Button type="primary" htmlType="submit">{editingId ? "Guardar Cambios" : "Crear"}</Button>
-                        </Space>
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <form onSubmit={handleSave} noValidate style={{ display: "grid", gap: 18 }}>
+                    <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+                        <FormField control={control} name="code" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código" requiredMark maxLength={50} />} />
+                        <FormField control={control} name="name" render={(p) => <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Nombre" requiredMark maxLength={255} />} />
+                    </div>
+                    <FormField
+                        control={control}
+                        name="description"
+                        render={(p) => (
+                            <div>
+                                <div style={captionLabelStyle}>Descripción</div>
+                                <CelumaTextArea value={String(p.value ?? "")} onChange={(v) => p.onChange(v)} rows={3} maxLength={1000} error={p.error} placeholder="Descripción opcional del tipo de estudio" />
+                            </div>
+                        )}
+                    />
+                    <FormField
+                        control={control}
+                        name="default_report_template_id"
+                        render={(p) => (
+                            <FloatingCaptionSelect
+                                label="Plantilla de reporte por defecto"
+                                value={typeof p.value === "string" ? p.value : undefined}
+                                onChange={(v) => p.onChange(v ?? "")}
+                                placeholder="Seleccionar plantilla"
+                                options={templates.map((t) => ({ value: t.id, label: t.name }))}
+                                showSearch
+                                error={p.error}
+                            />
+                        )}
+                    />
+                    <FormField
+                        control={control}
+                        name="is_active"
+                        render={(p) => {
+                            const active = p.value !== false;
+                            return (
+                                <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                                    <div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                        <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si está disponible para nuevas órdenes.</div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: active ? tokens.primary : tokens.textSecondary }}>{active ? "Activo" : "Inactivo"}</span>
+                                        <Switch checked={active} onChange={(checked) => p.onChange(checked)} />
+                                    </div>
+                                </Panel>
+                            );
+                        }}
+                    />
+                    <ModalFormFooter onCancel={closeModal} submitLabel={editingId ? "Guardar cambios" : "Crear"} loading={submitting} />
+                </form>
+            </CelumaModal>
         </>
     );
 

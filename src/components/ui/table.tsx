@@ -5,6 +5,7 @@ import type { ColumnsType } from "antd/es/table";
 import { tokens } from "../design/tokens";
 import CelumaPagination from "./celuma_pagination";
 import SearchField from "./search_field";
+import { matchesQuery } from "../../lib/search";
 
 // Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
 const SORTER_TOOLTIP = {
@@ -20,20 +21,12 @@ const SORTER_TOOLTIP = {
 } as const;
 
 /**
- * Generic search matcher — walks every string/number leaf of a record and tests
- * the (already normalized, lowercased) query against it. Used when a table opts
- * into search without supplying its own `searchFilter`.
+ * Generic search matcher — walks every string/number leaf of a record and runs
+ * the shared Céluma matcher (normalized, separator-insensitive, typo-tolerant).
+ * Used when a table opts into search without supplying its own `searchFilter`.
  */
 function defaultSearchMatch(record: unknown, query: string): boolean {
-    const visit = (value: unknown): boolean => {
-        if (value == null) return false;
-        if (typeof value === "string") return value.toLowerCase().includes(query);
-        if (typeof value === "number") return String(value).includes(query);
-        if (Array.isArray(value)) return value.some(visit);
-        if (typeof value === "object") return Object.values(value as Record<string, unknown>).some(visit);
-        return false;
-    };
-    return visit(record);
+    return matchesQuery([record], query);
 }
 
 export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 'columns' | 'rowKey'> {

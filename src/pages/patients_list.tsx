@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { SEX_CONFIG } from "../components/ui/status_configs";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -75,9 +76,7 @@ export default function PatientsList() {
     }, []);
 
     const searchFilter = (r: PatientRow, q: string) =>
-        [r.patient_code, r.first_name, r.last_name, r.email, r.phone]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
+        matchesQuery([r.patient_code, r.first_name, r.last_name, r.email, r.phone], q);
 
     // Sex filter
     const sexFilters = useMemo(() => {

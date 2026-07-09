@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-    Layout, Card, Button, Modal, Select, message,
+    Layout, Card, Button, message,
     Space, Popconfirm, Spin, Avatar,
 } from "antd";
 import {
@@ -14,11 +14,18 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import CelumaButton from "../components/ui/button";
+import CelumaModal from "../components/ui/celuma_modal";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import Panel from "../components/ui/panel";
+import ModalFormFooter from "../components/ui/modal_form_footer";
+import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
 
 const REVIEWER_ROLE = "reviewer";
+// Only users who already hold one of these roles may be promoted to Revisor.
+const REVIEWER_ELIGIBLE_ROLES = ["pathologist", "admin", "superuser"];
 
 const getInitials = (fullName?: string | null): string => {
     if (!fullName) return "U";
@@ -28,7 +35,7 @@ const getInitials = (fullName?: string | null): string => {
 };
 
 const getAvatarColor = (name: string): string => {
-    const colors = ["#0f8b8d", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
+    const colors = ["#49b6ad", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
@@ -175,9 +182,13 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
         }
     };
 
-    // Users eligible to be added as reviewers: active, in tenant, without the reviewer role
+    // Users eligible to be added as reviewers: active, without the reviewer role,
+    // and holding at least one of the eligible roles (Patólogo, Admin o Superadmin).
     const eligibleUsers = allUsers.filter(
-        (u) => u.is_active && !u.roles.includes(REVIEWER_ROLE),
+        (u) =>
+            u.is_active &&
+            !u.roles.includes(REVIEWER_ROLE) &&
+            u.roles.some((r) => REVIEWER_ELIGIBLE_ROLES.includes(r)),
     );
 
     const columns: ColumnsType<ReviewerItem> = [
@@ -300,50 +311,48 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
                     rowKey="id"
                     pagination={{ pageSize: 10 }}
                     emptyText="Aún no hay revisores asignados"
+                    searchable
+                    searchPlaceholder="Buscar revisores"
+                    searchFilter={(r, q) => matchesQuery([r.full_name, r.email], q)}
                 />
             </Card>
 
-            <Modal
+            <CelumaModal
                 title="Agregar Revisor"
                 open={addModalOpen}
                 onCancel={() => {
                     setAddModalOpen(false);
                     setSelectedUserId(undefined);
                 }}
-                onOk={handleAddReviewer}
-                okText="Agregar"
-                cancelText="Cancelar"
-                confirmLoading={submitting}
-                okButtonProps={{ disabled: !selectedUserId }}
-                destroyOnClose
+                footer={null}
+                width={520}
+                destroyOnHidden
             >
-                <p style={{ color: tokens.textSecondary, fontSize: 13, marginBottom: 12 }}>
-                    Selecciona el usuario al que deseas asignar el rol de Revisor. Solo se
-                    muestran usuarios activos que aún no tienen el rol.
-                </p>
-                <Select
-                    showSearch
-                    value={selectedUserId}
-                    onChange={(v) => setSelectedUserId(v)}
-                    placeholder="Buscar por nombre o email…"
-                    style={{ width: "100%" }}
-                    optionFilterProp="label"
-                    filterOption={(input, option) =>
-                        ((option?.label as string) ?? "")
-                            .toLowerCase()
-                            .includes(input.toLowerCase())
-                    }
-                    options={eligibleUsers.map((u) => ({
-                        value: u.id,
-                        label: `${u.full_name} · ${u.email}`,
-                    }))}
-                    notFoundContent={
-                        eligibleUsers.length === 0
-                            ? "No hay usuarios elegibles"
-                            : "Sin coincidencias"
-                    }
-                />
-            </Modal>
+                <form
+                    onSubmit={(e) => { e.preventDefault(); if (selectedUserId) handleAddReviewer(); }}
+                    style={{ display: "grid", gap: 18 }}
+                >
+                    <Panel style={{ background: "#f0fdfa", border: "2px solid #b2e8e4", color: tokens.textSecondary, fontSize: 13, lineHeight: 1.5 }}>
+                        Selecciona el usuario al que deseas asignar el rol de Revisor. Solo se muestran usuarios activos con rol de <strong>Patólogo</strong>, <strong>Administrador</strong> o <strong>Superadministrador</strong> que aún no son revisores.
+                    </Panel>
+                    <FloatingCaptionSelect
+                        label="Usuario"
+                        requiredMark
+                        value={selectedUserId}
+                        onChange={(v) => setSelectedUserId(v)}
+                        placeholder="Buscar por nombre o email…"
+                        options={eligibleUsers.map((u) => ({ value: u.id, label: `${u.full_name} · ${u.email}` }))}
+                        showSearch
+                    />
+                    <ModalFormFooter
+                        onCancel={() => { setAddModalOpen(false); setSelectedUserId(undefined); }}
+                        submitLabel="Agregar"
+                        loading={submitting}
+                        submitDisabled={!selectedUserId}
+                        hideRequiredNote
+                    />
+                </form>
+            </CelumaModal>
         </div>
     );
 

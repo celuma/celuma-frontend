@@ -10,6 +10,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { 
     PatientCell, 
     renderStatusChip, 
@@ -114,14 +115,17 @@ export default function SamplesList() {
         })();
     }, []);
 
-    const searchFilter = (r: Row, q: string) => {
-        const basicFields = [r.sample_code, r.type, r.state, r.order.order_code, r.patient_name, r.requested_by]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q));
-        const labelMatch = r.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
-        const assigneeMatch = r.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
-        return basicFields || labelMatch || assigneeMatch;
-    };
+    const searchFilter = (r: Row, q: string) =>
+        matchesQuery([
+            r.sample_code,
+            r.type,
+            r.state,
+            r.order.order_code,
+            r.patient_name,
+            r.requested_by,
+            r.labels?.map((label) => label.name),
+            r.assignees?.map((user) => [user.name, user.email]),
+        ], q);
 
     // Get unique states and types for filters
     const stateFilters = useMemo(() => {

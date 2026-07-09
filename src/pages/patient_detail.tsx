@@ -13,6 +13,7 @@ import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import { CelumaTable } from "../components/ui/table";
+import { matchesQuery } from "../lib/search";
 import { renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -152,16 +153,17 @@ export default function PatientDetailPage() {
     const totalSamples = rows.reduce((acc, o) => acc + o.sample_count, 0);
 
     const filteredOrders = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((row) => {
-            const basicFields = [row.order_code, row.status, row.requesting_physician?.full_name, row.requesting_physician?.physician_code, row.requested_by, row.notes]
-                .filter(Boolean)
-                .some((value) => String(value).toLowerCase().includes(q));
-            const labelMatch = row.labels?.some((label) => label.name.toLowerCase().includes(q)) || false;
-            const assigneeMatch = row.assignees?.some((user) => user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)) || false;
-            return basicFields || labelMatch || assigneeMatch;
-        });
+        if (!search.trim()) return rows;
+        return rows.filter((row) => matchesQuery([
+            row.order_code,
+            row.status,
+            row.requesting_physician?.full_name,
+            row.requesting_physician?.physician_code,
+            row.requested_by,
+            row.notes,
+            row.labels?.map((label) => label.name),
+            row.assignees?.map((user) => [user.name, user.email]),
+        ], search));
     }, [rows, search]);
 
     const statusFilters = useMemo(() => {

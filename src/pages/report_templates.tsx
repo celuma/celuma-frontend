@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Layout, Card, Button, DatePicker, Form, Input, Modal, message, Space, Popconfirm, Switch, Checkbox, Select, Divider, Typography, Tag, Empty, Spin, Tooltip } from "antd";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Layout, Card, Button, DatePicker, Form, message, Space, Popconfirm, Typography, Empty, Spin, Select as AntSelect, Divider } from "antd";
 import CelumaButton from "../components/ui/button";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, HolderOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
-import ReactQuill from "react-quill-new";
-import "react-quill-new/dist/quill.snow.css";
+import CelumaModal from "../components/ui/celuma_modal";
+import CelumaSwitch from "../components/ui/celuma_switch";
+import CelumaRichText from "../components/ui/celuma_rich_text";
+import SectionTitle from "../components/ui/section_title";
+import ActionButtonPanel from "../components/ui/action_button_panel";
+import Checkbox from "../components/ui/checkbox";
+import Tooltip from "../components/ui/tooltip";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -11,6 +17,13 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle, cardTitleStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
+import SearchField from "../components/ui/search_field";
+import CelumaSortableList from "../components/ui/celuma_sortable_list";
+import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import CelumaTextArea from "../components/ui/textarea_field";
+import Panel from "../components/ui/panel";
+import { renderActiveChip } from "../components/ui/table_helpers";
+import { matchesQuery } from "../lib/search";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
 import type {
     ReportTemplateListItem,
@@ -25,8 +38,7 @@ import type {
 import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, LEGACY_PREDEFINED_BASE_HIDDEN, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
 
-const { TextArea } = Input;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 const PREDEFINED_BASE_KEYS = Object.keys(DEFAULT_BASE_FIELDS);
 const PREDEFINED_SECTION_KEYS = Object.keys(DEFAULT_SECTIONS);
 
@@ -63,13 +75,6 @@ interface DraggableItem {
     cfg: ReportBaseFieldConfig | ReportSectionConfig;
 }
 
-function reorder<T>(list: T[], from: number, to: number): T[] {
-    const result = [...list];
-    const [removed] = result.splice(from, 1);
-    result.splice(to, 0, removed);
-    return result;
-}
-
 // Inline-edit row component
 interface EditableRowProps {
     itemKey: string;
@@ -80,7 +85,6 @@ interface EditableRowProps {
     effectiveType?: TemplateFieldType | "date";
     currentValue?: string;
     isSection?: boolean;
-    dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
     onToggleVisible: (key: string, checked: boolean) => void;
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
@@ -97,7 +101,6 @@ function EditableRow({
     effectiveType,
     currentValue,
     isSection = false,
-    dragHandleProps,
     onToggleVisible,
     onRename,
     onChangeType,
@@ -123,32 +126,15 @@ function EditableRow({
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: 8,
-                padding: "6px 8px",
-                borderRadius: 8,
-                background: "#fafafa",
-                border: "1px solid #f0f0f0",
-                transition: "background 0.15s",
+                width: "100%",
             }}
         >
-            {/* Grupo izquierdo: handle + checkbox + label */}
+            {/* Grupo izquierdo: checkbox + label */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", maxWidth: "100%" }}>
-                <span
-                    {...dragHandleProps}
-                    style={{
-                        cursor: "grab",
-                        color: "#bbb",
-                        fontSize: 14,
-                        lineHeight: 1,
-                        userSelect: "none",
-                        flexShrink: 0,
-                    }}
-                >
-                    <HolderOutlined />
-                </span>
-
                 <Checkbox
                     checked={isVisible}
                     onChange={(e) => onToggleVisible(itemKey, e.target.checked)}
+                    style={{ marginTop: 0 }}
                 />
 
                 {editing ? (
@@ -188,52 +174,125 @@ function EditableRow({
             {/* Grupo derecho: tipo + tags + botones de acción */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                 {isPredefined && type && (
-                    <Tag color={type === "images" ? "cyan" : "default"} style={{ fontSize: 10, margin: 0 }}>
-                        {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type}
-                    </Tag>
+                    <span style={FIELD_TYPE_CHIP_STYLE}>
+                        {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type === "numeric" ? "Numérico" : "Texto"}
+                    </span>
                 )}
                 {!isPredefined && type && onChangeType && (
-                    <Select
-                        size="small"
+                    <TypePillSelect
                         value={type}
-                        style={{ minWidth: 110 }}
-                        onChange={(v) => onChangeType(itemKey, v as TemplateFieldType)}
+                        onChange={(v) => onChangeType(itemKey, v)}
                         options={typeOptions}
-                        bordered={false}
-                        dropdownMatchSelectWidth={false}
                     />
                 )}
                 {!isPredefined && (
-                    <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>
+                    <span style={CUSTOM_CHIP_STYLE}>
                         {isSection ? "Personalizada" : "Personalizado"}
-                    </Tag>
+                    </span>
                 )}
 
-                {effectiveType !== undefined && onEditDefaultValue && (
-                    <Tooltip title={`${isSection ? "Contenido" : "Valor"} por defecto`}>
-                        <Button
-                            type="text"
-                            size="small"
-                            icon={<FormOutlined />}
-                            onClick={() => onEditDefaultValue(itemKey, label, effectiveType, currentValue ?? "")}
-                            style={{ color: currentValue ? tokens.primary : "#bbb" }}
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {effectiveType !== undefined && onEditDefaultValue && (
+                        <ActionButtonPanel
+                            size="xxsmall"
+                            actions={[{
+                                icon: <FormOutlined />,
+                                tooltip: `${isSection ? "Contenido" : "Valor"} por defecto`,
+                                ariaLabel: `${isSection ? "Contenido" : "Valor"} por defecto`,
+                                active: !!currentValue,
+                                onClick: () => onEditDefaultValue(itemKey, label, effectiveType, currentValue ?? ""),
+                            }]}
                         />
-                    </Tooltip>
-                )}
+                    )}
 
-                {!isPredefined && (
-                    <Tooltip title="Eliminar">
-                        <Button
-                            type="text"
-                            size="small"
-                            danger
-                            icon={<DeleteOutlined />}
-                            onClick={() => onRemove(itemKey)}
+                    {!isPredefined && (
+                        <ActionButtonPanel
+                            size="xxsmall"
+                            actions={[{
+                                icon: <DeleteOutlined />,
+                                tooltip: "Eliminar",
+                                ariaLabel: "Eliminar",
+                                danger: true,
+                                onClick: () => onRemove(itemKey),
+                            }]}
                         />
-                    </Tooltip>
-                )}
+                    )}
+                </div>
             </div>
         </div>
+    );
+}
+
+// ── Shared row chip styles (predefined type = teal tint, custom = salmon tint) ──
+const FIELD_TYPE_CHIP_STYLE: React.CSSProperties = {
+    background: `${tokens.primary}14`,
+    color: tokens.primary,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 10px",
+    borderRadius: 999,
+    lineHeight: 1.4,
+    whiteSpace: "nowrap",
+};
+
+const CUSTOM_CHIP_STYLE: React.CSSProperties = {
+    background: tokens.secondaryTint,
+    color: tokens.secondary,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 10px",
+    borderRadius: 999,
+    lineHeight: 1.4,
+    whiteSpace: "nowrap",
+};
+
+/** A compact, pill-shaped antd Select re-skinned to the Céluma language for
+ * inline use inside a row (teal ring on hover/focus, tinted at rest). */
+function TypePillSelect({
+    value,
+    onChange,
+    options,
+}: {
+    value: TemplateFieldType;
+    onChange: (v: TemplateFieldType) => void;
+    options: { value: TemplateFieldType; label: string }[];
+}) {
+    const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+    return (
+        <>
+            <style>{`
+                .tps-${uid} .ant-select-selector {
+                    background: #f8fafc !important;
+                    border: 1.5px solid #e5e7eb !important;
+                    border-radius: 999px !important;
+                    height: 26px !important;
+                    padding: 0 10px !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }
+                .tps-${uid}:hover .ant-select-selector,
+                .tps-${uid}.ant-select-focused .ant-select-selector {
+                    border-color: ${tokens.primary} !important;
+                }
+                .tps-${uid} .ant-select-selection-item {
+                    font-size: 11px !important;
+                    font-weight: 600;
+                    line-height: 22px !important;
+                    color: ${tokens.textPrimary};
+                }
+                .tps-${uid} .ant-select-arrow { color: ${tokens.primary}; font-size: 9px; }
+            `}</style>
+            <AntSelect
+                className={`tps-${uid}`}
+                size="small"
+                value={value}
+                style={{ minWidth: 118 }}
+                onChange={(v) => onChange(v as TemplateFieldType)}
+                options={options}
+                dropdownMatchSelectWidth={false}
+                dropdownStyle={{ borderRadius: 12 }}
+            />
+        </>
     );
 }
 
@@ -261,30 +320,12 @@ function DraggableList({
     onRemove,
     onEditDefaultValue,
 }: DraggableListProps) {
-    const dragIndex = useRef<number | null>(null);
-    const dragOverIndex = useRef<number | null>(null);
-
-    const handleDragStart = (idx: number) => {
-        dragIndex.current = idx;
-    };
-
-    const handleDragEnter = (idx: number) => {
-        dragOverIndex.current = idx;
-    };
-
-    const handleDragEnd = () => {
-        const from = dragIndex.current;
-        const to = dragOverIndex.current;
-        if (from !== null && to !== null && from !== to) {
-            onReorder(reorder(items, from, to));
-        }
-        dragIndex.current = null;
-        dragOverIndex.current = null;
-    };
-
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {items.map((item, idx) => {
+        <CelumaSortableList
+            items={items}
+            onReorder={onReorder}
+            gap={8}
+            renderItem={(item) => {
                 const cfg = item.cfg;
                 const custom = cfg as ReportBaseFieldCustom & ReportSectionTextCustom;
                 const predefined = isPredefined(item.key);
@@ -312,34 +353,24 @@ function DraggableList({
                     : ((cfg as { value?: string }).value ?? "");
 
                 return (
-                    <div
-                        key={item.key}
-                        draggable
-                        onDragStart={() => handleDragStart(idx)}
-                        onDragEnter={() => handleDragEnter(idx)}
-                        onDragEnd={handleDragEnd}
-                        onDragOver={(e) => e.preventDefault()}
-                        style={{ opacity: dragIndex.current === idx ? 0.5 : 1 }}
-                    >
-                        <EditableRow
-                            itemKey={item.key}
-                            label={label}
-                            isVisible={cfg.is_visible}
-                            isPredefined={predefined}
-                            type={type}
-                            effectiveType={effectiveType}
-                            currentValue={currentValue}
-                            isSection={isSection}
-                            onToggleVisible={onToggleVisible}
-                            onRename={onRename}
-                            onChangeType={onChangeType}
-                            onRemove={onRemove}
-                            onEditDefaultValue={onEditDefaultValue}
-                        />
-                    </div>
+                    <EditableRow
+                        itemKey={item.key}
+                        label={label}
+                        isVisible={cfg.is_visible}
+                        isPredefined={predefined}
+                        type={type}
+                        effectiveType={effectiveType}
+                        currentValue={currentValue}
+                        isSection={isSection}
+                        onToggleVisible={onToggleVisible}
+                        onRename={onRename}
+                        onChangeType={onChangeType}
+                        onRemove={onRemove}
+                        onEditDefaultValue={onEditDefaultValue}
+                    />
                 );
-            })}
-        </div>
+            }}
+        />
     );
 }
 
@@ -355,6 +386,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     // ---- Lista ----
     const [loadingList, setLoadingList] = useState(false);
     const [templates, setTemplates] = useState<ReportTemplateListItem[]>([]);
+    const [templateSearch, setTemplateSearch] = useState("");
 
     // ---- Panel derecho ----
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -364,6 +396,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
     // ---- Form ----
     const [form] = Form.useForm();
+    const isActiveWatch = Form.useWatch("is_active", form);
 
     // ---- template_json as ordered arrays ----
     const [baseItems, setBaseItems] = useState<DraggableItem[]>([]);
@@ -705,14 +738,32 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             styles={{ body: { overflowY: "auto", flex: 1 } }}
         >
             <Spin spinning={loadingList}>
+                <SearchField
+                    small
+                    value={templateSearch}
+                    onChange={setTemplateSearch}
+                    placeholder="Buscar plantillas"
+                    style={{ marginBottom: 12 }}
+                />
                 {templates.length === 0 && !loadingList ? (
                     <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description="Sin plantillas aún"
                     />
                 ) : (
+                    (() => {
+                        const visibleTemplates = templates.filter((t) => matchesQuery([t.name, t.description], templateSearch));
+                        if (visibleTemplates.length === 0) {
+                            return (
+                                <Empty
+                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                    description="Sin coincidencias"
+                                />
+                            );
+                        }
+                        return (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {templates.map((t) => (
+                        {visibleTemplates.map((t) => (
                             <div
                                 key={t.id}
                                 style={{
@@ -734,17 +785,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                         <FileTextOutlined style={{ color: tokens.primary }} />
                                         <Text strong ellipsis style={{ maxWidth: 160 }}>{t.name}</Text>
-                                        <div style={{
-                                            backgroundColor: t.is_active ? "#ecfdf5" : "#f3f4f6",
-                                            color: t.is_active ? "#10b981" : "#6b7280",
-                                            borderRadius: 12,
-                                            fontSize: 10,
-                                            fontWeight: 500,
-                                            padding: "2px 8px",
-                                            display: "inline-block",
-                                        }}>
-                                            {t.is_active ? "Activo" : "Inactivo"}
-                                        </div>
+                                        {renderActiveChip(t.is_active)}
                                     </div>
                                     {t.description && (
                                         <Text
@@ -784,6 +825,8 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             </div>
                         ))}
                     </div>
+                        );
+                    })()
                 )}
             </Spin>
         </Card>
@@ -800,7 +843,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             style={{ ...cardStyle, marginLeft: tokens.gap * 2, maxHeight: "calc(100vh - 96px)", overflow: "hidden", display: "flex", flexDirection: "column" }}
             styles={{ body: { overflowY: "auto", flex: 1 } }}
             extra={
-                <Button type="text" icon={<CloseOutlined />} onClick={closePanel} />
+                <CelumaButton type="text" icon={<CloseOutlined />} onClick={closePanel} />
             }
         >
                 <Spin spinning={loadingDetail}>
@@ -808,41 +851,47 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         {/* ---- Nombre / descripción / estado ---- */}
                         <Form.Item
                             name="name"
-                            label="Nombre"
                             rules={[{ required: true, message: "El nombre es requerido" }]}
+                            style={{ marginBottom: 16 }}
                         >
-                            <Input placeholder="Ej. Plantilla de Biopsia Estándar" maxLength={255} />
+                            <FloatingCaptionInput label="Nombre" requiredMark maxLength={255} />
                         </Form.Item>
 
-                        <Form.Item name="description" label="Descripción">
-                            <TextArea
-                                placeholder="Descripción opcional"
-                                rows={2}
-                                maxLength={1000}
-                            />
+                        <Form.Item name="description" style={{ marginBottom: 16 }}>
+                            <CelumaTextArea value="" onChange={() => {}} placeholder="Descripción opcional" rows={2} maxLength={1000} />
                         </Form.Item>
 
                         {editingId && (
-                            <Form.Item name="is_active" label="Estado" valuePropName="checked">
-                                <Switch checkedChildren="Activo" unCheckedChildren="Inactivo" />
-                            </Form.Item>
+                            <Panel style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+                                <div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: tokens.textPrimary }}>Estado</div>
+                                    <div style={{ fontSize: 13, color: tokens.textSecondary, marginTop: 2 }}>Define si la plantilla está disponible para nuevos reportes.</div>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: isActiveWatch ? tokens.primary : tokens.textSecondary }}>{isActiveWatch ? "Activo" : "Inactivo"}</span>
+                                    <Form.Item name="is_active" valuePropName="checked" noStyle>
+                                        <CelumaSwitch />
+                                    </Form.Item>
+                                </div>
+                            </Panel>
                         )}
 
                         <Divider />
 
                         {/* ---- Campos base ---- */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                            <Title level={5} style={{ margin: 0, fontFamily: tokens.titleFont }}>
-                                Campos base
-                            </Title>
-                            <Button
-                                size="small"
-                                icon={<PlusOutlined />}
-                                onClick={() => { baseFieldForm.resetFields(); setBaseFieldModalOpen(true); }}
-                            >
-                                Nuevo
-                            </Button>
-                        </div>
+                        <SectionTitle
+                            extra={
+                                <CelumaButton
+                                    size="xsmall"
+                                    icon={<PlusOutlined />}
+                                    onClick={() => { baseFieldForm.resetFields(); setBaseFieldModalOpen(true); }}
+                                >
+                                    Nuevo
+                                </CelumaButton>
+                            }
+                        >
+                            Campos base
+                        </SectionTitle>
 
                         <DraggableList
                             items={baseItems}
@@ -861,18 +910,19 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         <Divider />
 
                         {/* ---- Secciones ---- */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                            <Title level={5} style={{ margin: 0, fontFamily: tokens.titleFont }}>
-                                Secciones
-                            </Title>
-                            <Button
-                                size="small"
-                                icon={<PlusOutlined />}
-                                onClick={() => { sectionForm.resetFields(); setSectionModalOpen(true); }}
-                            >
-                                Nuevo
-                            </Button>
-                        </div>
+                        <SectionTitle
+                            extra={
+                                <CelumaButton
+                                    size="xsmall"
+                                    icon={<PlusOutlined />}
+                                    onClick={() => { sectionForm.resetFields(); setSectionModalOpen(true); }}
+                                >
+                                    Nuevo
+                                </CelumaButton>
+                            }
+                        >
+                            Secciones
+                        </SectionTitle>
 
                         <DraggableList
                             items={sectionItems}
@@ -891,24 +941,11 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         <Divider />
 
                         {/* ---- Firma (T7) ---- */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                            <SafetyCertificateOutlined style={{ color: tokens.primary }} />
-                            <Title level={5} style={{ margin: 0, fontFamily: tokens.titleFont }}>
-                                Firma
-                            </Title>
-                        </div>
+                        <SectionTitle icon={<SafetyCertificateOutlined />}>Firma</SectionTitle>
                         <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
                             Estos valores se usan como predeterminados al crear nuevos informes con esta plantilla.
                         </Text>
-                        <div style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 12,
-                            padding: "12px 14px",
-                            borderRadius: tokens.radius,
-                            background: "#fafafa",
-                            border: "1px solid #f0f0f0",
-                        }}>
+                        <Panel style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                                 <div style={{ minWidth: 0 }}>
                                     <div style={{ fontWeight: 500 }}>
@@ -918,7 +955,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                         Agrega un bloque al final del informe con espacio para la firma del revisor.
                                     </Text>
                                 </div>
-                                <Switch
+                                <CelumaSwitch
                                     checked={showSignatureSection}
                                     onChange={(checked) => {
                                         setShowSignatureSection(checked);
@@ -935,29 +972,30 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                         Inserta la firma digital del revisor al firmar el reporte.
                                     </Text>
                                 </div>
-                                <Switch
+                                <CelumaSwitch
                                     checked={requireDigitalSignature}
                                     disabled={!showSignatureSection}
                                     onChange={setRequireDigitalSignature}
                                 />
                             </div>
-                        </div>
+                        </Panel>
 
                         <Divider />
 
                         {/* ---- Acciones ---- */}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                            <Button onClick={closePanel} icon={<CloseOutlined />}>
+                            <CelumaButton size="small" onClick={closePanel} icon={<CloseOutlined />}>
                                 Cancelar
-                            </Button>
-                            <Button
+                            </CelumaButton>
+                            <CelumaButton
+                                size="small"
                                 type="primary"
                                 icon={<SaveOutlined />}
                                 loading={saving}
                                 onClick={handleSave}
                             >
                                 {editingId ? "Guardar Cambios" : "Crear Plantilla"}
-                            </Button>
+                            </CelumaButton>
                         </div>
                     </Form>
                 </Spin>
@@ -991,63 +1029,77 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             </div>
 
             {/* ---- Modal: crear campo base custom ---- */}
-            <Modal
+            <CelumaModal
                 title="Crear campo"
                 open={baseFieldModalOpen}
                 onCancel={() => { setBaseFieldModalOpen(false); baseFieldForm.resetFields(); }}
-                onOk={handleAddBaseField}
-                okText="Agregar"
-                cancelText="Cancelar"
                 destroyOnClose
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => { setBaseFieldModalOpen(false); baseFieldForm.resetFields(); }}>
+                            Cancelar
+                        </CelumaButton>
+                        <CelumaButton size="xsmall" type="primary" onClick={handleAddBaseField}>
+                            Agregar
+                        </CelumaButton>
+                    </div>
+                }
             >
-                <Form form={baseFieldForm} layout="vertical" style={{ marginTop: 16 }}>
+                <Form form={baseFieldForm} layout="vertical">
                     <Form.Item
                         name="label"
-                        label="Nombre del campo"
                         rules={[{ required: true, message: "El nombre es requerido" }]}
+                        style={{ marginBottom: 16 }}
                     >
-                        <Input placeholder="Ej. Número de expediente" maxLength={100} />
+                        <FloatingCaptionInput label="Nombre del campo" requiredMark maxLength={100} />
                     </Form.Item>
                     <Form.Item
                         name="type"
-                        label="Tipo de campo"
                         rules={[{ required: true, message: "El tipo es requerido" }]}
+                        style={{ marginBottom: 4 }}
                     >
-                        <Select placeholder="Seleccionar tipo" options={BASE_FIELD_TYPE_OPTIONS} />
+                        <FloatingCaptionSelect label="Tipo de campo" requiredMark options={BASE_FIELD_TYPE_OPTIONS} />
                     </Form.Item>
                 </Form>
-            </Modal>
+            </CelumaModal>
 
             {/* ---- Modal: crear sección custom ---- */}
-            <Modal
+            <CelumaModal
                 title="Crear sección"
                 open={sectionModalOpen}
                 onCancel={() => { setSectionModalOpen(false); sectionForm.resetFields(); }}
-                onOk={handleAddSection}
-                okText="Agregar"
-                cancelText="Cancelar"
                 destroyOnClose
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => { setSectionModalOpen(false); sectionForm.resetFields(); }}>
+                            Cancelar
+                        </CelumaButton>
+                        <CelumaButton size="xsmall" type="primary" onClick={handleAddSection}>
+                            Agregar
+                        </CelumaButton>
+                    </div>
+                }
             >
-                <Form form={sectionForm} layout="vertical" style={{ marginTop: 16 }}>
+                <Form form={sectionForm} layout="vertical">
                     <Form.Item
                         name="label"
-                        label="Nombre de la sección"
                         rules={[{ required: true, message: "El nombre es requerido" }]}
+                        style={{ marginBottom: 16 }}
                     >
-                        <Input placeholder="Ej. Inmunohistoquímica" maxLength={100} />
+                        <FloatingCaptionInput label="Nombre de la sección" requiredMark maxLength={100} />
                     </Form.Item>
                     <Form.Item
                         name="type"
-                        label="Tipo de contenido"
                         rules={[{ required: true, message: "El tipo es requerido" }]}
+                        style={{ marginBottom: 4 }}
                     >
-                        <Select placeholder="Seleccionar tipo" options={SECTION_TYPE_OPTIONS} />
+                        <FloatingCaptionSelect label="Tipo de contenido" requiredMark options={SECTION_TYPE_OPTIONS} />
                     </Form.Item>
                 </Form>
-            </Modal>
+            </CelumaModal>
 
             {/* ---- Modal: valor / contenido por defecto ---- */}
-            <Modal
+            <CelumaModal
                 title={
                     defaultValueModal
                         ? `${defaultValueModal.isSection ? "Contenido" : "Valor"} por defecto — ${defaultValueModal.label}`
@@ -1055,29 +1107,41 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 }
                 open={defaultValueModal !== null}
                 onCancel={() => setDefaultValueModal(null)}
-                onOk={saveDefaultValue}
-                okText="Guardar"
-                cancelText="Cancelar"
                 width={
                     defaultValueModal?.type === "richtext" || defaultValueModal?.type === "table"
                         ? 700
                         : 480
                 }
                 destroyOnClose
+                styles={{
+                    body: { padding: "8px 24px", background: tokens.cardBg },
+                    footer: { padding: "8px 16px 16px", background: tokens.cardBg },
+                }}
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => setDefaultValueModal(null)}>
+                            Cancelar
+                        </CelumaButton>
+                        <CelumaButton size="xsmall" type="primary" onClick={saveDefaultValue}>
+                            Guardar
+                        </CelumaButton>
+                    </div>
+                }
             >
                 {defaultValueModal && (
-                    <div style={{ marginTop: 16 }}>
+                    <div>
                         {defaultValueModal.type === "text" && (
-                            <TextArea
+                            <CelumaTextArea
                                 value={defaultDraftValue}
-                                onChange={(e) => setDefaultDraftValue(e.target.value)}
+                                onChange={setDefaultDraftValue}
                                 rows={4}
                                 placeholder="Texto por defecto..."
                                 autoFocus
                             />
                         )}
                         {defaultValueModal.type === "numeric" && (
-                            <Input
+                            <FloatingCaptionInput
+                                label="Valor numérico por defecto"
                                 value={defaultDraftValue}
                                 onChange={(e) => {
                                     const val = e.target.value;
@@ -1085,8 +1149,6 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                         setDefaultDraftValue(val);
                                     }
                                 }}
-                                style={{ width: "100%" }}
-                                placeholder="Valor numérico por defecto..."
                             />
                         )}
                         {defaultValueModal.type === "date" && (
@@ -1101,22 +1163,11 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             />
                         )}
                         {defaultValueModal.type === "richtext" && (
-                            <ReactQuill
-                                theme="snow"
+                            <CelumaRichText
                                 value={defaultDraftValue}
                                 onChange={setDefaultDraftValue}
-                                modules={{
-                                    toolbar: {
-                                        container: [
-                                            [{ header: [1, 2, false] }],
-                                            ["bold", "italic", "underline"],
-                                            [{ list: "ordered" }, { list: "bullet" }],
-                                            ["link"],
-                                            ["clean"],
-                                        ],
-                                    },
-                                }}
-                                style={{ minHeight: 180 }}
+                                placeholder="Contenido por defecto..."
+                                minHeight={180}
                             />
                         )}
                         {defaultValueModal.type === "table" && (
@@ -1127,7 +1178,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                         )}
                     </div>
                 )}
-            </Modal>
+            </CelumaModal>
         </>
     );
 
