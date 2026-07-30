@@ -24,7 +24,7 @@ import {
 import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
-import ReportPreviewPages, { type ReportPreviewPagesRef } from "./report_preview_pages";
+import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
 import { usePdfExport } from "../../hooks/use_pdf_export";
 import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,

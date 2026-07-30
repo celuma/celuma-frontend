@@ -3,7 +3,7 @@ import React, { useRef, forwardRef, useImperativeHandle } from "react";
 import { FilePdfOutlined } from "@ant-design/icons";
 import type { ReportEnvelope } from "../../models/report";
 import Panel from "../ui/panel";
-import ReportPreviewPages, { type ReportPreviewPagesRef, type SignerLookupEntry } from "./report_preview_pages";
+import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef, type SignerLookupEntry } from "./report_renderer_resolver";
 import { usePdfExport } from "../../hooks/use_pdf_export";
 
 interface ReportPreviewProps {

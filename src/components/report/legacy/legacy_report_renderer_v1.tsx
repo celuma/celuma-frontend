@@ -1,9 +1,35 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
-import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../models/report";
-import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../models/report";
-import { markdownTableToHtml } from "./table_utils";
-import logo from "../../images/report_logo.png";
-import SignatureBlock, { type SignatureBlockSigner } from "./signature_block";
+import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../../models/report";
+import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
+import { markdownTableToHtml } from "../table_utils";
+import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
+import {
+    LEGACY_LETTERHEAD_COLOR,
+    LEGACY_LETTERHEAD_FOOTER_ADDRESS,
+    LEGACY_LETTERHEAD_FOOTER_CONTACT,
+    LEGACY_LETTERHEAD_LOGO_SRC,
+    LEGACY_LETTERHEAD_PHYSICIAN_AFFILIATION,
+    LEGACY_LETTERHEAD_PHYSICIAN_LICENSES,
+    LEGACY_LETTERHEAD_PHYSICIAN_NAME,
+    LEGACY_LETTERHEAD_PHYSICIAN_SPECIALTY,
+} from "./legacy_letterhead_config";
+import type { ReportRendererRef, SignerLookupEntry } from "./legacy_report_types";
+
+/**
+ * LegacyReportRendererV1 (Céluma 1.3 Fase 2, Bloque A, Historia A4).
+ *
+ * This is the renderer that has produced every report in production to
+ * date, extracted VERBATIM from its original location
+ * (src/components/report/report_preview_pages.tsx) with no behavioral,
+ * visual, or algorithmic changes — see legacy-renderer-contract.md for the
+ * full list of what is frozen here and why. It is resolved for
+ * schema_version absent/1 by ReportRendererResolver (Historia A5).
+ *
+ * Do NOT optimize, refactor, restyle, or share its pagination algorithm with
+ * any future renderer. Do NOT connect it to live Tenant/Branch data — its
+ * institutional identity (legacy_letterhead_config.ts) is frozen historical
+ * content, not live configuration.
+ */
 
 // Page layout constants (Letter size)
 const PX_TO_MM = 0.264583;
@@ -17,25 +43,18 @@ const FOOTER_H_MM = 20;
 // Keys that are pre-populated from order/patient data (not custom)
 const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
 
-/** Lightweight user lookup so the signature block can resolve `signed_by` (a UUID)
- *  into a display name without forcing every caller to pass a resolved object. */
-export interface SignerLookupEntry {
-    id: string;
-    name: string;
-}
+export type { SignerLookupEntry } from "./legacy_report_types";
 
-interface ReportPreviewPagesProps {
+interface LegacyReportRendererV1Props {
     report: ReportEnvelope;
     style?: CSSProperties;
     /** Candidates the signature block can use to resolve `report.signed_by`. */
     signerLookup?: SignerLookupEntry[];
 }
 
-export interface ReportPreviewPagesRef {
-    getPages: () => HTMLElement[];
-}
+export type LegacyReportRendererV1Ref = ReportRendererRef;
 
-const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesProps>(({ report, style, signerLookup }, ref) => {
+const LegacyReportRendererV1 = forwardRef<LegacyReportRendererV1Ref, LegacyReportRendererV1Props>(({ report, style, signerLookup }, ref) => {
     const previewHostRef = useRef<HTMLDivElement>(null);
     const hiddenSourceRef = useRef<HTMLDivElement>(null);
 
@@ -79,16 +98,16 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             header.style.display = "flex";
             header.style.alignItems = "flex-end";
             header.style.paddingBottom = "4mm";
-            header.style.color = "#002060";
+            header.style.color = LEGACY_LETTERHEAD_COLOR;
             header.style.fontWeight = "bold";
             header.style.fontSize = "8pt";
             header.style.fontFamily = "Arial, sans-serif";
             header.innerHTML = `
                 <div>
-                  <div>Dra. Arisbeth Villanueva Pérez.</div>
-                  <div>Anatomía Patológica, Nefropatología y Citología Exfoliativa</div>
-                  <div>Centro Médico Nacional de Occidente IMSS. INCMNSZ</div>
-                  <div>DGP3833349 | DGP. ESP 6133871</div>
+                  <div>${LEGACY_LETTERHEAD_PHYSICIAN_NAME}</div>
+                  <div>${LEGACY_LETTERHEAD_PHYSICIAN_SPECIALTY}</div>
+                  <div>${LEGACY_LETTERHEAD_PHYSICIAN_AFFILIATION}</div>
+                  <div>${LEGACY_LETTERHEAD_PHYSICIAN_LICENSES}</div>
                 </div>
             `;
 
@@ -120,19 +139,19 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
             footer.style.display = "flex";
             footer.style.alignItems = "center";
             footer.style.justifyContent = "space-between";
-            footer.style.color = "#002060";
+            footer.style.color = LEGACY_LETTERHEAD_COLOR;
             footer.style.fontSize = "7pt";
             footer.style.fontFamily = "Arial, sans-serif";
             footer.style.fontWeight = "bold";
             footer.innerHTML = `
                 <img
-                    src="${logo}"
+                    src="${LEGACY_LETTERHEAD_LOGO_SRC}"
                     alt="Logo"
                     style="display:block; height: calc(${FOOTER_H_MM}mm - 4mm); width: auto; max-width: 35%; object-fit: contain;"
                 />
                 <div style="max-width:65%; text-align: right;">
-                  Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600<br/>
-                  Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com
+                  ${LEGACY_LETTERHEAD_FOOTER_ADDRESS}<br/>
+                  ${LEGACY_LETTERHEAD_FOOTER_CONTACT}
                 </div>
             `;
 
@@ -268,7 +287,7 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
                                 margin: "0 0 6px 0",
                                 fontSize: "11pt",
                                 fontWeight: 700,
-                                color: "#002060",
+                                color: LEGACY_LETTERHEAD_COLOR,
                                 borderBottom: "1px solid #e5e7eb",
                                 paddingBottom: 3,
                             }}>
@@ -363,6 +382,6 @@ const ReportPreviewPages = forwardRef<ReportPreviewPagesRef, ReportPreviewPagesP
     );
 });
 
-ReportPreviewPages.displayName = "ReportPreviewPages";
+LegacyReportRendererV1.displayName = "LegacyReportRendererV1";
 
-export default ReportPreviewPages;
+export default LegacyReportRendererV1;

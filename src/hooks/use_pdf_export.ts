@@ -1,9 +1,9 @@
 import { useCallback } from "react";
-import type { ReportPreviewPagesRef } from "../components/report/report_preview_pages";
+import type { ReportRendererRef } from "../components/report/legacy/legacy_report_types";
 
 export function usePdfExport() {
     const exportToPDF = useCallback(async (
-        previewPagesRef: React.RefObject<ReportPreviewPagesRef | null>,
+        previewPagesRef: React.RefObject<ReportRendererRef | null>,
         filename?: string,
     ) => {
         const pages = previewPagesRef.current?.getPages();
