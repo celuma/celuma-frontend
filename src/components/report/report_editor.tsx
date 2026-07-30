@@ -525,6 +525,26 @@ const ReportEditor: React.FC = () => {
             ...(preservedSignatureUrl ? { signature_url: preservedSignatureUrl } : {}),
         };
 
+        // Céluma 1.3 Fase 2, Bloque C, Historia C9: this function rebuilds
+        // `report` from scratch from the template definition, which has no
+        // notion of `schema_version`/`rendering_snapshot` — those live only
+        // on the previously loaded V2 envelope. Without this, saving edited
+        // clinical content on a V2 report would submit a body missing both
+        // keys. The backend (create_report_new_version) now independently
+        // re-attaches the frozen snapshot regardless of what is sent here —
+        // see versioned-renderer-v2-contract.md — but preserving it here too
+        // keeps the live preview correct while editing, before any save
+        // round-trip, and keeps this payload honest about what the report
+        // actually is.
+        const existingSchemaVersion = envelope?.report?.schema_version;
+        const existingRenderingSnapshot = envelope?.report?.rendering_snapshot;
+        if (existingSchemaVersion !== undefined) {
+            report.schema_version = existingSchemaVersion;
+        }
+        if (existingRenderingSnapshot !== undefined) {
+            report.rendering_snapshot = existingRenderingSnapshot;
+        }
+
         return {
             id: envelope?.id ?? "",
             version_no: envelope?.version_no ?? 1,
@@ -539,6 +559,13 @@ const ReportEditor: React.FC = () => {
             signed_at: envelope?.signed_at ?? null,
             template: tmpl,
             report,
+            // V2 metadata is server-authoritative (see B6/C9) — carried
+            // through only for the live preview's benefit, never trusted by
+            // the backend as an instruction to change these.
+            schema_version: envelope?.schema_version,
+            template_version_id: envelope?.template_version_id,
+            generated_by_renderer_version: envelope?.generated_by_renderer_version,
+            resolved_resources: envelope?.resolved_resources,
         };
     }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature]);
 

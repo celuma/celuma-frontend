@@ -9,6 +9,7 @@ import {
 import LegacyReportRendererV1 from "./legacy/legacy_report_renderer_v1";
 import type { ReportRendererRef, SignerLookupEntry } from "./legacy/legacy_report_types";
 import UnsupportedReportVersion from "./unsupported_report_version";
+import VersionedReportRendererV2 from "./versioned/versioned_report_renderer_v2";
 
 /**
  * ReportRendererResolver (Céluma 1.3 Fase 2, Bloque A, Historia A5).
@@ -18,9 +19,12 @@ import UnsupportedReportVersion from "./unsupported_report_version";
  * renderer directly. It resolves report.report's schema_version and picks
  * the matching renderer:
  *
- *   absent / 1  -> LegacyReportRendererV1  (the only renderer that exists today)
- *   2           -> UnsupportedReportVersion (V2 has no renderer until Bloque C —
- *                   NEVER falls back to the legacy renderer for a V2 report)
+ *   absent / 1  -> LegacyReportRendererV1  (frozen, historical letterhead — Bloque A)
+ *   2           -> VersionedReportRendererV2 (Bloque C — reads exclusively
+ *                   report.report.rendering_snapshot; NEVER falls back to
+ *                   the legacy renderer, even if its own snapshot turns out
+ *                   to be missing/invalid — it renders its own controlled
+ *                   fallback in that case, see versioned_report_renderer_v2.tsx)
  *   anything else -> UnsupportedReportVersion (controlled "unknown version" state)
  *
  * Every branch implements the same ReportRendererRef contract
@@ -54,9 +58,10 @@ const ReportRendererResolver = forwardRef<ReportRendererRef, ReportRendererResol
         }
 
         if (version === CURRENT_REPORT_SCHEMA_VERSION) {
-            // VersionedReportRendererV2 does not exist yet (Bloque C). Never
-            // reinterpret a V2 report with the legacy renderer.
-            return <UnsupportedReportVersion ref={ref} schemaVersion={version} reason="not-implemented" style={style} />;
+            // Never reinterpret a V2 report with the legacy renderer, even
+            // when its snapshot is missing/invalid — VersionedReportRendererV2
+            // owns that fallback itself (see its module docstring).
+            return <VersionedReportRendererV2 ref={ref} report={report} style={style} signerLookup={signerLookup} />;
         }
 
         return (

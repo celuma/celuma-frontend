@@ -136,8 +136,32 @@ export interface UpdateReportTemplatePayload {
 
 export type ReportStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" | "RETRACTED";
 
-/** The content of the report: same shape as ReportTemplateJSON but with values filled in */
-export type ReportContent = ReportTemplateJSON;
+/**
+ * The content of the report: same shape as ReportTemplateJSON but with
+ * values filled in, plus two fields the backend embeds directly in this
+ * same JSON body for V2 reports only (Céluma 1.3 Fase 2, Bloque C). Kept as
+ * `unknown`/loosely-typed here deliberately — the strict shape
+ * (`ReportRenderingSnapshotV2`) lives in
+ * components/report/versioned/versioned_report_types.ts and must be
+ * obtained through report_snapshot_validation.ts, never assumed valid just
+ * because the key is present.
+ */
+export type ReportContent = ReportTemplateJSON & {
+    /** Only present for V2 reports; absent for legacy. */
+    schema_version?: number;
+    /** Only present for V2 reports; absent for legacy. Validate before use. */
+    rendering_snapshot?: unknown;
+};
+
+/**
+ * Ephemeral resources resolved server-side from a V2 report's
+ * `rendering_snapshot` (Céluma 1.3 Fase 2, Bloque C, Historia C1). Never
+ * part of the snapshot itself — recomputed on every read, never persisted.
+ * Absent for legacy reports and for V2 reports with nothing to resolve.
+ */
+export interface ReportResolvedResources {
+    header_logo_url?: string | null;
+}
 
 /** Full report envelope returned by GET /api/v1/reports/{id} and POST /api/v1/reports/ */
 export interface ReportEnvelope {
@@ -156,6 +180,17 @@ export interface ReportEnvelope {
     template: ReportTemplateJSON;
     /** Content of the report (same shape as template but with values filled) */
     report: ReportContent;
+    /**
+     * Céluma 1.3 Fase 2, Bloque B/C: V2 metadata sourced from ReportVersion.
+     * Absent/null for legacy reports (schema_version absent/1 inside `report`).
+     * Do NOT use this top-level field to pick a renderer — resolveReportSchemaVersion
+     * reads `report.schema_version` (inside the JSON body), not this one.
+     */
+    schema_version?: number | null;
+    template_version_id?: string | null;
+    generated_by_renderer_version?: string | null;
+    /** Resolved, ephemeral resources for the current version (e.g. header logo URL). */
+    resolved_resources?: ReportResolvedResources | null;
 }
 
 /** Full report response from GET /api/v1/reports/{id}/full */

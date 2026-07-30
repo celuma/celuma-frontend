@@ -4,11 +4,13 @@ import { createRef } from "react";
 import ReportRendererResolver from "../../components/report/report_renderer_resolver";
 import type { ReportRendererRef } from "../../components/report/legacy/legacy_report_types";
 import { draftSingleSampleNoImages } from "../fixtures/reports";
+import { v2CompleteBranding, v2MissingSnapshot } from "../fixtures/reports/versioned_v2";
 import type { ReportEnvelope } from "../../models/report";
 
-// Céluma 1.3 Fase 2, Bloque A, Historia A5. Covers the full resolution
+// Céluma 1.3 Fase 2, Bloque A/C, Historias A5/C5. Covers the full resolution
 // matrix required by the acceptance criteria: absent/1 -> legacy, 2 ->
-// controlled "not implemented" (never the legacy renderer), unknown ->
+// VersionedReportRendererV2 (never the legacy renderer, even when its own
+// snapshot is invalid — it renders its own controlled fallback), unknown ->
 // controlled error, and ref propagation (getPages()) through each branch.
 
 function withSchemaVersion(envelope: ReportEnvelope, schema_version: unknown): ReportEnvelope {
@@ -32,12 +34,26 @@ describe("ReportRendererResolver — schema_version matrix", () => {
         expect(screen.queryByTestId("unsupported-report-version")).toBeNull();
     });
 
-    it("renders the controlled 'not implemented' state for schema_version 2, NEVER the legacy renderer", () => {
+    it("renders VersionedReportRendererV2 for a valid schema_version 2 report, NEVER the legacy renderer", () => {
+        render(<ReportRendererResolver report={v2CompleteBranding} />);
+        expect(screen.queryByText("Dra. Arisbeth Villanueva Pérez.")).toBeNull();
+        expect(screen.queryByTestId("unsupported-report-version")).toBeNull();
+        expect(screen.queryByTestId("invalid-report-snapshot")).toBeNull();
+    });
+
+    it("renders VersionedReportRendererV2's own controlled fallback for schema_version 2 with no snapshot, NEVER the legacy renderer or UnsupportedReportVersion", () => {
+        render(<ReportRendererResolver report={v2MissingSnapshot} />);
+        expect(screen.queryByText("Dra. Arisbeth Villanueva Pérez.")).toBeNull();
+        expect(screen.queryByTestId("unsupported-report-version")).toBeNull();
+        expect(screen.getByTestId("invalid-report-snapshot")).toBeTruthy();
+    });
+
+    it("renders VersionedReportRendererV2's own controlled fallback for schema_version 2 with no snapshot even via the generic withSchemaVersion helper", () => {
         const report = withSchemaVersion(draftSingleSampleNoImages, 2);
         render(<ReportRendererResolver report={report} />);
         expect(screen.queryByText("Dra. Arisbeth Villanueva Pérez.")).toBeNull();
-        const fallback = screen.getByTestId("unsupported-report-version");
-        expect(fallback.getAttribute("data-reason")).toBe("not-implemented");
+        expect(screen.queryByTestId("unsupported-report-version")).toBeNull();
+        expect(screen.getByTestId("invalid-report-snapshot")).toBeTruthy();
     });
 
     it("renders a controlled error state for an unknown schema_version, without throwing", () => {
@@ -65,10 +81,16 @@ describe("ReportRendererResolver — ref propagation", () => {
         expect(pages[0]?.textContent).toContain("Paciente de Prueba Uno");
     });
 
-    it("exposes a safe empty getPages() for an unsupported (V2) report instead of crashing callers", () => {
+    it("forwards getPages() from VersionedReportRendererV2 for a valid V2 report", () => {
         const ref = createRef<ReportRendererRef>();
-        const report = withSchemaVersion(draftSingleSampleNoImages, 2);
-        render(<ReportRendererResolver report={report} ref={ref} />);
+        render(<ReportRendererResolver report={v2CompleteBranding} ref={ref} />);
+        const pages = ref.current?.getPages() ?? [];
+        expect(pages.length).toBeGreaterThan(0);
+    });
+
+    it("exposes a safe empty getPages() for a V2 report with an invalid/missing snapshot instead of crashing callers", () => {
+        const ref = createRef<ReportRendererRef>();
+        render(<ReportRendererResolver report={v2MissingSnapshot} ref={ref} />);
         expect(ref.current?.getPages()).toEqual([]);
     });
 
