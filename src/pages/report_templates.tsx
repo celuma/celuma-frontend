@@ -9,7 +9,7 @@ import ActionButtonPanel from "../components/ui/action_button_panel";
 import Checkbox from "../components/ui/checkbox";
 import Tooltip from "../components/ui/tooltip";
 import FloatingCaptionSelect from "../components/ui/floating_caption_select";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined, AppstoreOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -798,6 +798,14 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                     )}
                                 </div>
                                 <Space onClick={(e) => e.stopPropagation()}>
+                                    <Tooltip title="Versiones de reporte V2 (papel, márgenes, membrete, branding)">
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<AppstoreOutlined />}
+                                            onClick={() => navigate(`/config/report-templates/${t.id}/versions`)}
+                                        />
+                                    </Tooltip>
                                     <Tooltip title="Editar">
                                         <Button
                                             type="text"

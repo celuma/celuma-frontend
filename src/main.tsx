@@ -36,6 +36,8 @@ import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
+import ReportTemplateVersions from "./pages/report_template_versions";
+import ReportTemplateEditor from "./pages/report_template_editor";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
 import BranchesList from "./pages/branches_list";
@@ -116,6 +118,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="profile" element={<Profile embedded />} />
                 <Route path="catalog" element={<RequirePermission permission="admin:manage_catalog"><PriceCatalog embedded /></RequirePermission>} />
                 <Route path="report-templates" element={<RequirePermission permission="admin:manage_catalog"><ReportTemplates embedded /></RequirePermission>} />
+                {/* Céluma 1.3 Fase 2, Bloque D: gated with reports:manage_templates
+                    (not admin:manage_catalog like the row above) because that is
+                    the permission the backend template-version endpoints actually
+                    enforce — see phase-2-block-d-architecture-decision.md for the
+                    pre-existing admin:manage_catalog/reports:manage_templates
+                    mismatch on the legacy route, left undisturbed here. */}
+                <Route path="report-templates/:templateId/versions" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateVersions embedded /></RequirePermission>} />
+                <Route path="report-templates/:templateId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateEditor embedded /></RequirePermission>} />
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />

@@ -16,9 +16,11 @@
 import { z } from "zod";
 import type { ReportRenderingSnapshotV2 } from "./versioned_report_types";
 
-const MIN_MARGIN_CM = 0.5;
-const MAX_MARGIN_CM = 4.0;
-const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+// Exported so report_presentation_editor_schema.ts (Bloque D) can validate
+// admin-entered values against the exact same bounds without drifting.
+export const MIN_MARGIN_CM = 0.5;
+export const MAX_MARGIN_CM = 4.0;
+export const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 const marginsSchema = z.object({
     top: z.number().min(MIN_MARGIN_CM).max(MAX_MARGIN_CM),

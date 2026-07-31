@@ -6,6 +6,11 @@ import type {
     ReportTemplateDetail,
     CreateReportTemplatePayload,
     UpdateReportTemplatePayload,
+    ReportTemplateVersionsListResponse,
+    ReportTemplateVersionDetail,
+    ReportTemplateVersionSummary,
+    CreateReportTemplateVersionPayload,
+    ReportTemplateLogoUploadResponse,
 } from "../models/report";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -404,4 +409,113 @@ export async function deleteReportTemplate(templateId: string): Promise<void> {
         const errText = await res.text();
         throw new Error(`Error al eliminar plantilla: ${res.status} - ${errText}`);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Report Template Versions (Céluma 1.3 Fase 2, Bloque D) — the immutable,
+// append-only versions of a template's rendering configuration
+// (ReportRenderingSnapshotV2). Distinct from the ReportTemplateListItem/
+// ReportTemplateDetail CRUD above, which is the mutable legacy/V1 template.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared request helper for the template-version endpoints. Distinguishes
+ * 401/403/404/409/422 with actionable Spanish messages (falling back to the
+ * backend's own `detail` when present) and network failures, per
+ * report-template-editor-contract.md — the admin UI must never show a
+ * generic error when the backend already distinguishes the cause.
+ */
+async function requestTemplateVersionJSON<T>(
+    url: string,
+    init: RequestInit,
+    fallbackMessage: string
+): Promise<T> {
+    let res: Response;
+    try {
+        res = await fetch(url, init);
+    } catch {
+        throw new Error("Error de red: no se pudo contactar al servidor. Verifica tu conexión.");
+    }
+    if (!res.ok) {
+        const errText = await res.text();
+        const detail = parseFastApiErrorDetail(errText);
+        if (res.status === 401) throw new Error(detail ?? "Tu sesión expiró. Vuelve a iniciar sesión.");
+        if (res.status === 403) throw new Error(detail ?? "No tienes permiso para realizar esta acción.");
+        if (res.status === 404) throw new Error(detail ?? "No se encontró el recurso solicitado.");
+        if (res.status === 409) throw new Error(detail ?? "La operación entra en conflicto con el estado actual de la versión.");
+        if (res.status === 422) throw new Error(detail ?? "Los datos enviados no son válidos.");
+        throw new Error(detail ?? `${fallbackMessage} (${res.status})`);
+    }
+    return (await res.json()) as T;
+}
+
+export async function listReportTemplateVersions(
+    templateId: string
+): Promise<ReportTemplateVersionsListResponse> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions`,
+        { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
+        "Error al listar versiones de la plantilla"
+    );
+}
+
+export async function getReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionDetail> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}`,
+        { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
+        "Error al obtener la versión de la plantilla"
+    );
+}
+
+export async function createReportTemplateVersion(
+    templateId: string,
+    payload: CreateReportTemplateVersionPayload
+): Promise<ReportTemplateVersionDetail> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions`,
+        {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify(payload),
+        },
+        "Error al publicar la versión de la plantilla"
+    );
+}
+
+export async function activateReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionSummary> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}/activate`,
+        { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }) },
+        "Error al activar la versión de la plantilla"
+    );
+}
+
+export async function archiveReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionSummary> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}/archive`,
+        { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }) },
+        "Error al archivar la versión de la plantilla"
+    );
+}
+
+export async function uploadReportTemplateLogo(
+    templateId: string,
+    file: File
+): Promise<ReportTemplateLogoUploadResponse> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/logo`,
+        { method: "POST", headers: authHeaders(), body: form },
+        "Error al subir el logo"
+    );
 }

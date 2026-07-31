@@ -14,6 +14,7 @@ import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signReport,
+    listReportTemplateVersions, getReportTemplateVersion,
 } from "../../services/report_service";
 import {
     getSignature,
@@ -30,7 +31,7 @@ import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
     ReportTemplateJSON, ReportSectionText,
     ReportBaseFieldConfig, ReportBaseFieldCustom, TemplateImageItem,
-    TemplateOrderInput,
+    TemplateOrderInput, ReportTemplateVersionSummary,
 } from "../../models/report";
 import {
     buildEmptyReportContent,
@@ -42,6 +43,7 @@ import {
     resolveSignatureMetadata,
 } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
+import FloatingCaptionSelect from "../ui/floating_caption_select";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem } from "../ui/record_card";
 import CelumaTabs from "../ui/celuma_tabs";
 import CelumaButton from "../ui/button";
@@ -201,6 +203,18 @@ const ReportEditor: React.FC = () => {
 
     // Study type name (for display)
     const [studyTypeName, setStudyTypeName] = useState<string>("");
+
+    // Céluma 1.3 Fase 2, Bloque D, Historia D10: template-version selection
+    // for new V2 reports. Only ever populated when creating a new report
+    // (prefilledOrderId branch) — never touched when editing an existing
+    // report, whose template_version_id (if any) is frozen on `envelope`.
+    const [resolvedTemplateId, setResolvedTemplateId] = useState<string | null>(null);
+    const [selectedTemplateVersionId, setSelectedTemplateVersionId] = useState<string | null>(null);
+    const [availableTemplateVersions, setAvailableTemplateVersions] = useState<ReportTemplateVersionSummary[]>([]);
+    // True when reports_v2_enabled is on for this tenant but the resolved
+    // template has no ACTIVE version to select — creation must block rather
+    // than silently falling back to Legacy (Céluma1.3-Fase2.md §D10).
+    const [v2ConfigBlocked, setV2ConfigBlocked] = useState(false);
 
     // Modals
     const [isApproveModalVisible, setIsApproveModalVisible] = useState(false);
@@ -416,8 +430,38 @@ const ReportEditor: React.FC = () => {
                             const st = await getStudyType(orderFull.order.study_type_id);
                             setStudyTypeName(st.name);
                             if (st.default_report_template_id) {
-                                const tpl = await getReportTemplateById(st.default_report_template_id);
+                                const templateId = st.default_report_template_id;
+                                setResolvedTemplateId(templateId);
+                                const tpl = await getReportTemplateById(templateId);
                                 tmplRaw = tpl.template_json;
+
+                                // Céluma 1.3 Fase 2, Bloque D, Historia D10: with
+                                // reports_v2_enabled on, prefer the template's
+                                // ACTIVE version — its frozen `configuration.template`
+                                // is what VersionedReportRendererV2 actually renders
+                                // (see versioned_report_renderer_v2.tsx), so the editor
+                                // should reflect that structure, not the live/mutable
+                                // ReportTemplate.template_json. No ACTIVE version means
+                                // V2 creation is blocked below, never silently Legacy.
+                                try {
+                                    const tenantInfo = await getJSON<{ reports_v2_enabled?: boolean }>(
+                                        `/v1/tenants/${session.tenantId}`
+                                    );
+                                    if (tenantInfo.reports_v2_enabled) {
+                                        const { versions } = await listReportTemplateVersions(templateId);
+                                        const selectable = versions.filter((v) => v.status !== "ARCHIVED");
+                                        setAvailableTemplateVersions(selectable);
+                                        const active = selectable.find((v) => v.status === "ACTIVE");
+                                        if (active) {
+                                            const detail = await getReportTemplateVersion(templateId, active.id);
+                                            const cfg = detail.configuration as { template?: TemplateOrderInput };
+                                            if (cfg.template) tmplRaw = cfg.template;
+                                            setSelectedTemplateVersionId(active.id);
+                                        } else {
+                                            setV2ConfigBlocked(true);
+                                        }
+                                    }
+                                } catch { /* flag/version lookup failed — proceed as Legacy */ }
                             }
                         } catch { /* ignore, use empty template */ }
                     }
@@ -453,7 +497,7 @@ const ReportEditor: React.FC = () => {
                 setLoadingData(false);
             }
         })();
-    }, [reportId, prefilledOrderId]);
+    }, [reportId, prefilledOrderId, session.tenantId]);
 
     // User role fetched via useUserProfile hook above (no separate effect needed)
 
@@ -561,13 +605,17 @@ const ReportEditor: React.FC = () => {
             report,
             // V2 metadata is server-authoritative (see B6/C9) — carried
             // through only for the live preview's benefit, never trusted by
-            // the backend as an instruction to change these.
+            // the backend as an instruction to change these. For a brand-new
+            // report, `envelope` is still null, so `selectedTemplateVersionId`
+            // (Bloque D, Historia D10) is what actually reaches the backend;
+            // once a report exists, its own `template_version_id` always wins
+            // and is never reconsidered (D10: "no reconsultar la versión activa").
             schema_version: envelope?.schema_version,
-            template_version_id: envelope?.template_version_id,
+            template_version_id: envelope?.template_version_id ?? selectedTemplateVersionId ?? undefined,
             generated_by_renderer_version: envelope?.generated_by_renderer_version,
             resolved_resources: envelope?.resolved_resources,
         };
-    }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature]);
+    }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature, selectedTemplateVersionId]);
 
     // Live preview envelope
     const previewEnvelope = useMemo(() => {
@@ -575,6 +623,41 @@ const ReportEditor: React.FC = () => {
         try { return buildEnvelope(); } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope, showSignatureSection, requireDigitalSignature]);
+
+    // Céluma 1.3 Fase 2, Bloque D, Historia D10: lets the user pick a
+    // different PUBLISHED/ACTIVE version than the auto-selected active one
+    // before creating the report (never ARCHIVED — already filtered out of
+    // availableTemplateVersions). Re-derives the clinical structure and
+    // resets field defaults from the chosen version's frozen snapshot; only
+    // available while creating a brand-new report.
+    const handleChangeTemplateVersion = async (versionId: string) => {
+        if (!resolvedTemplateId) return;
+        try {
+            const detail = await getReportTemplateVersion(resolvedTemplateId, versionId);
+            const cfg = detail.configuration as { template?: TemplateOrderInput };
+            const tmplNew = cfg.template ? normalizeReportTemplateJSON(cfg.template) : EMPTY_TEMPLATE_JSON;
+            setTemplate(tmplNew);
+            setSelectedTemplateVersionId(versionId);
+
+            const bv: Record<string, string> = {};
+            Object.entries(tmplNew.base).forEach(([k, v]) => {
+                if (isCustomField(v)) bv[k] = (v as ReportBaseFieldCustom).value || "";
+            });
+            setBaseValues(bv);
+
+            const sc: Record<string, string | TemplateImageItem[]> = {};
+            Object.entries(tmplNew.sections).forEach(([k, v]) => {
+                sc[k] = v.type === "images" ? [] : (v as ReportSectionText).content || "";
+            });
+            setSectionContent(sc);
+
+            const tmplSig = resolveSignatureMetadata(tmplNew);
+            setShowSignatureSection(tmplSig.show_signature_section);
+            setRequireDigitalSignature(tmplSig.require_digital_signature);
+        } catch {
+            message.error("Error al cargar la versión seleccionada");
+        }
+    };
 
     // ---------------------------------------------------------------------------
     // Handlers
@@ -759,6 +842,35 @@ const ReportEditor: React.FC = () => {
                 title="No se pudo cargar el reporte"
                 description={loadError}
                 action={<CelumaButton onClick={() => navigate("/reports")}>Ver reportes</CelumaButton>}
+            />
+        );
+    }
+
+    if (v2ConfigBlocked) {
+        const canManageTemplates = userHasPermission(PERMS.MANAGE_TEMPLATES);
+        return (
+            <EmptyState
+                icon={<ExclamationCircleOutlined />}
+                color="#e5484d"
+                title="Configuración de reportes V2 incompleta"
+                description={
+                    canManageTemplates
+                        ? "Esta plantilla no tiene ninguna versión activa. Publica y activa una versión desde Plantillas de Reporte antes de crear un reporte V2 para este estudio."
+                        : "Esta plantilla no tiene ninguna versión activa todavía. Contacta a un administrador para publicar y activar una versión antes de crear este reporte."
+                }
+                action={
+                    <div style={{ display: "flex", gap: 12 }}>
+                        {canManageTemplates && resolvedTemplateId && (
+                            <CelumaButton
+                                type="primary"
+                                onClick={() => navigate(`/config/report-templates/${resolvedTemplateId}/versions`)}
+                            >
+                                Ir a administración de plantillas
+                            </CelumaButton>
+                        )}
+                        <CelumaButton onClick={() => navigate(-1)}>Volver</CelumaButton>
+                    </div>
+                }
             />
         );
     }
@@ -996,6 +1108,21 @@ const ReportEditor: React.FC = () => {
                                     <div style={{ fontSize: 13, color: "#92400e", lineHeight: 1.45 }}>
                                         Este reporte está en <b>modo solo lectura</b> porque se encuentra en revisión o ya ha sido publicado.
                                     </div>
+                                </Panel>
+                            )}
+
+                            {!reportId && availableTemplateVersions.length > 1 && (
+                                <Panel style={{ marginBottom: 16 }}>
+                                    <FloatingCaptionSelect
+                                        label="Versión de plantilla"
+                                        value={selectedTemplateVersionId ?? undefined}
+                                        onChange={(v) => v && handleChangeTemplateVersion(v)}
+                                        options={availableTemplateVersions.map((v) => ({
+                                            value: v.id,
+                                            label: `#${v.version_number}${v.status === "ACTIVE" ? " (activa)" : ""}`,
+                                        }))}
+                                        allowClear={false}
+                                    />
                                 </Panel>
                             )}
 

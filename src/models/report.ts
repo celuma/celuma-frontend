@@ -131,6 +131,53 @@ export interface UpdateReportTemplatePayload {
 }
 
 // ---------------------------------------------------------------------------
+// Report Template Versions — Céluma 1.3 Fase 2, Bloque D. Mirrors
+// celuma-backend/app/schemas/report_template_version.py field-for-field.
+// The full `configuration` shape (ReportRenderingSnapshotV2) lives in
+// components/report/versioned/versioned_report_types.ts and must always be
+// validated via report_snapshot_validation.ts before use — never assumed
+// valid just because it came back from the API.
+// ---------------------------------------------------------------------------
+
+export type ReportTemplateVersionStatus = "PUBLISHED" | "ACTIVE" | "ARCHIVED";
+
+/** Lightweight version metadata — never includes `configuration`. */
+export interface ReportTemplateVersionSummary {
+    id: string;
+    tenant_id: string;
+    report_template_id: string;
+    version_number: number;
+    schema_version: number;
+    status: ReportTemplateVersionStatus;
+    created_by: string | null;
+    published_at: string;
+    activated_at: string | null;
+    archived_at: string | null;
+}
+
+/** Full version detail, including the immutable configuration. */
+export interface ReportTemplateVersionDetail extends ReportTemplateVersionSummary {
+    configuration: Record<string, unknown>;
+}
+
+export interface ReportTemplateVersionsListResponse {
+    versions: ReportTemplateVersionSummary[];
+}
+
+/** Payload for POST /api/v1/reports/templates/{id}/versions. */
+export interface CreateReportTemplateVersionPayload {
+    configuration: Record<string, unknown>;
+}
+
+/** Response from POST /api/v1/reports/templates/{id}/logo. */
+export interface ReportTemplateLogoUploadResponse {
+    storage_object_id: string;
+    url: string;
+    content_type: string;
+    size_bytes: number;
+}
+
+// ---------------------------------------------------------------------------
 // Report envelope — the full report object as stored/retrieved from the backend
 // ---------------------------------------------------------------------------
 
