@@ -46,6 +46,7 @@ import BranchDetail from "./pages/branch_detail";
 import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
+import InternalReportRender from "./components/report/internal_report_render";
 
 createRoot(document.getElementById("root")!).render(
     <ConfigProvider theme={{
@@ -73,6 +74,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route path="/patient-portal" element={<PatientPortal />} />
             <Route path="/access-denied" element={<AccessDenied />} />
+            {/* Céluma 1.3 Fase 2, Bloque E: internal render route for the backend's
+                headless-Chromium PDF generator. Chrome-free, no RequireAuth/
+                RequirePermission — authorized by a short-lived render token in the
+                URL fragment instead. Never linked to from the app UI. */}
+            <Route path="/internal/report-render/:reportId/:versionNo" element={<InternalReportRender />} />
 
             {/* Lab read access */}
             <Route path="/home" element={<RequirePermission permission="lab:read"><Home /></RequirePermission>} />

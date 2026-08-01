@@ -1,9 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { createRef, useEffect, useState } from "react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ReportRendererResolver, {
     type ReportRendererRef as ReportPreviewPagesRef,
     type SignerLookupEntry,
 } from "../../src/components/report/report_renderer_resolver";
+import InternalReportRender from "../../src/components/report/internal_report_render";
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
 
@@ -87,4 +89,67 @@ function Harness() {
     );
 }
 
-createRoot(document.getElementById("root")!).render(<Harness />);
+/**
+ * Céluma 1.3 Fase 2, Bloque E, Historia E17: exercises the actual
+ * InternalReportRender component (the route the backend's headless
+ * Chromium navigates to for official PDF generation) in a real browser,
+ * without a backend — `window.fetch` is stubbed to answer the one request
+ * InternalReportRender makes (GET .../internal/render-data/...) with a
+ * fixture, exactly like the real render-data endpoint would. This is what
+ * caught (and now guards against regressing) the phantom-blank-page bug:
+ * app chrome (ConfigProvider/AntApp/index.css) leaking a few px of spacing
+ * into this otherwise chrome-free route, just enough to spill an
+ * exact-N-page report onto a genuine blank N+1th physical page when
+ * Chromium paginates for page.pdf().
+ *
+ * Usage: /?internal_render=1&fixture=<key>
+ */
+function InternalRenderHarness({ fixtureKey }: { fixtureKey: string }) {
+    const fixture = allFixtures[fixtureKey];
+
+    // Synchronous (render-body, not useEffect): InternalReportRender reads
+    // the token from location.hash in ITS OWN mount-time effect, which (as
+    // the child) fires BEFORE this component's own effects — a useEffect
+    // here would race and lose. Stubbing fetch here too, for the same reason.
+    if (fixture && window.location.hash !== "#token=harness-fake-token") {
+        window.location.hash = "#token=harness-fake-token";
+    }
+    const originalFetchRef = (window as unknown as { __harnessOriginalFetch?: typeof window.fetch })
+        .__harnessOriginalFetch ?? window.fetch.bind(window);
+    (window as unknown as { __harnessOriginalFetch?: typeof window.fetch }).__harnessOriginalFetch =
+        originalFetchRef;
+    if (fixture) {
+        window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).includes("/reports/internal/render-data/")) {
+                return new Response(
+                    JSON.stringify({ ...fixture, signer_lookup: DEFAULT_SIGNER_LOOKUP }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            return originalFetchRef(input, init);
+        }) as typeof window.fetch;
+    }
+
+    if (!fixture) {
+        return <div data-error="unknown-fixture">Fixture desconocido: {fixtureKey}</div>;
+    }
+
+    return (
+        <MemoryRouter initialEntries={[`/internal/report-render/harness-report/1`]}>
+            <Routes>
+                <Route path="/internal/report-render/:reportId/:versionNo" element={<InternalReportRender />} />
+            </Routes>
+        </MemoryRouter>
+    );
+}
+
+function Root() {
+    const params = new URLSearchParams(window.location.search);
+    const fixtureKey = params.get("fixture") ?? "";
+    if (params.get("internal_render") === "1") {
+        return <InternalRenderHarness fixtureKey={fixtureKey} />;
+    }
+    return <Harness />;
+}
+
+createRoot(document.getElementById("root")!).render(<Root />);

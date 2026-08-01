@@ -15,7 +15,9 @@ import {
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signReport,
     listReportTemplateVersions, getReportTemplateVersion,
+    getOfficialPdfDownloadUrl,
 } from "../../services/report_service";
+import { usePdfGeneration } from "../../hooks/use_pdf_generation";
 import {
     getSignature,
     NO_SIGNATURE_TITLE,
@@ -236,6 +238,7 @@ const ReportEditor: React.FC = () => {
     const previewColumnRef = useRef<HTMLDivElement>(null);
 
     const { exportToPDF } = usePdfExport();
+    const { isRequesting: isGeneratingPdf, generate: generatePdf } = usePdfGeneration();
 
     // Read-only when not DRAFT
     const isReadOnly = useMemo(
@@ -730,6 +733,44 @@ const ReportEditor: React.FC = () => {
         });
     };
 
+    const handleGeneratePdf = async () => {
+        if (!envelope?.id || envelope.version_no == null) return;
+        try {
+            const result = await generatePdf(envelope.id, envelope.version_no);
+            setEnvelope((e) =>
+                e
+                    ? {
+                          ...e,
+                          pdf_generation_status: result.pdf_generation_status,
+                          pdf_generated_at: result.pdf_generated_at,
+                          pdf_sha256: result.pdf_sha256,
+                          pdf_size_bytes: result.pdf_size_bytes,
+                          pdf_page_count: result.pdf_page_count,
+                          pdf_error_code: result.pdf_error_code,
+                          pdf_error_message: result.pdf_error_message,
+                      }
+                    : e,
+            );
+            if (result.pdf_generation_status === "READY") {
+                message.success("PDF oficial generado");
+            } else if (result.pdf_generation_status === "FAILED") {
+                message.error(result.pdf_error_message || "No se pudo generar el PDF");
+            }
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al generar el PDF");
+        }
+    };
+
+    const handleDownloadOfficialPdf = async () => {
+        if (!envelope?.id || envelope.version_no == null) return;
+        try {
+            const { pdf_url } = await getOfficialPdfDownloadUrl(envelope.id, envelope.version_no);
+            window.open(pdf_url, "_blank");
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al descargar el PDF oficial");
+        }
+    };
+
     const handleSign = async () => {
         if (!envelope?.id) return;
         // Use the live toggle state so an unsaved "Firma digital" change is honoured.
@@ -992,8 +1033,8 @@ const ReportEditor: React.FC = () => {
                                 Guardar reporte
                             </CelumaButton>
                         )}
-                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleExportPDF}>
-                            Exportar a PDF
+                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleExportPDF} title="Vista de impresión local — no es el documento oficial persistido">
+                            Imprimir copia local
                         </CelumaButton>
                         {envelope?.status === "DRAFT" && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
@@ -1011,11 +1052,60 @@ const ReportEditor: React.FC = () => {
                             </>
                         )}
                         {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
-                            <CelumaButton type="primary" size="small" icon={<SafetyCertificateOutlined />} onClick={handleSign}>
-                                Firmar y Publicar
-                            </CelumaButton>
+                            <>
+                                {envelope?.pdf_generation_status === "READY" ? (
+                                    <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
+                                        Descargar PDF oficial
+                                    </CelumaButton>
+                                ) : (
+                                    <CelumaButton
+                                        size="small"
+                                        icon={<FilePdfOutlined />}
+                                        loading={isGeneratingPdf}
+                                        onClick={handleGeneratePdf}
+                                    >
+                                        {envelope?.pdf_generation_status === "FAILED"
+                                            ? "Reintentar generar PDF oficial"
+                                            : "Generar PDF oficial"}
+                                    </CelumaButton>
+                                )}
+                                <CelumaButton
+                                    type="primary"
+                                    size="small"
+                                    icon={<SafetyCertificateOutlined />}
+                                    disabled={envelope?.pdf_generation_status !== "READY"}
+                                    title={
+                                        envelope?.pdf_generation_status !== "READY"
+                                            ? "Genera el PDF oficial antes de firmar y publicar — un reporte publicado es inmutable"
+                                            : undefined
+                                    }
+                                    onClick={handleSign}
+                                >
+                                    Firmar y Publicar
+                                </CelumaButton>
+                            </>
                         )}
                     </div>
+                    {envelope?.status === "APPROVED" && (
+                        <div style={{ marginTop: 8 }}>
+                            {envelope?.pdf_generation_status === "FAILED" && envelope?.pdf_error_message && (
+                                <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                    No se pudo generar el PDF: {envelope.pdf_error_message}
+                                </Typography.Text>
+                            )}
+                            {envelope?.pdf_generation_status === "READY" && envelope?.pdf_page_count != null && (
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    PDF oficial listo · {envelope.pdf_page_count} página{envelope.pdf_page_count === 1 ? "" : "s"}
+                                    {envelope.pdf_sha256 ? ` · sha256 ${envelope.pdf_sha256.slice(0, 12)}…` : ""}
+                                </Typography.Text>
+                            )}
+                            {!envelope?.pdf_generation_status && (
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    Sin generar
+                                </Typography.Text>
+                            )}
+                        </div>
+                    )}
                 </RecordCard>
 
                 {/* ============================================================

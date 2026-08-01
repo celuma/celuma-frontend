@@ -238,6 +238,31 @@ export interface ReportEnvelope {
     generated_by_renderer_version?: string | null;
     /** Resolved, ephemeral resources for the current version (e.g. header logo URL). */
     resolved_resources?: ReportResolvedResources | null;
+    /**
+     * Céluma 1.3 Fase 2, Bloque E: official PDF artifact status for the
+     * current version. `pdf_generation_status` absent/null means no
+     * generation attempt has ever run (including every historical version
+     * from before this block existed) — distinct from "GENERATING"/"READY"/"FAILED".
+     */
+    pdf_generation_status?: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_generated_at?: string | null;
+    pdf_sha256?: string | null;
+    pdf_size_bytes?: number | null;
+    pdf_page_count?: number | null;
+    pdf_error_code?: string | null;
+    pdf_error_message?: string | null;
+}
+
+/**
+ * Céluma 1.3 Fase 2, Bloque E: response of
+ * GET /api/v1/reports/internal/render-data/{report_id}/{version_no},
+ * consumed only by the internal, token-authenticated render route driven by
+ * the backend's headless-Chromium PDF generator. Same shape as
+ * `ReportEnvelope` plus the reviewer id->name lookup needed to render a real
+ * signature block.
+ */
+export interface InternalRenderData extends ReportEnvelope {
+    signer_lookup: { id: string; name: string }[];
 }
 
 /** Full report response from GET /api/v1/reports/{id}/full */

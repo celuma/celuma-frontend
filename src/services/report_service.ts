@@ -11,6 +11,7 @@ import type {
     ReportTemplateVersionSummary,
     CreateReportTemplateVersionPayload,
     ReportTemplateLogoUploadResponse,
+    InternalRenderData,
 } from "../models/report";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -518,4 +519,91 @@ export async function uploadReportTemplateLogo(
         { method: "POST", headers: authHeaders(), body: form },
         "Error al subir el logo"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Céluma 1.3 Fase 2, Bloque E: internal render route + PDF generation
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the render envelope for the internal, chrome-free render route
+ * consumed by the backend's headless-Chromium PDF generator. Deliberately
+ * does NOT use `authHeaders()` — this is authorized by a short-lived render
+ * token (passed via the URL fragment by the caller), never by the normal
+ * user session in localStorage/sessionStorage.
+ */
+export async function fetchInternalRenderData(
+    renderToken: string,
+    reportId: string,
+    versionNo: number | string
+): Promise<InternalRenderData> {
+    const res = await fetch(`${base}/v1/reports/internal/render-data/${reportId}/${versionNo}`, {
+        method: "GET",
+        headers: { Accept: "application/json", Authorization: `Bearer ${renderToken}` },
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            parseFastApiErrorDetail(errText) ?? `Error al obtener datos de renderizado: ${res.status}`
+        );
+    }
+    return (await res.json()) as InternalRenderData;
+}
+
+export interface PdfGenerationStatusResponse {
+    version_id: string;
+    version_no: number;
+    report_id: string;
+    pdf_generation_status: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_generated_at: string | null;
+    pdf_sha256: string | null;
+    pdf_size_bytes: number | null;
+    pdf_page_count: number | null;
+    pdf_error_code: string | null;
+    pdf_error_message: string | null;
+}
+
+interface OfficialPdfDownloadResponse {
+    version_id: string;
+    version_no: number;
+    report_id: string;
+    pdf_storage_id: string;
+    pdf_key: string;
+    pdf_url: string;
+}
+
+/** Fetches a short-lived presigned URL for the persisted official PDF of one report version. Never regenerates. */
+export async function getOfficialPdfDownloadUrl(
+    reportId: string,
+    versionNo: number
+): Promise<OfficialPdfDownloadResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/versions/${versionNo}/pdf`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            parseFastApiErrorDetail(errText) ?? `Error al obtener el PDF oficial: ${res.status}`
+        );
+    }
+    return (await res.json()) as OfficialPdfDownloadResponse;
+}
+
+/** Triggers (or re-checks, if already READY) official PDF generation for one report version. */
+export async function generateReportPdf(
+    reportId: string,
+    versionNo: number
+): Promise<PdfGenerationStatusResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/versions/${versionNo}/generate-pdf`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            parseFastApiErrorDetail(errText) ?? `Error al generar el PDF: ${res.status}`
+        );
+    }
+    return (await res.json()) as PdfGenerationStatusResponse;
 }
