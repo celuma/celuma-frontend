@@ -63,6 +63,10 @@ describe("ReportLetterheadEditor — logo upload", () => {
             id: "lh1", tenant_id: "tenant-1", name: "Membrete Test",
             is_default: false, is_active: true, created_at: "2026-01-01",
         });
+        // Segunda remediación post-Fase 2 (UX): sin `?mode=publish`, el
+        // editor arranca en modo "normal" y precarga la versión ACTIVE —
+        // null simula un membrete recién creado, sin ninguna todavía.
+        vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);
         const uploadSpy = vi.spyOn(letterheadService, "uploadReportLetterheadLogo").mockResolvedValue({
             storage_object_id: "storage-1",
             url: "https://cdn.example/logo.png",
@@ -73,7 +77,7 @@ describe("ReportLetterheadEditor — logo upload", () => {
         renderPage();
 
         await waitFor(() => {
-            expect(screen.getByText(/Nueva configuración — Membrete Test/i)).toBeTruthy();
+            expect(screen.getByText(/Editar membrete — Membrete Test/i)).toBeTruthy();
         });
 
         const file = new File([new Uint8Array([1, 2, 3, 4])], "logo.png", { type: "image/png" });
@@ -102,6 +106,7 @@ describe("ReportLetterheadEditor — logo upload", () => {
             id: "lh1", tenant_id: "tenant-1", name: "Membrete Test",
             is_default: false, is_active: true, created_at: "2026-01-01",
         });
+        vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);
 
         renderPage();
 

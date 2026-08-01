@@ -15,6 +15,7 @@ import type {
     ReportLetterheadVersionDetail,
     ReportLetterheadVersionsListResponse,
     CreateReportLetterheadVersionPayload,
+    SaveCurrentReportLetterheadVersionPayload,
     ReportLetterheadLogoUploadResponse,
     CelumaLetterheadEnvelope,
 } from "../models/report_letterhead";
@@ -194,6 +195,46 @@ export async function createReportLetterheadVersion(
     );
 }
 
+/** Segunda remediación post-Fase 2 (UX): configuración ACTIVE actual de un
+ *  membrete, para precargar el editor visual en modo "Editar". `null` si el
+ *  membrete todavía no tiene ninguna versión (recién creado). */
+export async function getActiveReportLetterheadVersion(
+    letterheadId: string
+): Promise<ReportLetterheadVersionDetail | null> {
+    const url = `${base}/v1/report-letterheads/${letterheadId}/versions/active`;
+    let res: Response;
+    try {
+        res = await fetch(url, { method: "GET", headers: authHeaders({ Accept: "application/json" }) });
+    } catch {
+        throw new Error("Error de red: no se pudo contactar al servidor. Verifica tu conexión.");
+    }
+    if (res.status === 404) return null;
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(parseFastApiErrorDetail(errText) ?? `Error al obtener el membrete activo (${res.status})`);
+    }
+    return (await res.json()) as ReportLetterheadVersionDetail;
+}
+
+/** Segunda remediación post-Fase 2 (UX): "Guardar cambios" del editor
+ *  visual — crea y activa una versión nueva atómicamente (reemplaza el
+ *  antiguo flujo de "Publicar versión" + "Activar" manuales). No-op si la
+ *  configuración enviada es idéntica a la ya activa. */
+export async function saveCurrentReportLetterheadVersion(
+    letterheadId: string,
+    payload: SaveCurrentReportLetterheadVersionPayload
+): Promise<ReportLetterheadVersionDetail> {
+    return requestLetterheadJSON(
+        `${base}/v1/report-letterheads/${letterheadId}/versions/current`,
+        {
+            method: "PUT",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify(payload),
+        },
+        "Error al guardar el membrete"
+    );
+}
+
 export async function activateReportLetterheadVersion(
     letterheadId: string,
     versionId: string
@@ -264,7 +305,7 @@ export async function exportLegacyLetterhead(): Promise<void> {
         { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
         "Error al exportar el membrete legado"
     );
-    downloadJSONAsFile(envelope, "legacy-ambassador-letterhead.celuma");
+    downloadJSONAsFile(envelope, "legacy-ambassador-letterhead.cell");
 }
 
 export async function importReportLetterhead(

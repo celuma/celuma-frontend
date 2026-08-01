@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout, Card, Spin, message, Upload, InputNumber, ColorPicker, Divider, Typography } from "antd";
+import { Layout, Card, Spin, message, Upload, InputNumber, ColorPicker, Divider, Typography, Select as AntSelect } from "antd";
 import { UploadOutlined, DeleteOutlined, FileTextOutlined, PictureOutlined, SafetyCertificateOutlined, BgColorsOutlined } from "@ant-design/icons";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { RcFile } from "antd/es/upload/interface";
@@ -20,6 +20,7 @@ import { validatePresentationDraft } from "../components/report/versioned/report
 import type {
     ReportPresentationSnapshotV2,
     ReportMarginsCm,
+    DividerConfig,
 } from "../components/report/versioned/versioned_report_types";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
@@ -28,11 +29,22 @@ import { extractUploadedFile } from "../lib/upload_helpers";
 import {
     getReportLetterhead,
     getReportLetterheadVersion,
+    getActiveReportLetterheadVersion,
     createReportLetterheadVersion,
+    saveCurrentReportLetterheadVersion,
     uploadReportLetterheadLogo,
 } from "../services/report_letterhead_service";
 
 const { Text } = Typography;
+
+const DEFAULT_DIVIDER: DividerConfig = {
+    enabled: true,
+    style: "SINGLE",
+    primary_width_px: 1,
+    secondary_width_px: 1,
+    gap_mm: 1,
+    color: null,
+};
 
 const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
     paper: {
@@ -48,11 +60,37 @@ const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
         address: null,
         phone: null,
         email: null,
+        logo_position: "LEFT",
+        content_alignment: "CENTER",
+        height_mm: null,
+        divider: DEFAULT_DIVIDER,
     },
-    footer: { enabled: true, custom_text: null, show_page_number: true },
-    style: { primary_color: "#4A4A4A" },
+    footer: {
+        enabled: true,
+        custom_text: null,
+        show_page_number: true,
+        logo_storage_id: null,
+        logo_position: "LEFT",
+        content_alignment: "CENTER",
+        height_mm: null,
+        divider: DEFAULT_DIVIDER,
+    },
+    style: { primary_color: "#4A4A4A", secondary_color: null, typography: undefined },
     signer: null,
 };
+
+const LOGO_POSITION_OPTIONS = [
+    { value: "LEFT", label: "Izquierda" },
+    { value: "CENTER", label: "Centro" },
+    { value: "RIGHT", label: "Derecha" },
+];
+
+const FONT_FAMILY_OPTIONS = [
+    { value: "ARIAL", label: "Arial" },
+    { value: "HELVETICA", label: "Helvetica" },
+    { value: "TIMES", label: "Times" },
+    { value: "CALIBRI", label: "Calibri" },
+];
 
 const MARGIN_LABELS: Record<keyof ReportMarginsCm, string> = {
     top: "Superior",
@@ -82,6 +120,14 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     const { letterheadId } = useParams<{ letterheadId: string }>();
     const [searchParams] = useSearchParams();
     const fromVersionId = searchParams.get("from");
+    // Segunda remediación post-Fase 2 (UX): "normal" es el flujo principal
+    // ("Editar" desde la lista de membretes) — guarda-y-activa
+    // atómicamente, sin exponer versionamiento. "publish" es el flujo
+    // secundario de historial/rollback ("Nueva versión"/"Nueva versión
+    // desde esta" en la pantalla de versiones) — se mantiene intacto,
+    // publica sin activar automáticamente. Ver report-letterhead-domain-
+    // contract.md.
+    const mode = searchParams.get("mode") === "publish" ? "publish" : "normal";
     const { hasPermission } = useUserProfile();
     const canManage = hasPermission(PERMS.MANAGE_TEMPLATES);
     const tenantId = getTenantId();
@@ -91,6 +137,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     const [presentation, setPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
     const [initialPresentation, setInitialPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
     const [carriedForwardLogo, setCarriedForwardLogo] = useState(false);
+    const [carriedForwardFooterLogo, setCarriedForwardFooterLogo] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     // Post-Fase-2 remediation, Bug 1 fix: hold the raw RcFile directly (it
     // already IS the file we need), not an UploadFile wrapper — reading
@@ -99,10 +146,13 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     const [logoFile, setLogoFile] = useState<RcFile | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [previewLogoUrl, setPreviewLogoUrl] = useState<string | null>(null);
+    const [footerLogoFile, setFooterLogoFile] = useState<RcFile | null>(null);
+    const [uploadingFooterLogo, setUploadingFooterLogo] = useState(false);
+    const [previewFooterLogoUrl, setPreviewFooterLogoUrl] = useState<string | null>(null);
     const [publishing, setPublishing] = useState(false);
     const [publishModalOpen, setPublishModalOpen] = useState(false);
 
-    const baseline = fromVersionId ?? "new";
+    const baseline = mode === "publish" ? (fromVersionId ?? "new") : "current";
     const dirty = JSON.stringify(presentation) !== JSON.stringify(initialPresentation);
     const { loadDraft, clearDraft, confirmNavigateAway } = useTemplateEditorDraft({
         tenantId,
@@ -124,8 +174,15 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 if (fromVersionId) {
                     const version = await getReportLetterheadVersion(letterheadId, fromVersionId);
                     seed = version.configuration;
-                    setCarriedForwardLogo(!!seed.header.logo_storage_id);
+                } else if (mode === "normal") {
+                    // Flujo principal "Editar": precarga la configuración
+                    // ACTIVE actual — si no hay ninguna todavía (membrete
+                    // recién creado), arranca en blanco.
+                    const active = await getActiveReportLetterheadVersion(letterheadId);
+                    if (active) seed = active.configuration;
                 }
+                setCarriedForwardLogo(!!seed.header.logo_storage_id);
+                setCarriedForwardFooterLogo(!!seed.footer.logo_storage_id);
                 const draft = loadDraft();
                 setPresentation(draft ?? seed);
                 setInitialPresentation(seed);
@@ -137,7 +194,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         };
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [letterheadId, fromVersionId]);
+    }, [letterheadId, fromVersionId, mode]);
 
     const updateMargin = (field: keyof ReportMarginsCm, value: number) => {
         setPresentation((prev) => ({
@@ -151,6 +208,31 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         setPresentation((prev) => ({ ...prev, footer: { ...prev.footer, ...patch } }));
     const updateStyle = (patch: Partial<ReportPresentationSnapshotV2["style"]>) =>
         setPresentation((prev) => ({ ...prev, style: { ...prev.style, ...patch } }));
+    const updateHeaderDivider = (patch: Partial<DividerConfig>) =>
+        setPresentation((prev) => ({
+            ...prev,
+            header: { ...prev.header, divider: { ...(prev.header.divider ?? DEFAULT_DIVIDER), ...patch } },
+        }));
+    const updateFooterDivider = (patch: Partial<DividerConfig>) =>
+        setPresentation((prev) => ({
+            ...prev,
+            footer: { ...prev.footer, divider: { ...(prev.footer.divider ?? DEFAULT_DIVIDER), ...patch } },
+        }));
+    const updateTypography = (patch: Partial<NonNullable<ReportPresentationSnapshotV2["style"]["typography"]>>) =>
+        setPresentation((prev) => ({
+            ...prev,
+            style: {
+                ...prev.style,
+                typography: {
+                    font_family: "ARIAL",
+                    base_font_size_pt: 10,
+                    header_font_size_pt: 10,
+                    footer_font_size_pt: 7,
+                    ...prev.style.typography,
+                    ...patch,
+                },
+            },
+        }));
     const updateSigner = (patch: Partial<NonNullable<ReportPresentationSnapshotV2["signer"]>>) =>
         setPresentation((prev) => ({
             ...prev,
@@ -189,6 +271,29 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         setCarriedForwardLogo(false);
     };
 
+    const handleUploadFooterLogo = async () => {
+        const fileObject = extractUploadedFile(footerLogoFile);
+        if (!fileObject || !letterheadId) return;
+        setUploadingFooterLogo(true);
+        try {
+            const resp = await uploadReportLetterheadLogo(letterheadId, fileObject);
+            updateFooter({ logo_storage_id: resp.storage_object_id });
+            setPreviewFooterLogoUrl(resp.url);
+            setCarriedForwardFooterLogo(false);
+            setFooterLogoFile(null);
+            message.success("Logo de pie subido");
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al subir el logo de pie");
+        } finally {
+            setUploadingFooterLogo(false);
+        }
+    };
+    const handleRemoveFooterLogo = () => {
+        updateFooter({ logo_storage_id: null });
+        setPreviewFooterLogoUrl(null);
+        setCarriedForwardFooterLogo(false);
+    };
+
     const previewReport = useMemo(
         () => buildPreviewReportEnvelope(presentation, previewLogoUrl),
         [presentation, previewLogoUrl]
@@ -196,7 +301,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
 
     const handleBack = () => {
         if (!confirmNavigateAway()) return;
-        navigate(`/config/report-letterheads/${letterheadId}/versions`);
+        navigate(mode === "normal" ? "/config/report-letterheads" : `/config/report-letterheads/${letterheadId}/versions`);
     };
 
     const handleOpenPublishModal = () => {
@@ -214,15 +319,26 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         if (!letterheadId) return;
         setPublishing(true);
         try {
-            const version = await createReportLetterheadVersion(letterheadId, {
-                configuration: presentation,
-            });
-            message.success(`Versión ${version.version_number} publicada`);
-            clearDraft();
-            setPublishModalOpen(false);
-            navigate(`/config/report-letterheads/${letterheadId}/versions`);
+            if (mode === "normal") {
+                // Segunda remediación post-Fase 2 (UX): "Guardar cambios" —
+                // crea y activa atómicamente, reemplazando el histórico
+                // "Publicar versión" que se quedaba en PUBLISHED sin activar.
+                await saveCurrentReportLetterheadVersion(letterheadId, { configuration: presentation });
+                message.success("Membrete actualizado. La configuración anterior se conserva en el historial.");
+                clearDraft();
+                setPublishModalOpen(false);
+                navigate("/config/report-letterheads");
+            } else {
+                const version = await createReportLetterheadVersion(letterheadId, {
+                    configuration: presentation,
+                });
+                message.success(`Versión ${version.version_number} publicada`);
+                clearDraft();
+                setPublishModalOpen(false);
+                navigate(`/config/report-letterheads/${letterheadId}/versions`);
+            }
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al publicar la versión");
+            message.error(err instanceof Error ? err.message : "Error al guardar el membrete");
             setPublishModalOpen(false);
         } finally {
             setPublishing(false);
@@ -349,6 +465,50 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                                 onChange={(e) => updateHeader({ email: e.target.value || null })}
                                 error={fieldErrors["header.email"]} />
                         </div>
+
+                        {/* Segunda remediación post-Fase 2 (UX) — paridad Legacy */}
+                        <Panel style={{ display: "grid", gap: 10 }}>
+                            <Text style={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>Diseño avanzado</Text>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div>
+                                    <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Posición del logo</label>
+                                    <AntSelect
+                                        value={presentation.header.logo_position ?? "LEFT"}
+                                        onChange={(v) => updateHeader({ logo_position: v })}
+                                        options={LOGO_POSITION_OPTIONS}
+                                        disabled={!canManage}
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Alineación vertical</label>
+                                    <AntSelect
+                                        value={presentation.header.content_alignment ?? "CENTER"}
+                                        onChange={(v) => updateHeader({ content_alignment: v })}
+                                        options={[{ value: "TOP", label: "Superior" }, { value: "CENTER", label: "Centro" }, { value: "BOTTOM", label: "Inferior" }]}
+                                        disabled={!canManage}
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <Text style={{ fontSize: 13 }}>Línea divisoria bajo el encabezado</Text>
+                                <CelumaSwitch
+                                    checked={presentation.header.divider?.enabled ?? true}
+                                    onChange={(v) => updateHeaderDivider({ enabled: v })}
+                                    disabled={!canManage}
+                                />
+                            </div>
+                            {(presentation.header.divider?.enabled ?? true) && (
+                                <AntSelect
+                                    value={presentation.header.divider?.style ?? "SINGLE"}
+                                    onChange={(v) => updateHeaderDivider({ style: v })}
+                                    options={[{ value: "SINGLE", label: "Línea sencilla" }, { value: "DOUBLE", label: "Línea doble" }]}
+                                    disabled={!canManage}
+                                    style={{ width: "100%" }}
+                                />
+                            )}
+                        </Panel>
                     </div>
                 )}
             </section>
@@ -396,6 +556,54 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 </SectionTitle>
                 {presentation.footer.enabled && (
                     <div style={{ display: "grid", gap: 12, opacity: canManage ? 1 : 0.7 }}>
+                        {/* Segunda remediación post-Fase 2 (UX): logo de pie —
+                            necesario para paridad Legacy (su logo vive en el
+                            pie, no en el header). */}
+                        <Panel style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                            <div style={{ width: 72, height: 72, borderRadius: tokens.radius, border: "2px dashed #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                                {previewFooterLogoUrl ? (
+                                    <img src={previewFooterLogoUrl} alt="Logo de pie" style={{ maxWidth: 64, maxHeight: 64, objectFit: "contain" }} />
+                                ) : (
+                                    <PictureOutlined style={{ fontSize: 24, color: "#cbd5e1" }} />
+                                )}
+                            </div>
+                            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+                                {carriedForwardFooterLogo && (
+                                    <Text style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                        Esta versión heredó un logo de pie configurado. Sube uno nuevo para
+                                        reemplazarlo, o guarda sin cambiarlo.
+                                    </Text>
+                                )}
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                    <Upload
+                                        beforeUpload={(file) => { setFooterLogoFile(file); return false; }}
+                                        fileList={footerLogoFile ? [footerLogoFile] : []}
+                                        onRemove={() => setFooterLogoFile(null)}
+                                        accept="image/png,image/jpeg,image/webp"
+                                        maxCount={1}
+                                        disabled={!canManage}
+                                    >
+                                        <CelumaButton size="xsmall" icon={<UploadOutlined />} disabled={!canManage}>
+                                            Seleccionar logo de pie
+                                        </CelumaButton>
+                                    </Upload>
+                                    {footerLogoFile && canManage && (
+                                        <CelumaButton size="xsmall" type="primary" onClick={handleUploadFooterLogo} loading={uploadingFooterLogo}>
+                                            Subir logo
+                                        </CelumaButton>
+                                    )}
+                                    {(previewFooterLogoUrl || presentation.footer.logo_storage_id) && canManage && (
+                                        <CelumaButton size="xsmall" danger icon={<DeleteOutlined />} onClick={handleRemoveFooterLogo}>
+                                            Quitar
+                                        </CelumaButton>
+                                    )}
+                                </div>
+                                <Text style={{ fontSize: 11, color: tokens.textSecondary }}>
+                                    PNG, JPEG o WEBP. Máximo 5MB. No se admite SVG.
+                                </Text>
+                            </div>
+                        </Panel>
+
                         <CelumaTextArea
                             value={nullableStr(presentation.footer.custom_text)}
                             onChange={(v) => updateFooter({ custom_text: v || null })}
@@ -408,27 +616,98 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                             <Text style={{ fontSize: 13 }}>Mostrar número de página</Text>
                             <CelumaSwitch checked={presentation.footer.show_page_number} onChange={(v) => updateFooter({ show_page_number: v })} disabled={!canManage} />
                         </div>
+
+                        <Panel style={{ display: "grid", gap: 10 }}>
+                            <Text style={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>Diseño avanzado</Text>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div>
+                                    <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Posición del logo</label>
+                                    <AntSelect
+                                        value={presentation.footer.logo_position ?? "LEFT"}
+                                        onChange={(v) => updateFooter({ logo_position: v })}
+                                        options={LOGO_POSITION_OPTIONS}
+                                        disabled={!canManage}
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Alineación del texto</label>
+                                    <AntSelect
+                                        value={presentation.footer.content_alignment ?? "CENTER"}
+                                        onChange={(v) => updateFooter({ content_alignment: v })}
+                                        options={LOGO_POSITION_OPTIONS}
+                                        disabled={!canManage}
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <Text style={{ fontSize: 13 }}>Línea divisoria sobre el pie de página</Text>
+                                <CelumaSwitch
+                                    checked={presentation.footer.divider?.enabled ?? true}
+                                    onChange={(v) => updateFooterDivider({ enabled: v })}
+                                    disabled={!canManage}
+                                />
+                            </div>
+                            {(presentation.footer.divider?.enabled ?? true) && (
+                                <AntSelect
+                                    value={presentation.footer.divider?.style ?? "SINGLE"}
+                                    onChange={(v) => updateFooterDivider({ style: v })}
+                                    options={[{ value: "SINGLE", label: "Línea sencilla" }, { value: "DOUBLE", label: "Línea doble" }]}
+                                    disabled={!canManage}
+                                    style={{ width: "100%" }}
+                                />
+                            )}
+                        </Panel>
                     </div>
                 )}
             </section>
 
             <section>
                 <SectionTitle icon={<BgColorsOutlined />}>Estilo</SectionTitle>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <ColorPicker
-                        value={presentation.style.primary_color}
-                        disabledAlpha
-                        disabled={!canManage}
-                        onChangeComplete={(color) => updateStyle({ primary_color: `#${color.toHex().toUpperCase()}` })}
-                    />
-                    <FloatingCaptionInput
-                        label="Color principal (hex)"
-                        value={presentation.style.primary_color}
-                        onChange={(e) => updateStyle({ primary_color: e.target.value })}
-                        disabled={!canManage}
-                        style={{ flex: 1 }}
-                        error={fieldErrors["style.primary_color"]}
-                    />
+                <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <ColorPicker
+                            value={presentation.style.primary_color}
+                            disabledAlpha
+                            disabled={!canManage}
+                            onChangeComplete={(color) => updateStyle({ primary_color: `#${color.toHex().toUpperCase()}` })}
+                        />
+                        <FloatingCaptionInput
+                            label="Color principal (hex)"
+                            value={presentation.style.primary_color}
+                            onChange={(e) => updateStyle({ primary_color: e.target.value })}
+                            disabled={!canManage}
+                            style={{ flex: 1 }}
+                            error={fieldErrors["style.primary_color"]}
+                        />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <ColorPicker
+                            value={presentation.style.secondary_color ?? presentation.style.primary_color}
+                            disabledAlpha
+                            disabled={!canManage}
+                            onChangeComplete={(color) => updateStyle({ secondary_color: `#${color.toHex().toUpperCase()}` })}
+                        />
+                        <FloatingCaptionInput
+                            label="Color secundario (hex, opcional)"
+                            value={nullableStr(presentation.style.secondary_color)}
+                            onChange={(e) => updateStyle({ secondary_color: e.target.value || null })}
+                            disabled={!canManage}
+                            style={{ flex: 1 }}
+                            error={fieldErrors["style.secondary_color"]}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Tipografía</label>
+                        <AntSelect
+                            value={presentation.style.typography?.font_family ?? "ARIAL"}
+                            onChange={(v) => updateTypography({ font_family: v })}
+                            options={FONT_FAMILY_OPTIONS}
+                            disabled={!canManage}
+                            style={{ width: "100%" }}
+                        />
+                    </div>
                 </div>
             </section>
         </div>
@@ -461,13 +740,19 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
               @media (max-width: 960px) { .rle-grid { grid-template-columns: 1fr; } }
             `}</style>
             <PageHeader
-                title={fromVersionId ? `Nueva versión — ${letterheadName}` : `Nueva configuración — ${letterheadName}`}
-                subtitle="Los cambios no publicados se guardan localmente en este navegador."
+                title={
+                    mode === "normal"
+                        ? `Editar membrete — ${letterheadName}`
+                        : fromVersionId
+                            ? `Nueva versión — ${letterheadName}`
+                            : `Nueva configuración — ${letterheadName}`
+                }
+                subtitle="Los cambios sin guardar se conservan localmente en este navegador."
                 extra={
                     <div style={{ display: "flex", gap: 8 }}>
                         <CelumaButton onClick={handleBack}>Cancelar</CelumaButton>
                         <CelumaButton type="primary" onClick={handleOpenPublishModal} disabled={!canManage}>
-                            Publicar versión
+                            {mode === "normal" ? "Guardar cambios" : "Publicar versión"}
                         </CelumaButton>
                     </div>
                 }
@@ -496,23 +781,23 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         <>
             {page}
             <CelumaModal
-                title="Publicar nueva versión"
+                title={mode === "normal" ? "Guardar cambios del membrete" : "Publicar nueva versión"}
                 open={publishModalOpen}
                 onCancel={() => setPublishModalOpen(false)}
                 footer={
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                         <CelumaButton size="xsmall" onClick={() => setPublishModalOpen(false)}>Cancelar</CelumaButton>
                         <CelumaButton size="xsmall" type="primary" loading={publishing} onClick={handlePublish}>
-                            Publicar
+                            {mode === "normal" ? "Guardar" : "Publicar"}
                         </CelumaButton>
                     </div>
                 }
             >
                 <div style={{ display: "grid", gap: 12 }}>
                     <Text>
-                        Esta acción creará una <strong>nueva versión inmutable</strong> de este membrete. Una vez
-                        publicada, esta configuración no podrá editarse — para corregirla deberás publicar otra
-                        versión nueva.
+                        {mode === "normal"
+                            ? "Internamente se crea una nueva revisión inmutable y se activa de inmediato. La configuración anterior se conserva en el historial por si necesitas restaurarla."
+                            : "Esta acción creará una nueva versión inmutable de este membrete. Una vez publicada, esta configuración no podrá editarse — para corregirla deberás publicar otra versión nueva."}
                     </Text>
                     <Divider style={{ margin: "4px 0" }} />
                     <Text style={{ fontSize: 13 }}>
@@ -523,11 +808,13 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                         Encabezado: {presentation.header.enabled ? "habilitado" : "deshabilitado"} — Pie de página:
                         {" "}{presentation.footer.enabled ? "habilitado" : "deshabilitado"}
                     </Text>
-                    <Text style={{ fontSize: 13 }}>
-                        Esta nueva versión <strong>no se activará automáticamente</strong> ni se asociará a
-                        ningún reporte. Podrás activarla desde la lista de versiones cuando quieras que se use
-                        como membrete predeterminado.
-                    </Text>
+                    {mode === "publish" && (
+                        <Text style={{ fontSize: 13 }}>
+                            Esta nueva versión <strong>no se activará automáticamente</strong> ni se asociará a
+                            ningún reporte. Podrás activarla desde el historial cuando quieras que se use como
+                            membrete predeterminado.
+                        </Text>
+                    )}
                 </div>
             </CelumaModal>
         </>

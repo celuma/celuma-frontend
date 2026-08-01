@@ -37,6 +37,33 @@ const paperSchema = z.object({
 
 const nullableString = z.string().nullable().optional();
 
+// Segunda remediación post-Fase 2 (UX) — paridad Legacy. Todos opcionales:
+// un snapshot V2 existente sin estos campos sigue validando igual (Zod
+// strip-mode ya los habría descartado silenciosamente si no se declaran
+// aquí, aunque el backend los devuelva — de ahí que sea obligatorio
+// añadirlos, no solo en versioned_report_types.ts).
+const dividerSchema = z
+    .object({
+        enabled: z.boolean(),
+        style: z.enum(["SINGLE", "DOUBLE"]),
+        primary_width_px: z.number(),
+        secondary_width_px: z.number(),
+        gap_mm: z.number(),
+        color: nullableString,
+    })
+    .optional();
+
+const typographySchema = z
+    .object({
+        font_family: z.enum(["ARIAL", "HELVETICA", "TIMES", "CALIBRI"]),
+        base_font_size_pt: z.number(),
+        header_font_size_pt: z.number(),
+        footer_font_size_pt: z.number(),
+    })
+    .optional();
+
+const logoPositionSchema = z.enum(["LEFT", "CENTER", "RIGHT"]).optional();
+
 const headerSchema = z.object({
     enabled: z.boolean(),
     logo_storage_id: nullableString,
@@ -45,16 +72,27 @@ const headerSchema = z.object({
     address: nullableString,
     phone: nullableString,
     email: nullableString,
+    logo_position: logoPositionSchema,
+    content_alignment: z.enum(["TOP", "CENTER", "BOTTOM"]).optional(),
+    height_mm: z.number().nullable().optional(),
+    divider: dividerSchema,
 });
 
 const footerSchema = z.object({
     enabled: z.boolean(),
     custom_text: nullableString,
     show_page_number: z.boolean(),
+    logo_storage_id: nullableString,
+    logo_position: logoPositionSchema,
+    content_alignment: z.enum(["LEFT", "CENTER", "RIGHT"]).optional(),
+    height_mm: z.number().nullable().optional(),
+    divider: dividerSchema,
 });
 
 const styleSchema = z.object({
     primary_color: z.string().regex(HEX_COLOR_PATTERN, "must be a 6-digit hex color"),
+    secondary_color: nullableString,
+    typography: typographySchema,
 });
 
 const signerSchema = z

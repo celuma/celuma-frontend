@@ -108,8 +108,12 @@ export interface ReportTemplateListItem {
     is_active: boolean;
     created_at: string;
     /** Post-Fase-2 remediation: administrative preference, not ownership —
-     *  see template-letterhead-association-contract.md. */
+     *  see template-letterhead-association-contract.md. Legado, de solo
+     *  lectura desde la segunda remediación UX — usar preferred_letterhead_id. */
     preferred_letterhead_version_id?: string | null;
+    /** Segunda remediación post-Fase 2 (UX): el membrete lógico preferido
+     *  (no una versión concreta) — ver template-simplification-contract.md. */
+    preferred_letterhead_id?: string | null;
 }
 
 /** Template returned from GET /api/v1/reports/templates/{id} (detail) */
@@ -132,6 +136,7 @@ export interface UpdateReportTemplatePayload {
     template_json?: ReportTemplateJSON;
     is_active?: boolean;
     preferred_letterhead_version_id?: string | null;
+    preferred_letterhead_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------

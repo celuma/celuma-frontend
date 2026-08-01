@@ -9,7 +9,7 @@ import ActionButtonPanel from "../components/ui/action_button_panel";
 import Checkbox from "../components/ui/checkbox";
 import Tooltip from "../components/ui/tooltip";
 import FloatingCaptionSelect from "../components/ui/floating_caption_select";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined, AppstoreOutlined, BgColorsOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined, BgColorsOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -25,8 +25,7 @@ import Panel from "../components/ui/panel";
 import { renderActiveChip } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
-import { listReportLetterheads, listReportLetterheadVersions } from "../services/report_letterhead_service";
-import type { ReportLetterheadVersionSummary } from "../models/report_letterhead";
+import { listReportLetterheads } from "../services/report_letterhead_service";
 import type {
     ReportTemplateListItem,
     ReportTemplateJSON,
@@ -424,15 +423,13 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     } | null>(null);
     const [defaultDraftValue, setDefaultDraftValue] = useState<string>("");
 
-    // ---- Membrete predeterminado (post-Fase-2 remediation) ----
-    // Small association modal, not a full editor — selecting a letterhead
-    // here only sets an administrative preference (ReportTemplate.
-    // preferred_letterhead_version_id); it never edits presentation content.
-    const [letterheadModalTemplate, setLetterheadModalTemplate] = useState<ReportTemplateListItem | null>(null);
+    // ---- Membrete predeterminado (segunda remediación post-Fase 2, UX) ----
+    // Vive dentro del formulario normal de la plantilla — un simple <Select>
+    // de membretes lógicos (nunca versiones). Selecciona
+    // ReportTemplate.preferred_letterhead_id; nunca edita presentación.
     const [letterheadOptions, setLetterheadOptions] = useState<{ value: string; label: string }[]>([]);
     const [letterheadOptionsLoading, setLetterheadOptionsLoading] = useState(false);
-    const [selectedLetterheadVersionId, setSelectedLetterheadVersionId] = useState<string | undefined>(undefined);
-    const [savingLetterheadPreference, setSavingLetterheadPreference] = useState(false);
+    const [selectedLetterheadId, setSelectedLetterheadId] = useState<string | undefined>(undefined);
 
     // Convert template_json ↔ ordered arrays
     const templateJSONFromArrays = (): ReportTemplateJSON => ({
@@ -482,12 +479,37 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
     }, []);
 
+    // Segunda remediación post-Fase 2 (UX): membretes lógicos disponibles
+    // para el selector "Membrete predeterminado" — se cargan una vez, no
+    // dependen de qué plantilla se esté editando.
+    const loadLetterheadOptions = async () => {
+        setLetterheadOptionsLoading(true);
+        try {
+            const { letterheads } = await listReportLetterheads();
+            setLetterheadOptions(
+                letterheads.map((lh) => ({
+                    value: lh.id,
+                    label: lh.is_default ? `${lh.name} (predeterminado del laboratorio)` : lh.name,
+                }))
+            );
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al cargar los membretes disponibles");
+        } finally {
+            setLetterheadOptionsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadLetterheadOptions();
+    }, []);
+
     // Panel helpers
     const openNewPanel = () => {
         setEditingId(null);
         form.resetFields();
         form.setFieldsValue({ is_active: true });
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
+        setSelectedLetterheadId(undefined);
         setPanelVisible(true);
     };
 
@@ -502,6 +524,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 description: detail.description,
                 is_active:   detail.is_active,
             });
+            setSelectedLetterheadId(detail.preferred_letterhead_id ?? undefined);
             const stored = detail.template_json ?? {};
             const defaults = buildDefaultTemplateJSON();
 
@@ -565,12 +588,13 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             const templateJSON = templateJSONFromArrays();
             if (editingId) {
                 await updateReportTemplate(editingId, {
-                    name:          values.name,
-                    description:   values.description,
-                    template_json: templateJSON,
-                    is_active:     values.is_active,
+                    name:                    values.name,
+                    description:             values.description,
+                    template_json:           templateJSON,
+                    is_active:               values.is_active,
+                    preferred_letterhead_id: selectedLetterheadId ?? null,
                 });
-                message.success("Plantilla actualizada");
+                message.success("Plantilla guardada");
             } else {
                 await createReportTemplate({
                     name:          values.name,
@@ -599,52 +623,6 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             loadTemplates();
         } catch {
             message.error("Error al eliminar la plantilla");
-        }
-    };
-
-    const openLetterheadModal = async (t: ReportTemplateListItem) => {
-        setLetterheadModalTemplate(t);
-        setSelectedLetterheadVersionId(t.preferred_letterhead_version_id ?? undefined);
-        setLetterheadOptionsLoading(true);
-        try {
-            const { letterheads } = await listReportLetterheads();
-            const options: { value: string; label: string }[] = [];
-            for (const lh of letterheads) {
-                const { versions } = await listReportLetterheadVersions(lh.id);
-                versions
-                    .filter((v: ReportLetterheadVersionSummary) => v.status !== "ARCHIVED")
-                    .forEach((v: ReportLetterheadVersionSummary) => {
-                        options.push({ value: v.id, label: `${lh.name} — Versión ${v.version_number}` });
-                    });
-            }
-            setLetterheadOptions(options);
-        } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al cargar los membretes disponibles");
-        } finally {
-            setLetterheadOptionsLoading(false);
-        }
-    };
-
-    const closeLetterheadModal = () => {
-        setLetterheadModalTemplate(null);
-        setLetterheadOptions([]);
-        setSelectedLetterheadVersionId(undefined);
-    };
-
-    const handleSaveLetterheadPreference = async () => {
-        if (!letterheadModalTemplate) return;
-        setSavingLetterheadPreference(true);
-        try {
-            await updateReportTemplate(letterheadModalTemplate.id, {
-                preferred_letterhead_version_id: selectedLetterheadVersionId ?? null,
-            });
-            message.success("Membrete predeterminado actualizado");
-            closeLetterheadModal();
-            loadTemplates();
-        } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar el membrete predeterminado");
-        } finally {
-            setSavingLetterheadPreference(false);
         }
     };
 
@@ -856,22 +834,6 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                     )}
                                 </div>
                                 <Space onClick={(e) => e.stopPropagation()}>
-                                    <Tooltip title="Versiones de la estructura clínica de esta plantilla">
-                                        <Button
-                                            type="text"
-                                            size="small"
-                                            icon={<AppstoreOutlined />}
-                                            onClick={() => navigate(`/config/report-templates/${t.id}/versions`)}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip title="Membrete predeterminado">
-                                        <Button
-                                            type="text"
-                                            size="small"
-                                            icon={<BgColorsOutlined />}
-                                            onClick={() => openLetterheadModal(t)}
-                                        />
-                                    </Tooltip>
                                     <Tooltip title="Editar">
                                         <Button
                                             type="text"
@@ -1053,6 +1015,32 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                                 />
                             </div>
                         </Panel>
+
+                        {editingId && (
+                            <>
+                                <Divider />
+
+                                {/* ---- Membrete predeterminado (segunda remediación UX) ---- */}
+                                <SectionTitle icon={<BgColorsOutlined />}>Membrete predeterminado</SectionTitle>
+                                <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+                                    Se preseleccionará al crear un reporte con esta plantilla. Si no eliges
+                                    ninguno, se usa el membrete predeterminado del laboratorio.
+                                </Text>
+                                <FloatingCaptionSelect
+                                    label="Membrete"
+                                    value={selectedLetterheadId}
+                                    onChange={(v) => setSelectedLetterheadId(v)}
+                                    options={letterheadOptions}
+                                    allowClear
+                                    disabled={letterheadOptionsLoading}
+                                />
+                                {letterheadOptions.length === 0 && !letterheadOptionsLoading && (
+                                    <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 8 }}>
+                                        No hay membretes todavía. Créalos en Configuración → Membretes.
+                                    </Text>
+                                )}
+                            </>
+                        )}
 
                         <Divider />
 
@@ -1254,53 +1242,6 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 )}
             </CelumaModal>
 
-            {/* Post-Fase-2 remediation: small association modal — never a
-                duplicate presentation editor. Selecting a membrete version
-                here only sets ReportTemplate.preferred_letterhead_version_id;
-                it does not publish anything nor touch clinical structure. */}
-            <CelumaModal
-                title={letterheadModalTemplate ? `Membrete predeterminado — ${letterheadModalTemplate.name}` : "Membrete predeterminado"}
-                open={letterheadModalTemplate !== null}
-                onCancel={closeLetterheadModal}
-                footer={
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <CelumaButton size="xsmall" onClick={() => navigate("/config/report-letterheads")}>
-                            Administrar membretes
-                        </CelumaButton>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <CelumaButton size="xsmall" onClick={closeLetterheadModal}>Cancelar</CelumaButton>
-                            <CelumaButton
-                                size="xsmall"
-                                type="primary"
-                                loading={savingLetterheadPreference}
-                                onClick={handleSaveLetterheadPreference}
-                            >
-                                Guardar
-                            </CelumaButton>
-                        </div>
-                    </div>
-                }
-            >
-                <div style={{ display: "grid", gap: 12 }}>
-                    <Text style={{ fontSize: 13 }}>
-                        Cuando se cree un reporte con esta plantilla clínica, este membrete se preseleccionará.
-                        Si no eliges ninguno, se usará el membrete predeterminado del tenant.
-                    </Text>
-                    <FloatingCaptionSelect
-                        label="Membrete"
-                        value={selectedLetterheadVersionId}
-                        onChange={(v) => setSelectedLetterheadVersionId(v)}
-                        options={letterheadOptions}
-                        allowClear
-                        disabled={letterheadOptionsLoading}
-                    />
-                    {letterheadOptions.length === 0 && !letterheadOptionsLoading && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                            No hay membretes publicados todavía. Créalos en Configuración → Membretes.
-                        </Text>
-                    )}
-                </div>
-            </CelumaModal>
         </>
     );
 

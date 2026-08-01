@@ -26,6 +26,31 @@ export interface ReportPaperConfig {
     margins_cm: ReportMarginsCm;
 }
 
+/** Segunda remediación post-Fase 2 (UX): línea divisoria bajo el header /
+ *  sobre el footer — ver legacy-parity-contract.md. Todos opcionales; su
+ *  ausencia reproduce la línea sólida de 1px que el renderer ya dibuja hoy
+ *  incondicionalmente (mismo default que el backend). */
+export interface DividerConfig {
+    enabled: boolean;
+    style: "SINGLE" | "DOUBLE";
+    primary_width_px: number;
+    secondary_width_px: number;
+    gap_mm: number;
+    color: string | null;
+}
+
+export type ReportFontFamily = "ARIAL" | "HELVETICA" | "TIMES" | "CALIBRI";
+export type ReportLogoPosition = "LEFT" | "CENTER" | "RIGHT";
+export type ReportHeaderAlignment = "TOP" | "CENTER" | "BOTTOM";
+export type ReportFooterAlignment = "LEFT" | "CENTER" | "RIGHT";
+
+export interface ReportTypographyConfig {
+    font_family: ReportFontFamily;
+    base_font_size_pt: number;
+    header_font_size_pt: number;
+    footer_font_size_pt: number;
+}
+
 export interface ReportHeaderConfig {
     enabled: boolean;
     /** UUID of a StorageObject — never a raw URL. Resolved server-side into
@@ -36,17 +61,32 @@ export interface ReportHeaderConfig {
     address: string | null;
     phone: string | null;
     email: string | null;
+    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos: */
+    logo_position?: ReportLogoPosition;
+    content_alignment?: ReportHeaderAlignment;
+    height_mm?: number | null;
+    divider?: DividerConfig;
 }
 
 export interface ReportFooterConfig {
     enabled: boolean;
     custom_text: string | null;
     show_page_number: boolean;
+    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos:
+     *  Legacy coloca su logo en el PIE, no en el header. */
+    logo_storage_id?: string | null;
+    logo_position?: ReportLogoPosition;
+    content_alignment?: ReportFooterAlignment;
+    height_mm?: number | null;
+    divider?: DividerConfig;
 }
 
 export interface ReportStyleConfig {
     /** 6-digit hex color, e.g. "#4A4A4A". */
     primary_color: string;
+    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos: */
+    secondary_color?: string | null;
+    typography?: ReportTypographyConfig;
 }
 
 /**

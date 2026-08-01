@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, message, Popconfirm, Typography, Tag, Upload } from "antd";
+import { Layout, Card, message, Modal, Typography, Tag, Upload, Dropdown } from "antd";
+import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import {
-    AppstoreOutlined, EditOutlined, DeleteOutlined, CopyOutlined,
-    StarOutlined, StarFilled, PlusOutlined, UploadOutlined, DownloadOutlined,
+    EditOutlined, DeleteOutlined, CopyOutlined, HistoryOutlined,
+    StarOutlined, StarFilled, PlusOutlined, UploadOutlined, DownloadOutlined, MoreOutlined,
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -28,6 +29,8 @@ import {
     setDefaultReportLetterhead,
     importReportLetterhead,
     exportLegacyLetterhead,
+    exportReportLetterheadVersion,
+    getActiveReportLetterheadVersion,
 } from "../services/report_letterhead_service";
 import type { ReportLetterheadSummary } from "../models/report_letterhead";
 
@@ -52,13 +55,25 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const [letterheads, setLetterheads] = useState<ReportLetterheadSummary[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
 
-    const [modalOpen, setModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
+    // "Nuevo membrete": captura solo el nombre mínimo, luego crea la
+    // identidad y redirige de inmediato al editor visual — segunda
+    // remediación post-Fase 2 (UX). Nunca deja al usuario "varado" en la
+    // lista teniendo que buscar manualmente el botón de editar.
+    const [createModalOpen, setCreateModalOpen] = useState(false);
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [saving, setSaving] = useState(false);
+
+    // "Renombrar": edición ligera de nombre/descripción únicamente — vive
+    // en el menú secundario, separada del editor visual.
+    const [renamingLetterhead, setRenamingLetterhead] = useState<ReportLetterheadSummary | null>(null);
+    const [renameName, setRenameName] = useState("");
+    const [renameDescription, setRenameDescription] = useState("");
+    const [renaming, setRenaming] = useState(false);
+
     const [importing, setImporting] = useState(false);
     const [exportingLegacy, setExportingLegacy] = useState(false);
+    const [exportingId, setExportingId] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true);
@@ -77,52 +92,94 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     }, []);
 
     const openCreateModal = () => {
-        setEditingId(null);
         setFormName("");
         setFormDescription("");
-        setModalOpen(true);
+        setCreateModalOpen(true);
     };
 
-    const openEditModal = (letterhead: ReportLetterheadSummary) => {
-        setEditingId(letterhead.id);
-        setFormName(letterhead.name);
-        setFormDescription(letterhead.description ?? "");
-        setModalOpen(true);
-    };
-
-    const handleSave = async () => {
+    // Crea la identidad ReportLetterhead y redirige inmediatamente al
+    // editor visual — el primer "Guardar" ahí crea+activa la versión 1.
+    const handleCreateAndEdit = async () => {
         if (!formName.trim()) {
             message.error("El nombre es obligatorio");
             return;
         }
         setSaving(true);
         try {
-            if (editingId) {
-                await updateReportLetterhead(editingId, { name: formName, description: formDescription || undefined });
-                message.success("Membrete actualizado");
-            } else {
-                await createReportLetterhead({ name: formName, description: formDescription || undefined });
-                message.success("Membrete creado");
-            }
-            setModalOpen(false);
-            await load();
+            const created = await createReportLetterhead({ name: formName, description: formDescription || undefined });
+            setCreateModalOpen(false);
+            navigate(`/config/report-letterheads/${created.id}/versions/new`);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al guardar el membrete");
+            message.error(err instanceof Error ? err.message : "Error al crear el membrete");
         } finally {
             setSaving(false);
         }
     };
 
-    const handleDelete = async (letterhead: ReportLetterheadSummary) => {
-        setBusyId(letterhead.id);
+    const openRenameModal = (letterhead: ReportLetterheadSummary) => {
+        setRenamingLetterhead(letterhead);
+        setRenameName(letterhead.name);
+        setRenameDescription(letterhead.description ?? "");
+    };
+
+    const handleRename = async () => {
+        if (!renamingLetterhead) return;
+        if (!renameName.trim()) {
+            message.error("El nombre es obligatorio");
+            return;
+        }
+        setRenaming(true);
         try {
-            await deleteReportLetterhead(letterhead.id);
-            message.success("Membrete desactivado");
+            await updateReportLetterhead(renamingLetterhead.id, { name: renameName, description: renameDescription || undefined });
+            message.success("Membrete actualizado");
+            setRenamingLetterhead(null);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al eliminar el membrete");
+            message.error(err instanceof Error ? err.message : "Error al actualizar el membrete");
         } finally {
-            setBusyId(null);
+            setRenaming(false);
+        }
+    };
+
+    const handleDelete = (letterhead: ReportLetterheadSummary) => {
+        Modal.confirm({
+            title: "¿Eliminar este membrete?",
+            content: "Dejará de estar disponible para reportes nuevos. No afecta reportes ya creados.",
+            okText: "Sí, eliminar",
+            okButtonProps: { danger: true },
+            cancelText: "No",
+            onOk: async () => {
+                setBusyId(letterhead.id);
+                try {
+                    await deleteReportLetterhead(letterhead.id);
+                    message.success("Membrete eliminado");
+                    await load();
+                } catch (err) {
+                    message.error(err instanceof Error ? err.message : "Error al eliminar el membrete");
+                } finally {
+                    setBusyId(null);
+                }
+            },
+        });
+    };
+
+    const handleExportActive = async (letterhead: ReportLetterheadSummary) => {
+        setExportingId(letterhead.id);
+        try {
+            const active = await getActiveReportLetterheadVersion(letterhead.id);
+            if (!active) {
+                message.warning("Este membrete todavía no tiene ninguna versión guardada.");
+                return;
+            }
+            await exportReportLetterheadVersion(
+                letterhead.id,
+                active.id,
+                `${letterhead.name.replace(/\s+/g, "-")}-v${active.version_number}.cell`
+            );
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al exportar el membrete");
+        } finally {
+            setExportingId(null);
         }
     };
 
@@ -209,66 +266,80 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         {
             title: "Acciones",
             key: "actions",
-            render: (_: unknown, record) => (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Tooltip title="Versiones publicadas">
-                        <CelumaButton
-                            size="xsmall"
-                            icon={<AppstoreOutlined />}
-                            onClick={() => navigate(`/config/report-letterheads/${record.id}/versions`)}
-                        >
-                            Versiones
-                        </CelumaButton>
-                    </Tooltip>
-                    {!record.is_default && (
-                        <Tooltip title="Marcar como membrete predeterminado del tenant">
+            render: (_: unknown, record) => {
+                const menuItems: MenuProps["items"] = [
+                    {
+                        key: "history",
+                        icon: <HistoryOutlined />,
+                        label: "Ver historial",
+                        onClick: () => navigate(`/config/report-letterheads/${record.id}/versions`),
+                    },
+                    ...(!record.is_default
+                        ? [{
+                            key: "default",
+                            icon: <StarOutlined />,
+                            label: "Marcar como predeterminado",
+                            disabled: !canManage,
+                            onClick: () => handleSetDefault(record),
+                        }]
+                        : []),
+                    {
+                        key: "rename",
+                        icon: <EditOutlined />,
+                        label: "Renombrar",
+                        disabled: !canManage,
+                        onClick: () => openRenameModal(record),
+                    },
+                    { type: "divider" },
+                    {
+                        key: "delete",
+                        icon: <DeleteOutlined />,
+                        label: "Eliminar",
+                        danger: true,
+                        disabled: !canManage,
+                        onClick: () => handleDelete(record),
+                    },
+                ];
+                return (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        {record.is_default && (
+                            <Tooltip title="Este es el membrete predeterminado del laboratorio">
+                                <StarFilled style={{ color: "#eab308", fontSize: 16 }} />
+                            </Tooltip>
+                        )}
+                        <Tooltip title="Editar">
                             <CelumaButton
                                 size="xsmall"
-                                icon={<StarOutlined />}
+                                icon={<EditOutlined />}
                                 disabled={!canManage}
-                                loading={busyId === record.id}
-                                onClick={() => handleSetDefault(record)}
+                                onClick={() => navigate(`/config/report-letterheads/${record.id}/versions/new`)}
                             >
-                                Predeterminado
+                                Editar
                             </CelumaButton>
                         </Tooltip>
-                    )}
-                    {record.is_default && (
-                        <Tooltip title="Este es el membrete predeterminado del tenant">
-                            <StarFilled style={{ color: "#eab308", fontSize: 16 }} />
+                        <Tooltip title="Duplicar">
+                            <CelumaButton
+                                size="xsmall"
+                                icon={<CopyOutlined />}
+                                disabled={!canManage}
+                                loading={busyId === record.id}
+                                onClick={() => handleDuplicate(record)}
+                            />
                         </Tooltip>
-                    )}
-                    <Tooltip title="Duplicar">
-                        <CelumaButton
-                            size="xsmall"
-                            icon={<CopyOutlined />}
-                            disabled={!canManage}
-                            loading={busyId === record.id}
-                            onClick={() => handleDuplicate(record)}
-                        />
-                    </Tooltip>
-                    <Tooltip title="Editar nombre/descripción">
-                        <CelumaButton
-                            size="xsmall"
-                            icon={<EditOutlined />}
-                            disabled={!canManage}
-                            onClick={() => openEditModal(record)}
-                        />
-                    </Tooltip>
-                    <Popconfirm
-                        title="¿Desactivar este membrete?"
-                        description="Dejará de estar disponible para reportes nuevos. No afecta reportes ya creados."
-                        onConfirm={() => handleDelete(record)}
-                        okText="Sí"
-                        cancelText="No"
-                        disabled={!canManage}
-                    >
-                        <Tooltip title="Desactivar">
-                            <CelumaButton size="xsmall" danger icon={<DeleteOutlined />} disabled={!canManage} />
+                        <Tooltip title="Exportar (.cell)">
+                            <CelumaButton
+                                size="xsmall"
+                                icon={<DownloadOutlined />}
+                                loading={exportingId === record.id}
+                                onClick={() => handleExportActive(record)}
+                            />
                         </Tooltip>
-                    </Popconfirm>
-                </div>
-            ),
+                        <Dropdown menu={{ items: menuItems }} trigger={["click"]}>
+                            <CelumaButton size="xsmall" icon={<MoreOutlined />} />
+                        </Dropdown>
+                    </div>
+                );
+            },
         },
     ];
 
@@ -287,13 +358,13 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                             Exportar membrete legado
                         </CelumaButton>
                         <Upload
-                            accept=".celuma,application/json"
+                            accept=".cell,.clm,.celuma,application/json"
                             showUploadList={false}
                             disabled={!canManage || importing}
                             beforeUpload={(file) => handleImport(file)}
                         >
                             <CelumaButton icon={<UploadOutlined />} loading={importing} disabled={!canManage}>
-                                Importar .celuma
+                                Importar .cell
                             </CelumaButton>
                         </Upload>
                         <CelumaButton type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={openCreateModal}>
@@ -337,15 +408,19 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     return (
         <>
             {page}
+            {/* Segunda remediación post-Fase 2 (UX): captura solo el nombre
+                mínimo — al guardar crea la identidad y redirige de
+                inmediato al editor visual (nunca deja al usuario "varado"
+                en la lista). */}
             <CelumaModal
-                title={editingId ? "Editar membrete" : "Nuevo membrete"}
-                open={modalOpen}
-                onCancel={() => setModalOpen(false)}
+                title="Nuevo membrete"
+                open={createModalOpen}
+                onCancel={() => setCreateModalOpen(false)}
                 footer={
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                        <CelumaButton size="xsmall" onClick={() => setModalOpen(false)}>Cancelar</CelumaButton>
-                        <CelumaButton size="xsmall" type="primary" loading={saving} onClick={handleSave}>
-                            Guardar
+                        <CelumaButton size="xsmall" onClick={() => setCreateModalOpen(false)}>Cancelar</CelumaButton>
+                        <CelumaButton size="xsmall" type="primary" loading={saving} onClick={handleCreateAndEdit}>
+                            Crear y continuar
                         </CelumaButton>
                     </div>
                 }
@@ -360,6 +435,38 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                     <CelumaTextArea
                         value={formDescription}
                         onChange={setFormDescription}
+                        placeholder="Descripción (opcional)"
+                        rows={3}
+                        maxLength={500}
+                    />
+                </div>
+            </CelumaModal>
+
+            {/* "Renombrar" — edición ligera de nombre/descripción, separada
+                del editor visual de presentación. */}
+            <CelumaModal
+                title="Renombrar membrete"
+                open={renamingLetterhead !== null}
+                onCancel={() => setRenamingLetterhead(null)}
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => setRenamingLetterhead(null)}>Cancelar</CelumaButton>
+                        <CelumaButton size="xsmall" type="primary" loading={renaming} onClick={handleRename}>
+                            Guardar
+                        </CelumaButton>
+                    </div>
+                }
+            >
+                <div style={{ display: "grid", gap: 12 }}>
+                    <FloatingCaptionInput
+                        label="Nombre"
+                        maxLength={255}
+                        value={renameName}
+                        onChange={(e) => setRenameName(e.target.value)}
+                    />
+                    <CelumaTextArea
+                        value={renameDescription}
+                        onChange={setRenameDescription}
                         placeholder="Descripción (opcional)"
                         rows={3}
                         maxLength={500}

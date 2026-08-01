@@ -72,6 +72,11 @@ export interface CreateReportLetterheadVersionPayload {
     configuration: ReportPresentationSnapshotV2;
 }
 
+/** Payload for PUT /api/v1/report-letterheads/{id}/versions/current —
+ *  segunda remediación post-Fase 2 (UX): "Guardar cambios" del editor
+ *  visual, crea+activa una versión nueva atómicamente. */
+export type SaveCurrentReportLetterheadVersionPayload = CreateReportLetterheadVersionPayload;
+
 /** Response from POST /api/v1/report-letterheads/{id}/logo. */
 export interface ReportLetterheadLogoUploadResponse {
     storage_object_id: string;

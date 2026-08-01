@@ -148,7 +148,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
         if (!letterheadId) return;
         setBusyVersionId(version.id);
         try {
-            const filename = `${(letterheadName || "membrete").replace(/\s+/g, "-")}-v${version.version_number}.celuma`;
+            const filename = `${(letterheadName || "membrete").replace(/\s+/g, "-")}-v${version.version_number}.cell`;
             await exportReportLetterheadVersion(letterheadId, version.id, filename);
         } catch (err) {
             message.error(err instanceof Error ? err.message : "Error al exportar la versión");
@@ -212,12 +212,12 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
                         <CelumaButton
                             size="xsmall"
                             disabled={!canManage}
-                            onClick={() => navigate(`/config/report-letterheads/${letterheadId}/versions/new?from=${version.id}`)}
+                            onClick={() => navigate(`/config/report-letterheads/${letterheadId}/versions/new?mode=publish&from=${version.id}`)}
                         >
                             Nueva versión desde esta
                         </CelumaButton>
                     </Tooltip>
-                    <Tooltip title="Exportar como archivo .celuma portable">
+                    <Tooltip title="Exportar como archivo .cell portable">
                         <CelumaButton
                             size="xsmall"
                             icon={<DownloadOutlined />}
@@ -229,20 +229,21 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
                     </Tooltip>
                     {version.status !== "ACTIVE" && (
                         <Popconfirm
-                            title="Activar esta versión"
+                            title="Restaurar esta versión"
                             description={
                                 <span>
-                                    Esta versión se utilizará como membrete predeterminado para reportes
-                                    futuros que usen este membrete. Los reportes existentes no cambiarán.
+                                    Se usará como membrete predeterminado para reportes futuros que usen
+                                    este membrete. Los reportes ya publicados conservan su presentación
+                                    original intacta.
                                 </span>
                             }
-                            okText="Activar"
+                            okText="Restaurar"
                             cancelText="Cancelar"
                             onConfirm={() => handleActivate(version)}
                             disabled={!canManage}
                         >
                             <CelumaButton size="xsmall" type="primary" loading={busyVersionId === version.id} disabled={!canManage}>
-                                Activar
+                                Restaurar
                             </CelumaButton>
                         </Popconfirm>
                     )}
@@ -281,7 +282,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
                         <CelumaButton
                             type="primary"
                             disabled={!canManage}
-                            onClick={() => navigate(`/config/report-letterheads/${letterheadId}/versions/new`)}
+                            onClick={() => navigate(`/config/report-letterheads/${letterheadId}/versions/new?mode=publish`)}
                         >
                             Nueva versión
                         </CelumaButton>
