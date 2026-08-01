@@ -217,6 +217,9 @@ export type ReportContent = ReportTemplateJSON & {
  */
 export interface ReportResolvedResources {
     header_logo_url?: string | null;
+    /** Segunda remediación post-Fase 2 (UX): gemelo para
+     *  presentation.footer.logo_storage_id. */
+    footer_logo_url?: string | null;
 }
 
 /** Full report envelope returned by GET /api/v1/reports/{id} and POST /api/v1/reports/ */

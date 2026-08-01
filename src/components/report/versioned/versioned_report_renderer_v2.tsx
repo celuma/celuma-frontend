@@ -47,6 +47,85 @@ const BAND_GAP_MM = 4;
 // fully independent of the legacy module.
 const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
 
+// Segunda remediación post-Fase 2 (UX) — paridad Legacy. Todos los campos
+// que consumen estos helpers son opcionales/aditivos en el snapshot; los
+// defaults reproducen exactamente el comportamiento previo (línea única de
+// 1px en el color primario, Arial, tamaños fijos, logo a la izquierda,
+// contenido centrado).
+type DividerLike = {
+    enabled: boolean;
+    style: "SINGLE" | "DOUBLE";
+    primary_width_px: number;
+    secondary_width_px: number;
+    gap_mm: number;
+    color?: string | null;
+} | undefined;
+
+const DEFAULT_DIVIDER: NonNullable<DividerLike> = {
+    enabled: true,
+    style: "SINGLE",
+    primary_width_px: 1,
+    secondary_width_px: 1,
+    gap_mm: 1,
+    color: null,
+};
+
+function buildDividerElement(divider: DividerLike, primaryColor: string, edge: "bottom" | "top"): HTMLElement | null {
+    const cfg = divider ?? DEFAULT_DIVIDER;
+    if (!cfg.enabled) return null;
+    const color = cfg.color || primaryColor;
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "absolute";
+    wrapper.style.left = "0";
+    wrapper.style.right = "0";
+    wrapper.style[edge] = "0";
+    const line1 = document.createElement("div");
+    line1.style.borderTop = `${cfg.primary_width_px}px solid ${color}`;
+    wrapper.appendChild(line1);
+    if (cfg.style === "DOUBLE") {
+        const gap = document.createElement("div");
+        gap.style.height = `${cfg.gap_mm}mm`;
+        wrapper.appendChild(gap);
+        const line2 = document.createElement("div");
+        line2.style.borderTop = `${cfg.secondary_width_px}px solid ${color}`;
+        wrapper.appendChild(line2);
+    }
+    return wrapper;
+}
+
+function fontFamilyCss(family: string | undefined): string {
+    switch (family) {
+        case "HELVETICA":
+            return "Helvetica, Arial, sans-serif";
+        case "TIMES":
+            return "'Times New Roman', Times, serif";
+        case "CALIBRI":
+            return "Calibri, Arial, sans-serif";
+        case "ARIAL":
+        default:
+            return "Arial, sans-serif";
+    }
+}
+
+const DEFAULT_TYPOGRAPHY = {
+    font_family: "ARIAL" as const,
+    base_font_size_pt: 10,
+    header_font_size_pt: 10,
+    footer_font_size_pt: 7,
+};
+
+function alignItemsForHeaderAlignment(alignment: string | undefined): string {
+    if (alignment === "TOP") return "flex-start";
+    if (alignment === "BOTTOM") return "flex-end";
+    return "center";
+}
+
+function justifyContentForAlignment(alignment: string | undefined): string {
+    if (alignment === "LEFT") return "flex-start";
+    if (alignment === "RIGHT") return "flex-end";
+    return "center";
+}
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, "&amp;")
@@ -120,6 +199,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
 
             const primaryColor = presentation.style.primary_color;
             const logoSrc = report.resolved_resources?.header_logo_url || DEFAULT_NEUTRAL_LOGO_SRC;
+            const footerLogoUrl = report.resolved_resources?.footer_logo_url || null;
             const institutionName = presentation.header.institution_name || DEFAULT_INSTITUTION_NAME;
             const subtitle = presentation.header.subtitle;
             const address = presentation.header.address;
@@ -127,6 +207,21 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const email = presentation.header.email;
             const signer = presentation.signer;
             const footerText = presentation.footer.custom_text || DEFAULT_FOOTER_TEXT;
+            // Segunda remediación post-Fase 2 (UX) — paridad Legacy:
+            const typography = presentation.style.typography ?? DEFAULT_TYPOGRAPHY;
+            const bodyFontFamily = fontFamilyCss(typography.font_family);
+            const headerFontSizePt = typography.header_font_size_pt ?? DEFAULT_TYPOGRAPHY.header_font_size_pt;
+            const footerFontSizePt = typography.footer_font_size_pt ?? DEFAULT_TYPOGRAPHY.footer_font_size_pt;
+            const baseFontSizePt = typography.base_font_size_pt ?? DEFAULT_TYPOGRAPHY.base_font_size_pt;
+            const headerAlignItems = alignItemsForHeaderAlignment(presentation.header.content_alignment);
+            const headerLogoRight = presentation.header.logo_position === "RIGHT";
+            const footerLogoRight = presentation.footer.logo_position === "RIGHT";
+            const footerContentJustify = justifyContentForAlignment(presentation.footer.content_alignment);
+            const footerTextAlign = presentation.footer.content_alignment === "LEFT"
+                ? "left"
+                : presentation.footer.content_alignment === "RIGHT"
+                    ? "right"
+                    : "center";
 
             const makePage = () => {
                 const page = document.createElement("div");
@@ -147,18 +242,18 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     header.style.right = `${marginRightMm}mm`;
                     header.style.height = `${HEADER_BAND_MM}mm`;
                     header.style.display = "flex";
-                    header.style.alignItems = "center";
+                    header.style.alignItems = headerAlignItems;
                     header.style.justifyContent = "space-between";
                     header.style.gap = "8px";
                     header.style.color = primaryColor;
-                    header.style.fontFamily = "Arial, sans-serif";
-                    header.style.borderBottom = `1px solid ${primaryColor}`;
+                    header.style.fontFamily = bodyFontFamily;
                     header.style.paddingBottom = "3mm";
 
                     const identity = document.createElement("div");
                     identity.style.display = "flex";
                     identity.style.alignItems = "center";
                     identity.style.gap = "8px";
+                    if (headerLogoRight) identity.style.flexDirection = "row-reverse";
                     identity.innerHTML = `
                         <img
                             src="${logoSrc}"
@@ -167,7 +262,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             crossOrigin="anonymous"
                         />
                         <div>
-                          <div style="font-weight:bold;font-size:10pt;">${escapeHtml(institutionName)}</div>
+                          <div style="font-weight:bold;font-size:${headerFontSizePt}pt;">${escapeHtml(institutionName)}</div>
                           ${subtitle ? `<div style="font-size:8pt;">${escapeHtml(subtitle)}</div>` : ""}
                           ${address ? `<div style="font-size:7pt;">${escapeHtml(address)}</div>` : ""}
                           ${(phone || email) ? `<div style="font-size:7pt;">${[phone, email].filter(Boolean).map((v) => escapeHtml(v as string)).join(" · ")}</div>` : ""}
@@ -190,6 +285,9 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                         header.appendChild(signerBlock);
                     }
 
+                    const headerDivider = buildDividerElement(presentation.header.divider, primaryColor, "bottom");
+                    if (headerDivider) header.appendChild(headerDivider);
+
                     page.appendChild(header);
                 }
 
@@ -205,8 +303,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 body.style.boxSizing = "border-box";
                 body.style.background = "#ffffff";
                 body.style.backgroundColor = "#ffffff";
-                body.style.fontFamily = "Arial, sans-serif";
-                body.style.fontSize = "10pt";
+                body.style.fontFamily = bodyFontFamily;
+                body.style.fontSize = `${baseFontSizePt}pt`;
                 body.style.color = "#000000";
 
                 if (footerEnabled) {
@@ -220,14 +318,40 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     footer.style.alignItems = "center";
                     footer.style.justifyContent = "space-between";
                     footer.style.color = primaryColor;
-                    footer.style.fontSize = "7pt";
-                    footer.style.fontFamily = "Arial, sans-serif";
-                    footer.style.borderTop = `1px solid ${primaryColor}`;
+                    footer.style.fontSize = `${footerFontSizePt}pt`;
+                    footer.style.fontFamily = bodyFontFamily;
                     footer.style.paddingTop = "2mm";
+
+                    // Segunda remediación post-Fase 2 (UX): grupo logo+texto,
+                    // como el header — necesario para paridad Legacy (su
+                    // logo vive en el pie, no en el header).
+                    const identity = document.createElement("div");
+                    identity.style.display = "flex";
+                    identity.style.alignItems = "center";
+                    identity.style.justifyContent = footerContentJustify;
+                    identity.style.gap = "8px";
+                    identity.style.flex = "1";
+                    if (footerLogoRight) identity.style.flexDirection = "row-reverse";
+
+                    if (footerLogoUrl) {
+                        const img = document.createElement("img");
+                        img.src = footerLogoUrl;
+                        img.alt = "Logo";
+                        img.crossOrigin = "anonymous";
+                        img.style.display = "block";
+                        img.style.height = `calc(${FOOTER_BAND_MM}mm - 6mm)`;
+                        img.style.width = "auto";
+                        img.style.maxWidth = "28mm";
+                        img.style.objectFit = "contain";
+                        identity.appendChild(img);
+                    }
 
                     const text = document.createElement("div");
                     text.textContent = footerText;
-                    footer.appendChild(text);
+                    text.style.textAlign = footerTextAlign;
+                    identity.appendChild(text);
+
+                    footer.appendChild(identity);
 
                     if (presentation.footer.show_page_number) {
                         const pageNum = document.createElement("div");
@@ -235,6 +359,9 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                         pageNum.textContent = "";
                         footer.appendChild(pageNum);
                     }
+
+                    const footerDivider = buildDividerElement(presentation.footer.divider, primaryColor, "top");
+                    if (footerDivider) footer.appendChild(footerDivider);
 
                     page.appendChild(footer);
                 }
