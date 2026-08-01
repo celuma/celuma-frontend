@@ -64,6 +64,19 @@ test("renderer V2 — encabezado con branding propio (página 1)", async ({ page
     await expect(firstPage).toHaveScreenshot("v2-encabezado-branding-propio-pagina-1.png");
 });
 
+// Segunda remediación post-Fase 2 (UX) — golden de paridad Legacy
+// (legacy-parity-contract.md). Renderiza V2 con un membrete que reproduce
+// el membrete Legacy importado (mismo texto institucional, color #002060,
+// header alineado al fondo, sin divisores) — comparar manualmente contra
+// report_renderer_legacy.visual.spec.ts's golden para documentar las
+// diferencias residuales (nunca actualizar el golden Legacy; este es un
+// golden NUEVO y separado, nunca lo reemplaza).
+test("renderer V2 — membrete Legacy importado (golden de paridad)", async ({ page }) => {
+    await page.goto("/?fixture=v2LegacyImportedMembrete");
+    await page.waitForSelector('[data-ready="true"]');
+    await expect(page.locator("#pages-host")).toHaveScreenshot("v2-membrete-legacy-importado.png");
+});
+
 // Confirms visually that V1 and V2 look different for equivalent content —
 // required by the acceptance criteria ("diferencia visual intencional entre
 // V1 y V2"). This does not compare pixel snapshots against each other (that

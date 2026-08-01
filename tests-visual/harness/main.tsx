@@ -8,6 +8,7 @@ import ReportRendererResolver, {
 import InternalReportRender from "../../src/components/report/internal_report_render";
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
+import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/reports/versioned_v2_legacy_parity";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Fase 2, Bloque A / Historia
@@ -29,7 +30,7 @@ import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versione
  * Usage: /?fixture=<key of allReportFixtures or allVersionedV2Fixtures>
  */
 
-const allFixtures = { ...allReportFixtures, ...allVersionedV2Fixtures };
+const allFixtures = { ...allReportFixtures, ...allVersionedV2Fixtures, ...allVersionedV2LegacyParityFixtures };
 
 // Matches the signer ids used in publishedMultiSampleWithImages.signed_by (legacy)
 // and v2CompleteBranding.signed_by (V2) so the signature block resolves a
