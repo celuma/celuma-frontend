@@ -1,24 +1,29 @@
 /**
- * Real end-to-end test — post-Fase-2 remediation, R17.
+ * Real end-to-end test — post-Fase-2 remediation R17; actualizado en la
+ * segunda remediación post-Fase 2 (UX).
  *
  * Drives the actual app (`npm run dev`) against a real FastAPI backend +
  * real Postgres + real S3 (see playwright.e2e.config.ts). Creates its own
  * isolated tenant/admin user via POST /auth/register/unified so it never
  * touches real tenant data and is repeatable.
  *
- * Covers the flow requested by the remediation brief: login -> admin ->
- * create membrete -> upload logo via setInputFiles() -> publish -> set
- * default -> associate to 2 templates -> new report -> confirm V2-from-start
- * with the "Membrete" label -> type clinical text -> switch membrete ->
- * confirm text intact, only branding changed -> save -> generate PDF ->
- * download -> reopen and confirm the persisted snapshot is immutable.
+ * Flujo cubierto (actualizado a la UX simplificada): login -> admin ->
+ * crear membrete (redirige de inmediato al editor) -> subir logo via
+ * setInputFiles() -> "Guardar cambios" (crea+activa atómicamente, sin paso
+ * de "Publicar"/"Activar" separado) -> marcar predeterminado (menú
+ * secundario) -> asociar a 2 plantillas -> nuevo reporte -> confirmar
+ * V2-desde-el-inicio con el selector "Membrete" -> escribir texto clínico
+ * -> cambiar de membrete -> confirmar que el texto no se alteró, solo el
+ * branding -> guardar -> aprobar -> "Firmar y publicar" (acción única,
+ * como el reviewer — el admin no tiene el rol reviewer) -> descargar PDF
+ * oficial -> reabrir y confirmar que el snapshot persistido es inmutable.
  *
  * Secondary fixture setup (second template/study type, the order itself)
  * is done via direct API calls for speed — the same backend endpoints
  * already covered by the HTTP integration suite — so this spec's browser
- * time is spent on the parts that are actually new/risky in this
- * remediation: the membrete admin UI, the report editor's Membrete
- * selector, and the PDF generate/download flow.
+ * time is spent on the parts that are actually new/risky: la UI de
+ * membretes, el selector "Membrete" del editor, y el flujo de firma/PDF de
+ * una sola acción.
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import path from "path";
@@ -167,44 +172,37 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await page.getByRole("button", { name: "Iniciar Sesión" }).click();
         await expect(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 
-        // ---- Real UI: create membrete + upload logo via setInputFiles() ----
+        // ---- Real UI: create membrete — segunda remediación post-Fase 2
+        // (UX). "Nuevo membrete" crea la identidad y redirige de inmediato
+        // al editor visual; no hay paso "Versiones"/"Publicar versión"/
+        // "Activar" separado en el flujo normal. ----
         await page.goto("/config/report-letterheads");
         await page.getByRole("button", { name: "Nuevo membrete" }).click();
         await page.getByLabel("Nombre").fill(`Membrete E2E ${suffix}`);
-        await page.getByRole("button", { name: "Guardar" }).click();
-        await expect(page.getByText(`Membrete E2E ${suffix}`)).toBeVisible({ timeout: 10_000 });
-
-        await page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) })
-            .getByRole("button", { name: "Versiones" })
-            .click();
-        await expect(page.getByRole("heading", { name: /Versiones/ })).toBeVisible();
-        await page.getByRole("button", { name: "Nueva versión" }).click();
+        await page.getByRole("button", { name: "Crear y continuar" }).click();
+        await expect(page.getByRole("heading", { name: new RegExp(`Editar membrete — Membrete E2E ${suffix}`) }))
+            .toBeVisible({ timeout: 10_000 });
 
         // The real Ant Design file input, driven with a real File via setInputFiles().
         const logoPath = path.join(__dirname, "fixtures", "e2e-logo.png");
-        await page.locator('input[type="file"]').setInputFiles(logoPath);
-        await page.getByRole("button", { name: "Subir logo" }).click();
+        await page.locator('input[type="file"]').first().setInputFiles(logoPath);
+        await page.getByRole("button", { name: "Subir logo", exact: true }).click();
         await expect(page.getByAltText("Logo", { exact: true })).toBeVisible({ timeout: 10_000 });
 
         await page.getByLabel("Nombre institucional").fill(`E2E Lab ${suffix}`);
-        await page.getByRole("button", { name: "Publicar versión" }).click();
-        const publishModal = page.getByRole("dialog");
-        await expect(publishModal.getByText("Publicar nueva versión")).toBeVisible();
-        await publishModal.getByRole("button", { name: "Publicar", exact: true }).click();
-        await expect(page).toHaveURL(/\/versions$/, { timeout: 10_000 });
+        await page.getByRole("button", { name: "Guardar cambios" }).click();
+        const saveModal = page.getByRole("dialog");
+        await expect(saveModal.getByText("Guardar cambios del membrete")).toBeVisible();
+        await saveModal.getByRole("button", { name: "Guardar", exact: true }).click();
+        // No paso de "Activar" — segunda remediación UX: guardar activa de
+        // inmediato. Confirma que volvimos a la lista sin pasos extra.
+        await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
+        await expect(page.getByText(`Membrete E2E ${suffix}`)).toBeVisible({ timeout: 10_000 });
 
-        // Activate the version we just published, then set the letterhead as
-        // the tenant default and associate it to both templates.
-        await page.getByRole("button", { name: "Activar", exact: true }).click();
-        const activateConfirm = page.locator(".ant-popconfirm-buttons").getByRole("button", { name: "Activar" });
-        await activateConfirm.waitFor({ state: "visible", timeout: 5_000 });
-        await activateConfirm.click();
-        await expect(page.getByText("Versión activa:")).toBeVisible({ timeout: 10_000 });
-
-        await page.goto("/config/report-letterheads");
-        await page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) })
-            .getByRole("button", { name: "Predeterminado" })
-            .click();
+        // Marcar como predeterminado — ahora vive en el menú secundario "...".
+        const row = page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) });
+        await row.getByRole("button").last().click(); // el botón "..." (MoreOutlined)
+        await page.getByRole("menuitem", { name: "Marcar como predeterminado" }).click();
         await expect(page.getByText("Predeterminado").first()).toBeVisible({ timeout: 10_000 });
 
         // A second membrete, published+activated via API (setup speed —
@@ -304,30 +302,47 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await apiJson(request, "POST", `/api/v1/reports/${reportId}/submit`, { token, data: {} });
         await apiJson(request, "POST", `/api/v1/reports/${reportId}/approve`, { token, data: {} });
 
-        // ---- Real UI: reopen the report, generate + download the
-        // official PDF (bug 4 regression check — a read+edit admin must
-        // see and use both buttons, not just be blocked at 403). ----
-        await page.goto(`/reports/${reportId}`);
-        await expect(page.getByRole("button", { name: "Generar PDF oficial" })).toBeVisible({ timeout: 15_000 });
+        // ---- Real UI, as the reviewer (only role with reports:sign) —
+        // segunda remediación post-Fase 2 (UX): "Firmar y publicar" es la
+        // ÚNICA acción en APPROVED — reemplaza "Generar PDF oficial" +
+        // "Firmar y Publicar" separados. Sesión aparte porque el admin
+        // (superuser) no tiene el rol "reviewer" que sign_report exige. ----
+        const reviewerContext = await page.context().browser()!.newContext();
+        const reviewerPage = await reviewerContext.newPage();
+        await reviewerPage.goto("/");
+        await reviewerPage.getByRole("textbox", { name: "Usuario o email" }).fill(`e2e-reviewer-${suffix}@example.com`);
+        await reviewerPage.getByRole("textbox", { name: "Contraseña" }).fill("E2eReviewer!2026");
+        await reviewerPage.getByRole("button", { name: "Iniciar Sesión" }).click();
+        await expect(reviewerPage.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
+
+        await reviewerPage.goto(`/reports/${reportId}`);
+        await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" })).toBeVisible({ timeout: 15_000 });
         // The persisted snapshot must still show the branding of the
         // membrete that was active when the report was saved, and the
         // clinical text must still be intact.
-        await expect(page.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible();
-        await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
+        await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible();
+        await expect(reviewerPage.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
         // Once persisted, the report is locked to its saved letterhead —
         // the "Membrete" selector must not reappear on an existing report.
-        await expect(page.getByText("Membrete", { exact: true })).toHaveCount(0);
+        await expect(reviewerPage.getByText("Membrete", { exact: true })).toHaveCount(0);
+        // "Imprimir copia local" no debe existir en la vista principal.
+        await expect(reviewerPage.getByText("Imprimir copia local")).toHaveCount(0);
 
-        await page.getByRole("button", { name: "Generar PDF oficial" }).click();
-        await expect(page.getByRole("button", { name: "Descargar PDF oficial" })).toBeVisible({ timeout: 20_000 });
+        await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
+        // The single action generates the official PDF (reflecting the
+        // signed state) AND publishes — a longer wait than the old
+        // "generate" step alone, since it now does both.
+        await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" }))
+            .toBeVisible({ timeout: 30_000 });
+        await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" })).toHaveCount(0);
 
         // The presigned URL is served with Content-Disposition: attachment
         // (reports.py sets response_content_disposition=`attachment; ...`),
         // so `window.open(url, "_blank")` never becomes a navigable popup
         // page — Chromium turns it straight into a browser download. Assert
         // on the "download" event, not "popup".
-        const downloadPromise = page.waitForEvent("download");
-        await page.getByRole("button", { name: "Descargar PDF oficial" }).click();
+        const downloadPromise = reviewerPage.waitForEvent("download");
+        await reviewerPage.getByRole("button", { name: "Descargar PDF oficial" }).click();
         const download = await downloadPromise;
         expect(download.url()).toMatch(/^https?:\/\//);
         expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
@@ -335,9 +350,11 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         // ---- Reload the same report a second time — the persisted
         // snapshot (schema_version, template, presentation) must be
         // byte-identical, proving the saved version is immutable. ----
-        await page.reload();
-        await expect(page.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
-        await expect(page.getByRole("button", { name: "Descargar PDF oficial" })).toBeVisible();
+        await reviewerPage.reload();
+        await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible({ timeout: 15_000 });
+        await expect(reviewerPage.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
+        await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" })).toBeVisible();
+
+        await reviewerContext.close();
     });
 });
