@@ -21,7 +21,7 @@ import CelumaTextArea from "../components/ui/textarea_field";
 import CelumaTabs from "../components/ui/celuma_tabs";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
-import { getReport } from "../services/report_service";
+import { getReport, getOfficialPdfDownloadUrl } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -253,6 +253,20 @@ export default function OrderDetail() {
             showCelumaApiError(err, "Error al cargar la vista previa del reporte.");
         } finally {
             setReportLoading(false);
+        }
+    };
+
+    // Segunda remediación post-Fase 2 (UX): único documento descargable de
+    // un reporte publicado — reemplaza el antiguo "Exportar PDF" (que era
+    // solo una vista de impresión local vía usePdfExport, no el PDF
+    // oficial persistido). Ver signed-pdf-publication-workflow.md.
+    const handleDownloadOfficialPdf = async () => {
+        if (!latestReport?.id || latestReport.version_no == null) return;
+        try {
+            const { pdf_url } = await getOfficialPdfDownloadUrl(latestReport.id, latestReport.version_no);
+            window.open(pdf_url, "_blank");
+        } catch (err) {
+            showCelumaApiError(err, "Error al descargar el PDF oficial.");
         }
     };
 
@@ -758,14 +772,16 @@ export default function OrderDetail() {
                             >
                                 Actualizar
                             </CelumaButton>
-                            <CelumaButton
-                                size="small"
-                                type="primary"
-                                icon={<FilePdfOutlined />}
-                                onClick={() => previewRef.current?.exportPDF()}
-                            >
-                                Exportar PDF
-                            </CelumaButton>
+                            {latestReport?.status === "PUBLISHED" && hasPermission("reports:read") && (
+                                <CelumaButton
+                                    size="small"
+                                    type="primary"
+                                    icon={<FilePdfOutlined />}
+                                    onClick={handleDownloadOfficialPdf}
+                                >
+                                    Descargar PDF oficial
+                                </CelumaButton>
+                            )}
                         </div>
                     </Panel>
 

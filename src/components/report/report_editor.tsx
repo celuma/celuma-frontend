@@ -13,7 +13,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion,
-    submitReport, approveReport, requestChanges, signReport,
+    submitReport, approveReport, requestChanges, signAndPublishReport,
     getReportTemplateVersion,
     getOfficialPdfDownloadUrl,
     getStudyTypeReportDefaults,
@@ -24,7 +24,6 @@ import {
     getReportLetterheadVersion,
 } from "../../services/report_letterhead_service";
 import type { ReportPresentationSnapshotV2 } from "./versioned/versioned_report_types";
-import { usePdfGeneration } from "../../hooks/use_pdf_generation";
 import {
     getSignature,
     NO_SIGNATURE_TITLE,
@@ -35,7 +34,6 @@ import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
-import { usePdfExport } from "../../hooks/use_pdf_export";
 import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
     ReportTemplateJSON, ReportSectionText,
@@ -265,8 +263,12 @@ const ReportEditor: React.FC = () => {
     const leftColumnRef = useRef<HTMLDivElement>(null);
     const previewColumnRef = useRef<HTMLDivElement>(null);
 
-    const { exportToPDF } = usePdfExport();
-    const { isRequesting: isGeneratingPdf, generate: generatePdf } = usePdfGeneration();
+    // Segunda remediación post-Fase 2 (UX): "Firmar y publicar" es la única
+    // acción en estado APPROVED — orquesta generación+firma+publicación en
+    // una sola llamada (POST .../sign-and-publish). Reemplaza los dos
+    // hooks/botones separados que existían antes (usePdfGeneration +
+    // handleSign).
+    const [isSigningAndPublishing, setIsSigningAndPublishing] = useState(false);
 
     // Read-only when not DRAFT
     const isReadOnly = useMemo(
@@ -765,10 +767,6 @@ const ReportEditor: React.FC = () => {
         }
     };
 
-    const handleExportPDF = async () => {
-        await exportToPDF(previewPagesRef, reportTitle || "reporte");
-    };
-
     const handleSubmit = async () => {
         if (!envelope?.id) { message.warning("Guarda el reporte primero"); return; }
         try {
@@ -813,34 +811,6 @@ const ReportEditor: React.FC = () => {
         });
     };
 
-    const handleGeneratePdf = async () => {
-        if (!envelope?.id || envelope.version_no == null) return;
-        try {
-            const result = await generatePdf(envelope.id, envelope.version_no);
-            setEnvelope((e) =>
-                e
-                    ? {
-                          ...e,
-                          pdf_generation_status: result.pdf_generation_status,
-                          pdf_generated_at: result.pdf_generated_at,
-                          pdf_sha256: result.pdf_sha256,
-                          pdf_size_bytes: result.pdf_size_bytes,
-                          pdf_page_count: result.pdf_page_count,
-                          pdf_error_code: result.pdf_error_code,
-                          pdf_error_message: result.pdf_error_message,
-                      }
-                    : e,
-            );
-            if (result.pdf_generation_status === "READY") {
-                message.success("PDF oficial generado");
-            } else if (result.pdf_generation_status === "FAILED") {
-                message.error(result.pdf_error_message || "No se pudo generar el PDF");
-            }
-        } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al generar el PDF");
-        }
-    };
-
     const handleDownloadOfficialPdf = async () => {
         if (!envelope?.id || envelope.version_no == null) return;
         try {
@@ -851,8 +821,8 @@ const ReportEditor: React.FC = () => {
         }
     };
 
-    const handleSign = async () => {
-        if (!envelope?.id) return;
+    const handleSignAndPublish = async () => {
+        if (!envelope?.id || isSigningAndPublishing) return;
         // Use the live toggle state so an unsaved "Firma digital" change is honoured.
         // resolveSignatureMetadata mirrors the same precedence applied in buildEnvelope.
         const needsDigitalSignature = resolveSignatureMetadata({
@@ -878,9 +848,10 @@ const ReportEditor: React.FC = () => {
                 return;
             }
         }
+        setIsSigningAndPublishing(true);
         try {
-            const result = await signReport(envelope.id);
-            message.success(result.message);
+            const result = await signAndPublishReport(envelope.id);
+            message.success(result.message || "Reporte firmado y publicado. PDF oficial disponible.");
             const full = await getReportFull(envelope.id);
             setEnvelope(full.report);
         } catch (err) {
@@ -888,7 +859,9 @@ const ReportEditor: React.FC = () => {
                 promptUploadSignature();
                 return;
             }
-            showCelumaApiError(err, "Error al firmar el reporte.");
+            showCelumaApiError(err, "Error al firmar y publicar el reporte.");
+        } finally {
+            setIsSigningAndPublishing(false);
         }
     };
 
@@ -1113,9 +1086,6 @@ const ReportEditor: React.FC = () => {
                                 Guardar reporte
                             </CelumaButton>
                         )}
-                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleExportPDF} title="Vista de impresión local — no es el documento oficial persistido">
-                            Imprimir copia local
-                        </CelumaButton>
                         {envelope?.status === "DRAFT" && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
                                 Enviar a Revisión
@@ -1132,75 +1102,39 @@ const ReportEditor: React.FC = () => {
                             </>
                         )}
                         {/*
-                          * Post-Fase-2 remediation (bug 4 fix): these three
-                          * actions have three different permission tiers —
-                          * generate = reports:edit, download = reports:read,
-                          * sign/publish = reports:sign — previously all
-                          * three were bundled behind reports:sign alone, so
-                          * a read-only reviewer could never even see the
-                          * download button despite the backend always having
-                          * allowed reports:read holders to download (see
+                          * Segunda remediación post-Fase 2 (UX): en estado
+                          * APPROVED, "Firmar y publicar" es la ÚNICA acción
+                          * — genera el PDF oficial (reflejando ya la firma)
+                          * y publica en una sola llamada. No se muestra
+                          * "Generar PDF" por separado. En PUBLISHED, la
+                          * descarga se muestra siempre con solo
+                          * reports:read (bug 4 de la primera remediación,
+                          * sin cambios aquí — ver
                           * pdf-download-authorization-contract.md).
                           */}
-                        {envelope?.status === "APPROVED" && (
-                            <>
-                                {envelope?.pdf_generation_status === "READY" ? (
-                                    userHasPermission(PERMS.REPORTS_READ) && (
-                                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
-                                            Descargar PDF oficial
-                                        </CelumaButton>
-                                    )
-                                ) : (
-                                    userHasPermission(PERMS.REPORTS_EDIT) && (
-                                        <CelumaButton
-                                            size="small"
-                                            icon={<FilePdfOutlined />}
-                                            loading={isGeneratingPdf}
-                                            onClick={handleGeneratePdf}
-                                        >
-                                            {envelope?.pdf_generation_status === "FAILED"
-                                                ? "Reintentar generar PDF oficial"
-                                                : "Generar PDF oficial"}
-                                        </CelumaButton>
-                                    )
-                                )}
-                                {userHasPermission(PERMS.REPORTS_SIGN) && (
-                                    <CelumaButton
-                                        type="primary"
-                                        size="small"
-                                        icon={<SafetyCertificateOutlined />}
-                                        disabled={envelope?.pdf_generation_status !== "READY"}
-                                        title={
-                                            envelope?.pdf_generation_status !== "READY"
-                                                ? "Genera el PDF oficial antes de firmar y publicar — un reporte publicado es inmutable"
-                                                : undefined
-                                        }
-                                        onClick={handleSign}
-                                    >
-                                        Firmar y Publicar
-                                    </CelumaButton>
-                                )}
-                            </>
+                        {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
+                            <CelumaButton
+                                type="primary"
+                                size="small"
+                                icon={<SafetyCertificateOutlined />}
+                                loading={isSigningAndPublishing}
+                                disabled={isSigningAndPublishing}
+                                onClick={handleSignAndPublish}
+                            >
+                                {isSigningAndPublishing ? "Firmando y generando PDF oficial…" : "Firmar y publicar"}
+                            </CelumaButton>
+                        )}
+                        {envelope?.status === "PUBLISHED" && userHasPermission(PERMS.REPORTS_READ) && (
+                            <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
+                                Descargar PDF oficial
+                            </CelumaButton>
                         )}
                     </div>
-                    {envelope?.status === "APPROVED" && (
+                    {envelope?.status === "APPROVED" && envelope?.pdf_error_message && (
                         <div style={{ marginTop: 8 }}>
-                            {envelope?.pdf_generation_status === "FAILED" && envelope?.pdf_error_message && (
-                                <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                                    No se pudo generar el PDF: {envelope.pdf_error_message}
-                                </Typography.Text>
-                            )}
-                            {envelope?.pdf_generation_status === "READY" && envelope?.pdf_page_count != null && (
-                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    PDF oficial listo · {envelope.pdf_page_count} página{envelope.pdf_page_count === 1 ? "" : "s"}
-                                    {envelope.pdf_sha256 ? ` · sha256 ${envelope.pdf_sha256.slice(0, 12)}…` : ""}
-                                </Typography.Text>
-                            )}
-                            {!envelope?.pdf_generation_status && (
-                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                    Sin generar
-                                </Typography.Text>
-                            )}
+                            <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                No se pudo firmar y publicar: {envelope.pdf_error_message}
+                            </Typography.Text>
                         </div>
                     )}
                 </RecordCard>

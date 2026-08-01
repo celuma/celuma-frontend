@@ -307,6 +307,38 @@ export async function signReport(reportId: string, changelog?: string): Promise<
     return await res.json();
 }
 
+export interface ReportSignAndPublishResponse extends ReportActionResponse {
+    pdf_generation_status: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_sha256: string | null;
+    pdf_size_bytes: number | null;
+    pdf_page_count: number | null;
+    pdf_generated_at: string | null;
+}
+
+/** Segunda remediación post-Fase 2 (UX): la única acción del flujo
+ *  principal en estado APPROVED — genera el PDF oficial (reflejando ya la
+ *  firma) y publica, en una sola llamada. Reemplaza el flujo de dos
+ *  botones "Generar PDF oficial" + "Firmar y Publicar". Un 409 significa
+ *  que ya hay un intento de firmar-y-publicar en curso (doble-click u otra
+ *  pestaña) — mostrar el mensaje del backend tal cual, es seguro
+ *  reintentar tras esperar. */
+export async function signAndPublishReport(
+    reportId: string,
+    changelog?: string
+): Promise<ReportSignAndPublishResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/sign-and-publish`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ changelog }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        const detail = parseFastApiErrorDetail(errText);
+        throw new Error(detail ?? `Error al firmar y publicar el reporte (${res.status})`);
+    }
+    return await res.json();
+}
+
 export async function retractReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/retract`, {
         method: "POST",
