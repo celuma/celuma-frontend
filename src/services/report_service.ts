@@ -13,6 +13,7 @@ import type {
     ReportTemplateLogoUploadResponse,
     InternalRenderData,
 } from "../models/report";
+import type { StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
@@ -118,6 +119,26 @@ export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail
         throw new Error(`Error al obtener tipo de estudio: ${res.status} - ${errText}`);
     }
     return (await res.json()) as StudyTypeDetail;
+}
+
+/**
+ * Post-Fase-2 remediation: resolves everything the report editor needs to
+ * bootstrap a brand-new V2 report (clinical template + active version +
+ * resolved membrete) in one round trip, replacing the previous
+ * 3-sequential-fetch dance. See report-editor-letterhead-selection-contract.md.
+ */
+export async function getStudyTypeReportDefaults(
+    studyTypeId: string
+): Promise<StudyTypeReportDefaults> {
+    const res = await fetch(`${base}/v1/study-types/${studyTypeId}/report-defaults`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al resolver la configuración del tipo de estudio: ${res.status} - ${errText}`);
+    }
+    return (await res.json()) as StudyTypeReportDefaults;
 }
 
 // ---------------------------------------------------------------------------

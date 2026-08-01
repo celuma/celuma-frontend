@@ -107,6 +107,9 @@ export interface ReportTemplateListItem {
     description?: string;
     is_active: boolean;
     created_at: string;
+    /** Post-Fase-2 remediation: administrative preference, not ownership —
+     *  see template-letterhead-association-contract.md. */
+    preferred_letterhead_version_id?: string | null;
 }
 
 /** Template returned from GET /api/v1/reports/templates/{id} (detail) */
@@ -128,6 +131,7 @@ export interface UpdateReportTemplatePayload {
     description?: string;
     template_json?: ReportTemplateJSON;
     is_active?: boolean;
+    preferred_letterhead_version_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +239,11 @@ export interface ReportEnvelope {
      */
     schema_version?: number | null;
     template_version_id?: string | null;
+    /** Post-Fase-2 remediation: administrative twin of `template_version_id`
+     *  — which ReportLetterheadVersion produced this version's `presentation`
+     *  block. Null for legacy reports and for V2 reports created before this
+     *  remediation. */
+    letterhead_version_id?: string | null;
     generated_by_renderer_version?: string | null;
     /** Resolved, ephemeral resources for the current version (e.g. header logo URL). */
     resolved_resources?: ReportResolvedResources | null;

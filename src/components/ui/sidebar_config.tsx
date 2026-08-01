@@ -11,6 +11,7 @@ import {
     InfoCircleOutlined,
     ShopOutlined,
     BankOutlined,
+    BgColorsOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -21,6 +22,7 @@ const baseMenuItems: Required<MenuProps>["items"] = [
 
 const catalogMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/report-templates", icon: <FileTextOutlined />, label: "Plantillas de Reporte" },
+    { key: "/config/report-letterheads", icon: <BgColorsOutlined />, label: "Membretes" },
     { key: "/config/study-types", icon: <ExperimentOutlined />, label: "Tipos de Estudio" },
     { key: "/config/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios" },
 ];

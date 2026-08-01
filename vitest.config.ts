@@ -14,9 +14,11 @@ export default defineConfig({
         setupFiles: ["./src/test/setup.ts"],
         css: false,
         globals: false,
-        // tests-visual/ holds Playwright specs (real-browser golden tests,
-        // Céluma 1.3 Fase 2 Historia A2) — run via `npm run test:visual`,
-        // never picked up here since jsdom can't execute them.
-        exclude: ["**/node_modules/**", "**/dist/**", "tests-visual/**"],
+        // tests-visual/ and tests-e2e/ hold Playwright specs (real-browser
+        // golden tests from Fase 2 Historia A2, and the real-browser E2E
+        // suite from the post-Fase-2 remediation) — run via `npm run
+        // test:visual` / `npm run test:e2e`, never picked up here since
+        // jsdom can't execute them.
+        exclude: ["**/node_modules/**", "**/dist/**", "tests-visual/**", "tests-e2e/**"],
     },
 });

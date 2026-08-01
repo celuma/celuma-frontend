@@ -17,6 +17,7 @@ import CelumaSwitch from "../components/ui/celuma_switch";
 import { tokens, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
 import { getReportTemplates, listReportTemplateVersions } from "../services/report_service";
+import { extractUploadedFile } from "../lib/upload_helpers";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -168,7 +169,7 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
 
     const handleLogoUpload = async () => {
         if (!logoFile || !tenant) return;
-        const fileObject = logoFile.originFileObj;
+        const fileObject = extractUploadedFile(logoFile);
         if (!fileObject) return;
 
         const formData = new FormData();

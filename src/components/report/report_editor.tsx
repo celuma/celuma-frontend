@@ -14,9 +14,16 @@ import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signReport,
-    listReportTemplateVersions, getReportTemplateVersion,
+    getReportTemplateVersion,
     getOfficialPdfDownloadUrl,
+    getStudyTypeReportDefaults,
 } from "../../services/report_service";
+import {
+    listReportLetterheads,
+    listReportLetterheadVersions,
+    getReportLetterheadVersion,
+} from "../../services/report_letterhead_service";
+import type { ReportPresentationSnapshotV2 } from "./versioned/versioned_report_types";
 import { usePdfGeneration } from "../../hooks/use_pdf_generation";
 import {
     getSignature,
@@ -33,7 +40,7 @@ import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
     ReportTemplateJSON, ReportSectionText,
     ReportBaseFieldConfig, ReportBaseFieldCustom, TemplateImageItem,
-    TemplateOrderInput, ReportTemplateVersionSummary,
+    TemplateOrderInput,
 } from "../../models/report";
 import {
     buildEmptyReportContent,
@@ -105,6 +112,16 @@ function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
 }
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
+
+/** Post-Fase-2 remediation: one selectable "Membrete" option — the ACTIVE
+ * version of a shared, tenant-owned letterhead. `letterheadId` is carried
+ * alongside `value` (the version id) because fetching a version's full
+ * configuration requires both (GET .../report-letterheads/{letterheadId}/versions/{versionId}). */
+interface LetterheadVersionOption {
+    value: string;
+    label: string;
+    letterheadId: string;
+}
 
 // Report lifecycle for the CelumaSteps bar (colors mirror REPORT_STATUS_CONFIG chips).
 const REPORT_STEPS: CelumaStep[] = [
@@ -206,13 +223,24 @@ const ReportEditor: React.FC = () => {
     // Study type name (for display)
     const [studyTypeName, setStudyTypeName] = useState<string>("");
 
-    // Céluma 1.3 Fase 2, Bloque D, Historia D10: template-version selection
-    // for new V2 reports. Only ever populated when creating a new report
-    // (prefilledOrderId branch) — never touched when editing an existing
-    // report, whose template_version_id (if any) is frozen on `envelope`.
+    // Céluma 1.3 Fase 2, Bloque D, Historia D10 / post-Fase-2 remediation:
+    // resolved (never user-selected) clinical template + its single ACTIVE
+    // version, for new V2 reports only. Only ever populated when creating a
+    // new report (prefilledOrderId branch) — never touched when editing an
+    // existing report, whose template_version_id (if any) is frozen on
+    // `envelope`. The clinical template is determined exclusively by
+    // StudyType.default_report_template_id — there is no user-facing
+    // control to change it here (see report-editor-letterhead-selection-contract.md).
     const [resolvedTemplateId, setResolvedTemplateId] = useState<string | null>(null);
-    const [selectedTemplateVersionId, setSelectedTemplateVersionId] = useState<string | null>(null);
-    const [availableTemplateVersions, setAvailableTemplateVersions] = useState<ReportTemplateVersionSummary[]>([]);
+    const [resolvedTemplateVersionId, setResolvedTemplateVersionId] = useState<string | null>(null);
+    // Post-Fase-2 remediation: the "Membrete" selector — this is the only
+    // thing the user may change before first save. Switching it never
+    // touches `template`/`baseValues`/`sectionContent` (see
+    // handleChangeLetterheadVersion below).
+    const [selectedLetterheadVersionId, setSelectedLetterheadVersionId] = useState<string | null>(null);
+    const [selectedLetterheadPresentation, setSelectedLetterheadPresentation] =
+        useState<ReportPresentationSnapshotV2 | null>(null);
+    const [availableLetterheadVersions, setAvailableLetterheadVersions] = useState<LetterheadVersionOption[]>([]);
     // True when reports_v2_enabled is on for this tenant but the resolved
     // template has no ACTIVE version to select — creation must block rather
     // than silently falling back to Legacy (Céluma1.3-Fase2.md §D10).
@@ -446,25 +474,62 @@ const ReportEditor: React.FC = () => {
                                 // should reflect that structure, not the live/mutable
                                 // ReportTemplate.template_json. No ACTIVE version means
                                 // V2 creation is blocked below, never silently Legacy.
+                                //
+                                // Post-Fase-2 remediation: also resolves the membrete
+                                // (letterhead) to use for the live preview — this is
+                                // the actual fix for "preview shows Legacy initially"
+                                // (bug 2): previously nothing here ever set
+                                // `selectedLetterheadPresentation`, so buildEnvelope()
+                                // had no rendering_snapshot to seed before first save.
                                 try {
                                     const tenantInfo = await getJSON<{ reports_v2_enabled?: boolean }>(
                                         `/v1/tenants/${session.tenantId}`
                                     );
                                     if (tenantInfo.reports_v2_enabled) {
-                                        const { versions } = await listReportTemplateVersions(templateId);
-                                        const selectable = versions.filter((v) => v.status !== "ARCHIVED");
-                                        setAvailableTemplateVersions(selectable);
-                                        const active = selectable.find((v) => v.status === "ACTIVE");
-                                        if (active) {
-                                            const detail = await getReportTemplateVersion(templateId, active.id);
+                                        const defaults = await getStudyTypeReportDefaults(orderFull.order.study_type_id);
+                                        if (defaults.active_template_version_id) {
+                                            const detail = await getReportTemplateVersion(
+                                                templateId,
+                                                defaults.active_template_version_id
+                                            );
                                             const cfg = detail.configuration as { template?: TemplateOrderInput };
                                             if (cfg.template) tmplRaw = cfg.template;
-                                            setSelectedTemplateVersionId(active.id);
+                                            setResolvedTemplateVersionId(defaults.active_template_version_id);
+
+                                            // Build the "Membrete" selector options: the
+                                            // ACTIVE version of every active, shared
+                                            // letterhead in the tenant.
+                                            const { letterheads } = await listReportLetterheads();
+                                            const options: LetterheadVersionOption[] = [];
+                                            for (const lh of letterheads) {
+                                                const { versions: lhVersions } = await listReportLetterheadVersions(lh.id);
+                                                const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
+                                                if (activeLh) {
+                                                    options.push({
+                                                        value: activeLh.id,
+                                                        label: `${lh.name} — Versión ${activeLh.version_number}`,
+                                                        letterheadId: lh.id,
+                                                    });
+                                                }
+                                            }
+                                            setAvailableLetterheadVersions(options);
+
+                                            if (defaults.letterhead_version_id) {
+                                                const match = options.find((o) => o.value === defaults.letterhead_version_id);
+                                                if (match) {
+                                                    const versionDetail = await getReportLetterheadVersion(
+                                                        match.letterheadId,
+                                                        defaults.letterhead_version_id
+                                                    );
+                                                    setSelectedLetterheadVersionId(defaults.letterhead_version_id);
+                                                    setSelectedLetterheadPresentation(versionDetail.configuration);
+                                                }
+                                            }
                                         } else {
                                             setV2ConfigBlocked(true);
                                         }
                                     }
-                                } catch { /* flag/version lookup failed — proceed as Legacy */ }
+                                } catch { /* flag/version/letterhead lookup failed — proceed as Legacy */ }
                             }
                         } catch { /* ignore, use empty template */ }
                     }
@@ -583,13 +648,30 @@ const ReportEditor: React.FC = () => {
         // keeps the live preview correct while editing, before any save
         // round-trip, and keeps this payload honest about what the report
         // actually is.
+        //
+        // Post-Fase-2 remediation, bug 2 fix: for a brand-new report,
+        // `envelope` is null, so the block above never had anything to
+        // copy — schema_version/rendering_snapshot stayed undefined and
+        // the preview always resolved to Legacy, even after a V2 template
+        // + membrete had already been resolved by the bootstrap effect.
+        // This is the missing fallback: seed both directly from the
+        // resolved/selected bootstrap state whenever there is no envelope
+        // yet to inherit from.
         const existingSchemaVersion = envelope?.report?.schema_version;
         const existingRenderingSnapshot = envelope?.report?.rendering_snapshot;
         if (existingSchemaVersion !== undefined) {
             report.schema_version = existingSchemaVersion;
+        } else if (resolvedTemplateVersionId && selectedLetterheadPresentation) {
+            report.schema_version = 2;
         }
         if (existingRenderingSnapshot !== undefined) {
             report.rendering_snapshot = existingRenderingSnapshot;
+        } else if (resolvedTemplateVersionId && selectedLetterheadPresentation) {
+            report.rendering_snapshot = {
+                schema_version: 2,
+                template: tmplWithSavedOrder as unknown as Record<string, unknown>,
+                presentation: selectedLetterheadPresentation,
+            };
         }
 
         return {
@@ -609,56 +691,54 @@ const ReportEditor: React.FC = () => {
             // V2 metadata is server-authoritative (see B6/C9) — carried
             // through only for the live preview's benefit, never trusted by
             // the backend as an instruction to change these. For a brand-new
-            // report, `envelope` is still null, so `selectedTemplateVersionId`
-            // (Bloque D, Historia D10) is what actually reaches the backend;
-            // once a report exists, its own `template_version_id` always wins
-            // and is never reconsidered (D10: "no reconsultar la versión activa").
-            schema_version: envelope?.schema_version,
-            template_version_id: envelope?.template_version_id ?? selectedTemplateVersionId ?? undefined,
+            // report, `envelope` is still null, so `resolvedTemplateVersionId`/
+            // `selectedLetterheadVersionId` (Bloque D Historia D10 / post-Fase-2
+            // remediation) are what actually reach the backend; once a report
+            // exists, its own template_version_id/letterhead_version_id always
+            // win and are never reconsidered (D10: "no reconsultar la versión activa").
+            schema_version: envelope?.schema_version ?? (resolvedTemplateVersionId ? 2 : undefined),
+            template_version_id: envelope?.template_version_id ?? resolvedTemplateVersionId ?? undefined,
+            letterhead_version_id: envelope?.letterhead_version_id ?? selectedLetterheadVersionId ?? undefined,
             generated_by_renderer_version: envelope?.generated_by_renderer_version,
             resolved_resources: envelope?.resolved_resources,
         };
-    }, [template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature, selectedTemplateVersionId]);
+    }, [
+        template, fullData, customBaseFields, baseValues, sectionContent, envelope, session,
+        reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
+        resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
+    ]);
 
     // Live preview envelope
     const previewEnvelope = useMemo(() => {
         if (!template) return null;
         try { return buildEnvelope(); } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope, showSignatureSection, requireDigitalSignature]);
+    }, [
+        template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope,
+        showSignatureSection, requireDigitalSignature,
+        // Post-Fase-2 remediation: without these, switching the "Membrete"
+        // selector updated selectedLetterheadPresentation but this memo
+        // never recomputed, so the preview kept showing the old branding
+        // (a real bug caught during live verification, not just a fix on
+        // paper — see remediation-local-validation-report.md).
+        resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
+    ]);
 
-    // Céluma 1.3 Fase 2, Bloque D, Historia D10: lets the user pick a
-    // different PUBLISHED/ACTIVE version than the auto-selected active one
-    // before creating the report (never ARCHIVED — already filtered out of
-    // availableTemplateVersions). Re-derives the clinical structure and
-    // resets field defaults from the chosen version's frozen snapshot; only
-    // available while creating a brand-new report.
-    const handleChangeTemplateVersion = async (versionId: string) => {
-        if (!resolvedTemplateId) return;
+    // Post-Fase-2 remediation (bug 3 fix): the "Membrete" selector — only
+    // available while creating a brand-new report (D10). Unlike the old
+    // "Versión de plantilla" selector this replaces, this NEVER touches
+    // `template`/`baseValues`/`sectionContent`: a membrete change is a pure
+    // presentation swap. Only `selectedLetterheadPresentation` changes,
+    // which flows into `buildEnvelope()`'s `rendering_snapshot.presentation`
+    // and re-renders the preview immediately — clinical content already
+    // typed by the user is never rebuilt or reset.
+    const handleChangeLetterheadVersion = async (option: LetterheadVersionOption) => {
         try {
-            const detail = await getReportTemplateVersion(resolvedTemplateId, versionId);
-            const cfg = detail.configuration as { template?: TemplateOrderInput };
-            const tmplNew = cfg.template ? normalizeReportTemplateJSON(cfg.template) : EMPTY_TEMPLATE_JSON;
-            setTemplate(tmplNew);
-            setSelectedTemplateVersionId(versionId);
-
-            const bv: Record<string, string> = {};
-            Object.entries(tmplNew.base).forEach(([k, v]) => {
-                if (isCustomField(v)) bv[k] = (v as ReportBaseFieldCustom).value || "";
-            });
-            setBaseValues(bv);
-
-            const sc: Record<string, string | TemplateImageItem[]> = {};
-            Object.entries(tmplNew.sections).forEach(([k, v]) => {
-                sc[k] = v.type === "images" ? [] : (v as ReportSectionText).content || "";
-            });
-            setSectionContent(sc);
-
-            const tmplSig = resolveSignatureMetadata(tmplNew);
-            setShowSignatureSection(tmplSig.show_signature_section);
-            setRequireDigitalSignature(tmplSig.require_digital_signature);
+            const versionDetail = await getReportLetterheadVersion(option.letterheadId, option.value);
+            setSelectedLetterheadVersionId(option.value);
+            setSelectedLetterheadPresentation(versionDetail.configuration);
         } catch {
-            message.error("Error al cargar la versión seleccionada");
+            message.error("Error al cargar el membrete seleccionado");
         }
     };
 
@@ -1051,38 +1131,55 @@ const ReportEditor: React.FC = () => {
                                 </CelumaButton>
                             </>
                         )}
-                        {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
+                        {/*
+                          * Post-Fase-2 remediation (bug 4 fix): these three
+                          * actions have three different permission tiers —
+                          * generate = reports:edit, download = reports:read,
+                          * sign/publish = reports:sign — previously all
+                          * three were bundled behind reports:sign alone, so
+                          * a read-only reviewer could never even see the
+                          * download button despite the backend always having
+                          * allowed reports:read holders to download (see
+                          * pdf-download-authorization-contract.md).
+                          */}
+                        {envelope?.status === "APPROVED" && (
                             <>
                                 {envelope?.pdf_generation_status === "READY" ? (
-                                    <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
-                                        Descargar PDF oficial
-                                    </CelumaButton>
+                                    userHasPermission(PERMS.REPORTS_READ) && (
+                                        <CelumaButton size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
+                                            Descargar PDF oficial
+                                        </CelumaButton>
+                                    )
                                 ) : (
+                                    userHasPermission(PERMS.REPORTS_EDIT) && (
+                                        <CelumaButton
+                                            size="small"
+                                            icon={<FilePdfOutlined />}
+                                            loading={isGeneratingPdf}
+                                            onClick={handleGeneratePdf}
+                                        >
+                                            {envelope?.pdf_generation_status === "FAILED"
+                                                ? "Reintentar generar PDF oficial"
+                                                : "Generar PDF oficial"}
+                                        </CelumaButton>
+                                    )
+                                )}
+                                {userHasPermission(PERMS.REPORTS_SIGN) && (
                                     <CelumaButton
+                                        type="primary"
                                         size="small"
-                                        icon={<FilePdfOutlined />}
-                                        loading={isGeneratingPdf}
-                                        onClick={handleGeneratePdf}
+                                        icon={<SafetyCertificateOutlined />}
+                                        disabled={envelope?.pdf_generation_status !== "READY"}
+                                        title={
+                                            envelope?.pdf_generation_status !== "READY"
+                                                ? "Genera el PDF oficial antes de firmar y publicar — un reporte publicado es inmutable"
+                                                : undefined
+                                        }
+                                        onClick={handleSign}
                                     >
-                                        {envelope?.pdf_generation_status === "FAILED"
-                                            ? "Reintentar generar PDF oficial"
-                                            : "Generar PDF oficial"}
+                                        Firmar y Publicar
                                     </CelumaButton>
                                 )}
-                                <CelumaButton
-                                    type="primary"
-                                    size="small"
-                                    icon={<SafetyCertificateOutlined />}
-                                    disabled={envelope?.pdf_generation_status !== "READY"}
-                                    title={
-                                        envelope?.pdf_generation_status !== "READY"
-                                            ? "Genera el PDF oficial antes de firmar y publicar — un reporte publicado es inmutable"
-                                            : undefined
-                                    }
-                                    onClick={handleSign}
-                                >
-                                    Firmar y Publicar
-                                </CelumaButton>
                             </>
                         )}
                     </div>
@@ -1201,16 +1298,16 @@ const ReportEditor: React.FC = () => {
                                 </Panel>
                             )}
 
-                            {!reportId && availableTemplateVersions.length > 1 && (
+                            {!reportId && availableLetterheadVersions.length > 1 && (
                                 <Panel style={{ marginBottom: 16 }}>
                                     <FloatingCaptionSelect
-                                        label="Versión de plantilla"
-                                        value={selectedTemplateVersionId ?? undefined}
-                                        onChange={(v) => v && handleChangeTemplateVersion(v)}
-                                        options={availableTemplateVersions.map((v) => ({
-                                            value: v.id,
-                                            label: `#${v.version_number}${v.status === "ACTIVE" ? " (activa)" : ""}`,
-                                        }))}
+                                        label="Membrete"
+                                        value={selectedLetterheadVersionId ?? undefined}
+                                        onChange={(v) => {
+                                            const option = availableLetterheadVersions.find((o) => o.value === v);
+                                            if (option) handleChangeLetterheadVersion(option);
+                                        }}
+                                        options={availableLetterheadVersions}
                                         allowClear={false}
                                     />
                                 </Panel>

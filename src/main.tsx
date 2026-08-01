@@ -38,6 +38,9 @@ import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
 import ReportTemplateVersions from "./pages/report_template_versions";
 import ReportTemplateEditor from "./pages/report_template_editor";
+import ReportLetterheads from "./pages/report_letterheads";
+import ReportLetterheadVersions from "./pages/report_letterhead_versions";
+import ReportLetterheadEditor from "./pages/report_letterhead_editor";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
 import BranchesList from "./pages/branches_list";
@@ -132,6 +135,13 @@ createRoot(document.getElementById("root")!).render(
                     mismatch on the legacy route, left undisturbed here. */}
                 <Route path="report-templates/:templateId/versions" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateVersions embedded /></RequirePermission>} />
                 <Route path="report-templates/:templateId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateEditor embedded /></RequirePermission>} />
+                {/* Post-Fase-2 remediation: membretes son un dominio compartido
+                    independiente de las plantillas clínicas — mismo permiso
+                    reports:manage_templates que ya administra configuración de
+                    reportes (ver remediation-architecture-decision.md §5). */}
+                <Route path="report-letterheads" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheads embedded /></RequirePermission>} />
+                <Route path="report-letterheads/:letterheadId/versions" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheadVersions embedded /></RequirePermission>} />
+                <Route path="report-letterheads/:letterheadId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheadEditor embedded /></RequirePermission>} />
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />
