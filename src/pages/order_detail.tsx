@@ -6,7 +6,7 @@ import {
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
-    DollarOutlined, ClockCircleOutlined
+    DollarOutlined, ClockCircleOutlined, PrinterOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -268,6 +268,14 @@ export default function OrderDetail() {
         } catch (err) {
             showCelumaApiError(err, "Error al descargar el PDF oficial.");
         }
+    };
+
+    // Cuarta remediación post-Fase 2 (Observación 1): impresión local — NO
+    // es el PDF oficial y nunca lo reemplaza. Delega en ReportPreview, que
+    // imprime las páginas del renderer ya montado y deriva la marca
+    // (BORRADOR / RETRACTADO) del estado del propio reporte.
+    const handlePrintLocalCopy = async () => {
+        await previewRef.current?.printLocalCopy();
     };
 
     // Function to refresh order data.
@@ -780,6 +788,28 @@ export default function OrderDetail() {
                                     onClick={handleDownloadOfficialPdf}
                                 >
                                     Descargar PDF oficial
+                                </CelumaButton>
+                            )}
+                            {/* Cuarta remediación (Observación 1): acción
+                                secundaria, siempre distinta del PDF oficial.
+                                Imprime la vista previa ya montada abajo
+                                (`previewRef`), con marca BORRADOR/RETRACTADO
+                                según el estado. Ver local-print-contract.md. */}
+                            {latestReport && hasPermission("reports:read") && (
+                                <CelumaButton
+                                    size="small"
+                                    icon={<PrinterOutlined />}
+                                    onClick={handlePrintLocalCopy}
+                                    data-testid="print-local-copy"
+                                    title={
+                                        latestReport.status === "PUBLISHED"
+                                            ? "Copia local impresa por el navegador — no sustituye al PDF oficial firmado"
+                                            : "Copia local de trabajo — se marca como BORRADOR y no genera ningún documento oficial"
+                                    }
+                                >
+                                    {latestReport.status === "PUBLISHED" || latestReport.status === "RETRACTED"
+                                        ? "Imprimir copia local"
+                                        : "Imprimir borrador"}
                                 </CelumaButton>
                             )}
                         </div>

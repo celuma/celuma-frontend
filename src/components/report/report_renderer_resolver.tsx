@@ -28,7 +28,7 @@ import VersionedReportRendererV2 from "./versioned/versioned_report_renderer_v2"
  *   anything else -> UnsupportedReportVersion (controlled "unknown version" state)
  *
  * Every branch implements the same ReportRendererRef contract
- * (`getPages(): HTMLElement[]`), so use_pdf_export.ts and callers work
+ * (`getPages(): HTMLElement[]`), so use_local_print.ts and callers work
  * unchanged regardless of which branch actually rendered.
  */
 

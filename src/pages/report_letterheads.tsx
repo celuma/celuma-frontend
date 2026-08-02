@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Layout, Card, message, Modal, Typography, Tag, Upload, Dropdown } from "antd";
+import { Layout, Card, message, Typography, Tag, Upload, Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import {
     EditOutlined, DeleteOutlined, CopyOutlined, HistoryOutlined,
     StarOutlined, StarFilled, PlusOutlined, UploadOutlined, DownloadOutlined, MoreOutlined,
+    StopOutlined, UndoOutlined,
 } from "@ant-design/icons";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -33,6 +34,7 @@ import {
     getActiveReportLetterheadVersion,
 } from "../services/report_letterhead_service";
 import type { ReportLetterheadSummary } from "../models/report_letterhead";
+import { normalizeLetterheadDescription } from "../models/report_letterhead";
 
 const { Text } = Typography;
 
@@ -71,6 +73,10 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const [renameDescription, setRenameDescription] = useState("");
     const [renaming, setRenaming] = useState(false);
 
+    // Confirmaciones de eliminar/desactivar — ver `confirmHardDelete`.
+    const [confirmingDelete, setConfirmingDelete] = useState<ReportLetterheadSummary | null>(null);
+    const [confirmingDeactivate, setConfirmingDeactivate] = useState<ReportLetterheadSummary | null>(null);
+
     const [importing, setImporting] = useState(false);
     const [exportingLegacy, setExportingLegacy] = useState(false);
     const [exportingId, setExportingId] = useState<string | null>(null);
@@ -78,7 +84,13 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const load = async () => {
         setLoading(true);
         try {
-            const resp = await listReportLetterheads();
+            // Tercera remediación: la pantalla de administración lista TODOS
+            // los membretes, incluidos los desactivados — si no, "Desactivar"
+            // los haría desaparecer y "Reactivar" sería inalcanzable. Lo que
+            // un membrete desactivado sí deja de hacer es aparecer en las
+            // selecciones de reportes nuevos (ese selector sigue pidiendo
+            // solo los activos).
+            const resp = await listReportLetterheads(false);
             setLetterheads(resp.letterheads);
         } catch (err) {
             message.error(err instanceof Error ? err.message : "Error al cargar los membretes");
@@ -106,7 +118,14 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
         setSaving(true);
         try {
-            const created = await createReportLetterhead({ name: formName, description: formDescription || undefined });
+            // Cuarta remediación (Observación 2): `formDescription ||
+            // undefined` omitía el campo cuando estaba vacío. Se envía
+            // `null` explícito — "membrete sin descripción" es un estado
+            // válido, no un campo que falte por llenar.
+            const created = await createReportLetterhead({
+                name: formName.trim(),
+                description: normalizeLetterheadDescription(formDescription),
+            });
             setCreateModalOpen(false);
             navigate(`/config/report-letterheads/${created.id}/versions/new`);
         } catch (err) {
@@ -130,7 +149,13 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
         setRenaming(true);
         try {
-            await updateReportLetterhead(renamingLetterhead.id, { name: renameName, description: renameDescription || undefined });
+            // Cuarta remediación (Observación 2): el `|| undefined` de antes
+            // hacía imposible limpiar una descripción existente — el campo
+            // no viajaba y el backend conservaba el texto anterior.
+            await updateReportLetterhead(renamingLetterhead.id, {
+                name: renameName.trim(),
+                description: normalizeLetterheadDescription(renameDescription),
+            });
             message.success("Membrete actualizado");
             setRenamingLetterhead(null);
             await load();
@@ -141,26 +166,65 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
     };
 
-    const handleDelete = (letterhead: ReportLetterheadSummary) => {
-        Modal.confirm({
-            title: "¿Eliminar este membrete?",
-            content: "Dejará de estar disponible para reportes nuevos. No afecta reportes ya creados.",
-            okText: "Sí, eliminar",
-            okButtonProps: { danger: true },
-            cancelText: "No",
-            onOk: async () => {
-                setBusyId(letterhead.id);
-                try {
-                    await deleteReportLetterhead(letterhead.id);
-                    message.success("Membrete eliminado");
-                    await load();
-                } catch (err) {
-                    message.error(err instanceof Error ? err.message : "Error al eliminar el membrete");
-                } finally {
-                    setBusyId(null);
-                }
-            },
-        });
+    /**
+     * Tercera remediación post-Fase 2 — política de eliminación segura (ver
+     * letterhead-delete-deactivate-contract.md). "Eliminar" borra de verdad
+     * y solo se ofrece cuando el backend ya dijo que es seguro
+     * (`can_hard_delete`); "Desactivar" es la vía cuando hay historial que
+     * conservar. Antes había una sola acción "Eliminar" que en realidad
+     * desactivaba: el usuario pedía borrar, el membrete seguía ahí y nada
+     * explicaba por qué.
+     *
+     * La confirmación usa `CelumaModal` (un componente React normal) y no
+     * `Modal.confirm` de antd: la API estática de antd v5 se apoya en el
+     * `ReactDOM.render` heredado, que en React 19 —la versión de este
+     * proyecto— no monta nada. El diálogo simplemente no aparecía y el clic
+     * en "Eliminar" no hacía absolutamente nada, lo que explica el síntoma
+     * "la UI no permite eliminar membretes" incluso con el endpoint
+     * disponible. Ver la advertencia "[antd: compatible] antd v5 support
+     * React is 16 ~ 18" en consola.
+     */
+    const confirmHardDelete = async () => {
+        if (!confirmingDelete) return;
+        setBusyId(confirmingDelete.id);
+        try {
+            await deleteReportLetterhead(confirmingDelete.id, true);
+            message.success("Membrete eliminado");
+            setConfirmingDelete(null);
+            await load();
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al eliminar el membrete");
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const confirmDeactivate = async () => {
+        if (!confirmingDeactivate) return;
+        setBusyId(confirmingDeactivate.id);
+        try {
+            await deleteReportLetterhead(confirmingDeactivate.id, false);
+            message.success("Membrete desactivado");
+            setConfirmingDeactivate(null);
+            await load();
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al desactivar el membrete");
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const handleReactivate = async (letterhead: ReportLetterheadSummary) => {
+        setBusyId(letterhead.id);
+        try {
+            await updateReportLetterhead(letterhead.id, { is_active: true });
+            message.success("Membrete reactivado");
+            await load();
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al reactivar el membrete");
+        } finally {
+            setBusyId(null);
+        }
     };
 
     const handleExportActive = async (letterhead: ReportLetterheadSummary) => {
@@ -209,14 +273,17 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
     };
 
-    // Post-Fase-2 remediation, R12/R13: import creates a new, unpublished-
-    // to-default letterhead — the admin must still explicitly activate/
-    // default it (never silently makes an imported membrete live).
+    // Post-Fase-2 remediation, R12/R13. Tercera remediación: el membrete
+    // importado llega con su configuración ya activa (visible y editable de
+    // inmediato), pero NUNCA como predeterminado del tenant — eso sigue
+    // siendo una decisión explícita del administrador.
     const handleImport = async (file: File) => {
         setImporting(true);
         try {
             await importReportLetterhead(file);
-            message.success("Membrete importado. Revísalo en Versiones antes de activarlo.");
+            message.success(
+                "Membrete importado. Ábrelo para revisarlo; márcalo como predeterminado cuando quieras usarlo."
+            );
             await load();
         } catch (err) {
             message.error(err instanceof Error ? err.message : "Error al importar el membrete");
@@ -267,6 +334,12 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             title: "Acciones",
             key: "actions",
             render: (_: unknown, record) => {
+                // Tercera remediación: solo se ofrecen las acciones que de
+                // verdad son válidas para ESTE membrete. `can_hard_delete` y
+                // `has_active_version` los precalcula el backend con las
+                // mismas reglas que aplicaría al ejecutarlas, así que el menú
+                // y el resultado no pueden discrepar.
+                const canHardDelete = record.can_hard_delete === true;
                 const menuItems: MenuProps["items"] = [
                     {
                         key: "history",
@@ -274,12 +347,15 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                         label: "Ver historial",
                         onClick: () => navigate(`/config/report-letterheads/${record.id}/versions`),
                     },
-                    ...(!record.is_default
+                    ...(!record.is_default && record.is_active
                         ? [{
                             key: "default",
                             icon: <StarOutlined />,
                             label: "Marcar como predeterminado",
-                            disabled: !canManage,
+                            // Un membrete sin configuración guardada no puede
+                            // resolverse, así que tampoco puede ser el
+                            // predeterminado — el backend lo rechaza con 409.
+                            disabled: !canManage || record.has_active_version === false,
                             onClick: () => handleSetDefault(record),
                         }]
                         : []),
@@ -291,14 +367,31 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                         onClick: () => openRenameModal(record),
                     },
                     { type: "divider" },
-                    {
-                        key: "delete",
-                        icon: <DeleteOutlined />,
-                        label: "Eliminar",
-                        danger: true,
-                        disabled: !canManage,
-                        onClick: () => handleDelete(record),
-                    },
+                    ...(record.is_active
+                        ? [{
+                            key: "deactivate",
+                            icon: <StopOutlined />,
+                            label: "Desactivar",
+                            disabled: !canManage || record.is_default,
+                            onClick: () => setConfirmingDeactivate(record),
+                        }]
+                        : [{
+                            key: "reactivate",
+                            icon: <UndoOutlined />,
+                            label: "Reactivar",
+                            disabled: !canManage,
+                            onClick: () => handleReactivate(record),
+                        }]),
+                    ...(canHardDelete
+                        ? [{
+                            key: "delete",
+                            icon: <DeleteOutlined />,
+                            label: "Eliminar",
+                            danger: true,
+                            disabled: !canManage,
+                            onClick: () => setConfirmingDelete(record),
+                        }]
+                        : []),
                 ];
                 return (
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -334,8 +427,13 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                                 onClick={() => handleExportActive(record)}
                             />
                         </Tooltip>
+                        {/* El disparador va envuelto en un <span>: CelumaButton
+                            es un componente de función sin forwardRef, y antd
+                            Dropdown necesita un nodo real al que engancharse. */}
                         <Dropdown menu={{ items: menuItems }} trigger={["click"]}>
-                            <CelumaButton size="xsmall" icon={<MoreOutlined />} />
+                            <span>
+                                <CelumaButton size="xsmall" icon={<MoreOutlined />} aria-label="Más acciones" />
+                            </span>
                         </Dropdown>
                     </div>
                 );
@@ -439,6 +537,66 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                         rows={3}
                         maxLength={500}
                     />
+                </div>
+            </CelumaModal>
+
+            {/* Confirmación de borrado FÍSICO — solo alcanzable cuando el
+                backend marcó `can_hard_delete`. */}
+            <CelumaModal
+                title="Eliminar membrete"
+                open={confirmingDelete !== null}
+                onCancel={() => setConfirmingDelete(null)}
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => setConfirmingDelete(null)}>Cancelar</CelumaButton>
+                        <CelumaButton
+                            size="xsmall"
+                            type="primary"
+                            danger
+                            loading={busyId === confirmingDelete?.id}
+                            onClick={confirmHardDelete}
+                        >
+                            Sí, eliminar
+                        </CelumaButton>
+                    </div>
+                }
+            >
+                <Text>
+                    «{confirmingDelete?.name}» se borrará junto con todo su historial de
+                    configuraciones. Esta acción no se puede deshacer.
+                </Text>
+            </CelumaModal>
+
+            {/* Confirmación de desactivación — la vía cuando hay historial
+                que conservar; explica qué impide eliminarlo. */}
+            <CelumaModal
+                title="Desactivar membrete"
+                open={confirmingDeactivate !== null}
+                onCancel={() => setConfirmingDeactivate(null)}
+                footer={
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <CelumaButton size="xsmall" onClick={() => setConfirmingDeactivate(null)}>Cancelar</CelumaButton>
+                        <CelumaButton
+                            size="xsmall"
+                            type="primary"
+                            loading={busyId === confirmingDeactivate?.id}
+                            onClick={confirmDeactivate}
+                        >
+                            Sí, desactivar
+                        </CelumaButton>
+                    </div>
+                }
+            >
+                <div style={{ display: "grid", gap: 8 }}>
+                    {!!confirmingDeactivate?.blocking_references?.length && (
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                            No puede eliminarse porque {confirmingDeactivate.blocking_references.join("; ")}.
+                        </Text>
+                    )}
+                    <Text>
+                        «{confirmingDeactivate?.name}» dejará de ofrecerse para reportes nuevos, pero se
+                        conserva su historial y los reportes ya creados con él no cambian.
+                    </Text>
                 </div>
             </CelumaModal>
 

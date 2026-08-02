@@ -18,7 +18,7 @@ import type { SignerLookupEntry } from "../../../components/report/legacy/legacy
 // Bloque A / Historia A4 alongside the renderer's extraction into
 // legacy/legacy_report_renderer_v1.tsx. LegacyReportRendererV1 is the SAME
 // renderer previously named ReportPreviewPages — used for both on-screen
-// preview and the "PDF" export (use_pdf_export.ts just clones its DOM — see
+// preview and the "PDF" export (use_local_print.ts just clones its DOM — see
 // report-rendering-inventory.md §3) — so these tests double as protection
 // for the PDF output too.
 //

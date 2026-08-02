@@ -183,11 +183,16 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await expect(page.getByRole("heading", { name: new RegExp(`Editar membrete — Membrete E2E ${suffix}`) }))
             .toBeVisible({ timeout: 10_000 });
 
-        // The real Ant Design file input, driven with a real File via setInputFiles().
+        // The real Ant Design file input, driven with a real File via
+        // setInputFiles(). Tercera remediación: seleccionar el archivo lo
+        // sube de inmediato — ya no hay un segundo botón "Subir logo".
         const logoPath = path.join(__dirname, "fixtures", "e2e-logo.png");
-        await page.locator('input[type="file"]').first().setInputFiles(logoPath);
-        await page.getByRole("button", { name: "Subir logo", exact: true }).click();
-        await expect(page.getByAltText("Logo", { exact: true })).toBeVisible({ timeout: 10_000 });
+        await page.locator('input[type="file"]').nth(0).setInputFiles(logoPath);
+        await expect(page.getByAltText("Logo", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+
+        // Logo de PIE — su propio input, su propia previsualización.
+        await page.locator('input[type="file"]').nth(1).setInputFiles(logoPath);
+        await expect(page.getByAltText("Logo de pie", { exact: true })).toBeVisible({ timeout: 10_000 });
 
         await page.getByLabel("Nombre institucional").fill(`E2E Lab ${suffix}`);
         await page.getByRole("button", { name: "Guardar cambios" }).click();
@@ -199,9 +204,35 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
         await expect(page.getByText(`Membrete E2E ${suffix}`)).toBeVisible({ timeout: 10_000 });
 
+        // ---- Tercera remediación: reabrir el editor y confirmar que AMBOS
+        // logos y la configuración se rehidratan (problemas B y C). Antes
+        // aquí aparecía el logo neutral de Céluma. ----
+        const letterheadRow = page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) });
+        await letterheadRow.getByRole("button", { name: "Editar" }).click();
+        await expect(page.getByRole("heading", { name: /Editar membrete/ })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByLabel("Nombre institucional")).toHaveValue(`E2E Lab ${suffix}`);
+        await expect(page.getByAltText("Logo", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByAltText("Logo de pie", { exact: true })).toBeVisible();
+        // Los dos logos llegan a la previsualización, cada uno en su banda.
+        const bands = await page.evaluate(() => {
+            const pageEl = document.querySelector('[style*="8.5in"]');
+            if (!pageEl) return [];
+            return Array.from(pageEl.querySelectorAll("img")).map((img) => {
+                let n: HTMLElement | null = img.parentElement;
+                while (n && n.parentElement !== pageEl) n = n.parentElement;
+                if (!n) return "other";
+                const top = !!n.style.top, bottom = !!n.style.bottom;
+                return top && bottom ? "body" : bottom ? "footer" : top ? "header" : "other";
+            });
+        });
+        expect(bands).toContain("header");
+        expect(bands).toContain("footer");
+        await page.getByRole("button", { name: "Cancelar" }).click();
+        await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
+
         // Marcar como predeterminado — ahora vive en el menú secundario "...".
         const row = page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) });
-        await row.getByRole("button").last().click(); // el botón "..." (MoreOutlined)
+        await row.getByRole("button", { name: "Más acciones" }).click();
         await page.getByRole("menuitem", { name: "Marcar como predeterminado" }).click();
         await expect(page.getByText("Predeterminado").first()).toBeVisible({ timeout: 10_000 });
 
@@ -325,8 +356,17 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         // Once persisted, the report is locked to its saved letterhead —
         // the "Membrete" selector must not reappear on an existing report.
         await expect(reviewerPage.getByText("Membrete", { exact: true })).toHaveCount(0);
-        // "Imprimir copia local" no debe existir en la vista principal.
-        await expect(reviewerPage.getByText("Imprimir copia local")).toHaveCount(0);
+        // Cuarta remediación (Observación 1): la impresión local existe otra
+        // vez, pero en APPROVED se ofrece como "Imprimir borrador" — nunca
+        // como "copia local" (ese rótulo se reserva a PUBLISHED/RETRACTED) y
+        // nunca como algo que pueda confundirse con el PDF oficial, que en
+        // este estado todavía no existe.
+        await expect(reviewerPage.getByRole("button", { name: "Imprimir borrador" })).toBeVisible();
+        await expect(reviewerPage.getByRole("button", { name: "Imprimir copia local" })).toHaveCount(0);
+        await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" })).toHaveCount(0);
+        await expect(
+            reviewerPage.getByText("BORRADOR — DOCUMENTO NO OFICIAL", { exact: false }),
+        ).toBeVisible();
 
         await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
         // The single action generates the official PDF (reflecting the

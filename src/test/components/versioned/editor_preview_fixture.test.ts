@@ -66,3 +66,36 @@ describe("buildPreviewReportEnvelope", () => {
         expect(snapB.presentation.paper.margins_cm.top).toBe(2);
     });
 });
+
+/**
+ * Tercera remediación post-Fase 2 — problema C: el logo de pie no aparecía
+ * NUNCA en la previsualización del editor. El renderer ya sabía dibujarlo
+ * (lee `resolved_resources.footer_logo_url`); lo que faltaba era que este
+ * builder lo aceptara y lo pusiera en el sobre.
+ */
+describe("buildPreviewReportEnvelope — logo de pie", () => {
+    it("expone footer_logo_url cuando se le pasa la URL del logo de pie", () => {
+        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/pie.png");
+        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/pie.png");
+    });
+
+    it("mantiene los dos logos separados — nunca reutiliza el del encabezado", () => {
+        const envelope = buildPreviewReportEnvelope(
+            presentation,
+            "https://cdn.example/header.png",
+            "https://cdn.example/footer.png"
+        );
+        expect(envelope.resolved_resources?.header_logo_url).toBe("https://cdn.example/header.png");
+        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/footer.png");
+    });
+
+    it("expone solo el de pie cuando no hay logo de encabezado", () => {
+        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/pie.png");
+        expect(envelope.resolved_resources?.header_logo_url).toBeNull();
+        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/pie.png");
+    });
+
+    it("omite resolved_resources cuando no hay ninguno de los dos", () => {
+        expect(buildPreviewReportEnvelope(presentation, null, null).resolved_resources).toBeUndefined();
+    });
+});

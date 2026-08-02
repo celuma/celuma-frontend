@@ -19,6 +19,14 @@ export interface ReportLetterheadSummary {
     is_default: boolean;
     is_active: boolean;
     created_at: string;
+    /** Tercera remediación: el backend precalcula qué acciones son válidas
+     *  para que la UI muestre "Eliminar" solo cuando de verdad se puede, en
+     *  vez de ofrecerlo siempre y responder 409 después del clic. Ver
+     *  letterhead-delete-deactivate-contract.md. */
+    has_active_version?: boolean;
+    can_hard_delete?: boolean;
+    /** Motivos legibles del bloqueo; vacío si `can_hard_delete`. */
+    blocking_references?: string[];
 }
 
 export interface ReportLetterheadDetail extends ReportLetterheadSummary {
@@ -29,17 +37,38 @@ export interface ReportLetterheadsListResponse {
     letterheads: ReportLetterheadSummary[];
 }
 
-/** Payload for POST /api/v1/report-letterheads/ */
+/** Payload for POST /api/v1/report-letterheads/
+ *
+ *  Cuarta remediación post-Fase 2 (Observación 2): `description` es
+ *  opcional Y anulable. `undefined` = campo omitido; `null` = "sin
+ *  descripción". El backend normaliza además `""`/solo-espacios a `null`.
+ *  Ver optional-letterhead-description-contract.md. */
 export interface CreateReportLetterheadPayload {
     name: string;
-    description?: string;
+    description?: string | null;
 }
 
-/** Payload for PUT /api/v1/report-letterheads/{id} */
+/** Payload for PUT /api/v1/report-letterheads/{id}
+ *
+ *  `description: undefined` NO se serializa (JSON.stringify lo omite) y el
+ *  backend deja el valor previo intacto; `description: null` lo limpia. */
 export interface UpdateReportLetterheadPayload {
     name?: string;
-    description?: string;
+    description?: string | null;
     is_active?: boolean;
+}
+
+/** Normaliza el valor de un campo de descripción del formulario al valor
+ *  que debe viajar en el payload: vacío o solo espacios -> `null` (limpiar),
+ *  cualquier otro texto -> el texto recortado.
+ *
+ *  Existe como función exportada, y no como expresión suelta en cada
+ *  pantalla, precisamente porque el bug original venía de repetir
+ *  `description || undefined` en dos sitios: ese patrón convierte `""` en
+ *  "campo omitido" y hace imposible limpiar la descripción. */
+export function normalizeLetterheadDescription(value: string | null | undefined): string | null {
+    const trimmed = (value ?? "").trim();
+    return trimmed.length > 0 ? trimmed : null;
 }
 
 export type ReportLetterheadVersionStatus = "PUBLISHED" | "ACTIVE" | "ARCHIVED";
@@ -58,9 +87,23 @@ export interface ReportLetterheadVersionSummary {
     archived_at: string | null;
 }
 
+/** URLs efímeras de los logos de un membrete — nunca se persisten; el
+ *  contrato único es "storage_id persistente + URL resuelta efímera"
+ *  (ver letterhead-logo-persistence-contract.md). Misma forma que
+ *  `ReportEnvelope.resolved_resources`, a propósito: el editor y el
+ *  renderer consumen ambos orígenes con el mismo código. */
+export interface LetterheadResolvedResources {
+    header_logo_url?: string | null;
+    footer_logo_url?: string | null;
+}
+
 /** Full version detail, including the immutable configuration. */
 export interface ReportLetterheadVersionDetail extends ReportLetterheadVersionSummary {
     configuration: ReportPresentationSnapshotV2;
+    /** Tercera remediación: sin esto el editor no podía previsualizar un
+     *  logo ya persistido al reabrirse y siempre caía al logo neutral
+     *  (problemas B y C del brief). */
+    resolved_resources?: LetterheadResolvedResources | null;
 }
 
 export interface ReportLetterheadVersionsListResponse {
@@ -85,12 +128,32 @@ export interface ReportLetterheadLogoUploadResponse {
     size_bytes: number;
 }
 
-/** Response from GET /api/v1/study-types/{id}/report-defaults. */
+export type LetterheadResolutionSource = "EXPLICIT" | "TEMPLATE_PREFERRED" | "TENANT_DEFAULT";
+
+export type V2BlockedReason =
+    | "NO_TEMPLATE"
+    | "NO_ACTIVE_TEMPLATE_VERSION"
+    | "NO_LETTERHEAD"
+    | "LETTERHEAD_MISCONFIGURED";
+
+/** Response from GET /api/v1/study-types/{id}/report-defaults.
+ *
+ *  Tercera remediación: incluye la `presentation` ya resuelta y el motivo
+ *  exacto de bloqueo. Antes el editor tenía que encadenar
+ *  listar-membretes -> listar-versiones -> leer-versión para reconstruirla,
+ *  y si cualquier eslabón fallaba se quedaba sin presentación y montaba
+ *  Legacy en silencio (problema F). */
 export interface StudyTypeReportDefaults {
     template_id: string | null;
     active_template_version_id: string | null;
     letterhead_version_id: string | null;
     letterhead_name: string | null;
+    letterhead_id?: string | null;
+    letterhead_resolution_source?: LetterheadResolutionSource | null;
+    letterhead_presentation?: ReportPresentationSnapshotV2 | null;
+    letterhead_resolved_resources?: LetterheadResolvedResources | null;
+    v2_blocked_reason?: V2BlockedReason | null;
+    v2_blocked_detail?: string | null;
 }
 
 // ---------------------------------------------------------------------------

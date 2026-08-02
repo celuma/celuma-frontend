@@ -1,10 +1,9 @@
-import { Spin, Button } from "antd";
+import { Spin } from "antd";
 import React, { useRef, forwardRef, useImperativeHandle } from "react";
-import { FilePdfOutlined } from "@ant-design/icons";
 import type { ReportEnvelope } from "../../models/report";
 import Panel from "../ui/panel";
 import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef, type SignerLookupEntry } from "./report_renderer_resolver";
-import { usePdfExport } from "../../hooks/use_pdf_export";
+import { useLocalPrint, localPrintMarkForStatus } from "../../hooks/use_local_print";
 
 interface ReportPreviewProps {
     report: ReportEnvelope;
@@ -15,19 +14,26 @@ interface ReportPreviewProps {
 }
 
 export interface ReportPreviewRef {
-    exportPDF: () => Promise<void>;
+    /** Cuarta remediación (Observación 1): impresión LOCAL — nunca el PDF
+     *  oficial. La marca de borrador/retractado se deriva del estado del
+     *  reporte, no del llamante, para que ninguna pantalla pueda imprimir
+     *  un no-publicado sin marca. Ver local-print-contract.md. */
+    printLocalCopy: () => Promise<void>;
 }
 
 const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report, loading = false, style, signerLookup }, ref) => {
     const previewPagesRef = useRef<ReportPreviewPagesRef>(null);
-    const { exportToPDF } = usePdfExport();
+    const { printLocalCopy } = useLocalPrint();
 
-    const handleExportPDF = async () => {
-        await exportToPDF(previewPagesRef, report.title ?? undefined);
+    const handlePrintLocalCopy = async () => {
+        await printLocalCopy(previewPagesRef, {
+            filename: report.title ?? undefined,
+            mark: localPrintMarkForStatus(report.status),
+        });
     };
 
     useImperativeHandle(ref, () => ({
-        exportPDF: handleExportPDF
+        printLocalCopy: handlePrintLocalCopy
     }));
 
     if (loading) {
@@ -40,18 +46,6 @@ const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report
 
     return (
         <Panel style={{ ...style, padding: 16, overflowY: "auto", maxHeight: 600 }}>
-            <div style={{ marginBottom: 12 }}>
-                <Button
-                    type="primary"
-                    icon={<FilePdfOutlined />}
-                    onClick={handleExportPDF}
-                    size="small"
-                    data-pdf-export
-                    style={{ display: "none" }} // Hidden since we're using external button
-                >
-                    Exportar PDF
-                </Button>
-            </div>
             <ReportPreviewPages ref={previewPagesRef} report={report} signerLookup={signerLookup} />
         </Panel>
     );

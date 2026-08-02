@@ -29,10 +29,23 @@ const marginsSchema = z.object({
     left: z.number().min(MIN_MARGIN_CM).max(MAX_MARGIN_CM),
 });
 
+// Cuarta remediación post-Fase 2 — paridad Legacy. Igual que en la segunda
+// remediación, TODO campo nuevo debe declararse aquí aunque ya esté en
+// versioned_report_types.ts: Zod trabaja en modo "strip" y descartaría
+// silenciosamente cualquier clave no declarada, dejando al renderer sin los
+// valores que el backend sí devolvió.
+const nullableNumber = z.number().nullable().optional();
+const fontWeightSchema = z
+    .union([z.literal(400), z.literal(500), z.literal(600), z.literal(700)])
+    .nullable()
+    .optional();
+const logoModeSchema = z.enum(["NONE", "CUSTOM", "CELUMA_DEFAULT"]).nullable().optional();
+
 const paperSchema = z.object({
     size: z.literal("LETTER"),
     orientation: z.literal("PORTRAIT"),
     margins_cm: marginsSchema,
+    body_padding_top_mm: nullableNumber,
 });
 
 const nullableString = z.string().nullable().optional();
@@ -59,6 +72,11 @@ const typographySchema = z
         base_font_size_pt: z.number(),
         header_font_size_pt: z.number(),
         footer_font_size_pt: z.number(),
+        header_secondary_font_size_pt: nullableNumber,
+        header_font_weight: fontWeightSchema,
+        footer_font_weight: fontWeightSchema,
+        body_font_weight: fontWeightSchema,
+        line_height: nullableNumber,
     })
     .optional();
 
@@ -74,8 +92,15 @@ const headerSchema = z.object({
     email: nullableString,
     logo_position: logoPositionSchema,
     content_alignment: z.enum(["TOP", "CENTER", "BOTTOM"]).optional(),
-    height_mm: z.number().nullable().optional(),
+    height_mm: nullableNumber,
     divider: dividerSchema,
+    logo_mode: logoModeSchema,
+    offset_mm: nullableNumber,
+    content_gap_mm: nullableNumber,
+    padding_mm: nullableNumber,
+    signer_placement: z.enum(["RIGHT", "INLINE", "HIDDEN"]).nullable().optional(),
+    logo_height_mm: nullableNumber,
+    logo_max_width_mm: nullableNumber,
 });
 
 const footerSchema = z.object({
@@ -85,8 +110,16 @@ const footerSchema = z.object({
     logo_storage_id: nullableString,
     logo_position: logoPositionSchema,
     content_alignment: z.enum(["LEFT", "CENTER", "RIGHT"]).optional(),
-    height_mm: z.number().nullable().optional(),
+    height_mm: nullableNumber,
     divider: dividerSchema,
+    logo_mode: logoModeSchema,
+    layout: z.enum(["GROUPED", "SPLIT"]).nullable().optional(),
+    offset_mm: nullableNumber,
+    content_gap_mm: nullableNumber,
+    padding_mm: nullableNumber,
+    logo_height_mm: nullableNumber,
+    logo_max_width_pct: nullableNumber,
+    text_max_width_pct: nullableNumber,
 });
 
 const styleSchema = z.object({

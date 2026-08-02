@@ -17,7 +17,7 @@ interface UnsupportedReportVersionProps {
  * or the value is not a version this build understands at all.
  *
  * Implements the same ReportRendererRef contract as every real renderer so
- * consumers (use_pdf_export.ts, etc.) can call getPages() unconditionally
+ * consumers (use_local_print.ts, etc.) can call getPages() unconditionally
  * without a type-level branch — it just safely returns no pages.
  */
 const UnsupportedReportVersion = forwardRef<ReportRendererRef, UnsupportedReportVersionProps>(

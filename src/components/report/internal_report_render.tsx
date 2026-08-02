@@ -95,7 +95,7 @@ export default function InternalReportRender() {
                     await document.fonts.ready;
                 }
                 const pages = rendererRef.current?.getPages() ?? [];
-                // Same page-break-after wrapping use_pdf_export.ts applies to
+                // Same page-break-after wrapping use_local_print.ts applies to
                 // cloned pages before window.print() — applied here directly to
                 // the live DOM (no iframe/clone) so Chromium's own page.pdf()
                 // breaks at identical boundaries. Also explicitly zero each

@@ -9,6 +9,9 @@ import InternalReportRender from "../../src/components/report/internal_report_re
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
 import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/reports/versioned_v2_legacy_parity";
+// Cuarta remediación post-Fase 2: fixtures PAREADOS Legacy ↔ V2 (mismo
+// contenido clínico, dos renderers) para legacy_v2_parity.visual.spec.ts.
+import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Fase 2, Bloque A / Historia
@@ -30,7 +33,12 @@ import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/repo
  * Usage: /?fixture=<key of allReportFixtures or allVersionedV2Fixtures>
  */
 
-const allFixtures = { ...allReportFixtures, ...allVersionedV2Fixtures, ...allVersionedV2LegacyParityFixtures };
+const allFixtures = {
+    ...allReportFixtures,
+    ...allVersionedV2Fixtures,
+    ...allVersionedV2LegacyParityFixtures,
+    ...allLegacyV2ParityFixtures,
+};
 
 // Matches the signer ids used in publishedMultiSampleWithImages.signed_by (legacy)
 // and v2CompleteBranding.signed_by (V2) so the signature block resolves a

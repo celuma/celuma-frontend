@@ -24,6 +24,10 @@ export interface ReportPaperConfig {
     size: ReportPaperSize;
     orientation: ReportPaperOrientation;
     margins_cm: ReportMarginsCm;
+    /** Cuarta remediación post-Fase 2 (opcional/aditivo): relleno superior
+     *  DENTRO de la caja paginable. Ausente = 0mm (comportamiento actual);
+     *  Legacy usa 4mm. Ver v2-legacy-parity-capabilities.md. */
+    body_padding_top_mm?: number | null;
 }
 
 /** Segunda remediación post-Fase 2 (UX): línea divisoria bajo el header /
@@ -44,11 +48,37 @@ export type ReportLogoPosition = "LEFT" | "CENTER" | "RIGHT";
 export type ReportHeaderAlignment = "TOP" | "CENTER" | "BOTTOM";
 export type ReportFooterAlignment = "LEFT" | "CENTER" | "RIGHT";
 
+/** Cuarta remediación post-Fase 2: enum cerrado de pesos tipográficos —
+ *  nunca CSS libre. */
+export type ReportFontWeight = 400 | 500 | 600 | 700;
+
+/**
+ * Cuarta remediación post-Fase 2: modo de logo de una banda.
+ *
+ * `undefined`/ausente NO es un cuarto modo: significa "snapshot anterior a
+ * esta remediación", y cada banda lo resuelve al comportamiento que ya
+ * tenía (el encabezado caía al isotipo neutral; el pie no). Ver
+ * `resolveLogoMode` en versioned_report_renderer_v2.tsx.
+ */
+export type ReportLogoMode = "NONE" | "CUSTOM" | "CELUMA_DEFAULT";
+
+export type ReportSignerPlacement = "RIGHT" | "INLINE" | "HIDDEN";
+
+export type ReportFooterLayout = "GROUPED" | "SPLIT";
+
 export interface ReportTypographyConfig {
     font_family: ReportFontFamily;
     base_font_size_pt: number;
     header_font_size_pt: number;
     footer_font_size_pt: number;
+    /** Cuarta remediación (opcionales/aditivos). Ausente/null = el
+     *  comportamiento por línea que el renderer ya tenía; un valor
+     *  explícito unifica esa propiedad en toda la banda. */
+    header_secondary_font_size_pt?: number | null;
+    header_font_weight?: ReportFontWeight | null;
+    footer_font_weight?: ReportFontWeight | null;
+    body_font_weight?: ReportFontWeight | null;
+    line_height?: number | null;
 }
 
 export interface ReportHeaderConfig {
@@ -66,6 +96,14 @@ export interface ReportHeaderConfig {
     content_alignment?: ReportHeaderAlignment;
     height_mm?: number | null;
     divider?: DividerConfig;
+    /** Cuarta remediación post-Fase 2 (opcionales/aditivos) — paridad Legacy. */
+    logo_mode?: ReportLogoMode | null;
+    offset_mm?: number | null;
+    content_gap_mm?: number | null;
+    padding_mm?: number | null;
+    signer_placement?: ReportSignerPlacement | null;
+    logo_height_mm?: number | null;
+    logo_max_width_mm?: number | null;
 }
 
 export interface ReportFooterConfig {
@@ -79,6 +117,15 @@ export interface ReportFooterConfig {
     content_alignment?: ReportFooterAlignment;
     height_mm?: number | null;
     divider?: DividerConfig;
+    /** Cuarta remediación post-Fase 2 (opcionales/aditivos) — paridad Legacy. */
+    logo_mode?: ReportLogoMode | null;
+    layout?: ReportFooterLayout | null;
+    offset_mm?: number | null;
+    content_gap_mm?: number | null;
+    padding_mm?: number | null;
+    logo_height_mm?: number | null;
+    logo_max_width_pct?: number | null;
+    text_max_width_pct?: number | null;
 }
 
 export interface ReportStyleConfig {

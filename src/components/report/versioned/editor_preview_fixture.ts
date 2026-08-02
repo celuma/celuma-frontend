@@ -47,14 +47,23 @@ const PREVIEW_CLINICAL_TEMPLATE: ReportTemplateJSON = {
 /**
  * Builds a full ReportEnvelope for the live preview, combining the fixed
  * synthetic clinical content above with the editor's current (unsaved)
- * `presentation` state. `resolvedLogoUrl` mirrors what the backend would
- * normally compute in `resolved_resources.header_logo_url` — while editing,
- * this is the locally-known URL of a just-uploaded (but not yet published)
- * logo.
+ * `presentation` state.
+ *
+ * `resolvedLogoUrl`/`resolvedFooterLogoUrl` son exactamente lo que el
+ * backend calcularía en `resolved_resources.header_logo_url`/
+ * `footer_logo_url`. Mientras se edita, cada uno es (por orden) la URL del
+ * logo recién subido, o la URL resuelta que devolvió el backend para el
+ * logo ya persistido.
+ *
+ * Tercera remediación: antes esta función solo aceptaba el logo del
+ * encabezado, así que el logo de pie NUNCA aparecía en la previsualización
+ * por mucho que estuviera bien guardado — el problema C del brief. El
+ * renderer ya lo soportaba; lo que faltaba era pasárselo.
  */
 export function buildPreviewReportEnvelope(
     presentation: ReportPresentationSnapshotV2,
-    resolvedLogoUrl?: string | null
+    resolvedLogoUrl?: string | null,
+    resolvedFooterLogoUrl?: string | null
 ): ReportEnvelope {
     const snapshot: ReportRenderingSnapshotV2 = {
         schema_version: 2,
@@ -83,6 +92,14 @@ export function buildPreviewReportEnvelope(
         template: PREVIEW_CLINICAL_TEMPLATE,
         report,
         schema_version: 2,
-        resolved_resources: resolvedLogoUrl ? { header_logo_url: resolvedLogoUrl } : undefined,
+        // Mismo contrato que el backend: el objeto entero está ausente si no
+        // hay nada que resolver, nunca presente con todos los campos nulos.
+        resolved_resources:
+            resolvedLogoUrl || resolvedFooterLogoUrl
+                ? {
+                      header_logo_url: resolvedLogoUrl ?? null,
+                      footer_logo_url: resolvedFooterLogoUrl ?? null,
+                  }
+                : undefined,
     };
 }

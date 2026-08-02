@@ -42,6 +42,46 @@ describe("VersionedReportRendererV2 — footer logo (paridad Legacy)", () => {
         expect(imgs).toContain("https://fake-cdn.example.invalid/logos/footer-logo.png");
     });
 
+    /**
+     * Tercera remediación post-Fase 2 (§5 del brief): guardia explícita
+     * contra un bug de copy/paste entre las dos bandas. Con DOS logos
+     * distintos configurados, cada uno tiene que aterrizar en su banda —
+     * el pie NUNCA puede acabar dibujando `header_logo_url`.
+     */
+    it("draws each logo in its own band — the footer never reuses header_logo_url", () => {
+        const report = clone(v2CompleteBranding);
+        report.resolved_resources = {
+            header_logo_url: "https://fake-cdn.example.invalid/logos/SOLO-HEADER.png",
+            footer_logo_url: "https://fake-cdn.example.invalid/logos/SOLO-FOOTER.png",
+        };
+        const { pages } = renderReport(report);
+        const page = pages[0] as HTMLElement;
+
+        // Las tres bandas son hijos directos de la página: encabezado
+        // (`top`, sin `bottom`), pie (`bottom`, sin `top`) y cuerpo (ambos).
+        const bandOf = (img: Element): "header" | "footer" | "body" | "other" => {
+            let node: HTMLElement | null = img.parentElement;
+            while (node && node.parentElement !== page) {
+                node = node.parentElement;
+                if (!node) return "other";
+            }
+            if (!node) return "other";
+            const hasTop = !!node.style.top;
+            const hasBottom = !!node.style.bottom;
+            if (hasTop && hasBottom) return "body";
+            if (hasBottom) return "footer";
+            if (hasTop) return "header";
+            return "other";
+        };
+
+        const imgs = Array.from(page.querySelectorAll("img"));
+        const headerImgs = imgs.filter((i) => bandOf(i) === "header").map((i) => i.getAttribute("src"));
+        const footerImgs = imgs.filter((i) => bandOf(i) === "footer").map((i) => i.getAttribute("src"));
+
+        expect(headerImgs).toEqual(["https://fake-cdn.example.invalid/logos/SOLO-HEADER.png"]);
+        expect(footerImgs).toEqual(["https://fake-cdn.example.invalid/logos/SOLO-FOOTER.png"]);
+    });
+
     it("renders no footer logo image when footer_logo_url is absent, even with a header logo", () => {
         const { pages } = renderReport(v2CompleteBranding);
         const imgs = Array.from(pages[0]?.querySelectorAll("img") ?? []).map((i) => i.getAttribute("src"));

@@ -21,11 +21,13 @@ import type {
     ReportPresentationSnapshotV2,
     ReportMarginsCm,
     DividerConfig,
+    ReportLogoMode,
 } from "../components/report/versioned/versioned_report_types";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
 import { useTemplateEditorDraft } from "../hooks/use_template_editor_draft";
 import { extractUploadedFile } from "../lib/upload_helpers";
+import type { LetterheadResolvedResources } from "../models/report_letterhead";
 import {
     getReportLetterhead,
     getReportLetterheadVersion,
@@ -64,6 +66,11 @@ const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
         content_alignment: "CENTER",
         height_mm: null,
         divider: DEFAULT_DIVIDER,
+        // Cuarta remediación: un membrete NUEVO nace sin logo y sin
+        // sustituto. El isotipo de Céluma no vuelve a colarse dentro de un
+        // documento clínico solo porque nadie haya subido un logotipo
+        // todavía — ver v2-legacy-parity-capabilities.md, "logo_mode".
+        logo_mode: "NONE",
     },
     footer: {
         enabled: true,
@@ -74,10 +81,42 @@ const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
         content_alignment: "CENTER",
         height_mm: null,
         divider: DEFAULT_DIVIDER,
+        logo_mode: "NONE",
     },
     style: { primary_color: "#4A4A4A", secondary_color: null, typography: undefined },
     signer: null,
 };
+
+/**
+ * Cuarta remediación — al ABRIR un membrete ya existente que no tiene
+ * `logo_mode` (todos los guardados antes de esta remediación), se deriva el
+ * modo que reproduce lo que su autor está viendo hoy, no el que nos
+ * gustaría que tuviera:
+ *
+ *   - con `logo_storage_id`  -> CUSTOM
+ *   - encabezado sin logo    -> CELUMA_DEFAULT (el renderer caía al isotipo
+ *                               neutral, y guardar no debe cambiárselo de
+ *                               golpe sin que lo pida)
+ *   - pie sin logo           -> NONE (el pie nunca tuvo ese sustituto)
+ *
+ * A partir de ahí el modo queda explícito en la nueva versión, y el
+ * administrador puede cambiarlo desde el propio editor.
+ */
+function deriveLogoMode(
+    explicit: ReportLogoMode | null | undefined,
+    logoStorageId: string | null | undefined,
+    neutralFallbackWhenAbsent: boolean,
+): ReportLogoMode {
+    if (explicit) return explicit;
+    if (logoStorageId) return "CUSTOM";
+    return neutralFallbackWhenAbsent ? "CELUMA_DEFAULT" : "NONE";
+}
+
+const HEADER_LOGO_MODE_OPTIONS = [
+    { value: "NONE", label: "Sin logotipo" },
+    { value: "CUSTOM", label: "Logotipo propio" },
+    { value: "CELUMA_DEFAULT", label: "Isotipo de Céluma" },
+];
 
 const LOGO_POSITION_OPTIONS = [
     { value: "LEFT", label: "Izquierda" },
@@ -136,19 +175,23 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     const [letterheadName, setLetterheadName] = useState("");
     const [presentation, setPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
     const [initialPresentation, setInitialPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
-    const [carriedForwardLogo, setCarriedForwardLogo] = useState(false);
-    const [carriedForwardFooterLogo, setCarriedForwardFooterLogo] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-    // Post-Fase-2 remediation, Bug 1 fix: hold the raw RcFile directly (it
-    // already IS the file we need), not an UploadFile wrapper — reading
-    // `.originFileObj` off an RcFile is always undefined, which silently
-    // no-op'd every upload attempt in the previous template editor.
-    const [logoFile, setLogoFile] = useState<RcFile | null>(null);
-    const [uploadingLogo, setUploadingLogo] = useState(false);
+    // Tercera remediación post-Fase 2 — contrato único de preview de logos
+    // (ver letterhead-logo-persistence-contract.md):
+    //
+    //     1. URL del logo recién subido  (la que devuelve POST .../logo)
+    //     2. URL resuelta por el backend (resolved_resources.*_logo_url)
+    //     3. logo neutral                (SOLO si no hay ningún logo configurado)
+    //
+    // Estos dos estados guardan (1) o (2) indistintamente — el renderer no
+    // necesita saber cuál es. La causa raíz de los problemas B y C era que
+    // solo se poblaban en el caso (1): al reabrir el editor quedaban en
+    // `null` y se caía al caso (3) aunque `logo_storage_id` estuviera
+    // perfectamente persistido.
     const [previewLogoUrl, setPreviewLogoUrl] = useState<string | null>(null);
-    const [footerLogoFile, setFooterLogoFile] = useState<RcFile | null>(null);
-    const [uploadingFooterLogo, setUploadingFooterLogo] = useState(false);
     const [previewFooterLogoUrl, setPreviewFooterLogoUrl] = useState<string | null>(null);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [uploadingFooterLogo, setUploadingFooterLogo] = useState(false);
     const [publishing, setPublishing] = useState(false);
     const [publishModalOpen, setPublishModalOpen] = useState(false);
 
@@ -171,18 +214,44 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 setLetterheadName(letterhead.name);
 
                 let seed = BLANK_PRESENTATION;
+                let seedResources: LetterheadResolvedResources | null | undefined;
                 if (fromVersionId) {
                     const version = await getReportLetterheadVersion(letterheadId, fromVersionId);
                     seed = version.configuration;
+                    seedResources = version.resolved_resources;
                 } else if (mode === "normal") {
                     // Flujo principal "Editar": precarga la configuración
                     // ACTIVE actual — si no hay ninguna todavía (membrete
                     // recién creado), arranca en blanco.
                     const active = await getActiveReportLetterheadVersion(letterheadId);
-                    if (active) seed = active.configuration;
+                    if (active) {
+                        seed = active.configuration;
+                        seedResources = active.resolved_resources;
+                    }
                 }
-                setCarriedForwardLogo(!!seed.header.logo_storage_id);
-                setCarriedForwardFooterLogo(!!seed.footer.logo_storage_id);
+                // Tercera remediación: el preview se inicializa con las URLs
+                // que ya resolvió el backend para los logos persistidos. Sin
+                // este paso el editor arrancaba siempre sin URLs y mostraba
+                // el logo neutral de Céluma aunque el membrete tuviera uno
+                // guardado — el síntoma exacto de los problemas B y C.
+                setPreviewLogoUrl(seedResources?.header_logo_url ?? null);
+                setPreviewFooterLogoUrl(seedResources?.footer_logo_url ?? null);
+                // Cuarta remediación: se materializa `logo_mode` al abrir,
+                // con el valor que reproduce lo que el membrete muestra hoy
+                // (ver deriveLogoMode). A partir de aquí el modo es
+                // explícito y editable, y nunca depende de una regla
+                // implícita del renderer.
+                seed = {
+                    ...seed,
+                    header: {
+                        ...seed.header,
+                        logo_mode: deriveLogoMode(seed.header.logo_mode, seed.header.logo_storage_id, true),
+                    },
+                    footer: {
+                        ...seed.footer,
+                        logo_mode: deriveLogoMode(seed.footer.logo_mode, seed.footer.logo_storage_id, false),
+                    },
+                };
                 const draft = loadDraft();
                 setPresentation(draft ?? seed);
                 setInitialPresentation(seed);
@@ -248,17 +317,31 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 : null,
         }));
 
-    const handleUploadLogo = async () => {
-        const fileObject = extractUploadedFile(logoFile);
+    /**
+     * Tercera remediación post-Fase 2: seleccionar (o arrastrar) un archivo
+     * lo SUBE de inmediato, en vez de dejarlo en un estado intermedio a la
+     * espera de un segundo botón "Subir logo".
+     *
+     * Aquel paso intermedio causaba dos fallos reales: el drag-and-drop no
+     * mostraba nunca el asset recién soltado (nada actualizaba el preview
+     * hasta pulsar el segundo botón), y quien elegía un archivo y pulsaba
+     * directamente "Guardar" perdía el logo en silencio — el `File` seguía
+     * en memoria y jamás llegó a convertirse en un `logo_storage_id`.
+     * Ahora, al terminar `handleSelectLogo`, `logo_storage_id` ya es
+     * definitivo y "Guardar" nunca depende de un objeto `File`.
+     */
+    const handleSelectLogo = async (file: RcFile) => {
+        const fileObject = extractUploadedFile(file);
         if (!fileObject || !letterheadId) return;
         setUploadingLogo(true);
         try {
             const resp = await uploadReportLetterheadLogo(letterheadId, fileObject);
-            updateHeader({ logo_storage_id: resp.storage_object_id });
+            // Subir un logotipo ES la manera de pedir "logotipo propio": el
+            // modo se pone solo, para que nadie suba una imagen y luego no
+            // la vea porque el modo seguía en NONE.
+            updateHeader({ logo_storage_id: resp.storage_object_id, logo_mode: "CUSTOM" });
             setPreviewLogoUrl(resp.url);
-            setCarriedForwardLogo(false);
-            setLogoFile(null);
-            message.success("Logo subido");
+            message.success("Logo actualizado");
         } catch (err) {
             message.error(err instanceof Error ? err.message : "Error al subir el logo");
         } finally {
@@ -266,22 +349,22 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         }
     };
     const handleRemoveLogo = () => {
-        updateHeader({ logo_storage_id: null });
+        // Quitar el logotipo significa "sin logotipo", no "pon el de
+        // Céluma": si el modo se quedara en CUSTOM/CELUMA_DEFAULT, el
+        // documento acabaría con una imagen que nadie pidió.
+        updateHeader({ logo_storage_id: null, logo_mode: "NONE" });
         setPreviewLogoUrl(null);
-        setCarriedForwardLogo(false);
     };
 
-    const handleUploadFooterLogo = async () => {
-        const fileObject = extractUploadedFile(footerLogoFile);
+    const handleSelectFooterLogo = async (file: RcFile) => {
+        const fileObject = extractUploadedFile(file);
         if (!fileObject || !letterheadId) return;
         setUploadingFooterLogo(true);
         try {
             const resp = await uploadReportLetterheadLogo(letterheadId, fileObject);
-            updateFooter({ logo_storage_id: resp.storage_object_id });
+            updateFooter({ logo_storage_id: resp.storage_object_id, logo_mode: "CUSTOM" });
             setPreviewFooterLogoUrl(resp.url);
-            setCarriedForwardFooterLogo(false);
-            setFooterLogoFile(null);
-            message.success("Logo de pie subido");
+            message.success("Logo de pie actualizado");
         } catch (err) {
             message.error(err instanceof Error ? err.message : "Error al subir el logo de pie");
         } finally {
@@ -289,14 +372,18 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         }
     };
     const handleRemoveFooterLogo = () => {
-        updateFooter({ logo_storage_id: null });
+        updateFooter({ logo_storage_id: null, logo_mode: "NONE" });
         setPreviewFooterLogoUrl(null);
-        setCarriedForwardFooterLogo(false);
     };
 
+    // Guardar queda bloqueado mientras hay una subida en vuelo: publicar en
+    // ese momento persistiría una configuración sin el `logo_storage_id`
+    // que está a punto de llegar.
+    const uploadInFlight = uploadingLogo || uploadingFooterLogo;
+
     const previewReport = useMemo(
-        () => buildPreviewReportEnvelope(presentation, previewLogoUrl),
-        [presentation, previewLogoUrl]
+        () => buildPreviewReportEnvelope(presentation, previewLogoUrl, previewFooterLogoUrl),
+        [presentation, previewLogoUrl, previewFooterLogoUrl]
     );
 
     const handleBack = () => {
@@ -305,6 +392,10 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     };
 
     const handleOpenPublishModal = () => {
+        if (uploadInFlight) {
+            message.warning("Espera a que termine de subirse el logo antes de guardar.");
+            return;
+        }
         const result = validatePresentationDraft(presentation);
         if (!result.valid) {
             setFieldErrors(result.fieldErrors);
@@ -407,31 +498,25 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                                 )}
                             </div>
                             <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-                                {carriedForwardLogo && (
-                                    <Text style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                        Esta versión heredó un logotipo configurado. No es posible mostrar su vista previa
-                                        aquí — sube uno nuevo para reemplazarlo, o publica sin cambiar el logo.
-                                    </Text>
-                                )}
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <Upload
-                                        beforeUpload={(file) => { setLogoFile(file); return false; }}
-                                        fileList={logoFile ? [logoFile] : []}
-                                        onRemove={() => setLogoFile(null)}
+                                        beforeUpload={(file) => { void handleSelectLogo(file); return false; }}
+                                        showUploadList={false}
                                         accept="image/png,image/jpeg,image/webp"
                                         maxCount={1}
-                                        disabled={!canManage}
+                                        disabled={!canManage || uploadingLogo}
                                     >
-                                        <CelumaButton size="xsmall" icon={<UploadOutlined />} disabled={!canManage}>
-                                            Seleccionar logo
+                                        <CelumaButton
+                                            size="xsmall"
+                                            icon={<UploadOutlined />}
+                                            loading={uploadingLogo}
+                                            disabled={!canManage}
+                                            data-testid="header-logo-upload-button"
+                                        >
+                                            {presentation.header.logo_storage_id ? "Cambiar logo" : "Subir logo"}
                                         </CelumaButton>
                                     </Upload>
-                                    {logoFile && canManage && (
-                                        <CelumaButton size="xsmall" type="primary" onClick={handleUploadLogo} loading={uploadingLogo}>
-                                            Subir logo
-                                        </CelumaButton>
-                                    )}
-                                    {(previewLogoUrl || presentation.header.logo_storage_id) && canManage && (
+                                    {presentation.header.logo_storage_id && canManage && (
                                         <CelumaButton size="xsmall" danger icon={<DeleteOutlined />} onClick={handleRemoveLogo}>
                                             Quitar
                                         </CelumaButton>
@@ -469,6 +554,29 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                         {/* Segunda remediación post-Fase 2 (UX) — paridad Legacy */}
                         <Panel style={{ display: "grid", gap: 10 }}>
                             <Text style={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>Diseño avanzado</Text>
+                            {/* Cuarta remediación: el logotipo del encabezado
+                                deja de ser una consecuencia implícita de
+                                haber subido (o no) un archivo. "Sin
+                                logotipo" no reserva espacio y no dibuja
+                                nada — es lo que necesita el membrete
+                                Legacy, cuyo logotipo vive en el pie. */}
+                            <div>
+                                <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Logotipo del encabezado</label>
+                                <AntSelect
+                                    value={presentation.header.logo_mode ?? "CELUMA_DEFAULT"}
+                                    onChange={(v: ReportLogoMode) => updateHeader({ logo_mode: v })}
+                                    options={HEADER_LOGO_MODE_OPTIONS}
+                                    disabled={!canManage}
+                                    style={{ width: "100%" }}
+                                    data-testid="header-logo-mode"
+                                />
+                                {presentation.header.logo_mode === "CUSTOM" && !presentation.header.logo_storage_id && (
+                                    <Text type="warning" style={{ fontSize: 11 }}>
+                                        Selecciona "Logotipo propio" solo si subes una imagen: sin ella el
+                                        encabezado saldrá sin logotipo (nunca con uno sustituto).
+                                    </Text>
+                                )}
+                            </div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div>
                                     <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Posición del logo</label>
@@ -568,31 +676,25 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                                 )}
                             </div>
                             <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-                                {carriedForwardFooterLogo && (
-                                    <Text style={{ fontSize: 12, color: tokens.textSecondary }}>
-                                        Esta versión heredó un logo de pie configurado. Sube uno nuevo para
-                                        reemplazarlo, o guarda sin cambiarlo.
-                                    </Text>
-                                )}
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <Upload
-                                        beforeUpload={(file) => { setFooterLogoFile(file); return false; }}
-                                        fileList={footerLogoFile ? [footerLogoFile] : []}
-                                        onRemove={() => setFooterLogoFile(null)}
+                                        beforeUpload={(file) => { void handleSelectFooterLogo(file); return false; }}
+                                        showUploadList={false}
                                         accept="image/png,image/jpeg,image/webp"
                                         maxCount={1}
-                                        disabled={!canManage}
+                                        disabled={!canManage || uploadingFooterLogo}
                                     >
-                                        <CelumaButton size="xsmall" icon={<UploadOutlined />} disabled={!canManage}>
-                                            Seleccionar logo de pie
+                                        <CelumaButton
+                                            size="xsmall"
+                                            icon={<UploadOutlined />}
+                                            loading={uploadingFooterLogo}
+                                            disabled={!canManage}
+                                            data-testid="footer-logo-upload-button"
+                                        >
+                                            {presentation.footer.logo_storage_id ? "Cambiar logo de pie" : "Subir logo de pie"}
                                         </CelumaButton>
                                     </Upload>
-                                    {footerLogoFile && canManage && (
-                                        <CelumaButton size="xsmall" type="primary" onClick={handleUploadFooterLogo} loading={uploadingFooterLogo}>
-                                            Subir logo
-                                        </CelumaButton>
-                                    )}
-                                    {(previewFooterLogoUrl || presentation.footer.logo_storage_id) && canManage && (
+                                    {presentation.footer.logo_storage_id && canManage && (
                                         <CelumaButton size="xsmall" danger icon={<DeleteOutlined />} onClick={handleRemoveFooterLogo}>
                                             Quitar
                                         </CelumaButton>
@@ -751,7 +853,12 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 extra={
                     <div style={{ display: "flex", gap: 8 }}>
                         <CelumaButton onClick={handleBack}>Cancelar</CelumaButton>
-                        <CelumaButton type="primary" onClick={handleOpenPublishModal} disabled={!canManage}>
+                        <CelumaButton
+                            type="primary"
+                            onClick={handleOpenPublishModal}
+                            disabled={!canManage || uploadInFlight}
+                            loading={uploadInFlight}
+                        >
                             {mode === "normal" ? "Guardar cambios" : "Publicar versión"}
                         </CelumaButton>
                     </div>

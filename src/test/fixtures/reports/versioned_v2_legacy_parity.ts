@@ -53,43 +53,82 @@ const template: ReportTemplateJSON = {
 };
 
 // Mirrors legacy_letterhead_adapter.py's build_legacy_letterhead_export()
-// exactly (Bloque 6) — same institutional text, same color, same
-// content_alignment=BOTTOM/no-divider choices made there for closest
-// parity given the current V2 layout (header identity+logo slot vs
-// Legacy's logo-less, bottom-aligned physician block — see that file's
-// module docstring for the documented residual difference).
+// exactly — same institutional text, same color, same layout decisions.
+//
+// CUARTA REMEDIACIÓN: este snapshot se actualizó junto con el adaptador.
+// Hasta la tercera remediación transportaba campos que el renderer V2
+// simplemente ignoraba (`height_mm`), y repartía las cuatro líneas del
+// encabezado Legacy entre institution_name/subtitle/address, que tienen
+// tamaños distintos y dejaban la dirección postal arriba en vez de en el
+// pie. Ahora emite `logo_mode`, `signer_placement`, offsets/alturas/gaps,
+// `layout=SPLIT` y los pesos tipográficos — todos ya conectados al
+// renderer. Su golden (`v2-membrete-legacy-importado.png`) se regeneró por
+// esa razón; los goldens Legacy y los cinco goldens V2 históricos NO se
+// tocaron. Ver v2-legacy-parity-capabilities.md.
 const snapshot: ReportRenderingSnapshotV2 = {
     schema_version: 2,
     template: template as unknown as Record<string, unknown>,
     presentation: {
-        paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: 2.5, right: 1.5, bottom: 2.5, left: 1.5 } },
+        paper: {
+            size: "LETTER",
+            orientation: "PORTRAIT",
+            margins_cm: { top: 2.8, right: 1.8, bottom: 2.0, left: 1.8 },
+            body_padding_top_mm: 4,
+        },
         header: {
             enabled: true,
             logo_storage_id: null,
-            institution_name: "Dra. Arisbeth Villanueva Pérez.",
-            subtitle: "Anatomía Patológica, Nefropatología y Citología Exfoliativa",
-            address: "Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600",
+            institution_name: null,
+            subtitle: null,
+            address: null,
             phone: null,
             email: null,
             logo_position: "LEFT",
             content_alignment: "BOTTOM",
             height_mm: 28,
             divider: { enabled: false, style: "SINGLE", primary_width_px: 1, secondary_width_px: 1, gap_mm: 1, color: null },
+            logo_mode: "NONE",
+            offset_mm: 0,
+            content_gap_mm: 0,
+            padding_mm: 4,
+            signer_placement: "INLINE",
+            logo_height_mm: null,
+            logo_max_width_mm: null,
         },
         footer: {
             enabled: true,
-            custom_text: "Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com",
-            show_page_number: true,
+            custom_text:
+                "Francisco Rojas González No. 654 Col. Ladrón de Guevara, Guadalajara, Jalisco, México C.P. 44600\n" +
+                "Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com",
+            show_page_number: false,
             logo_storage_id: null,
             logo_position: "LEFT",
             content_alignment: "RIGHT",
             height_mm: 20,
             divider: { enabled: false, style: "SINGLE", primary_width_px: 1, secondary_width_px: 1, gap_mm: 1, color: null },
+            logo_mode: "CUSTOM",
+            layout: "SPLIT",
+            offset_mm: 0,
+            content_gap_mm: 0,
+            padding_mm: 0,
+            logo_height_mm: 16,
+            logo_max_width_pct: 35,
+            text_max_width_pct: 65,
         },
         style: {
             primary_color: "#002060",
             secondary_color: null,
-            typography: { font_family: "ARIAL", base_font_size_pt: 10, header_font_size_pt: 8, footer_font_size_pt: 7 },
+            typography: {
+                font_family: "ARIAL",
+                base_font_size_pt: 10,
+                header_font_size_pt: 8,
+                footer_font_size_pt: 7,
+                header_secondary_font_size_pt: 8,
+                header_font_weight: 700,
+                footer_font_weight: 700,
+                body_font_weight: null,
+                line_height: null,
+            },
         },
         signer: {
             display_name: "Dra. Arisbeth Villanueva Pérez.",

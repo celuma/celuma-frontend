@@ -4,6 +4,7 @@ import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetad
 import { markdownTableToHtml } from "../table_utils";
 import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
+import type { ReportTypographyConfig } from "./versioned_report_types";
 import { extractRenderingSnapshot } from "./report_snapshot_validation";
 import {
     DEFAULT_FOOTER_TEXT,
@@ -107,12 +108,69 @@ function fontFamilyCss(family: string | undefined): string {
     }
 }
 
-const DEFAULT_TYPOGRAPHY = {
-    font_family: "ARIAL" as const,
+const DEFAULT_TYPOGRAPHY: ReportTypographyConfig = {
+    font_family: "ARIAL",
     base_font_size_pt: 10,
     header_font_size_pt: 10,
     footer_font_size_pt: 7,
 };
+
+// ---------------------------------------------------------------------------
+// Cuarta remediación post-Fase 2 — capacidades de paridad Legacy.
+//
+// TODOS los defaults de esta sección reproducen, al píxel, lo que el
+// renderer hacía antes de la remediación, de modo que un snapshot V2 ya
+// persistido (que no lleva ninguno de los campos nuevos) siga renderizando
+// exactamente igual. Ver v2-legacy-parity-capabilities.md.
+// ---------------------------------------------------------------------------
+
+/** Sub-título del header antes de esta remediación. */
+const LEGACY_V2_SUBTITLE_PT = 8;
+/** Dirección / contacto / firmante del header antes de esta remediación. */
+const LEGACY_V2_DETAIL_PT = 7;
+const DEFAULT_HEADER_PADDING_MM = 3;
+const DEFAULT_FOOTER_PADDING_MM = 2;
+/** Inset del logo respecto al alto de su banda, antes de esta remediación. */
+const DEFAULT_LOGO_INSET_MM = 6;
+const DEFAULT_HEADER_LOGO_MAX_WIDTH_MM = 32;
+const DEFAULT_FOOTER_LOGO_MAX_WIDTH_MM = 28;
+
+type LogoMode = "NONE" | "CUSTOM" | "CELUMA_DEFAULT";
+
+/**
+ * Resuelve la imagen de una banda.
+ *
+ * `mode` ausente/null NO es un modo: es un snapshot anterior a esta
+ * remediación, y se resuelve con la expresión LITERAL que el renderer
+ * usaba entonces — el header caía al isotipo neutral de Céluma cuando no
+ * había URL resuelta, el pie no. Reproducirlo aquí, en vez de "traducir" el
+ * snapshot a un modo equivalente, es lo que garantiza que ningún reporte V2
+ * histórico cambie (incluido el caso en que había `logo_storage_id` pero la
+ * URL no se resolvió).
+ *
+ * Con un modo EXPLÍCITO, `CUSTOM` nunca sustituye por otra imagen: si la
+ * URL no se resuelve, no se dibuja nada. El isotipo de Céluma solo aparece
+ * dentro del documento si el membrete lo pidió con `CELUMA_DEFAULT`.
+ */
+function resolveBandLogoSrc(
+    mode: LogoMode | null | undefined,
+    resolvedUrl: string | null | undefined,
+    neutralFallbackWhenAbsent: boolean,
+): string | null {
+    if (mode == null) {
+        return neutralFallbackWhenAbsent
+            ? resolvedUrl || DEFAULT_NEUTRAL_LOGO_SRC
+            : resolvedUrl || null;
+    }
+    if (mode === "NONE") return null;
+    if (mode === "CELUMA_DEFAULT") return DEFAULT_NEUTRAL_LOGO_SRC;
+    return resolvedUrl || null;
+}
+
+/** `?? fallback` que además trata `null` como "no configurado". */
+function mmOr(value: number | null | undefined, fallback: number): number {
+    return value == null ? fallback : value;
+}
 
 function alignItemsForHeaderAlignment(alignment: string | undefined): string {
     if (alignment === "TOP") return "flex-start";
@@ -186,21 +244,51 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
 
             const headerEnabled = presentation.header.enabled;
             const footerEnabled = presentation.footer.enabled;
-            const headerHeightMm = headerEnabled ? HEADER_BAND_MM : 0;
-            const footerHeightMm = footerEnabled ? FOOTER_BAND_MM : 0;
-            const headerGapMm = headerEnabled ? BAND_GAP_MM : 0;
-            const footerGapMm = footerEnabled ? BAND_GAP_MM : 0;
 
-            const bodyTopMm = marginTopMm + headerHeightMm + headerGapMm;
-            const bodyBottomMm = marginBottomMm + footerHeightMm + footerGapMm;
+            // Cuarta remediación — geometría configurable de las bandas.
+            // Cada `mmOr(..., default)` reproduce la constante fija que el
+            // renderer usaba antes, de modo que un snapshot sin estos
+            // campos produce EXACTAMENTE la misma aritmética de siempre.
+            const headerHeightMm = headerEnabled ? mmOr(presentation.header.height_mm, HEADER_BAND_MM) : 0;
+            const footerHeightMm = footerEnabled ? mmOr(presentation.footer.height_mm, FOOTER_BAND_MM) : 0;
+            const headerOffsetMm = headerEnabled ? mmOr(presentation.header.offset_mm, marginTopMm) : 0;
+            const footerOffsetMm = footerEnabled ? mmOr(presentation.footer.offset_mm, marginBottomMm) : 0;
+            const headerGapMm = headerEnabled ? mmOr(presentation.header.content_gap_mm, BAND_GAP_MM) : 0;
+            const footerGapMm = footerEnabled ? mmOr(presentation.footer.content_gap_mm, BAND_GAP_MM) : 0;
+            const headerPaddingMm = mmOr(presentation.header.padding_mm, DEFAULT_HEADER_PADDING_MM);
+            const footerPaddingMm = mmOr(presentation.footer.padding_mm, DEFAULT_FOOTER_PADDING_MM);
+            const bodyPaddingTopMm = mmOr(presentation.paper.body_padding_top_mm, 0);
+
+            const bodyTopMm = headerEnabled ? headerOffsetMm + headerHeightMm + headerGapMm : marginTopMm;
+            const bodyBottomMm = footerEnabled ? footerOffsetMm + footerHeightMm + footerGapMm : marginBottomMm;
 
             const contentWpx = Math.round((PAGE_W_MM - marginLeftMm - marginRightMm) / PX_TO_MM);
             const contentHpx = Math.round((PAGE_H_MM - bodyTopMm - bodyBottomMm) / PX_TO_MM);
 
             const primaryColor = presentation.style.primary_color;
-            const logoSrc = report.resolved_resources?.header_logo_url || DEFAULT_NEUTRAL_LOGO_SRC;
-            const footerLogoUrl = report.resolved_resources?.footer_logo_url || null;
-            const institutionName = presentation.header.institution_name || DEFAULT_INSTITUTION_NAME;
+            // `true` en el header / `false` en el pie = la asimetría real que
+            // el renderer tenía antes de esta remediación (ver
+            // resolveBandLogoSrc). El isotipo neutral deja de aparecer en
+            // cuanto el membrete declara `logo_mode` explícitamente.
+            const headerLogoSrc = resolveBandLogoSrc(
+                presentation.header.logo_mode,
+                report.resolved_resources?.header_logo_url,
+                true,
+            );
+            const footerLogoSrc = resolveBandLogoSrc(
+                presentation.footer.logo_mode,
+                report.resolved_resources?.footer_logo_url,
+                false,
+            );
+            // El relleno "Céluma" existe para que un encabezado habilitado
+            // nunca salga sin identidad alguna. Con `signer_placement =
+            // INLINE` el bloque institucional ya se compone de las líneas
+            // del firmante (la forma Legacy: nombre, especialidad,
+            // adscripción, cédulas), así que anteponer "Céluma" sería
+            // inventar una institución que el membrete no pidió. El resto
+            // de los casos conserva el relleno tal cual.
+            const institutionName = presentation.header.institution_name
+                || (presentation.header.signer_placement === "INLINE" ? null : DEFAULT_INSTITUTION_NAME);
             const subtitle = presentation.header.subtitle;
             const address = presentation.header.address;
             const phone = presentation.header.phone;
@@ -223,6 +311,50 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     ? "right"
                     : "center";
 
+            // Cuarta remediación — pesos y tamaños secundarios. `null`
+            // conserva la mezcla por línea que el renderer ya tenía
+            // (institución 700 / resto 400, subtítulo 8pt, detalles 7pt);
+            // un valor explícito unifica la propiedad en toda la banda, que
+            // es la forma del encabezado y el pie Legacy.
+            const headerWeightPrimary = typography.header_font_weight ?? 700;
+            const headerWeightSecondary = typography.header_font_weight ?? 400;
+            const headerSubtitlePt = typography.header_secondary_font_size_pt ?? LEGACY_V2_SUBTITLE_PT;
+            const headerDetailPt = typography.header_secondary_font_size_pt ?? LEGACY_V2_DETAIL_PT;
+            const footerFontWeight = typography.footer_font_weight ?? null;
+            const bodyFontWeight = typography.body_font_weight ?? null;
+            const bandLineHeight = typography.line_height ?? null;
+
+            const signerPlacement = presentation.header.signer_placement ?? "RIGHT";
+            const footerLayout = presentation.footer.layout ?? "GROUPED";
+            const headerLogoHeightMm = mmOr(
+                presentation.header.logo_height_mm,
+                headerHeightMm - DEFAULT_LOGO_INSET_MM,
+            );
+            const headerLogoMaxWidthMm = mmOr(
+                presentation.header.logo_max_width_mm,
+                DEFAULT_HEADER_LOGO_MAX_WIDTH_MM,
+            );
+            const footerLogoHeightMm = mmOr(
+                presentation.footer.logo_height_mm,
+                footerHeightMm - DEFAULT_LOGO_INSET_MM,
+            );
+            const footerLogoMaxWidth = presentation.footer.logo_max_width_pct != null
+                ? `${presentation.footer.logo_max_width_pct}%`
+                : `${DEFAULT_FOOTER_LOGO_MAX_WIDTH_MM}mm`;
+            const footerTextMaxWidth = presentation.footer.text_max_width_pct != null
+                ? `${presentation.footer.text_max_width_pct}%`
+                : null;
+
+            type BandLine = { text: string; weight: number };
+            const signerLines: BandLine[] = signer
+                ? ([
+                    signer.display_name ? { text: signer.display_name, weight: headerWeightPrimary } : null,
+                    signer.specialty ? { text: signer.specialty, weight: headerWeightSecondary } : null,
+                    signer.affiliation ? { text: signer.affiliation, weight: headerWeightSecondary } : null,
+                    signer.license_number ? { text: signer.license_number, weight: headerWeightSecondary } : null,
+                ] as Array<BandLine | null>).filter((l): l is BandLine => l !== null)
+                : [];
+
             const makePage = () => {
                 const page = document.createElement("div");
                 page.style.width = "8.5in";
@@ -237,51 +369,75 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 if (headerEnabled) {
                     const header = document.createElement("div");
                     header.style.position = "absolute";
-                    header.style.top = `${marginTopMm}mm`;
+                    header.style.top = `${headerOffsetMm}mm`;
                     header.style.left = `${marginLeftMm}mm`;
                     header.style.right = `${marginRightMm}mm`;
-                    header.style.height = `${HEADER_BAND_MM}mm`;
+                    header.style.height = `${headerHeightMm}mm`;
                     header.style.display = "flex";
                     header.style.alignItems = headerAlignItems;
                     header.style.justifyContent = "space-between";
                     header.style.gap = "8px";
                     header.style.color = primaryColor;
                     header.style.fontFamily = bodyFontFamily;
-                    header.style.paddingBottom = "3mm";
+                    header.style.paddingBottom = `${headerPaddingMm}mm`;
+                    if (bandLineHeight != null) header.style.lineHeight = String(bandLineHeight);
 
-                    const identity = document.createElement("div");
-                    identity.style.display = "flex";
-                    identity.style.alignItems = "center";
-                    identity.style.gap = "8px";
-                    if (headerLogoRight) identity.style.flexDirection = "row-reverse";
-                    identity.innerHTML = `
-                        <img
-                            src="${logoSrc}"
-                            alt="Logo"
-                            style="display:block; height: calc(${HEADER_BAND_MM}mm - 6mm); width: auto; max-width: 32mm; object-fit: contain;"
-                            crossOrigin="anonymous"
-                        />
-                        <div>
-                          <div style="font-weight:bold;font-size:${headerFontSizePt}pt;">${escapeHtml(institutionName)}</div>
-                          ${subtitle ? `<div style="font-size:8pt;">${escapeHtml(subtitle)}</div>` : ""}
-                          ${address ? `<div style="font-size:7pt;">${escapeHtml(address)}</div>` : ""}
-                          ${(phone || email) ? `<div style="font-size:7pt;">${[phone, email].filter(Boolean).map((v) => escapeHtml(v as string)).join(" · ")}</div>` : ""}
-                        </div>
+                    // Bloque institucional: nombre/subtítulo/dirección/contacto
+                    // y —cuando `signer_placement = INLINE`— las credenciales
+                    // del firmante institucional como líneas más, con la
+                    // MISMA tipografía. Ésa es exactamente la forma del
+                    // encabezado Legacy: un único bloque de cuatro líneas
+                    // idénticas, sin columna derecha y sin logo.
+                    const inlineSignerHtml = signerPlacement === "INLINE"
+                        ? signerLines
+                            .map((l) => `<div style="font-weight:${l.weight};font-size:${headerDetailPt}pt;">${escapeHtml(l.text)}</div>`)
+                            .join("")
+                        : "";
+
+                    const identityText = document.createElement("div");
+                    identityText.innerHTML = `
+                          ${institutionName ? `<div style="font-weight:${headerWeightPrimary};font-size:${headerFontSizePt}pt;">${escapeHtml(institutionName)}</div>` : ""}
+                          ${subtitle ? `<div style="font-weight:${headerWeightSecondary};font-size:${headerSubtitlePt}pt;">${escapeHtml(subtitle)}</div>` : ""}
+                          ${address ? `<div style="font-weight:${headerWeightSecondary};font-size:${headerDetailPt}pt;">${escapeHtml(address)}</div>` : ""}
+                          ${(phone || email) ? `<div style="font-weight:${headerWeightSecondary};font-size:${headerDetailPt}pt;">${[phone, email].filter(Boolean).map((v) => escapeHtml(v as string)).join(" · ")}</div>` : ""}
+                          ${inlineSignerHtml}
                     `;
 
-                    header.appendChild(identity);
+                    if (headerLogoSrc) {
+                        // Con logo se conserva la envoltura `identity`
+                        // (logo + texto agrupados) que el renderer ya usaba.
+                        const identity = document.createElement("div");
+                        identity.style.display = "flex";
+                        identity.style.alignItems = "center";
+                        identity.style.gap = "8px";
+                        if (headerLogoRight) identity.style.flexDirection = "row-reverse";
+                        const img = document.createElement("img");
+                        img.src = headerLogoSrc;
+                        img.alt = "Logo";
+                        img.crossOrigin = "anonymous";
+                        img.style.display = "block";
+                        img.style.height = `${headerLogoHeightMm}mm`;
+                        img.style.width = "auto";
+                        img.style.maxWidth = `${headerLogoMaxWidthMm}mm`;
+                        img.style.objectFit = "contain";
+                        identity.appendChild(img);
+                        identity.appendChild(identityText);
+                        header.appendChild(identity);
+                    } else {
+                        // Sin logo NO se envuelve ni se reserva caja alguna:
+                        // el bloque de texto es hijo directo de la banda,
+                        // igual que en LegacyReportRendererV1. Ésta es la
+                        // corrección del "espacio de logo reservado aunque
+                        // el membrete no tenga logo superior".
+                        header.appendChild(identityText);
+                    }
 
-                    if (signer && (signer.display_name || signer.specialty || signer.affiliation || signer.license_number)) {
+                    if (signerPlacement === "RIGHT" && signerLines.length > 0) {
                         const signerBlock = document.createElement("div");
                         signerBlock.style.textAlign = "right";
-                        signerBlock.style.fontSize = "7pt";
-                        signerBlock.style.fontWeight = "bold";
-                        signerBlock.innerHTML = `
-                            ${signer.display_name ? `<div>${escapeHtml(signer.display_name)}</div>` : ""}
-                            ${signer.specialty ? `<div style="font-weight:normal;">${escapeHtml(signer.specialty)}</div>` : ""}
-                            ${signer.affiliation ? `<div style="font-weight:normal;">${escapeHtml(signer.affiliation)}</div>` : ""}
-                            ${signer.license_number ? `<div style="font-weight:normal;">${escapeHtml(signer.license_number)}</div>` : ""}
-                        `;
+                        signerBlock.innerHTML = signerLines
+                            .map((l) => `<div style="font-weight:${l.weight};font-size:${headerDetailPt}pt;">${escapeHtml(l.text)}</div>`)
+                            .join("");
                         header.appendChild(signerBlock);
                     }
 
@@ -306,52 +462,92 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 body.style.fontFamily = bodyFontFamily;
                 body.style.fontSize = `${baseFontSizePt}pt`;
                 body.style.color = "#000000";
+                // Cuarta remediación: `0mm` (el default) es exactamente lo
+                // que el renderer tenía antes — no declaraba `padding-top`.
+                // Legacy declara 4mm dentro de la misma caja `border-box`,
+                // así que el área paginable se reduce igual en ambos.
+                body.style.paddingTop = `${bodyPaddingTopMm}mm`;
+                if (bodyFontWeight != null) body.style.fontWeight = String(bodyFontWeight);
+
+                // Cuarta remediación: el cuerpo se inserta ANTES del pie
+                // (orden encabezado → cuerpo → pie, el mismo de
+                // LegacyReportRendererV1). Antes iba después, y aunque las
+                // tres bandas están posicionadas en absoluto y no se
+                // solapan —así que no cambia un solo píxel— sí cambiaba el
+                // orden del flujo de contenido del PDF: el texto del pie se
+                // extraía antes que el del cuerpo. Eso afecta a copiar y
+                // pegar, a la búsqueda dentro del PDF y a los lectores de
+                // pantalla, y hacía imposible comparar el texto extraído
+                // página a página contra el PDF Legacy.
+                page.appendChild(body);
 
                 if (footerEnabled) {
                     const footer = document.createElement("div");
                     footer.style.position = "absolute";
-                    footer.style.bottom = `${marginBottomMm}mm`;
+                    footer.style.bottom = `${footerOffsetMm}mm`;
                     footer.style.left = `${marginLeftMm}mm`;
                     footer.style.right = `${marginRightMm}mm`;
-                    footer.style.height = `${FOOTER_BAND_MM}mm`;
+                    footer.style.height = `${footerHeightMm}mm`;
                     footer.style.display = "flex";
                     footer.style.alignItems = "center";
                     footer.style.justifyContent = "space-between";
                     footer.style.color = primaryColor;
                     footer.style.fontSize = `${footerFontSizePt}pt`;
                     footer.style.fontFamily = bodyFontFamily;
-                    footer.style.paddingTop = "2mm";
+                    footer.style.paddingTop = `${footerPaddingMm}mm`;
+                    if (footerFontWeight != null) footer.style.fontWeight = String(footerFontWeight);
+                    if (bandLineHeight != null) footer.style.lineHeight = String(bandLineHeight);
 
-                    // Segunda remediación post-Fase 2 (UX): grupo logo+texto,
-                    // como el header — necesario para paridad Legacy (su
-                    // logo vive en el pie, no en el header).
-                    const identity = document.createElement("div");
-                    identity.style.display = "flex";
-                    identity.style.alignItems = "center";
-                    identity.style.justifyContent = footerContentJustify;
-                    identity.style.gap = "8px";
-                    identity.style.flex = "1";
-                    if (footerLogoRight) identity.style.flexDirection = "row-reverse";
-
-                    if (footerLogoUrl) {
+                    const buildFooterLogo = () => {
+                        if (!footerLogoSrc) return null;
                         const img = document.createElement("img");
-                        img.src = footerLogoUrl;
+                        img.src = footerLogoSrc;
                         img.alt = "Logo";
                         img.crossOrigin = "anonymous";
                         img.style.display = "block";
-                        img.style.height = `calc(${FOOTER_BAND_MM}mm - 6mm)`;
+                        img.style.height = `${footerLogoHeightMm}mm`;
                         img.style.width = "auto";
-                        img.style.maxWidth = "28mm";
+                        img.style.maxWidth = footerLogoMaxWidth;
                         img.style.objectFit = "contain";
-                        identity.appendChild(img);
-                    }
+                        return img;
+                    };
 
                     const text = document.createElement("div");
+                    // `white-space: pre-line` deja que un `custom_text` con
+                    // saltos de línea rinda varias líneas — el pie Legacy
+                    // imprime dirección y contacto en dos renglones. El
+                    // contrato prohíbe markup, así que un `\n` es la única
+                    // forma de expresarlo, y para un texto sin saltos el
+                    // resultado es idéntico al de antes (los espacios
+                    // consecutivos se colapsan igual que con `normal`).
                     text.textContent = footerText;
+                    text.style.whiteSpace = "pre-line";
                     text.style.textAlign = footerTextAlign;
-                    identity.appendChild(text);
+                    if (footerTextMaxWidth) text.style.maxWidth = footerTextMaxWidth;
 
-                    footer.appendChild(identity);
+                    if (footerLayout === "SPLIT") {
+                        // Forma Legacy: logo y texto son hermanos DIRECTOS
+                        // separados por `justify-content: space-between` de
+                        // la propia banda — sin caja intermedia, sin `gap`.
+                        const logo = buildFooterLogo();
+                        if (logo) footer.appendChild(footerLogoRight ? text : logo);
+                        footer.appendChild(logo ? (footerLogoRight ? logo : text) : text);
+                    } else {
+                        // Segunda remediación post-Fase 2 (UX): grupo logo+texto,
+                        // como el header.
+                        const identity = document.createElement("div");
+                        identity.style.display = "flex";
+                        identity.style.alignItems = "center";
+                        identity.style.justifyContent = footerContentJustify;
+                        identity.style.gap = "8px";
+                        identity.style.flex = "1";
+                        if (footerLogoRight) identity.style.flexDirection = "row-reverse";
+
+                        const logo = buildFooterLogo();
+                        if (logo) identity.appendChild(logo);
+                        identity.appendChild(text);
+                        footer.appendChild(identity);
+                    }
 
                     if (presentation.footer.show_page_number) {
                         const pageNum = document.createElement("div");
@@ -366,7 +562,6 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     page.appendChild(footer);
                 }
 
-                page.appendChild(body);
                 host.appendChild(page);
                 return { page, body };
             };
