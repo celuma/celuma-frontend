@@ -11,9 +11,9 @@ interface UnsupportedReportVersionProps {
 }
 
 /**
- * Controlled fallback rendered by ReportRendererResolver (Céluma 1.3 Fase 2,
- * Bloque A, Historia A5) when a report cannot be rendered: either its
- * schema_version is recognized but has no renderer yet (V2, before Bloque C),
+ * Controlled fallback rendered by ReportRendererResolver (Céluma 1.3 Phase 2,
+ * Block A, Story A5) when a report cannot be rendered: either its
+ * schema_version is recognized but has no renderer yet (V2, before Block C),
  * or the value is not a version this build understands at all.
  *
  * Implements the same ReportRendererRef contract as every real renderer so

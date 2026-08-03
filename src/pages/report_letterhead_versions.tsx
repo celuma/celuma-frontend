@@ -92,7 +92,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
         }
     };
 
-    // Best-effort id -> nombre lookup for "Publicado por".
+    // Best-effort id -> name lookup for "Publicado por".
     useEffect(() => {
         const tenantId = getTenantId();
         if (!tenantId) return;

@@ -1,7 +1,7 @@
 import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../../models/report";
 
 /**
- * Anonymized report fixtures for Céluma 1.3 Fase 1 (Workstream 5). No real
+ * Anonymized report fixtures for Céluma 1.3 Phase 1 (Workstream 5). No real
  * patient data, no identifiable diagnoses, no real image files — image URLs
  * are synthetic and never fetched in tests. Mirrors the matrix documented in
  * celuma-backend/tests/fixtures/reports/README.md (same case coverage, ported
@@ -34,7 +34,7 @@ function templateFrom(content: ReportContent, orderOverride?: { base_order?: str
     };
 }
 
-/** Covers: una muestra, contenido corto, sin imágenes, reporte en borrador. */
+/** Covers: one sample, short content, no images, draft report. */
 const draftSingleSampleNoImagesContent: ReportContent = {
     base: {
         order_code: { is_visible: true, label: "Código de orden", value: "SYN-0001" },
@@ -66,7 +66,7 @@ export const draftSingleSampleNoImages: ReportEnvelope = {
     report: draftSingleSampleNoImagesContent,
 };
 
-/** Covers: varias muestras, con imágenes, todas las secciones completas, reporte liberado. */
+/** Covers: multiple samples, images, all sections completed, published report. */
 const publishedMultiSampleWithImagesContent: ReportContent = {
     base: {
         order_code: { is_visible: true, label: "Código de orden", value: "SYN-0002" },
@@ -113,7 +113,7 @@ export const publishedMultiSampleWithImages: ReportEnvelope = {
     report: publishedMultiSampleWithImagesContent,
 };
 
-/** Covers: secciones opcionales vacías. */
+/** Covers: empty optional sections. */
 const emptyOptionalSectionsContent: ReportContent = {
     base: {
         order_code: { is_visible: true, label: "Código de orden", value: "SYN-0003" },
@@ -144,7 +144,7 @@ export const emptyOptionalSections: ReportEnvelope = {
     report: emptyOptionalSectionsContent,
 };
 
-/** Covers: contenido de varias páginas, textos suficientemente largos para provocar saltos de página. */
+/** Covers: multi-page content with text long enough to trigger page breaks. */
 const longParagraph = (n: number) =>
     `<p>Párrafo sintético de prueba de paginación, número ${n}, repetido para alcanzar una longitud suficiente y forzar múltiples páginas en el documento generado. Este texto no contiene información clínica real. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>`;
 
@@ -186,7 +186,7 @@ export const longContentMultipage: ReportEnvelope = {
     report: longContentMultipageContent,
 };
 
-/** Covers: caracteres especiales y acentos. */
+/** Covers: special characters and accents. */
 const specialCharactersAccentsContent: ReportContent = {
     base: {
         order_code: { is_visible: true, label: "Código de orden", value: "SYN-0005" },
@@ -221,7 +221,7 @@ export const specialCharactersAccents: ReportEnvelope = {
 };
 
 /**
- * Covers: reporte histórico con la estructura más antigua disponible.
+ * Covers: historical report with the oldest available structure.
  * No signatureMetadata, and empty order arrays on BOTH template and content
  * (as if base_order/section_order never existed) — resolveDisplayOrder must
  * fall back to Object.keys() and still render every field/section.
@@ -254,7 +254,7 @@ export const legacyOldestStructure: ReportEnvelope = {
     report: legacyOldestStructureContent,
 };
 
-/** Covers: reporte sin paciente, cuando el flujo lo permita. */
+/** Covers: report without a patient when the workflow permits it. */
 const noPatientReportContent: ReportContent = {
     base: {
         order_code: { is_visible: true, label: "Código de orden", value: "SYN-0007" },

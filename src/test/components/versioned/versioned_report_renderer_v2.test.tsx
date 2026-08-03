@@ -16,13 +16,13 @@ import {
 } from "../../fixtures/reports/versioned_v2";
 import type { ReportEnvelope } from "../../../models/report";
 
-// Céluma 1.3 Fase 2, Bloque C, Historia C7.
+// Cell 1.3 Phase 2, Block C, History C7.
 //
 // NOTE on pagination: same jsdom limitation documented in
 // legacy_report_renderer_v1.test.tsx — scrollHeight/clientHeight are always
 // 0, so every fixture renders onto a single page here regardless of
 // content length. Multi-page/visual behavior is covered by the Playwright
-// golden tests (Historia C8).
+// golden tests (Story C8).
 
 function renderReport(report: ReportEnvelope, signerLookup?: SignerLookupEntry[]) {
     const ref = createRef<VersionedReportRendererV2Ref>();

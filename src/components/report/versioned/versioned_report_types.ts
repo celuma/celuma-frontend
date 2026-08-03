@@ -1,6 +1,6 @@
 /**
- * TypeScript contract for `ReportRenderingSnapshotV2` (Céluma 1.3 Fase 2,
- * Bloque C, Historia C2), mirroring the backend Pydantic contract in
+ * TypeScript contract for `ReportRenderingSnapshotV2` (Céluma 1.3 Phase 2,
+ * Block C, Story C2), mirroring the backend Pydantic contract in
  * `celuma-backend/app/schemas/report_template_version.py` field-for-field.
  * See versioned-renderer-v2-contract.md for the full rationale.
  *
@@ -24,16 +24,16 @@ export interface ReportPaperConfig {
     size: ReportPaperSize;
     orientation: ReportPaperOrientation;
     margins_cm: ReportMarginsCm;
-    /** Cuarta remediación post-Fase 2 (opcional/aditivo): relleno superior
-     *  DENTRO de la caja paginable. Ausente = 0mm (comportamiento actual);
-     *  Legacy usa 4mm. Ver v2-legacy-parity-capabilities.md. */
+    /** Fourth post-Phase 2 remediation (optional/additive): top padding
+     *  INSIDE the paginated box. Absent = 0mm (current behavior); Legacy
+     *  uses 4mm. See v2-legacy-parity-capabilities.md. */
     body_padding_top_mm?: number | null;
 }
 
-/** Segunda remediación post-Fase 2 (UX): línea divisoria bajo el header /
- *  sobre el footer — ver legacy-parity-contract.md. Todos opcionales; su
- *  ausencia reproduce la línea sólida de 1px que el renderer ya dibuja hoy
- *  incondicionalmente (mismo default que el backend). */
+/** Second post-Phase 2 remediation (UX): divider below the header / above
+ *  the footer — see legacy-parity-contract.md. All fields are optional; when
+ *  absent, the renderer retains its unconditional 1px solid line (the same
+ *  default as the backend). */
 export interface DividerConfig {
     enabled: boolean;
     style: "SINGLE" | "DOUBLE";
@@ -48,17 +48,17 @@ export type ReportLogoPosition = "LEFT" | "CENTER" | "RIGHT";
 export type ReportHeaderAlignment = "TOP" | "CENTER" | "BOTTOM";
 export type ReportFooterAlignment = "LEFT" | "CENTER" | "RIGHT";
 
-/** Cuarta remediación post-Fase 2: enum cerrado de pesos tipográficos —
- *  nunca CSS libre. */
+/** Fourth post-Phase 2 remediation: closed enum of typographic weights —
+ *  never free-form CSS. */
 export type ReportFontWeight = 400 | 500 | 600 | 700;
 
 /**
- * Cuarta remediación post-Fase 2: modo de logo de una banda.
+ * Fourth post-Phase 2 remediation: logo mode for a band.
  *
- * `undefined`/ausente NO es un cuarto modo: significa "snapshot anterior a
- * esta remediación", y cada banda lo resuelve al comportamiento que ya
- * tenía (el encabezado caía al isotipo neutral; el pie no). Ver
- * `resolveLogoMode` en versioned_report_renderer_v2.tsx.
+ * `undefined`/absent is NOT a fourth mode: it means a "snapshot predating
+ * this remediation," and each band resolves it to its previous behavior
+ * (the header fell back to the neutral isotipo; the footer did not). See
+ * `resolveLogoMode` in versioned_report_renderer_v2.tsx.
  */
 export type ReportLogoMode = "NONE" | "CUSTOM" | "CELUMA_DEFAULT";
 
@@ -71,9 +71,9 @@ export interface ReportTypographyConfig {
     base_font_size_pt: number;
     header_font_size_pt: number;
     footer_font_size_pt: number;
-    /** Cuarta remediación (opcionales/aditivos). Ausente/null = el
-     *  comportamiento por línea que el renderer ya tenía; un valor
-     *  explícito unifica esa propiedad en toda la banda. */
+    /** Fourth remediation (optional/additive). Absent/null retains the
+     *  per-line behavior the renderer already had; an explicit value makes
+     *  that property consistent across the entire band. */
     header_secondary_font_size_pt?: number | null;
     header_font_weight?: ReportFontWeight | null;
     footer_font_weight?: ReportFontWeight | null;
@@ -91,12 +91,12 @@ export interface ReportHeaderConfig {
     address: string | null;
     phone: string | null;
     email: string | null;
-    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos: */
+    /** Second post-Phase 2 remediation (UX), all optional/additive: */
     logo_position?: ReportLogoPosition;
     content_alignment?: ReportHeaderAlignment;
     height_mm?: number | null;
     divider?: DividerConfig;
-    /** Cuarta remediación post-Fase 2 (opcionales/aditivos) — paridad Legacy. */
+    /** Fourth post-Phase 2 remediation (optional/additive) — Legacy parity. */
     logo_mode?: ReportLogoMode | null;
     offset_mm?: number | null;
     content_gap_mm?: number | null;
@@ -110,14 +110,14 @@ export interface ReportFooterConfig {
     enabled: boolean;
     custom_text: string | null;
     show_page_number: boolean;
-    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos:
-     *  Legacy coloca su logo en el PIE, no en el header. */
+    /** Second post-Phase 2 remediation (UX), all optional/additive:
+     *  Legacy places its logo in the FOOTER, not the header. */
     logo_storage_id?: string | null;
     logo_position?: ReportLogoPosition;
     content_alignment?: ReportFooterAlignment;
     height_mm?: number | null;
     divider?: DividerConfig;
-    /** Cuarta remediación post-Fase 2 (opcionales/aditivos) — paridad Legacy. */
+    /** Fourth post-Phase 2 remediation (optional/additive) — Legacy parity. */
     logo_mode?: ReportLogoMode | null;
     layout?: ReportFooterLayout | null;
     offset_mm?: number | null;
@@ -131,7 +131,7 @@ export interface ReportFooterConfig {
 export interface ReportStyleConfig {
     /** 6-digit hex color, e.g. "#4A4A4A". */
     primary_color: string;
-    /** Segunda remediación post-Fase 2 (UX), todos opcionales/aditivos: */
+    /** Second post-Phase 2 remediation (UX), all optional/additive: */
     secondary_color?: string | null;
     typography?: ReportTypographyConfig;
 }
@@ -140,7 +140,7 @@ export interface ReportStyleConfig {
  * Static, institutional signer credentials configured by an admin when
  * publishing a ReportTemplateVersion — NOT the real signer of
  * ReportVersion.signed_by/signed_at. See versioned-renderer-v2-contract.md,
- * "Firmante institucional vs. firmante real".
+ * "Institutional signer vs. actual signer".
  */
 export interface ReportSignerSnapshot {
     display_name: string | null;

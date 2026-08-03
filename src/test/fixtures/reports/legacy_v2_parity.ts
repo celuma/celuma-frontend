@@ -3,31 +3,30 @@ import type { ReportRenderingSnapshotV2 } from "../../../components/report/versi
 import legacyLogo from "../../../images/report_logo.png";
 
 /**
- * Cuarta remediación post-Fase 2 — fixtures PAREADOS para la suite de
- * paridad Legacy ↔ V2 (`tests-visual/legacy_v2_parity.visual.spec.ts`).
+ * Fourth post-Phase 2 remediation — PAIRED fixtures for the Legacy ↔ V2
+ * parity suite (`tests-visual/legacy_v2_parity.visual.spec.ts`).
  *
- * La idea central: cada caso clínico se declara UNA sola vez y se emite en
- * dos envelopes construidos a partir del MISMO objeto de contenido —
+ * The core idea: each clinical case is declared ONCE and emitted in two
+ * envelopes built from the SAME content object —
  *
- *   `<caso>Legacy` -> sin `schema_version`  -> LegacyReportRendererV1
- *   `<caso>V2`     -> `schema_version = 2`  -> VersionedReportRendererV2
- *                                              + membrete Legacy importado
+ *   `<case>Legacy` -> no `schema_version`  -> LegacyReportRendererV1
+ *   `<case>V2`     -> `schema_version = 2`  -> VersionedReportRendererV2
+ *                                              + imported Legacy letterhead
  *
- * de modo que cualquier diferencia entre las dos capturas solo puede venir
- * del renderer o del membrete, nunca de los datos. Comparar JSON o contar
- * campos no prueba paridad; comparar estas dos capturas, sí.
+ * so any difference between the two screenshots can only come from the
+ * renderer or letterhead, never the data. Comparing JSON or counting fields
+ * does not prove parity; comparing these two screenshots does.
  *
- * `LEGACY_PARITY_PRESENTATION` es la copia TypeScript de lo que
- * `celuma-backend/app/services/legacy_letterhead_adapter.py` produce hoy
- * (`build_legacy_letterhead_export()`), campo por campo. Un test de
- * contrato en el backend (`test_letterhead_remediation4.py`) fija esos
- * valores del lado servidor; si alguna vez divergen, la suite de paridad
- * visual fallará, que es exactamente lo que debe pasar.
+ * `LEGACY_PARITY_PRESENTATION` is the TypeScript copy of what
+ * `celuma-backend/app/services/legacy_letterhead_adapter.py` currently
+ * produces (`build_legacy_letterhead_export()`), field by field. A backend
+ * contract test (`test_letterhead_remediation4.py`) pins those server-side
+ * values; if they ever diverge, the visual parity suite must fail.
  *
- * Sobre el texto institucional real: igual que en
- * versioned_v2_legacy_parity.ts, aquí es el dato de entrada CORRECTO —
- * el caso que se prueba es "el tenant embajador importó su propio membrete
- * Legacy". No es información de paciente.
+ * Regarding the real institutional text: as in
+ * versioned_v2_legacy_parity.ts, it is the CORRECT input data here — the
+ * case being tested is "the ambassador tenant imported its own Legacy
+ * letterhead." It is not patient information.
  */
 
 const baseEnvelope = {
@@ -37,7 +36,7 @@ const baseEnvelope = {
     created_by: "00000000-0000-0000-0000-000000000999",
 };
 
-/** Mismo id que `DEFAULT_SIGNER_LOOKUP` en el harness visual. */
+/** Same ID as `DEFAULT_SIGNER_LOOKUP` in the visual harness. */
 export const PARITY_SIGNER_ID = "00000000-0000-0000-0000-000000000099";
 
 const PHYSICIAN_NAME = "Dra. Arisbeth Villanueva Pérez.";
@@ -49,7 +48,7 @@ const FOOTER_ADDRESS =
 const FOOTER_CONTACT =
     "Tel. 33 2015 0100, 33 2015 0101. Cel. 33 2823-1959  patologiaynefropatologia@gmail.com";
 
-/** Copia exacta de `build_legacy_letterhead_export().letterhead.presentation`. */
+/** Exact copy of `build_legacy_letterhead_export().letterhead.presentation`. */
 export const LEGACY_PARITY_PRESENTATION: ReportRenderingSnapshotV2["presentation"] = {
     paper: {
         size: "LETTER",
@@ -81,10 +80,10 @@ export const LEGACY_PARITY_PRESENTATION: ReportRenderingSnapshotV2["presentation
         enabled: true,
         custom_text: `${FOOTER_ADDRESS}\n${FOOTER_CONTACT}`,
         show_page_number: false,
-        // En producción el import materializa aquí el StorageObject creado a
-        // partir de `assets.footer_logo`; en el fixture basta la URL ya
-        // resuelta (`resolved_resources.footer_logo_url`), que es lo único
-        // que el renderer consume.
+        // In production, import materializes the StorageObject created from
+        // `assets.footer_logo` here; the fixture only needs the resolved URL
+        // (`resolved_resources.footer_logo_url`), which is all the renderer
+        // consumes.
         logo_storage_id: "00000000-0000-0000-0000-00000000f001",
         logo_position: "LEFT",
         content_alignment: "RIGHT",
@@ -141,10 +140,10 @@ interface PairOptions {
 }
 
 /**
- * Construye los DOS envelopes de un caso a partir de un único contenido.
- * El V2 recibe el `rendering_snapshot` con el membrete Legacy y la URL ya
- * resuelta del logo de pie — el MISMO bitmap que LegacyReportRendererV1
- * incrusta, para que la comparación no mida dos imágenes distintas.
+ * Builds BOTH envelopes for a case from one content object. V2 receives the
+ * `rendering_snapshot` with the Legacy letterhead and resolved footer logo
+ * URL — the SAME bitmap embedded by LegacyReportRendererV1 — so the
+ * comparison does not measure two different images.
  */
 function makeParityPair(content: ReportContent, opts: PairOptions): {
     legacy: ReportEnvelope;
@@ -197,7 +196,7 @@ const BASE_FIELDS: ReportContent["base"] = {
 const BASE_ORDER = ["order_code", "patient", "study_type", "patient_age", "requesting_physician"];
 
 // --------------------------------------------------------------------------
-// Caso 1 — reporte corto sin imágenes
+// Case 1 — short report without images
 // --------------------------------------------------------------------------
 const shortContent: ReportContent = {
     base: BASE_FIELDS,
@@ -217,11 +216,11 @@ const shortContent: ReportContent = {
 };
 
 const shortPair = makeParityPair(shortContent, {
-    key: "corto", title: "Paridad — reporte corto sin imágenes", status: "DRAFT",
+    key: "short", title: "Parity — short report without images", status: "DRAFT",
 });
 
 // --------------------------------------------------------------------------
-// Caso 2 — varias secciones (richtext + text + table)
+// Case 2 — multiple sections (richtext + text + table)
 // --------------------------------------------------------------------------
 const sectionsContent: ReportContent = {
     base: BASE_FIELDS,
@@ -256,11 +255,11 @@ const sectionsContent: ReportContent = {
 };
 
 const sectionsPair = makeParityPair(sectionsContent, {
-    key: "secciones", title: "Paridad — varias secciones", status: "IN_REVIEW",
+    key: "sections", title: "Parity — multiple sections", status: "IN_REVIEW",
 });
 
 // --------------------------------------------------------------------------
-// Caso 3 — reporte con imágenes
+// Case 3 — report with images
 // --------------------------------------------------------------------------
 const imagesContent: ReportContent = {
     base: BASE_FIELDS,
@@ -285,12 +284,12 @@ const imagesContent: ReportContent = {
 };
 
 const imagesPair = makeParityPair(imagesContent, {
-    key: "imagenes", title: "Paridad — reporte con imágenes", status: "APPROVED",
+    key: "images", title: "Parity — report with images", status: "APPROVED",
 });
 
 // --------------------------------------------------------------------------
-// Caso 4 — reporte firmado (firma real del reporte, no el firmante
-// institucional del membrete: son cosas distintas y ambas deben coincidir).
+// Case 4 — signed report (the report's actual signature, not the
+// institutional letterhead signer: they are distinct and both must match).
 // --------------------------------------------------------------------------
 const signedContent: ReportContent = {
     base: BASE_FIELDS,
@@ -314,8 +313,8 @@ const signedContent: ReportContent = {
 };
 
 const signedPair = makeParityPair(signedContent, {
-    key: "firmado",
-    title: "Paridad — reporte firmado",
+    key: "signed",
+    title: "Parity — signed report",
     status: "PUBLISHED",
     signedBy: PARITY_SIGNER_ID,
     signedAt: "2026-07-01T12:00:00Z",
@@ -323,8 +322,8 @@ const signedPair = makeParityPair(signedContent, {
 });
 
 // --------------------------------------------------------------------------
-// Caso 5 — multipágina (el caso que de verdad prueba que la paginación
-// coincide: mismo número de páginas y mismos cortes).
+// Case 5 — multipage (the case that truly tests pagination parity: same
+// number of pages and identical breaks).
 // --------------------------------------------------------------------------
 const longParagraph = (n: number) =>
     `<p>Párrafo sintético ${n} de la suite de paridad. Texto de relleno sin contenido clínico real, ` +
@@ -350,40 +349,40 @@ const multipageContent: ReportContent = {
 };
 
 const multipagePair = makeParityPair(multipageContent, {
-    key: "multipagina", title: "Paridad — reporte multipágina", status: "APPROVED",
+    key: "multipage", title: "Parity — multipage report", status: "APPROVED",
 });
 
-/** Los cinco casos mínimos exigidos por la cuarta remediación (§15). */
+/** The five minimum cases required by the fourth remediation (§15). */
 export const LEGACY_V2_PARITY_CASES = [
-    { key: "corto", description: "reporte corto sin imágenes" },
-    { key: "secciones", description: "reporte con varias secciones" },
-    { key: "imagenes", description: "reporte con imágenes" },
-    { key: "firmado", description: "reporte firmado" },
-    { key: "multipagina", description: "reporte multipágina" },
+    { key: "short", description: "short report without images" },
+    { key: "sections", description: "report with multiple sections" },
+    { key: "images", description: "report with images" },
+    { key: "signed", description: "signed report" },
+    { key: "multipage", description: "multipage report" },
 ] as const;
 
-// Exportados uno a uno además del mapa, para que las pruebas unitarias
-// (vitest) puedan importar un caso concreto sin cargar el índice entero.
-export const parityCortoLegacy = shortPair.legacy;
-export const parityCortoV2 = shortPair.v2;
-export const paritySeccionesLegacy = sectionsPair.legacy;
-export const paritySeccionesV2 = sectionsPair.v2;
-export const parityImagenesLegacy = imagesPair.legacy;
-export const parityImagenesV2 = imagesPair.v2;
-export const parityFirmadoLegacy = signedPair.legacy;
-export const parityFirmadoV2 = signedPair.v2;
-export const parityMultipaginaLegacy = multipagePair.legacy;
-export const parityMultipaginaV2 = multipagePair.v2;
+// Exported individually as well as in the map so unit tests (vitest) can
+// import a specific case without loading the entire index.
+export const parityShortLegacy = shortPair.legacy;
+export const parityShortV2 = shortPair.v2;
+export const paritySectionsLegacy = sectionsPair.legacy;
+export const paritySectionsV2 = sectionsPair.v2;
+export const parityImagesLegacy = imagesPair.legacy;
+export const parityImagesV2 = imagesPair.v2;
+export const paritySignedLegacy = signedPair.legacy;
+export const paritySignedV2 = signedPair.v2;
+export const parityMultipageLegacy = multipagePair.legacy;
+export const parityMultipageV2 = multipagePair.v2;
 
 export const allLegacyV2ParityFixtures: Record<string, ReportEnvelope> = {
-    parityCortoLegacy,
-    parityCortoV2,
-    paritySeccionesLegacy,
-    paritySeccionesV2,
-    parityImagenesLegacy,
-    parityImagenesV2,
-    parityFirmadoLegacy,
-    parityFirmadoV2,
-    parityMultipaginaLegacy,
-    parityMultipaginaV2,
+    parityShortLegacy,
+    parityShortV2,
+    paritySectionsLegacy,
+    paritySectionsV2,
+    parityImagesLegacy,
+    parityImagesV2,
+    paritySignedLegacy,
+    paritySignedV2,
+    parityMultipageLegacy,
+    parityMultipageV2,
 };

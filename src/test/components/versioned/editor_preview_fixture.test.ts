@@ -4,9 +4,9 @@ import { validateReportRenderingSnapshotV2 } from "../../../components/report/ve
 import { resolveReportSchemaVersion, CURRENT_REPORT_SCHEMA_VERSION } from "../../../components/report/report_schema_version";
 import type { ReportPresentationSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 
-// Céluma 1.3 Fase 2, Bloque D, Historia D6/D14 — the editor's live preview
+// Céluma 1.3 Phase 2, Block D, Story D6/D14 — the editor's live preview
 // must always be a valid, resolver-renderable V2 envelope: this is what
-// stands between the admin editor and rendering an actual patient's data.
+// stands between the admin editor and rendering an current patient's data.
 
 const presentation: ReportPresentationSnapshotV2 = {
     paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: 0.8, right: 1, bottom: 1, left: 1 } },
@@ -68,18 +68,18 @@ describe("buildPreviewReportEnvelope", () => {
 });
 
 /**
- * Tercera remediación post-Fase 2 — problema C: el logo de pie no aparecía
- * NUNCA en la previsualización del editor. El renderer ya sabía dibujarlo
- * (lee `resolved_resources.footer_logo_url`); lo que faltaba era que este
- * builder lo aceptara y lo pusiera en el sobre.
+ * Third post-Phase 2 remediation — issue C: the footer logo did not appear
+ * never in the editor's preview. The renderer already knew how to draw it
+ * (read `resolved_resources.footer_logo_url`); what was missing was that this
+ * builder will accept it and put it in the about.
  */
-describe("buildPreviewReportEnvelope — logo de pie", () => {
-    it("expone footer_logo_url cuando se le pasa la URL del logo de pie", () => {
-        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/pie.png");
-        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/pie.png");
+describe("buildPreviewReportEnvelope — footer logo", () => {
+    it("exposes footer_logo_url when passed the URL of the footer logo", () => {
+        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/footer.png");
+        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/footer.png");
     });
 
-    it("mantiene los dos logos separados — nunca reutiliza el del encabezado", () => {
+    it("keeps the two logos separate — never reuse the one in the header", () => {
         const envelope = buildPreviewReportEnvelope(
             presentation,
             "https://cdn.example/header.png",
@@ -89,13 +89,13 @@ describe("buildPreviewReportEnvelope — logo de pie", () => {
         expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/footer.png");
     });
 
-    it("expone solo el de pie cuando no hay logo de encabezado", () => {
-        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/pie.png");
+    it("exposes only the footer logo when there is no header logo", () => {
+        const envelope = buildPreviewReportEnvelope(presentation, null, "https://cdn.example/footer.png");
         expect(envelope.resolved_resources?.header_logo_url).toBeNull();
-        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/pie.png");
+        expect(envelope.resolved_resources?.footer_logo_url).toBe("https://cdn.example/footer.png");
     });
 
-    it("omite resolved_resources cuando no hay ninguno de los dos", () => {
+    it("omits resolved_resources when neither logo is present", () => {
         expect(buildPreviewReportEnvelope(presentation, null, null).resolved_resources).toBeUndefined();
     });
 });

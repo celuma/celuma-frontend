@@ -2,25 +2,24 @@ import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../..
 import type { ReportRenderingSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 
 /**
- * Segunda remediación post-Fase 2 (UX) — golden de paridad Legacy
- * (legacy-parity-contract.md, sección 9.2 del encargo).
+ * Second post-Phase 2 remediation (UX) — Legacy parity golden
+ * (legacy-parity-contract.md, section 9.2 of the brief).
  *
- * DELIBERADAMENTE distinto de todos los demás fixtures en este directorio:
- * usa el texto institucional REAL del membrete Legacy congelado (el mismo
- * que `legacy_letterhead_adapter.py` exporta), porque este fixture existe
- * específicamente para probar el caso "el tenant embajador importó su
- * propio membrete Legacy como .cell y lo seleccionó explícitamente" — en
- * ese caso, mostrar ese texto es el comportamiento CORRECTO (ver
- * report-rendering-inventory.md §5.1, "Caso esperado"). No es información
- * de paciente — es información institucional/profesional ya pública en
- * cada reporte Legacy histórico.
+ * DELIBERATELY different from every other fixture in this directory: it uses
+ * the frozen REAL institutional text from the Legacy letterhead (the same
+ * text exported by `legacy_letterhead_adapter.py`) because this fixture
+ * specifically tests the case where "the ambassador tenant imported its own
+ * Legacy letterhead as a .cell and selected it explicitly" — displaying that
+ * text is the CORRECT behavior in this case (see
+ * report-rendering-inventory.md §5.1, "Expected case"). It is not patient
+ * information — it is institutional/professional information already public
+ * in every historical Legacy report.
  *
- * Vive fuera de components/report/versioned/ a propósito: ese directorio
- * tiene su propio guardia estático (no_legacy_literals.test.ts) que
- * verifica que el CÓDIGO del renderer nunca contenga estos literales
- * hardcodeados — un FIXTURE de prueba que los usa como dato explícito de
- * entrada es exactamente lo opuesto de una fuga, y no debe vivir bajo ese
- * guardia.
+ * It intentionally lives outside components/report/versioned/: that
+ * directory has its own static guard (no_legacy_literals.test.ts), which
+ * verifies that renderer CODE never contains these hardcoded literals — a
+ * test FIXTURE that uses them as explicit input data is the exact opposite of
+ * a leak and must not live under that guard.
  */
 
 const content: ReportContent = {
@@ -55,16 +54,16 @@ const template: ReportTemplateJSON = {
 // Mirrors legacy_letterhead_adapter.py's build_legacy_letterhead_export()
 // exactly — same institutional text, same color, same layout decisions.
 //
-// CUARTA REMEDIACIÓN: este snapshot se actualizó junto con el adaptador.
-// Hasta la tercera remediación transportaba campos que el renderer V2
-// simplemente ignoraba (`height_mm`), y repartía las cuatro líneas del
-// encabezado Legacy entre institution_name/subtitle/address, que tienen
-// tamaños distintos y dejaban la dirección postal arriba en vez de en el
-// pie. Ahora emite `logo_mode`, `signer_placement`, offsets/alturas/gaps,
-// `layout=SPLIT` y los pesos tipográficos — todos ya conectados al
-// renderer. Su golden (`v2-membrete-legacy-importado.png`) se regeneró por
-// esa razón; los goldens Legacy y los cinco goldens V2 históricos NO se
-// tocaron. Ver v2-legacy-parity-capabilities.md.
+// FOURTH REMEDIATION: this snapshot was updated alongside the adapter. Until
+// the third remediation, it carried fields the V2 renderer simply ignored
+// (`height_mm`) and split the four Legacy header lines across
+// institution_name/subtitle/address, whose sizes differ and placed the postal
+// address at the top instead of the footer. It now emits `logo_mode`,
+// `signer_placement`, offsets/heights/gaps, `layout=SPLIT`, and typography
+// weights — all now wired to the renderer. Its golden
+// (`v2-imported-legacy-letterhead.png`) was regenerated for this reason; the
+// Legacy goldens and five historical V2 goldens were NOT changed. See
+// v2-legacy-parity-capabilities.md.
 const snapshot: ReportRenderingSnapshotV2 = {
     schema_version: 2,
     template: template as unknown as Record<string, unknown>,

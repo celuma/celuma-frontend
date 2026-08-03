@@ -14,10 +14,10 @@ interface ReportPreviewProps {
 }
 
 export interface ReportPreviewRef {
-    /** Cuarta remediación (Observación 1): impresión LOCAL — nunca el PDF
-     *  oficial. La marca de borrador/retractado se deriva del estado del
-     *  reporte, no del llamante, para que ninguna pantalla pueda imprimir
-     *  un no-publicado sin marca. Ver local-print-contract.md. */
+    /** Fourth remediation (Observation 1): LOCAL printing — never the
+     *  official PDF. The draft/retracted mark is derived from the report
+     *  status, not the caller, so no screen can print an unpublished report
+     *  without a mark. See local-print-contract.md. */
     printLocalCopy: () => Promise<void>;
 }
 

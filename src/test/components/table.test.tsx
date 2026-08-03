@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { CelumaTable } from "../../components/ui/table";
 import { matchesQuery } from "../../lib/search";
 
-// Regression coverage for Céluma 1.3 Fase 1 (Workstream 2). CelumaTable is the
-// shared table used by Estudios (study_types.tsx) and Lista de precios
+// Regression coverage for Céluma 1.3 Phase 1 (Workstream 2). CelumaTable is the
+// shared table used by Estudios (study_types.tsx) and list de precios
 // (price_catalog.tsx), among others — this exercises it with the same
 // searchFilter/sorter pattern those pages use, so it stands in as concrete
 // evidence for both screens without needing a live backend.
@@ -17,7 +17,7 @@ interface StudyRow {
 }
 
 // Intentionally unsorted, includes accented Spanish names, mirrors a "Estudios"/
-// "Lista de precios" style dataset large enough to force pagination (default pageSize 10).
+// "list de precios" style dataset large enough to force pagination (default pageSize 10).
 const rows: StudyRow[] = [
     { id: "1", code: "HIST", name: "Histopatología" },
     { id: "2", code: "CITO", name: "Citología Exfoliativa" },
@@ -49,7 +49,7 @@ function renderTable() {
     );
 }
 
-describe("CelumaTable — search behavior (Estudios / Lista de precios pattern)", () => {
+describe("CelumaTable — search behavior (Studies / price list pattern)", () => {
     it("shows all rows (first page) with no search applied", () => {
         renderTable();
         expect(screen.getByText("Histopatología")).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("CelumaTable — search behavior (Estudios / Lista de precios pattern)"
         renderTable();
         await user.type(screen.getByPlaceholderText("Buscar tipos de estudio"), "patolog");
 
-        // "Histopatología", "Nefropatología", "Anatomía Patológica", "Dermatopatología"
+        // "Histopathology", "Nephropathology", "Pathological Anatomy", "Dermatopathology"
         expect(screen.getByText("Histopatología")).toBeInTheDocument();
         expect(screen.getByText("Nefropatología")).toBeInTheDocument();
         expect(screen.getByText("Anatomía Patológica")).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe("CelumaTable — search behavior (Estudios / Lista de precios pattern)"
         const user = userEvent.setup();
         renderTable();
 
-        // Go to page 2 first (CelumaPagination renders page buttons labeled "Página N").
+        // Go to page 2 first (CelumaPagination renders page buttons labeled "page N").
         const page2 = screen.getByRole("button", { name: "Página 2" });
         await user.click(page2);
         expect(screen.getByText("Zoonosis")).toBeInTheDocument();

@@ -767,7 +767,7 @@ export default function SampleDetailPage() {
     // value it's reconciled by position and keeps its state across re-renders.
     const sidebarContent = (
         <div style={{ display: "grid", gap: tokens.gap }}>
-            {/* Estado — change the sample state from a rail action card */}
+            {/* Status — change the sample state from a rail action card */}
             <Card
                 size="small"
                 style={{ ...cardStyle, padding: 0 }}

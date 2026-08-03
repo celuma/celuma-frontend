@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { levenshtein, matchesQuery, normalizeText, stripSeparators } from "../../lib/search";
 
-// Regression coverage for Céluma 1.3 Fase 1 (Workstream 2 — UX validation of
+// Regression coverage for Céluma 1.3 Phase 1 (Workstream 2 — UX validation of
 // search/filter/sort). This is the shared engine behind every list screen's
 // search box (Patients, Orders, Studies, Price List, Requesting Physicians, ...).
 // These tests protect current behavior; they do not change it.
@@ -22,7 +22,7 @@ describe("stripSeparators", () => {
     });
 });
 
-describe("levenshtein", () => {
+describe("Levenshtein", () => {
     it("is 0 for identical strings", () => {
         expect(levenshtein("biopsia", "biopsia")).toBe(0);
     });

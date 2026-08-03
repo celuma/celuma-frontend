@@ -90,7 +90,7 @@ function ReportTemplateVersions({ embedded = false }: ReportTemplateVersionsProp
         }
     };
 
-    // Best-effort id -> nombre lookup for "Publicado por". Not gated on any
+    // Best-effort id -> name lookup for "Publicado por". Not gated on any
     // extra permission beyond being an authenticated tenant member; silently
     // falls back to showing the raw id if it fails.
     useEffect(() => {

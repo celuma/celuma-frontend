@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validatePresentationDraft } from "../../../components/report/versioned/report_presentation_editor_schema";
 import type { ReportPresentationSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 
-// Céluma 1.3 Fase 2, Bloque D, Historia D5/D14 — mirrors the backend Pydantic
+// Céluma 1.3 Phase 2, Block D, Story D5/D14 — mirrors the backend Pydantic
 // contract's limits (margins, hex color, phone pattern, markup rejection).
 
 function validPresentation(): ReportPresentationSnapshotV2 {

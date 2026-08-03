@@ -1,17 +1,17 @@
 /**
  * Page-level tests for the letterhead editor's logo flow.
  *
- * Post-Fase-2 remediation R8/R16 (bug 1: `originFileObj` on a raw RcFile) y
- * TERCERA remediación (problemas B y C: el logo se subía pero no persistía
- * visualmente al reabrir, y el logo de pie no aparecía nunca en la
- * previsualización).
+ * Post-Phase-2 remediation R8/R16 (bug 1: `originFileObj` on a raw RcFile) and
+ * Third remediation (issues B and C: the logo was uploaded but did not persist
+ * visually when reopening, and the footer logo never appeared on the
+ * preview).
  *
- * Se conduce el `<Upload>` real de Ant Design con `userEvent.upload()` (un
- * `File` de verdad a través del input del DOM), no una llamada mockeada al
- * servicio: los tres bugs que cubre esta clase vivían justamente en el
- * cableado de la página, invisible para una prueba de servicio (ver
- * report_letterhead_service.test.ts, que pasaba mientras los bugs
- * shippeaban).
+ * The actual `<Upload>` is driven by Ant Design with `userEvent.upload()` (a
+ * Real `File` through the DOM input), not a mocked call
+ * service: the three bugs that this class covers lived precisely in the
+ * page wiring, invisible for service testing (see
+ * report_letterhead_service.test.ts, which passed while the bugs
+ *shipped).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -138,8 +138,8 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
-describe("ReportLetterheadEditor — subida de logos", () => {
-    it("sube un File real seleccionado por el input, sin pasos intermedios", async () => {
+describe("ReportLetterheadEditor — logo uploads", () => {
+    it("uploads to actual File selected by the input, without intermediate steps", async () => {
         withPermission(true);
         mockLetterhead();
         vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);
@@ -160,10 +160,10 @@ describe("ReportLetterheadEditor — subida de logos", () => {
         const file = new File([new Uint8Array([1, 2, 3, 4])], "logo.png", { type: "image/png" });
         await userEvent.upload(fileInputs()[0], file);
 
-        // Tercera remediación: la subida arranca al seleccionar el archivo.
-        // Antes hacía falta pulsar un segundo botón "Subir logo", lo que
-        // dejaba el drag-and-drop sin efecto visible y permitía pulsar
-        // "Guardar" perdiendo el logo en silencio.
+        // Third remedy: the upload starts when the file is selected.
+        // before pressing the second "upload logo" button was missing, which
+        // left the drag-and-drop with no visible effect and allowed clicking
+        // "save" losing the logo silently.
         await waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(1));
 
         const [, uploadedFile] = uploadSpy.mock.calls[0];
@@ -171,7 +171,7 @@ describe("ReportLetterheadEditor — subida de logos", () => {
         expect((uploadedFile as File).name).toBe("logo.png");
     });
 
-    it("muestra el logo recién subido en la previsualización de inmediato", async () => {
+    it("shows the newly uploaded logo in the preview immediately", async () => {
         withPermission(true);
         mockLetterhead();
         vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);
@@ -198,13 +198,13 @@ describe("ReportLetterheadEditor — subida de logos", () => {
         });
     });
 
-    it("sube el logo de PIE por su propio input, sin tocar el del encabezado", async () => {
+    it("upload the footer logo through its own input, without touching the header", async () => {
         withPermission(true);
         mockLetterhead();
         vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);
         vi.spyOn(letterheadService, "uploadReportLetterheadLogo").mockResolvedValue({
             storage_object_id: "storage-footer",
-            url: "https://cdn.example/pie.png",
+            url: "https://cdn.example/footer.png",
             content_type: "image/png",
             size_bytes: 42,
         });
@@ -222,7 +222,7 @@ describe("ReportLetterheadEditor — subida de logos", () => {
             expect(screen.getByText(/Editar membrete/i)).toBeTruthy();
         });
 
-        // [0] = encabezado, [1] = pie.
+        // [0] = header, [1] = footer.
         await userEvent.upload(
             fileInputs()[1],
             new File([new Uint8Array([9])], "pie.png", { type: "image/png" })
@@ -238,8 +238,8 @@ describe("ReportLetterheadEditor — subida de logos", () => {
     });
 });
 
-describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)", () => {
-    it("previsualiza los logos ya persistidos con las URLs resueltas por el backend", async () => {
+describe("ReportLetterheadEditor — rehydration on reopen (issues B and C)", () => {
+    it("preview the logos already persisted with the URLs resolved by the backend", async () => {
         withPermission(true);
         mockLetterhead();
         mockActiveVersion(
@@ -248,8 +248,8 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
                 footer: { ...presentationWith().footer, logo_storage_id: "storage-f" },
             }),
             {
-                header_logo_url: "https://cdn.example/persistido-header.png",
-                footer_logo_url: "https://cdn.example/persistido-footer.png",
+                header_logo_url: "https://cdn.example/persisted-header.png",
+                footer_logo_url: "https://cdn.example/persisted-footer.png",
             }
         );
 
@@ -258,17 +258,17 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
             expect(screen.getByText(/Editar membrete/i)).toBeTruthy();
         });
 
-        // La regresión concreta: antes ambos quedaban en null al reabrir y
-        // el editor mostraba el logo neutral de Céluma pese a tener
-        // `logo_storage_id` bien guardado.
+        // The specific regression: before both were null when reopened and
+        // the editor showed the neutral Céluma logo despite having
+        // `logo_storage_id` correctly saved.
         await waitFor(() => {
             const srcs = Array.from(document.querySelectorAll("img")).map((i) => i.getAttribute("src"));
-            expect(srcs).toContain("https://cdn.example/persistido-header.png");
-            expect(srcs).toContain("https://cdn.example/persistido-footer.png");
+            expect(srcs).toContain("https://cdn.example/persisted-header.png");
+            expect(srcs).toContain("https://cdn.example/persisted-footer.png");
         });
     });
 
-    it("no muestra ningún logo cuando el membrete no tiene ninguno configurado", async () => {
+    it("shows no logo when the letterhead has none configured", async () => {
         withPermission(true);
         mockLetterhead();
         mockActiveVersion(presentationWith(), null);
@@ -278,18 +278,18 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
             expect(screen.getByText(/Editar membrete/i)).toBeTruthy();
         });
 
-        // El fallback neutral solo aplica cuando NO hay logo configurado.
+        // Neutral fallback only applies when there is NO logo configured.
         expect(screen.queryByRole("button", { name: /Quitar/i })).toBeNull();
     });
 
-    it("conserva el logo persistido al guardar sin tocarlo", async () => {
+    it("preserve the persisted logo when saving without touching it", async () => {
         withPermission(true);
         mockLetterhead();
         mockActiveVersion(
             presentationWith({
                 header: { ...presentationWith().header, logo_storage_id: "storage-h" },
             }),
-            { header_logo_url: "https://cdn.example/persistido-header.png" }
+            { header_logo_url: "https://cdn.example/persisted-header.png" }
         );
         const saveSpy = vi
             .spyOn(letterheadService, "saveCurrentReportLetterheadVersion")
@@ -312,14 +312,14 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
         expect(saveSpy.mock.calls[0][1].configuration.header.logo_storage_id).toBe("storage-h");
     });
 
-    it("«Quitar» persiste el logo como null", async () => {
+    it("persists the logo as null after removal", async () => {
         withPermission(true);
         mockLetterhead();
         mockActiveVersion(
             presentationWith({
                 footer: { ...presentationWith().footer, logo_storage_id: "storage-f" },
             }),
-            { footer_logo_url: "https://cdn.example/persistido-footer.png" }
+            { footer_logo_url: "https://cdn.example/persisted-footer.png" }
         );
         const saveSpy = vi
             .spyOn(letterheadService, "saveCurrentReportLetterheadVersion")
@@ -343,7 +343,7 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
         expect(saveSpy.mock.calls[0][1].configuration.footer.logo_storage_id).toBeNull();
     });
 
-    it("restaura todos los campos visuales importados, sin sustituirlos por defaults", async () => {
+    it("restores all imported visual fields, without replacing them with defaults", async () => {
         withPermission(true);
         mockLetterhead();
         const imported = presentationWith({
@@ -382,13 +382,13 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
         await userEvent.click(screen.getByRole("button", { name: /^Guardar$/i }));
 
         await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
-        // Re-guardar sin editar nada devuelve EXACTAMENTE lo cargado, con
-        // una única adición deliberada de la cuarta remediación: `logo_mode`
-        // se materializa con el valor que REPRODUCE lo que el membrete ya
-        // mostraba (encabezado sin logo -> el isotipo neutral al que caía el
-        // renderer; pie sin logo -> nada, que es lo que el pie hacía). Es lo
-        // contrario de "sustituir por defaults": deja escrito, y por tanto
-        // editable, un comportamiento que hasta ahora era implícito.
+        // Re-save without editing anything returns exactly what was loaded, with
+        // a single deliberate addition of the fourth remedy: `logo_mode`
+        // materializes with the value REPRODUCE what the letterhead already
+        // showed (header without logo -> the neutral isotype to which the
+        // renderer; footer without logo -> nothing, which is what the footer did). It is what
+        // opposite of "replace by defaults": leaves written, and therefore
+        // editable, a behavior that until now was implicit.
         const saved = saveSpy.mock.calls[0][1].configuration;
         expect(saved.header.logo_mode).toBe("CELUMA_DEFAULT");
         expect(saved.footer.logo_mode).toBe("NONE");
@@ -404,8 +404,8 @@ describe("ReportLetterheadEditor — rehidratación al reabrir (problemas B y C)
     });
 });
 
-describe("ReportLetterheadEditor — permisos", () => {
-    it("muestra el estado de solo lectura sin permiso de administración", async () => {
+describe("ReportLetterheadEditor — permissions", () => {
+    it("shows read-only state without admin permission", async () => {
         withPermission(false);
         mockLetterhead();
         vi.spyOn(letterheadService, "getActiveReportLetterheadVersion").mockResolvedValue(null);

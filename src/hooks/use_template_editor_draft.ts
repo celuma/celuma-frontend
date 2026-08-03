@@ -2,23 +2,23 @@ import { useCallback, useEffect } from "react";
 
 /**
  * sessionStorage-backed draft persistence + accidental-navigation guard for
- * the report template editor (Céluma 1.3 Fase 2, Bloque D, Historia D11).
+ * the report template editor (Céluma 1.3 Phase 2, Block D, Story D11).
  *
  * There is no `DRAFT` entity on the backend — `ReportTemplateVersion` stays
- * append-only/immutable (see report-template-editor-contract.md, "Estado
- * local o borrador"). This hook only persists the in-progress `presentation`
+ * append-only/immutable (see report-template-editor-contract.md, "Local
+ * state or draft"). This hook only persists the in-progress `presentation`
  * state client-side, scoped per tenant/template/baseline, so a reload or
  * accidental tab close doesn't silently discard unpublished configuration.
  *
  * Only `presentation` values (paper/header/footer/style/signer) are ever
  * stored here — never clinical/patient data, matching the constraint in the
- * assignment ("no contiene datos clínicos ni sensibles").
+ * assignment ("contains no clinical or sensitive data").
  *
  * This app uses a plain `<BrowserRouter>` (see main.tsx), not a data router,
  * so React Router's `useBlocker` (which requires `RouterProvider`) is not
  * available here. In-app navigation is guarded manually via
  * `confirmNavigateAway()`, called by every nav trigger inside the editor
- * (Cancel/Volver); tab close/refresh is covered by `beforeunload` below.
+ * (Cancel/Back); tab close/refresh is covered by `beforeunload` below.
  */
 
 function draftKey(tenantId: string, templateId: string, baseline: string): string {

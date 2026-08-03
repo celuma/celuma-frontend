@@ -1,56 +1,56 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Los cinco casos exigidos por §15. Se declaran aquí, y no se importan de
- * `src/test/fixtures/reports/legacy_v2_parity.ts`, porque ese módulo
- * importa el bitmap del logotipo Legacy: Vite lo resuelve dentro del
- * harness, pero el runner de Playwright (Node, sin Vite) no puede.
- * `legacy_v2_parity.ts` exporta la misma lista para el harness, y
- * `LEGACY_V2_PARITY_CASE_KEYS` de aquí debe mantenerse en sincronía —
- * cualquier desajuste hace fallar el `page.goto` con "Fixture desconocido".
+ * The five cases required by §15. They are declared here rather than
+ * imported from `src/test/fixtures/reports/legacy_v2_parity.ts` because that
+ * module imports the Legacy logo bitmap: Vite resolves it inside the harness,
+ * but the Playwright runner (Node, without Vite) cannot. `legacy_v2_parity.ts`
+ * exports the same list for the harness, and this
+ * `LEGACY_V2_PARITY_CASE_KEYS` must remain synchronized — any mismatch makes
+ * `page.goto` fail with "Unknown fixture".
  */
 const LEGACY_V2_PARITY_CASES = [
-    { key: "corto", description: "reporte corto sin imágenes" },
-    { key: "secciones", description: "reporte con varias secciones" },
-    { key: "imagenes", description: "reporte con imágenes" },
-    { key: "firmado", description: "reporte firmado" },
-    { key: "multipagina", description: "reporte multipágina" },
+    { key: "short", description: "short report without images" },
+    { key: "sections", description: "report with multiple sections" },
+    { key: "images", description: "report with images" },
+    { key: "signed", description: "signed report" },
+    { key: "multipage", description: "multipage report" },
 ] as const;
 
 /**
- * Cuarta remediación post-Fase 2 — PARIDAD VISUAL Legacy ↔ V2 (§15 y §16
- * del encargo).
+ * Fourth post-Phase 2 remediation — Legacy ↔ V2 VISUAL PARITY (§15 and §16
+ * of the brief).
  *
- * Esta suite no comprueba que un `.cell` importe bien, ni que existan
- * campos, ni que ambos rendericen "algo parecido". Renderiza el MISMO
- * contenido clínico dos veces —
+ * This suite does not verify that a `.cell` imports correctly, that fields
+ * exist, or that both render "something similar." It renders the SAME
+ * clinical content twice —
  *
  *     LegacyReportRendererV1
- *     VersionedReportRendererV2 + membrete Legacy importado
+ *     VersionedReportRendererV2 + imported Legacy letterhead
  *
- * — y compara geometría medida y píxeles reales.
+ * — and compares measured geometry and real pixels.
  *
- * Contrato con los goldens existentes:
- *   - NO toca `report_renderer_legacy.visual.spec.ts` ni sus 7 snapshots.
- *   - NO toca los 5 snapshots V2 históricos.
- *   - Sus propias líneas base viven bajo el prefijo `parity-` y son
- *     NUEVAS; nunca sustituyen a ninguna existente.
+ * Contract with existing goldens:
+ *   - Does NOT touch `report_renderer_legacy.visual.spec.ts` or its 7 snapshots.
+ *   - Does NOT touch the 5 historical V2 snapshots.
+ *   - Its own baselines use the `parity-` prefix and are NEW; they never
+ *     replace an existing one.
  *
- * Las diferencias residuales se documentan en legacy-dom-parity-report.md
- * con su recuento de píxeles y su motivo. Ver también
- * legacy_v2_pdf_parity.visual.spec.ts para la comparación en PDF.
+ * Residual differences are documented in legacy-dom-parity-report.md with
+ * their pixel count and reason. See legacy_v2_pdf_parity.visual.spec.ts for
+ * PDF comparison.
  */
 
 /**
- * Tolerancia EXACTA, a propósito. El objetivo de esta remediación no es
- * "parecerse mucho": es que el cliente embajador no perciba ningún cambio
- * visual no solicitado. `threshold: 0` desactiva incluso la tolerancia
- * por-píxel que Playwright aplica por defecto (0.2), así que estas pruebas
- * solo pasan si las dos capturas son idénticas bit a bit.
+ * EXACT tolerance, deliberately. This remediation is not intended to make
+ * the result "look very similar": the ambassador client must perceive no
+ * unrequested visual change. `threshold: 0` even disables Playwright's
+ * default per-pixel tolerance (0.2), so these tests pass only if both
+ * screenshots are bit-for-bit identical.
  *
- * Si alguna vez hubiera que relajarlo, la diferencia residual debe quedar
- * medida y justificada en legacy-dom-parity-report.md — nunca subida en
- * silencio para que el CI vuelva a verde.
+ * If it ever needs relaxing, the residual difference must be measured and
+ * justified in legacy-dom-parity-report.md — never silently increased just
+ * to make CI green again.
  */
 const MAX_DIFF_PIXEL_RATIO = 0;
 const PER_PIXEL_THRESHOLD = 0;
@@ -72,15 +72,15 @@ interface PageGeometry {
 }
 
 /**
- * Mide la geometría real de las páginas ya renderizadas. Es deliberadamente
- * independiente del DOM interno de cada renderer: localiza las bandas por
- * su posición (hijo absoluto pegado arriba / abajo) en vez de por clases o
- * ids, que Legacy y V2 no comparten.
+ * Measures actual geometry of rendered pages. It is deliberately independent
+ * of each renderer's internal DOM: it locates bands by position (absolute
+ * child pinned to top/bottom) rather than classes or IDs, which Legacy and V2
+ * do not share.
  *
- * Las hojas se localizan por `width: 8.5in`, que es como AMBOS renderers
- * las crean. `#pages-host > div` no sirve: devuelve el envoltorio del
- * componente (que además contiene la fuente oculta de paginación), con lo
- * que todas las comparaciones pasarían por igualdad trivial.
+ * Pages are located by `width: 8.5in`, how BOTH renderers create them.
+ * `#pages-host > div` does not work: it returns the component wrapper (which
+ * also contains the hidden pagination source), making every comparison pass
+ * through trivial equality.
  */
 async function readGeometry(page: import("@playwright/test").Page): Promise<PageGeometry> {
     return page.evaluate(() => {
@@ -92,8 +92,8 @@ async function readGeometry(page: import("@playwright/test").Page): Promise<Page
         const firstRect = first.getBoundingClientRect();
 
         const children = Array.from(first.children).filter((el): el is HTMLElement => el instanceof HTMLElement);
-        // El cuerpo es el único hijo con `overflow: hidden` y alto explícito
-        // en px; las bandas se declaran en mm.
+        // The body is the only child with `overflow: hidden` and explicit px
+        // height; bands are declared in mm.
         const body = children.find((el) => el.style.overflow === "hidden" && el.style.height.endsWith("px"))!;
         const bodyRect = body.getBoundingClientRect();
         const bands = children.filter((el) => el !== body);
@@ -127,7 +127,7 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
     const legacyFixture = `parity${capitalized}Legacy`;
     const v2Fixture = `parity${capitalized}V2`;
 
-    test(`paridad Legacy ↔ V2 — ${description}: geometría y paginación`, async ({ page }) => {
+    test(`Legacy ↔ V2 parity — ${description}: geometry and pagination`, async ({ page }) => {
         await page.goto(`/?fixture=${legacyFixture}`);
         await page.waitForSelector('[data-ready="true"]');
         const legacy = await readGeometry(page);
@@ -136,28 +136,28 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
         await page.waitForSelector('[data-ready="true"]');
         const v2 = await readGeometry(page);
 
-        // Dimensiones físicas y márgenes del área de contenido.
+        // Physical dimensions and content-area margins.
         expect(v2.pageWidth).toBe(legacy.pageWidth);
         expect(v2.pageHeight).toBe(legacy.pageHeight);
         expect(v2.bodyLeft).toBe(legacy.bodyLeft);
         expect(v2.bodyWidth).toBe(legacy.bodyWidth);
-        // Altura de las bandas y separación con el cuerpo. Éste es el
-        // criterio que fallaba antes de conectar `height_mm`/`offset_mm`.
+        // Band height and separation from the body. This is the criterion
+        // that failed before connecting `height_mm`/`offset_mm`.
         expect(v2.headerTop).toBe(legacy.headerTop);
         expect(v2.headerHeight).toBe(legacy.headerHeight);
         expect(v2.footerBottomFromPage).toBe(legacy.footerBottomFromPage);
         expect(v2.footerHeight).toBe(legacy.footerHeight);
-        // Área paginable: si difiere aunque sea 1px, los saltos de página
-        // pueden divergir en reportes largos.
+        // Pageable area: if it differs by even 1px, page breaks can diverge
+        // in long reports.
         expect(v2.bodyTop).toBe(legacy.bodyTop);
         expect(v2.bodyClientHeight).toBe(legacy.bodyClientHeight);
-        // Paginación: mismo número de páginas y mismo reparto de texto.
+        // Pagination: same page count and text distribution.
         expect(v2.pageCount).toBe(legacy.pageCount);
         expect(v2.perPageTextLengths).toEqual(legacy.perPageTextLengths);
     });
 
-    test(`paridad Legacy ↔ V2 — ${description}: píxeles (V2 contra el golden Legacy del caso)`, async ({ page }) => {
-        // Primero se fija la línea base a partir de Legacy...
+    test(`Legacy ↔ V2 parity — ${description}: pixels (V2 against case Legacy golden)`, async ({ page }) => {
+        // First, establish the baseline from Legacy...
         await page.goto(`/?fixture=${legacyFixture}`);
         await page.waitForSelector('[data-ready="true"]');
         await expect(page.locator("#pages-host")).toHaveScreenshot(`parity-${key}-legacy.png`, {
@@ -165,8 +165,8 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
             threshold: PER_PIXEL_THRESHOLD,
         });
 
-        // ...y después se compara V2 CONTRA ESA MISMA imagen. No es un
-        // golden propio de V2: si V2 se desvía de Legacy, esto falla.
+        // ...then compare V2 AGAINST THAT SAME image. It is not a V2-specific
+        // golden: if V2 deviates from Legacy, this fails.
         await page.goto(`/?fixture=${v2Fixture}`);
         await page.waitForSelector('[data-ready="true"]');
         await expect(page.locator("#pages-host")).toHaveScreenshot(`parity-${key}-legacy.png`, {
@@ -176,11 +176,11 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
     });
 }
 
-// El encabezado es donde vivían dos de las diferencias reportadas (caja de
-// logo reservada e isotipo neutral). Una aserción explícita sobre el DOM,
-// además del píxel, deja constancia de la causa si alguna vez reaparece.
-test("paridad Legacy ↔ V2 — el encabezado V2 con membrete Legacy no contiene ninguna imagen", async ({ page }) => {
-    await page.goto("/?fixture=parityCortoV2");
+// The header contained two reported differences (reserved logo box and
+// neutral icon). An explicit DOM assertion, in addition to the pixel check,
+// records the cause if it ever reappears.
+test("Legacy ↔ V2 parity — V2 header with Legacy letterhead contains no image", async ({ page }) => {
+    await page.goto("/?fixture=parityShortV2");
     await page.waitForSelector('[data-ready="true"]');
     const headerImages = await page.evaluate(() => {
         const first = Array.from(document.querySelectorAll<HTMLElement>("#pages-host div")).filter(
@@ -193,8 +193,8 @@ test("paridad Legacy ↔ V2 — el encabezado V2 con membrete Legacy no contiene
     expect(headerImages).toBe(0);
 });
 
-test("paridad Legacy ↔ V2 — el pie V2 con membrete Legacy sí contiene el logotipo", async ({ page }) => {
-    await page.goto("/?fixture=parityCortoV2");
+test("Legacy ↔ V2 parity — V2 footer with Legacy letterhead contains the logo", async ({ page }) => {
+    await page.goto("/?fixture=parityShortV2");
     await page.waitForSelector('[data-ready="true"]');
     const footerImages = await page.evaluate(() => {
         const first = Array.from(document.querySelectorAll<HTMLElement>("#pages-host div")).filter(
@@ -207,10 +207,10 @@ test("paridad Legacy ↔ V2 — el pie V2 con membrete Legacy sí contiene el lo
     expect(footerImages).toBe(1);
 });
 
-// Legacy nunca imprimió número de página; el membrete Legacy debe
-// reproducir esa ausencia.
-test("paridad Legacy ↔ V2 — el membrete Legacy no imprime numeración de página", async ({ page }) => {
-    await page.goto("/?fixture=parityMultipaginaV2");
+// Legacy never printed page numbers; the Legacy letterhead must reproduce
+// that absence.
+test("Legacy ↔ V2 parity — Legacy letterhead does not print page numbering", async ({ page }) => {
+    await page.goto("/?fixture=parityMultipageV2");
     await page.waitForSelector('[data-ready="true"]');
     const text = await page.locator("#pages-host").innerText();
     expect(text).not.toMatch(/Página \d+ de \d+/);

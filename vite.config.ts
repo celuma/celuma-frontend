@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
             }),
         },
         server: {
-            // Céluma 1.3 Fase 2, Bloque E: the backend's headless-Chromium PDF
+            // Céluma 1.3 Phase 2, Block E: the backend's headless-Chromium PDF
             // generator (running inside the `api` Docker container) needs to
             // reach this dev server to render `/internal/report-render/...`.
             // Docker Desktop's `host.docker.internal` only resolves back here

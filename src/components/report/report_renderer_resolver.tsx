@@ -12,15 +12,15 @@ import UnsupportedReportVersion from "./unsupported_report_version";
 import VersionedReportRendererV2 from "./versioned/versioned_report_renderer_v2";
 
 /**
- * ReportRendererResolver (Céluma 1.3 Fase 2, Bloque A, Historia A5).
+ * ReportRendererResolver (Céluma 1.3 Phase 2, Block A, Story A5).
  *
  * The single entry point for rendering a report — preview (editor + detail)
  * and PDF export all go through this component instead of importing a
  * renderer directly. It resolves report.report's schema_version and picks
  * the matching renderer:
  *
- *   absent / 1  -> LegacyReportRendererV1  (frozen, historical letterhead — Bloque A)
- *   2           -> VersionedReportRendererV2 (Bloque C — reads exclusively
+ *   absent / 1  -> LegacyReportRendererV1  (frozen, historical letterhead — Block A)
+ *   2           -> VersionedReportRendererV2 (Block C — reads exclusively
  *                   report.report.rendering_snapshot; NEVER falls back to
  *                   the legacy renderer, even if its own snapshot turns out
  *                   to be missing/invalid — it renders its own controlled

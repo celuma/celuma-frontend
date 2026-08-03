@@ -1,11 +1,11 @@
 /**
- * Cuarta remediación post-Fase 2 (Observación 2) — la descripción de un
- * membrete debe poder quedar vacía.
+ * Fourth post-Phase 2 remediation (Observation 2) — the description of a
+ * letterhead must be able to remain empty.
  *
- * La causa raíz vivía en DOS sitios a la vez, y por eso hay pruebas de los
- * dos: el backend interpretaba `null` como "no tocar", y el frontend ni
- * siquiera enviaba el campo (`description || undefined`). Estas pruebas
- * cubren la mitad de frontend: qué payload sale del formulario.
+ * The root cause lived in two places at the same time, and that is why there are tests of the
+ * two: the backend interpreted `null` as "do not touch", and the frontend neither
+ * it didn't even send the field (`description || undefined`). These tests
+ * cover half of frontend: what payload outputs from the form.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe("normalizeLetterheadDescription", () => {
-    it("convierte vacío, espacios, null y undefined en null", () => {
+    it("converts empty, spaces, null and undefined to null", () => {
         expect(normalizeLetterheadDescription("")).toBeNull();
         expect(normalizeLetterheadDescription("   ")).toBeNull();
         expect(normalizeLetterheadDescription("\n\t ")).toBeNull();
@@ -73,23 +73,23 @@ describe("normalizeLetterheadDescription", () => {
         expect(normalizeLetterheadDescription(undefined)).toBeNull();
     });
 
-    it("recorta pero conserva el texto real", () => {
+    it("crop but preserve the real text", () => {
         expect(normalizeLetterheadDescription("  Texto  ")).toBe("Texto");
         expect(normalizeLetterheadDescription("Texto")).toBe("Texto");
     });
 
-    it("nunca devuelve undefined — undefined significaría \"campo omitido\"", () => {
-        // Éste es literalmente el bug: `description || undefined` hacía que
-        // JSON.stringify omitiera la clave y el backend conservara el valor
-        // anterior para siempre.
+    it("never returns undefined — undefined would mean \"field omitted\"", () => {
+        // This is literally the bug: `description || undefined` made
+        // JSON.stringify omits the key and the backend retains the previous
+        // value.
         for (const input of ["", "   ", null, undefined, "algo"]) {
             expect(normalizeLetterheadDescription(input)).not.toBeUndefined();
         }
     });
 });
 
-describe("ReportLetterheads — crear con descripción vacía", () => {
-    it("envía description: null cuando el campo se deja en blanco", async () => {
+describe("ReportLetterheads — create with empty description", () => {
+    it("sends description: null when field is left blank", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
         const createSpy = vi
@@ -110,7 +110,7 @@ describe("ReportLetterheads — crear con descripción vacía", () => {
         });
     });
 
-    it("envía la descripción recortada cuando sí hay texto", async () => {
+    it("sends the description clipped when there is text", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
         const createSpy = vi
@@ -130,8 +130,8 @@ describe("ReportLetterheads — crear con descripción vacía", () => {
     });
 });
 
-describe("ReportLetterheads — limpiar una descripción existente", () => {
-    /** "Renombrar" edita nombre Y descripción; vive en el menú de acciones. */
+describe("ReportLetterheads — clean up existing description", () => {
+    /** "Rename" edits name AND description; lives in the actions menu. */
     async function openEditModal() {
         renderPage();
         await waitFor(() => expect(screen.getByText("Membrete con descripción")).toBeTruthy());
@@ -142,7 +142,7 @@ describe("ReportLetterheads — limpiar una descripción existente", () => {
         );
     }
 
-    it("rehidrata el textarea con la descripción guardada", async () => {
+    it("rehydrates the textarea with the saved description", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({
             letterheads: [letterhead()],
@@ -153,7 +153,7 @@ describe("ReportLetterheads — limpiar una descripción existente", () => {
         expect(textarea.value).toBe("Texto que el usuario quiere borrar");
     });
 
-    it("envía description: null al vaciar el campo (el bug reportado)", async () => {
+    it("sends description: null when clearing the field (the reported bug)", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({
             letterheads: [letterhead()],
@@ -170,12 +170,12 @@ describe("ReportLetterheads — limpiar una descripción existente", () => {
         await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
         const payload = updateSpy.mock.calls[0][1];
         expect(payload.description).toBeNull();
-        // La distinción que importa: `null` limpia; `undefined` habría
-        // dejado el texto anterior intacto, que es el síntoma reportado.
+        // The distinction that matters: `null` clean; `undefined` would have
+        // left the previous text intact, which is the reported symptom.
         expect("description" in payload).toBe(true);
     });
 
-    it("envía description: null cuando el campo queda con solo espacios", async () => {
+    it("sends description: null when the field becomes whitespace-only", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({
             letterheads: [letterhead()],
@@ -194,7 +194,7 @@ describe("ReportLetterheads — limpiar una descripción existente", () => {
         expect(updateSpy.mock.calls[0][1].description).toBeNull();
     });
 
-    it("el textarea de descripción acepta quedarse vacío (no es un campo requerido)", async () => {
+    it("the description accepts textarea stay empty (it is not a field required)", async () => {
         withPermission(true);
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({
             letterheads: [letterhead()],

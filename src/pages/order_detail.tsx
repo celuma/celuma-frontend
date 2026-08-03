@@ -256,10 +256,10 @@ export default function OrderDetail() {
         }
     };
 
-    // Segunda remediación post-Fase 2 (UX): único documento descargable de
-    // un reporte publicado — reemplaza el antiguo "Exportar PDF" (que era
-    // solo una vista de impresión local vía usePdfExport, no el PDF
-    // oficial persistido). Ver signed-pdf-publication-workflow.md.
+    // Second post-Phase 2 remediation (UX): the only downloadable document
+    // for a published report — replaces the former "Export PDF" (which was
+    // only a local print view via usePdfExport, not the persisted official
+    // PDF). See signed-pdf-publication-workflow.md.
     const handleDownloadOfficialPdf = async () => {
         if (!latestReport?.id || latestReport.version_no == null) return;
         try {
@@ -270,10 +270,10 @@ export default function OrderDetail() {
         }
     };
 
-    // Cuarta remediación post-Fase 2 (Observación 1): impresión local — NO
-    // es el PDF oficial y nunca lo reemplaza. Delega en ReportPreview, que
-    // imprime las páginas del renderer ya montado y deriva la marca
-    // (BORRADOR / RETRACTADO) del estado del propio reporte.
+    // Fourth post-Phase 2 remediation (Observation 1): local printing is NOT
+    // the official PDF and never replaces it. Delegates to ReportPreview,
+    // which prints the already-mounted renderer pages and derives the mark
+    // (DRAFT / RETRACTED) from the report's own status.
     const handlePrintLocalCopy = async () => {
         await previewRef.current?.printLocalCopy();
     };
@@ -790,11 +790,11 @@ export default function OrderDetail() {
                                     Descargar PDF oficial
                                 </CelumaButton>
                             )}
-                            {/* Cuarta remediación (Observación 1): acción
-                                secundaria, siempre distinta del PDF oficial.
-                                Imprime la vista previa ya montada abajo
-                                (`previewRef`), con marca BORRADOR/RETRACTADO
-                                según el estado. Ver local-print-contract.md. */}
+                            {/* Fourth remediation (Observation 1): a secondary
+                                action, always distinct from the official PDF.
+                                Prints the preview already mounted below
+                                (`previewRef`), with a DRAFT/RETRACTED mark
+                                based on the status. See local-print-contract.md. */}
                             {latestReport && hasPermission("reports:read") && (
                                 <CelumaButton
                                     size="small"

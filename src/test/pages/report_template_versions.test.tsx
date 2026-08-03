@@ -5,7 +5,7 @@ import ReportTemplateVersions from "../../pages/report_template_versions";
 import * as reportService from "../../services/report_service";
 import { useUserProfile } from "../../hooks/use_user_profile";
 
-// Céluma 1.3 Fase 2, Bloque D, Historia D4/D14 — administration list:
+// Cell 1.3 Phase 2, Block D, History D4/D14 — administration list:
 // states (empty/loaded/active chip), and read-only gating by permission.
 
 vi.mock("../../hooks/use_user_profile");

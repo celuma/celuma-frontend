@@ -14,8 +14,8 @@ import {
 } from "../../fixtures/reports";
 import type { SignerLookupEntry } from "../../../components/report/legacy/legacy_report_renderer_v1";
 
-// Regression coverage for Céluma 1.3 Fase 1 (Workstream 5), moved in Fase 2
-// Bloque A / Historia A4 alongside the renderer's extraction into
+// Regression coverage for Céluma 1.3 Phase 1 (Workstream 5), moved in Phase 2
+// Block A / Story A4 alongside the renderer's extraction into
 // legacy/legacy_report_renderer_v1.tsx. LegacyReportRendererV1 is the SAME
 // renderer previously named ReportPreviewPages — used for both on-screen
 // preview and the "PDF" export (use_local_print.ts just clones its DOM — see
@@ -30,7 +30,7 @@ import type { SignerLookupEntry } from "../../../components/report/legacy/legacy
 // pagination doesn't happen in a real browser. These tests instead protect
 // against CONTENT LOSS during pagination (all text must still be present
 // somewhere); the visual/multi-page behavior is protected by the
-// Playwright-based golden tests added in Historia A2
+// Playwright-based golden tests added in Story A2
 // (tests-visual/report_renderer_legacy.visual.spec.ts).
 
 function renderReport(report: typeof draftSingleSampleNoImages, signerLookup?: SignerLookupEntry[]) {

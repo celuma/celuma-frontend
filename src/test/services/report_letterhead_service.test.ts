@@ -1,6 +1,6 @@
 /**
  * Tests for the letterhead-domain service functions —
- * post-Fase-2 remediation, R8/R16. Mirrors
+ * post-Phase-2 remediation, R8/R16. Mirrors
  * report_template_version_service.test.ts's fetch-mocking convention.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

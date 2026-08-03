@@ -1,6 +1,6 @@
 /**
- * Runtime validation for `ReportRenderingSnapshotV2` (Céluma 1.3 Fase 2,
- * Bloque C, Historia C2). TypeScript types (versioned_report_types.ts) do
+ * Runtime validation for `ReportRenderingSnapshotV2` (Céluma 1.3 Phase 2,
+ * Block C, Story C2). TypeScript types (versioned_report_types.ts) do
  * not validate anything at the network boundary — a report fetched from the
  * API is `unknown` until checked here. Uses Zod (already a project
  * dependency, see package.json) instead of a hand-rolled validator, mirroring
@@ -16,7 +16,7 @@
 import { z } from "zod";
 import type { ReportRenderingSnapshotV2 } from "./versioned_report_types";
 
-// Exported so report_presentation_editor_schema.ts (Bloque D) can validate
+// Exported so report_presentation_editor_schema.ts (Block D) can validate
 // admin-entered values against the exact same bounds without drifting.
 export const MIN_MARGIN_CM = 0.5;
 export const MAX_MARGIN_CM = 4.0;
@@ -29,11 +29,11 @@ const marginsSchema = z.object({
     left: z.number().min(MIN_MARGIN_CM).max(MAX_MARGIN_CM),
 });
 
-// Cuarta remediación post-Fase 2 — paridad Legacy. Igual que en la segunda
-// remediación, TODO campo nuevo debe declararse aquí aunque ya esté en
-// versioned_report_types.ts: Zod trabaja en modo "strip" y descartaría
-// silenciosamente cualquier clave no declarada, dejando al renderer sin los
-// valores que el backend sí devolvió.
+// Fourth post-Phase 2 remediation — Legacy parity. As in the second
+// remediation, every new field must be declared here even if it is already in
+// versioned_report_types.ts: Zod runs in "strip" mode and would silently
+// discard undeclared keys, leaving the renderer without values returned by the
+// backend.
 const nullableNumber = z.number().nullable().optional();
 const fontWeightSchema = z
     .union([z.literal(400), z.literal(500), z.literal(600), z.literal(700)])
@@ -50,11 +50,11 @@ const paperSchema = z.object({
 
 const nullableString = z.string().nullable().optional();
 
-// Segunda remediación post-Fase 2 (UX) — paridad Legacy. Todos opcionales:
-// un snapshot V2 existente sin estos campos sigue validando igual (Zod
-// strip-mode ya los habría descartado silenciosamente si no se declaran
-// aquí, aunque el backend los devuelva — de ahí que sea obligatorio
-// añadirlos, no solo en versioned_report_types.ts).
+// Second post-Phase 2 remediation (UX) — Legacy parity. All fields are
+// optional: an existing V2 snapshot without them continues to validate (Zod
+// strip mode would silently discard them if they were not declared here, even
+// when returned by the backend — therefore they must be added here, not just
+// to versioned_report_types.ts).
 const dividerSchema = z
     .object({
         enabled: z.boolean(),

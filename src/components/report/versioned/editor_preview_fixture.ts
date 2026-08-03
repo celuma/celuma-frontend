@@ -1,13 +1,13 @@
 /**
  * Synthetic clinical content used ONLY by the template editor's live preview
- * (Céluma 1.3 Fase 2, Bloque D, Historia D6). Deliberately separate from
+ * (Céluma 1.3 Phase 2, Block D, Story D6). Deliberately separate from
  * src/test/fixtures/reports/versioned_v2.ts, which is test-only — this
  * module ships in the production bundle so the admin editor can render a
  * realistic preview without ever touching real patient data.
  *
  * The editor feeds the resulting envelope through ReportRendererResolver
  * (never an alternate/simplified renderer), exactly like the golden tests
- * do — see report-template-editor-contract.md, "Preview en vivo".
+ * do — see report-template-editor-contract.md, "Live preview".
  */
 import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../../models/report";
 import type { ReportPresentationSnapshotV2, ReportRenderingSnapshotV2 } from "./versioned_report_types";
@@ -49,16 +49,16 @@ const PREVIEW_CLINICAL_TEMPLATE: ReportTemplateJSON = {
  * synthetic clinical content above with the editor's current (unsaved)
  * `presentation` state.
  *
- * `resolvedLogoUrl`/`resolvedFooterLogoUrl` son exactamente lo que el
- * backend calcularía en `resolved_resources.header_logo_url`/
- * `footer_logo_url`. Mientras se edita, cada uno es (por orden) la URL del
- * logo recién subido, o la URL resuelta que devolvió el backend para el
- * logo ya persistido.
+ * `resolvedLogoUrl`/`resolvedFooterLogoUrl` are exactly what the backend
+ * would calculate in `resolved_resources.header_logo_url`/
+ * `footer_logo_url`. While editing, each is (in order) the URL of the newly
+ * uploaded logo, or the resolved URL returned by the backend for the
+ * persisted logo.
  *
- * Tercera remediación: antes esta función solo aceptaba el logo del
- * encabezado, así que el logo de pie NUNCA aparecía en la previsualización
- * por mucho que estuviera bien guardado — el problema C del brief. El
- * renderer ya lo soportaba; lo que faltaba era pasárselo.
+ * Third remediation: this function previously accepted only the header logo,
+ * so the footer logo NEVER appeared in the preview even when correctly saved
+ * — issue C from the brief. The renderer already supported it; it simply was
+ * not being passed through.
  */
 export function buildPreviewReportEnvelope(
     presentation: ReportPresentationSnapshotV2,
@@ -92,8 +92,8 @@ export function buildPreviewReportEnvelope(
         template: PREVIEW_CLINICAL_TEMPLATE,
         report,
         schema_version: 2,
-        // Mismo contrato que el backend: el objeto entero está ausente si no
-        // hay nada que resolver, nunca presente con todos los campos nulos.
+        // Same contract as the backend: the entire object is absent when
+        // there is nothing to resolve, never present with every field null.
         resolved_resources:
             resolvedLogoUrl || resolvedFooterLogoUrl
                 ? {

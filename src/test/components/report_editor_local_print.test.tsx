@@ -1,15 +1,15 @@
 /**
- * Cuarta remediación post-Fase 2 (Observación 1) — la impresión local
- * vuelve a la barra de acciones del reporte, y vuelve DIFERENCIADA.
+ * Fourth post-Phase 2 remediation (Observation 1) — local printing
+ * returns to the report's action bar, and returns DIFERENCIADA.
  *
- * Estas pruebas cubren la superficie de producto que el brief exige:
- * qué acción se ofrece en cada estado, con qué rótulo, con qué permiso, y
- * que "Descargar PDF oficial" e "Imprimir copia local" son dos acciones
- * distintas que nunca se sustituyen entre sí.
+ * These tests cover the product surface that the brief requires:
+ * what action is offered in each state, with what label, with what permission, and
+ * that "Download official PDF" and "Print local copy" are two actions
+ * different ones that never replace each other.
  *
- * La causa raíz de la desaparición fue el commit c0b73aa ("unified
- * sign-and-publish, remove local print copy"), que junto con la unificación
- * de firma+publicación borró el botón y el hook de todas las pantallas.
+ * The root cause of the disappearance was commit c0b73aa ("unified
+ * sign-and-publish, remove local print copy"), which together with the unification
+ * signature+publishing deleted the button and hook from all screens.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -105,9 +105,9 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
-describe("ReportEditor — la impresión local existe otra vez", () => {
+describe("ReportEditor — local printing exists again", () => {
     it.each<[ReportStatus]>([["DRAFT"], ["IN_REVIEW"], ["APPROVED"]])(
-        "en %s ofrece \"Imprimir borrador\"",
+        "in %s ofrece \"Print draft\"",
         async (status) => {
             withPermissions(["reports:read"]);
             mockReport(status);
@@ -121,7 +121,7 @@ describe("ReportEditor — la impresión local existe otra vez", () => {
         },
     );
 
-    it("en PUBLISHED ofrece \"Imprimir copia local\" JUNTO a \"Descargar PDF oficial\"", async () => {
+    it("en PUBLISHED ofrece \"Print local copy\" JUNTO a \"Download official PDF\"", async () => {
         withPermissions(["reports:read"]);
         mockReport("PUBLISHED");
         mockRestOfTheEditor();
@@ -131,11 +131,11 @@ describe("ReportEditor — la impresión local existe otra vez", () => {
         await waitFor(() => {
             expect(screen.getByRole("button", { name: /Descargar PDF oficial/i })).toBeTruthy();
         });
-        // Coexisten: la copia local nunca reemplaza al documento oficial.
+        // They coexist: the local copy never replaces the official document.
         expect(screen.getByRole("button", { name: /Imprimir copia local/i })).toBeTruthy();
     });
 
-    it("en RETRACTED ofrece \"Imprimir copia local\"", async () => {
+    it("en RETRACTED ofrece \"Print local copy\"", async () => {
         withPermissions(["reports:read"]);
         mockReport("RETRACTED");
         mockRestOfTheEditor();
@@ -148,8 +148,8 @@ describe("ReportEditor — la impresión local existe otra vez", () => {
     });
 });
 
-describe("ReportEditor — la copia local se distingue del PDF oficial", () => {
-    it("avisa de la marca BORRADOR mientras el reporte no está publicado", async () => {
+describe("ReportEditor — local copy is distinguished from official PDF", () => {
+    it("notifies the brand draft while the report is not published", async () => {
         withPermissions(["reports:read"]);
         mockReport("APPROVED");
         mockRestOfTheEditor();
@@ -162,7 +162,7 @@ describe("ReportEditor — la copia local se distingue del PDF oficial", () => {
         expect(screen.getByText(/no genera ni reemplaza el PDF oficial/i)).toBeTruthy();
     });
 
-    it("avisa de la marca RETRACTADO en un reporte retractado", async () => {
+    it("warns of the RETRACTADO brand in a retracted report", async () => {
         withPermissions(["reports:read"]);
         mockReport("RETRACTED");
         mockRestOfTheEditor();
@@ -174,7 +174,7 @@ describe("ReportEditor — la copia local se distingue del PDF oficial", () => {
         });
     });
 
-    it("en PUBLISHED no aparece ninguna advertencia de borrador", async () => {
+    it("in PUBLISHED no draft warning appears", async () => {
         withPermissions(["reports:read"]);
         mockReport("PUBLISHED");
         mockRestOfTheEditor();
@@ -187,7 +187,7 @@ describe("ReportEditor — la copia local se distingue del PDF oficial", () => {
         expect(screen.queryByText(/BORRADOR — DOCUMENTO NO OFICIAL/)).toBeNull();
     });
 
-    it("imprimir NO pide la URL de descarga del PDF oficial", async () => {
+    it("print DOES NOT ask for the URL download from the official PDF", async () => {
         withPermissions(["reports:read"]);
         mockReport("PUBLISHED");
         mockRestOfTheEditor();
@@ -203,8 +203,8 @@ describe("ReportEditor — la copia local se distingue del PDF oficial", () => {
     });
 });
 
-describe("ReportEditor — permisos de la impresión local", () => {
-    it("basta reports:read — no exige reports:sign ni reports:generate_pdf", async () => {
+describe("ReportEditor — local printing permissions", () => {
+    it("reports:read is enough — does not require reports:sign or reports:generate_pdf", async () => {
         withPermissions(["reports:read"]);
         mockReport("APPROVED");
         mockRestOfTheEditor();
@@ -214,12 +214,12 @@ describe("ReportEditor — permisos de la impresión local", () => {
         await waitFor(() => {
             expect(screen.getByRole("button", { name: /Imprimir borrador/i })).toBeTruthy();
         });
-        // Sin reports:sign, "Firmar y publicar" no debe estar — y aun así
-        // imprimir sigue disponible.
+        // Without reports:sign, "sign and publish" must not be there — and even so
+        // printing remains available.
         expect(screen.queryByRole("button", { name: /Firmar y publicar/i })).toBeNull();
     });
 
-    it("sin reports:read no se ofrece imprimir", async () => {
+    it("without reports:read printing is not offered", async () => {
         withPermissions([]);
         mockReport("APPROVED");
         mockRestOfTheEditor();

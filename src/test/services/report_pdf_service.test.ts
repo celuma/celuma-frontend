@@ -1,7 +1,7 @@
 /**
- * Tests for the Bloque E PDF-generation service functions in
+ * Tests for the Block E PDF-generation service functions in
  * report_service.ts: generateReportPdf, fetchInternalRenderData,
- * getOfficialPdfDownloadUrl (Céluma 1.3 Fase 2, Bloque E, Historia E12/E16).
+ * getOfficialPdfDownloadUrl (Céluma 1.3 Phase 2, Block E, Story E12/E16).
  *
  * Follows the fetch-mocking convention established in
  * report_template_version_service.test.ts.

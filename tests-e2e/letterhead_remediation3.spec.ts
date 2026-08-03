@@ -1,21 +1,21 @@
 /**
- * Real end-to-end — TERCERA remediación post-Fase 2.
+ * real end-to-end — Third post-Phase 2 remediation.
  *
- * Complementa letterhead_lifecycle.spec.ts (que cubre crear -> subir logo ->
- * guardar -> reporte -> firmar -> PDF) con los flujos que esta remediación
- * introduce o repara, y que ninguna prueba anterior tocaba:
+ * Complements letterhead_lifecycle.spec.ts (which covers create -> upload logo ->
+ * save -> report -> sign -> PDF) with the flows that this remediation
+ * introduces or repairs, and what the previous test did not touch on:
  *
- *   1. Round-trip `.cell` REAL entre DOS tenants aislados, comparado campo
- *      por campo y visualmente en el editor del tenant destino (problema A).
- *   2. Estado BLOQUEADO explícito sin membrete predeterminado, y V2 en
- *      cuanto lo hay — nunca Legacy (problema F).
- *   3. Default determinista: cambiar el predeterminado afecta a los
- *      reportes NUEVOS y jamás a los ya creados (problema E).
- *   4. Eliminar un membrete sin referencias; rechazar el eliminado del
- *      referenciado; desactivar como alternativa (problema D).
+ * 1. Real round-trip `.cell` between two isolated tenants, compared field
+ * by field and visually in the tenant destination editor (issue A).
+ * 2. explicit state blocked without default letterhead, and V2 in
+ * how much there is — never Legacy (issue F).
+ * 3. Deterministic default: change the default affects the
+ * reports NUEVOS and never to those already created (issue E).
+ * 4. delete a letterhead without references; reject the removed from
+ * referenced; deactivate as alternative (issue D).
  *
- * Cada bloque crea su propio tenant vía POST /auth/register/unified, así
- * que nunca toca datos reales y se puede repetir.
+ * each block creates its own tenant via POST /auth/register/unified, thus
+ * It never touches real data and can be repeated.
  */
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import path from "path";
@@ -54,7 +54,7 @@ interface Lab {
     branchId: string;
 }
 
-/** Un laboratorio aislado con reports_v2_enabled. */
+/** An isolated lab with reports_v2_enabled. */
 async function createLab(request: APIRequestContext, label: string): Promise<Lab> {
     const suffix = uniqueSuffix();
     const email = `e2e-r3-${label}-${suffix}@example.com`;
@@ -83,7 +83,7 @@ async function createLab(request: APIRequestContext, label: string): Promise<Lab
     };
 }
 
-/** Plantilla clínica con versión ACTIVE + tipo de estudio que la usa. */
+/** Clinical template with an ACTIVE version and its study type. */
 async function createClinicalSetup(request: APIRequestContext, lab: Lab) {
     const suffix = uniqueSuffix();
     const templateJson = {
@@ -147,7 +147,7 @@ async function login(page: Page, lab: Lab) {
     await expect(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 }
 
-/** En qué banda de la página previsualizada cae cada `<img>`. */
+/** In which band of the previewed page each `<img>` falls. */
 async function previewLogoBands(page: Page): Promise<string[]> {
     return page.evaluate(() => {
         const pageEl = document.querySelector('[style*="8.5in"]');
@@ -162,12 +162,12 @@ async function previewLogoBands(page: Page): Promise<string[]> {
     });
 }
 
-test.describe("Tercera remediación — membretes", () => {
-    test("round-trip .cell entre tenants conserva configuración y ambos logos", async ({ page, request }) => {
+test.describe("Third Remediation — Letterheads", () => {
+    test("round-trip .cell between tenants preserves configuration and both logos", async ({ page, request }) => {
         const labA = await createLab(request, "a");
         const labB = await createLab(request, "b");
 
-        // --- Tenant A: crear el membrete por la UI real, con los dos logos ---
+        // --- Tenant A: create the letterhead for the real UI, with the two logos ---
         await login(page, labA);
         await page.goto("/config/report-letterheads");
         await page.getByRole("button", { name: "Nuevo membrete" }).click();
@@ -175,8 +175,8 @@ test.describe("Tercera remediación — membretes", () => {
         await page.getByRole("button", { name: "Crear y continuar" }).click();
         await expect(page.getByRole("heading", { name: /Editar membrete/ })).toBeVisible({ timeout: 10_000 });
 
-        // Seleccionar el archivo lo sube de inmediato (sin segundo botón) y
-        // el asset aparece al instante — el fallo del drag-and-drop.
+        // Selecting the file uploads it immediately (without a second button) and
+        // the asset appears immediately — the drag-and-drop failure.
         await page.locator('input[type="file"]').nth(0).setInputFiles(LOGO_PATH);
         await expect(page.getByAltText("Logo", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
         await page.locator('input[type="file"]').nth(1).setInputFiles(LOGO_PATH);
@@ -187,7 +187,7 @@ test.describe("Tercera remediación — membretes", () => {
         await page.getByRole("dialog").getByRole("button", { name: "Guardar", exact: true }).click();
         await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
 
-        // --- Salir y volver: los dos logos y la configuración se rehidratan ---
+        // --- Exit and return: the two logos and the configuration are rehydrated ---
         await page.reload();
         await page.getByRole("row", { name: /Membrete Origen/ }).getByRole("button", { name: "Editar" }).click();
         await expect(page.getByLabel("Nombre institucional")).toHaveValue("Laboratorio Origen");
@@ -197,7 +197,7 @@ test.describe("Tercera remediación — membretes", () => {
         expect(bandsA).toContain("header");
         expect(bandsA).toContain("footer");
 
-        // --- Exportar e importar en el tenant B ---
+        // --- Export and import in tenant B ---
         const { letterheads } = await api<{ letterheads: Array<{ id: string; name: string }> }>(
             request, "GET", "/api/v1/report-letterheads/?active_only=false", { token: labA.token }
         );
@@ -223,10 +223,10 @@ test.describe("Tercera remediación — membretes", () => {
         });
         expect(imported.ok(), await imported.text()).toBeTruthy();
         const importedBody = await imported.json();
-        // Importado = usable de inmediato (ACTIVE), pero nunca predeterminado.
+        // Imported = usable immediately (ACTIVE), but never default.
         expect(importedBody.status).toBe("ACTIVE");
 
-        // Igualdad campo por campo, ignorando solo los ids de StorageObject.
+        // Field-by-field equality, ignoring only StorageObject ids.
         const scrub = (c: Record<string, any>) => {
             const copy = JSON.parse(JSON.stringify(c));
             copy.header.logo_storage_id = "<id>";
@@ -234,11 +234,11 @@ test.describe("Tercera remediación — membretes", () => {
             return copy;
         };
         expect(scrub(importedBody.configuration)).toEqual(scrub(activeA.configuration));
-        // ...y los ids SÍ se regeneraron (no se filtraron los del tenant origen).
+        // ...and the ids WERE regenerated (those from the tenant source were not filtered).
         expect(importedBody.configuration.header.logo_storage_id)
             .not.toBe(activeA.configuration.header.logo_storage_id);
 
-        // --- Tenant B: abrir el importado y comprobarlo VISUALMENTE ---
+        // --- Tenant B: open the imported one and check it visually ---
         const pageB = await page.context().browser()!.newContext();
         const b = await pageB.newPage();
         await login(b, labB);
@@ -253,7 +253,7 @@ test.describe("Tercera remediación — membretes", () => {
         await pageB.close();
     });
 
-    test("sin membrete predeterminado bloquea V2 explícitamente; con él, nunca Legacy", async ({ page, request }) => {
+    test("without a default letterhead V2 blocks explicitly; with one, never Legacy", async ({ page, request }) => {
         const lab = await createLab(request, "block");
         const setup = await createClinicalSetup(request, lab);
         const order = await createOrder(request, lab, setup.studyTypeId);
@@ -261,13 +261,13 @@ test.describe("Tercera remediación — membretes", () => {
         await login(page, lab);
         await page.goto(`/reports/editor?orderId=${order.id}`);
 
-        // Estado bloqueado, accionable — y NUNCA el membrete legado.
+        // Blocked, actionable state — and never the Legacy letterhead.
         await expect(page.getByText(/Falta el membrete predeterminado del laboratorio/i))
             .toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole("button", { name: "Ir a Membretes" })).toBeVisible();
         await expect(page.getByText("Dra. Arisbeth Villanueva Pérez.")).toHaveCount(0);
 
-        // Configurar el predeterminado y volver: ahora V2, con su marca.
+        // Set the default and return: now V2, with your brand.
         const lh = await api<{ id: string }>(request, "POST", "/api/v1/report-letterheads/", {
             data: { name: "Predeterminado E2E" }, token: lab.token,
         });
@@ -286,13 +286,13 @@ test.describe("Tercera remediación — membretes", () => {
 
         await page.goto(`/reports/editor?orderId=${order.id}`);
         await expect(page.getByText("LAB PREDETERMINADO")).toBeVisible({ timeout: 15_000 });
-        // La UI dice POR QUÉ salió ese membrete, sin ids técnicos.
+        // The UI states why that letterhead was selected, without technical IDs.
         await expect(page.getByTestId("letterhead-resolution-source"))
             .toHaveText(/Predeterminado del laboratorio/);
         await expect(page.getByText("Dra. Arisbeth Villanueva Pérez.")).toHaveCount(0);
     });
 
-    test("cambiar el predeterminado afecta a reportes nuevos, nunca a los ya creados", async ({ request }) => {
+    test("change the default affects new reports, never those already created", async ({ request }) => {
         const lab = await createLab(request, "default");
         const setup = await createClinicalSetup(request, lab);
 
@@ -344,11 +344,11 @@ test.describe("Tercera remediación — membretes", () => {
         const second = await makeReport();
         expect(await institutionOf(second)).toBe("INSTITUCION B");
 
-        // El reporte anterior conserva su snapshot intacto.
+        // The previous report preserves its snapshot intact.
         expect(await institutionOf(first)).toBe("INSTITUCION A");
     });
 
-    test("eliminar sin referencias funciona; con referencias se rechaza y se desactiva", async ({ page, request }) => {
+    test("delete without references works; with references it rejects and is disabled", async ({ page, request }) => {
         const lab = await createLab(request, "delete");
 
         const makeLetterhead = async (name: string) => {
@@ -372,7 +372,7 @@ test.describe("Tercera remediación — membretes", () => {
         const defaultId = await makeLetterhead("Membrete Predeterminado");
         await api(request, "POST", `/api/v1/report-letterheads/${defaultId}/default`, { token: lab.token });
 
-        // El predeterminado no se puede eliminar ni desactivar.
+        // The default cannot be deleted or deactivated.
         await api(request, "DELETE", `/api/v1/report-letterheads/${defaultId}?hard_delete=true`, {
             token: lab.token, expectStatus: 409,
         });
@@ -380,7 +380,7 @@ test.describe("Tercera remediación — membretes", () => {
             token: lab.token, expectStatus: 409,
         });
 
-        // El desechable sí: por la UI real, con su diálogo de confirmación.
+        // The disposable one does: because of the real UI, with its confirmation dialog.
         await login(page, lab);
         await page.goto("/config/report-letterheads");
         const row = page.getByRole("row", { name: /Membrete Desechable/ });
@@ -394,7 +394,7 @@ test.describe("Tercera remediación — membretes", () => {
             token: lab.token, expectStatus: 404,
         });
 
-        // Un membrete referenciado por una plantilla: no se elimina, se desactiva.
+        // a letterhead referenced by a template: it is not removed, it is disabled.
         const referencedId = await makeLetterhead("Membrete Referenciado");
         const setup = await createClinicalSetup(request, lab);
         await api(request, "PUT", `/api/v1/reports/templates/${setup.templateId}`, {
@@ -407,7 +407,7 @@ test.describe("Tercera remediación — membretes", () => {
         await page.reload();
         const refRow = page.getByRole("row", { name: /Membrete Referenciado/ });
         await refRow.getByRole("button", { name: "Más acciones" }).click();
-        // "Eliminar" ni siquiera se ofrece — el backend ya dijo que no es seguro.
+        // "delete" is not even offered — the backend already said it is not safe.
         await expect(page.getByRole("menuitem", { name: "Eliminar" })).toHaveCount(0);
         await page.getByRole("menuitem", { name: "Desactivar" }).click();
         await expect(page.getByText(/está configurado como membrete de/i)).toBeVisible();

@@ -9,13 +9,13 @@ import InternalReportRender from "../../src/components/report/internal_report_re
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
 import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/reports/versioned_v2_legacy_parity";
-// Cuarta remediación post-Fase 2: fixtures PAREADOS Legacy ↔ V2 (mismo
-// contenido clínico, dos renderers) para legacy_v2_parity.visual.spec.ts.
+// Fourth post-Phase 2 remediation: PAIRED Legacy ↔ V2 fixtures (same
+// clinical content, two renderers) for legacy_v2_parity.visual.spec.ts.
 import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
 
 /**
- * Isolated visual-regression harness (Céluma 1.3 Fase 2, Bloque A / Historia
- * A2, extended in Bloque C / Historia C8).
+ * Isolated visual-regression harness (Céluma 1.3 Phase 2, Block A / Story
+ * A2, extended in Block C / Story C8).
  *
  * Renders one anonymized fixture (legacy or V2) from src/test/fixtures/reports
  * via ReportRendererResolver — the SAME entry point production uses — so
@@ -23,11 +23,11 @@ import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legac
  * jsdom cannot protect. Routing both legacy and V2 fixtures through the real
  * resolver (instead of importing each renderer directly) means these golden
  * tests exercise the exact production code path, including schema_version
- * resolution. This does not change the 7 Bloque A legacy snapshots: the
+ * resolution. This does not change the 7 Block A legacy snapshots: the
  * resolver renders schema_version absent/1 via the same
  * LegacyReportRendererV1 component, unmodified, with the same props —
  * already proven pixel-identical when the resolver was introduced (see
- * legacy-renderer-contract.md, "Evidencia de cero cambios visuales").
+ * legacy-renderer-contract.md, "Evidence of zero visual changes").
  * Never bundled into the production app — served only by vite.harness.config.ts.
  *
  * Usage: /?fixture=<key of allReportFixtures or allVersionedV2Fixtures>
@@ -99,7 +99,7 @@ function Harness() {
 }
 
 /**
- * Céluma 1.3 Fase 2, Bloque E, Historia E17: exercises the actual
+ * Céluma 1.3 Phase 2, Block E, Story E17: exercises the actual
  * InternalReportRender component (the route the backend's headless
  * Chromium navigates to for official PDF generation) in a real browser,
  * without a backend — `window.fetch` is stubbed to answer the one request

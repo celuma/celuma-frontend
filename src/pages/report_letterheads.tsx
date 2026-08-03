@@ -43,10 +43,10 @@ interface ReportLetterheadsProps {
 }
 
 /**
- * Administración de membretes compartidos del tenant — post-Fase-2
- * remediation ("Configuración → Membretes"). Un membrete es un recurso
- * compartido reutilizable entre plantillas clínicas; esta pantalla nunca
- * edita estructura clínica. Ver report-letterhead-domain-contract.md.
+ * Administration of shared tenant-owned letterheads — post-Phase 2
+ * remediation ("Configuration → Letterheads"). A letterhead is a shared
+ * resource reusable across clinical templates; this screen never edits
+ * clinical structure. See report-letterhead-domain-contract.md.
  */
 function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const navigate = useNavigate();
@@ -57,23 +57,23 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const [letterheads, setLetterheads] = useState<ReportLetterheadSummary[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
 
-    // "Nuevo membrete": captura solo el nombre mínimo, luego crea la
-    // identidad y redirige de inmediato al editor visual — segunda
-    // remediación post-Fase 2 (UX). Nunca deja al usuario "varado" en la
-    // lista teniendo que buscar manualmente el botón de editar.
+    // "New letterhead": captures only the minimum name, then creates the
+    // identity and immediately redirects to the visual editor—second
+    // post-Phase 2 remediation (UX). It never leaves the user stranded in
+    // the list searching manually for the edit button.
     const [createModalOpen, setCreateModalOpen] = useState(false);
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [saving, setSaving] = useState(false);
 
-    // "Renombrar": edición ligera de nombre/descripción únicamente — vive
-    // en el menú secundario, separada del editor visual.
+    // "Rename": lightweight name/description editing only—lives in the
+    // secondary menu, separate from the visual editor.
     const [renamingLetterhead, setRenamingLetterhead] = useState<ReportLetterheadSummary | null>(null);
     const [renameName, setRenameName] = useState("");
     const [renameDescription, setRenameDescription] = useState("");
     const [renaming, setRenaming] = useState(false);
 
-    // Confirmaciones de eliminar/desactivar — ver `confirmHardDelete`.
+    // Delete/deactivate confirmations — see `confirmHardDelete`.
     const [confirmingDelete, setConfirmingDelete] = useState<ReportLetterheadSummary | null>(null);
     const [confirmingDeactivate, setConfirmingDeactivate] = useState<ReportLetterheadSummary | null>(null);
 
@@ -84,12 +84,11 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const load = async () => {
         setLoading(true);
         try {
-            // Tercera remediación: la pantalla de administración lista TODOS
-            // los membretes, incluidos los desactivados — si no, "Desactivar"
-            // los haría desaparecer y "Reactivar" sería inalcanzable. Lo que
-            // un membrete desactivado sí deja de hacer es aparecer en las
-            // selecciones de reportes nuevos (ese selector sigue pidiendo
-            // solo los activos).
+            // Third remediation: the administration screen lists ALL
+            // letterheads, including deactivated ones—otherwise "Deactivate"
+            // would make them disappear and "Reactivate" would be unreachable.
+            // A deactivated letterhead only stops appearing in new-report
+            // selections (that selector still requests active ones only).
             const resp = await listReportLetterheads(false);
             setLetterheads(resp.letterheads);
         } catch (err) {
@@ -109,8 +108,8 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         setCreateModalOpen(true);
     };
 
-    // Crea la identidad ReportLetterhead y redirige inmediatamente al
-    // editor visual — el primer "Guardar" ahí crea+activa la versión 1.
+    // Creates the ReportLetterhead identity and immediately redirects to the
+    // visual editor—the first "Save" there creates and activates version 1.
     const handleCreateAndEdit = async () => {
         if (!formName.trim()) {
             message.error("El nombre es obligatorio");
@@ -118,10 +117,10 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
         setSaving(true);
         try {
-            // Cuarta remediación (Observación 2): `formDescription ||
-            // undefined` omitía el campo cuando estaba vacío. Se envía
-            // `null` explícito — "membrete sin descripción" es un estado
-            // válido, no un campo que falte por llenar.
+            // Fourth remediation (Observation 2): `formDescription ||
+            // undefined` omitted the field when empty. Send explicit `null`:
+            // a "letterhead without a description" is a valid state, not a
+            // field left to fill in.
             const created = await createReportLetterhead({
                 name: formName.trim(),
                 description: normalizeLetterheadDescription(formDescription),
@@ -149,9 +148,9 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
         setRenaming(true);
         try {
-            // Cuarta remediación (Observación 2): el `|| undefined` de antes
-            // hacía imposible limpiar una descripción existente — el campo
-            // no viajaba y el backend conservaba el texto anterior.
+            // Fourth remediation (Observation 2): the previous `|| undefined`
+            // made clearing an existing description impossible—the field was
+            // not sent and the backend retained the old text.
             await updateReportLetterhead(renamingLetterhead.id, {
                 name: renameName.trim(),
                 description: normalizeLetterheadDescription(renameDescription),
@@ -167,22 +166,21 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     };
 
     /**
-     * Tercera remediación post-Fase 2 — política de eliminación segura (ver
-     * letterhead-delete-deactivate-contract.md). "Eliminar" borra de verdad
-     * y solo se ofrece cuando el backend ya dijo que es seguro
-     * (`can_hard_delete`); "Desactivar" es la vía cuando hay historial que
-     * conservar. Antes había una sola acción "Eliminar" que en realidad
-     * desactivaba: el usuario pedía borrar, el membrete seguía ahí y nada
-     * explicaba por qué.
+     * Third post-Phase 2 remediation—safe deletion policy (see
+     * letterhead-delete-deactivate-contract.md). "Delete" actually deletes
+     * and is offered only when the backend has confirmed it is safe
+     * (`can_hard_delete`); "Deactivate" is the path when history must be
+     * preserved. Previously, there was one "Delete" action that actually
+     * deactivated: the user requested deletion, the letterhead remained, and
+     * nothing explained why.
      *
-     * La confirmación usa `CelumaModal` (un componente React normal) y no
-     * `Modal.confirm` de antd: la API estática de antd v5 se apoya en el
-     * `ReactDOM.render` heredado, que en React 19 —la versión de este
-     * proyecto— no monta nada. El diálogo simplemente no aparecía y el clic
-     * en "Eliminar" no hacía absolutamente nada, lo que explica el síntoma
-     * "la UI no permite eliminar membretes" incluso con el endpoint
-     * disponible. Ver la advertencia "[antd: compatible] antd v5 support
-     * React is 16 ~ 18" en consola.
+     * The confirmation uses `CelumaModal` (a normal React component), not
+     * antd's `Modal.confirm`: antd v5's static API relies on legacy
+     * `ReactDOM.render`, which mounts nothing in this project's React 19.
+     * The dialog did not appear and clicking "Delete" did nothing, explaining
+     * the "the UI does not allow deleting letterheads" symptom even with the
+     * endpoint available. See the console warning "[antd: compatible] antd
+     * v5 support React is 16 ~ 18".
      */
     const confirmHardDelete = async () => {
         if (!confirmingDelete) return;
@@ -273,10 +271,10 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         }
     };
 
-    // Post-Fase-2 remediation, R12/R13. Tercera remediación: el membrete
-    // importado llega con su configuración ya activa (visible y editable de
-    // inmediato), pero NUNCA como predeterminado del tenant — eso sigue
-    // siendo una decisión explícita del administrador.
+    // Post-Phase 2 remediation, R12/R13. Third remediation: the imported
+    // letterhead arrives with its configuration already active (visible and
+    // editable immediately), but NEVER as the tenant default—that remains an
+    // explicit administrator decision.
     const handleImport = async (file: File) => {
         setImporting(true);
         try {
@@ -334,11 +332,11 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             title: "Acciones",
             key: "actions",
             render: (_: unknown, record) => {
-                // Tercera remediación: solo se ofrecen las acciones que de
-                // verdad son válidas para ESTE membrete. `can_hard_delete` y
-                // `has_active_version` los precalcula el backend con las
-                // mismas reglas que aplicaría al ejecutarlas, así que el menú
-                // y el resultado no pueden discrepar.
+                // Third remediation: offer only actions that are actually
+                // valid for THIS letterhead. The backend precomputes
+                // `can_hard_delete` and `has_active_version` with the same
+                // rules it would apply when executing them, so the menu and
+                // result cannot disagree.
                 const canHardDelete = record.can_hard_delete === true;
                 const menuItems: MenuProps["items"] = [
                     {
@@ -352,9 +350,9 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                             key: "default",
                             icon: <StarOutlined />,
                             label: "Marcar como predeterminado",
-                            // Un membrete sin configuración guardada no puede
-                            // resolverse, así que tampoco puede ser el
-                            // predeterminado — el backend lo rechaza con 409.
+                            // A letterhead without saved configuration cannot
+                            // be resolved and therefore cannot be the default;
+                            // the backend rejects it with 409.
                             disabled: !canManage || record.has_active_version === false,
                             onClick: () => handleSetDefault(record),
                         }]
@@ -427,9 +425,9 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                                 onClick={() => handleExportActive(record)}
                             />
                         </Tooltip>
-                        {/* El disparador va envuelto en un <span>: CelumaButton
-                            es un componente de función sin forwardRef, y antd
-                            Dropdown necesita un nodo real al que engancharse. */}
+                        {/* The trigger is wrapped in a <span>: CelumaButton is
+                            a function component without forwardRef, and antd
+                            Dropdown needs a real node to attach to. */}
                         <Dropdown menu={{ items: menuItems }} trigger={["click"]}>
                             <span>
                                 <CelumaButton size="xsmall" icon={<MoreOutlined />} aria-label="Más acciones" />
@@ -506,10 +504,9 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     return (
         <>
             {page}
-            {/* Segunda remediación post-Fase 2 (UX): captura solo el nombre
-                mínimo — al guardar crea la identidad y redirige de
-                inmediato al editor visual (nunca deja al usuario "varado"
-                en la lista). */}
+            {/* Second post-Phase 2 remediation (UX): captures only the minimum
+                name—saving creates the identity and immediately redirects to
+                the visual editor (never leaving the user stranded in the list). */}
             <CelumaModal
                 title="Nuevo membrete"
                 open={createModalOpen}
@@ -540,8 +537,8 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                 </div>
             </CelumaModal>
 
-            {/* Confirmación de borrado FÍSICO — solo alcanzable cuando el
-                backend marcó `can_hard_delete`. */}
+            {/* PHYSICAL deletion confirmation—reachable only when the backend
+                marked `can_hard_delete`. */}
             <CelumaModal
                 title="Eliminar membrete"
                 open={confirmingDelete !== null}
@@ -567,8 +564,8 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                 </Text>
             </CelumaModal>
 
-            {/* Confirmación de desactivación — la vía cuando hay historial
-                que conservar; explica qué impide eliminarlo. */}
+            {/* Deactivation confirmation—the path when history must be
+                preserved; explains what prevents deletion. */}
             <CelumaModal
                 title="Desactivar membrete"
                 open={confirmingDeactivate !== null}
@@ -600,8 +597,8 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                 </div>
             </CelumaModal>
 
-            {/* "Renombrar" — edición ligera de nombre/descripción, separada
-                del editor visual de presentación. */}
+            {/* "Rename"—lightweight name/description editing, separate from
+                the visual presentation editor. */}
             <CelumaModal
                 title="Renombrar membrete"
                 open={renamingLetterhead !== null}

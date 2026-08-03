@@ -2,7 +2,7 @@ import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../..
 import type { ReportRenderingSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 
 /**
- * Anonymized V2 fixtures for Céluma 1.3 Fase 2, Bloque C (Historia C6). No
+ * Anonymized V2 fixtures for Céluma 1.3 Phase 2, Block C (Story C6). No
  * real patient data, no tenant-embajador branding — every fixture uses its
  * OWN synthetic branding (or the neutral Céluma defaults), never
  * `#002060`/"Villanueva"/`report_logo.png`/etc. (see
@@ -268,7 +268,7 @@ export const v2NoFooter: ReportEnvelope = {
 
 // ---------------------------------------------------------------------------
 // Fixture 5 — tight margins (0.8-1.0cm), the specific range a real client
-// requested (Céluma1.3-Fase2.md, Historia C6).
+// requested (Céluma1.3-Fase2.md, Story C6).
 // ---------------------------------------------------------------------------
 
 const v2TightMarginsContent: ReportContent = {

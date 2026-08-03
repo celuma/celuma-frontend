@@ -8,15 +8,15 @@ import { v2CompleteBranding, v2MinimalNeutral } from "../../fixtures/reports/ver
 import type { ReportEnvelope } from "../../../models/report";
 
 /**
- * Segunda remediación post-Fase 2 (UX) — Bloque 11 (anti-contaminación
- * Legacy) + cobertura de los campos nuevos del contrato de presentación
- * (footer logo, divisores, tipografía) recién cableados en el renderer.
+ * Second post-Phase 2 remediation (UX) — Block 11 (anti-pollution
+ * Legacy) + coverage of the new fields of the presentation contract
+ * (footer logo, dividers, typography) newly wired in the renderer.
  *
- * Complementa no_legacy_literals.test.ts (grep estático de literales
- * prohibidos) con pruebas de COMPORTAMIENTO: un membrete "importado del
- * embajador" es solo datos normales en el snapshot — ningún valor
- * aparece a menos que esté explícitamente en `presentation`, y ningún
- * fallback a Legacy existe en absoluto.
+ * Complements no_legacy_literals.test.ts (static literals grep
+ * prohibited) with behavior tests: a letterhead "imported from
+ * ambassador" is just normal data in the snapshot — no value
+ * appears unless explicitly in `presentation`, and does not
+ * fallback to Legacy exists at all.
  */
 
 function renderReport(report: ReportEnvelope) {
@@ -30,7 +30,7 @@ function clone(report: ReportEnvelope): ReportEnvelope {
     return JSON.parse(JSON.stringify(report)) as ReportEnvelope;
 }
 
-describe("VersionedReportRendererV2 — footer logo (paridad Legacy)", () => {
+describe("VersionedReportRendererV2 — footer logo (Legacy parity)", () => {
     it("renders the footer logo when resolved_resources.footer_logo_url is present", () => {
         const report = clone(v2CompleteBranding);
         report.resolved_resources = {
@@ -43,22 +43,22 @@ describe("VersionedReportRendererV2 — footer logo (paridad Legacy)", () => {
     });
 
     /**
-     * Tercera remediación post-Fase 2 (§5 del brief): guardia explícita
-     * contra un bug de copy/paste entre las dos bandas. Con DOS logos
-     * distintos configurados, cada uno tiene que aterrizar en su banda —
-     * el pie NUNCA puede acabar dibujando `header_logo_url`.
+     * Third post-Phase 2 remediation (§5 of the brief): explicit guard
+     * against a copy/paste bug between the two bands. With two logos
+     * different configured, each one has to land on their band —
+     * the footer can never end up drawing `header_logo_url`.
      */
     it("draws each logo in its own band — the footer never reuses header_logo_url", () => {
         const report = clone(v2CompleteBranding);
         report.resolved_resources = {
-            header_logo_url: "https://fake-cdn.example.invalid/logos/SOLO-HEADER.png",
-            footer_logo_url: "https://fake-cdn.example.invalid/logos/SOLO-FOOTER.png",
+            header_logo_url: "https://fake-cdn.example.invalid/logos/only-HEADER.png",
+            footer_logo_url: "https://fake-cdn.example.invalid/logos/only-FOOTER.png",
         };
         const { pages } = renderReport(report);
         const page = pages[0] as HTMLElement;
 
-        // Las tres bandas son hijos directos de la página: encabezado
-        // (`top`, sin `bottom`), pie (`bottom`, sin `top`) y cuerpo (ambos).
+        // The three bands are direct children of the page: header
+        // (`top`, without `bottom`), footer (`bottom`, without `top`) y body (both).
         const bandOf = (img: Element): "header" | "footer" | "body" | "other" => {
             let node: HTMLElement | null = img.parentElement;
             while (node && node.parentElement !== page) {
@@ -78,8 +78,8 @@ describe("VersionedReportRendererV2 — footer logo (paridad Legacy)", () => {
         const headerImgs = imgs.filter((i) => bandOf(i) === "header").map((i) => i.getAttribute("src"));
         const footerImgs = imgs.filter((i) => bandOf(i) === "footer").map((i) => i.getAttribute("src"));
 
-        expect(headerImgs).toEqual(["https://fake-cdn.example.invalid/logos/SOLO-HEADER.png"]);
-        expect(footerImgs).toEqual(["https://fake-cdn.example.invalid/logos/SOLO-FOOTER.png"]);
+        expect(headerImgs).toEqual(["https://fake-cdn.example.invalid/logos/only-HEADER.png"]);
+        expect(footerImgs).toEqual(["https://fake-cdn.example.invalid/logos/only-FOOTER.png"]);
     });
 
     it("renders no footer logo image when footer_logo_url is absent, even with a header logo", () => {
@@ -91,7 +91,7 @@ describe("VersionedReportRendererV2 — footer logo (paridad Legacy)", () => {
     });
 });
 
-describe("VersionedReportRendererV2 — divisores (header/footer)", () => {
+describe("VersionedReportRendererV2 — dividers (header/footer)", () => {
     it("draws a divider line by default (undefined divider == today's always-on 1px line)", () => {
         const { container } = renderReport(v2CompleteBranding);
         const dividerLines = Array.from(container.querySelectorAll("div")).filter(
@@ -128,11 +128,11 @@ describe("VersionedReportRendererV2 — divisores (header/footer)", () => {
     });
 });
 
-describe("VersionedReportRendererV2 — membrete embajador importado: solo datos del snapshot", () => {
-    // Valores que imitan (pero no importan literalmente) los que
-    // legacy_letterhead_adapter.py exportaría para el membrete Legacy — la
-    // prueba es que este renderer los trata como datos normales de
-    // CUALQUIER membrete, sin ninguna ruta de código especial para ellos.
+describe("VersionedReportRendererV2 — imported ambassador letterhead: snapshot data only", () => {
+    // values ​​that imitate (but do not literally matter) those that
+    // legacy_letterhead_adapter.py would export for the Legacy letterhead — the
+    // test is that this renderer treats it as normal data
+    // CUALQUIER letterhead, with no special code path for them.
     const importedAmbassadorLikeReport: ReportEnvelope = (() => {
         const report = clone(v2CompleteBranding);
         const snapshot = report.report.rendering_snapshot as {
@@ -168,7 +168,7 @@ describe("VersionedReportRendererV2 — membrete embajador importado: solo datos
         return report;
     })();
 
-    it("shows exactly the imported values when this membrete is explicitly selected", () => {
+    it("shows exactly the imported values when this letterhead is explicitly selected", () => {
         const { text } = renderReport(importedAmbassadorLikeReport);
         expect(text).toContain("Dra. Ejemplo Importada");
         expect(text).toContain("Contacto importado de ejemplo");
@@ -180,7 +180,7 @@ describe("VersionedReportRendererV2 — membrete embajador importado: solo datos
         expect(text).not.toContain("Contacto importado de ejemplo");
     });
 
-    it("switching a report's snapshot from the imported membrete to neutral removes all trace of it", () => {
+    it("switching a report's snapshot from the imported letterhead to neutral removes all trace of it", () => {
         const first = renderReport(importedAmbassadorLikeReport);
         expect(first.text).toContain("Dra. Ejemplo Importada");
 

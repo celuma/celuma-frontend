@@ -1,6 +1,6 @@
 /**
  * Tests for the report-template-version service functions in
- * report_service.ts (Céluma 1.3 Fase 2, Bloque D, Historia D3/D13/D14).
+ * report_service.ts (Céluma 1.3 Phase 2, Block D, Story D3/D13/D14).
  *
  * No fetch mocking convention existed in this codebase yet — this
  * establishes one: `vi.stubGlobal("fetch", ...)` per test, asserting both

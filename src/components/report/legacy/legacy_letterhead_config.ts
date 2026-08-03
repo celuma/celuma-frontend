@@ -2,10 +2,10 @@ import logo from "../../../images/report_logo.png";
 
 /**
  * Historical institutional letterhead for the legacy report renderer
- * (Céluma 1.3 Fase 2, Bloque A, Historia A4).
+ * (Céluma 1.3 Phase 2, Block A, Story A4).
  *
  * These values are the A1-A8 findings from ambassador-hardcoding-inventory.md
- * (Fase 1, Workstream 4), copied here VERBATIM — not reformatted, not
+ * (Phase 1, Workstream 4), copied here VERBATIM — not reformatted, not
  * corrected, not translated. Every report ever published under the legacy
  * renderer (schema_version absent or 1) was rendered with exactly this
  * letterhead, so it must be reproduced identically to reconstruct those

@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { generateReportPdf, type PdfGenerationStatusResponse } from "../services/report_service";
 
 /**
- * Céluma 1.3 Fase 2, Bloque E, Historia E12.
+ * Céluma 1.3 Phase 2, Block E, Story E12.
  *
  * Thin, testable wrapper around POST .../generate-pdf. Extracted out of
  * report_editor.tsx (already large — see block-e-dependencies.md) instead of

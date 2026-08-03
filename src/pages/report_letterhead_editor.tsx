@@ -66,10 +66,10 @@ const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
         content_alignment: "CENTER",
         height_mm: null,
         divider: DEFAULT_DIVIDER,
-        // Cuarta remediación: un membrete NUEVO nace sin logo y sin
-        // sustituto. El isotipo de Céluma no vuelve a colarse dentro de un
-        // documento clínico solo porque nadie haya subido un logotipo
-        // todavía — ver v2-legacy-parity-capabilities.md, "logo_mode".
+        // Fourth remediation: a NEW letterhead starts without a logo or a
+        // substitute. The Céluma isotipo no longer slips into a clinical
+        // document just because nobody has uploaded a logo yet—see
+        // v2-legacy-parity-capabilities.md, "logo_mode".
         logo_mode: "NONE",
     },
     footer: {
@@ -88,19 +88,18 @@ const BLANK_PRESENTATION: ReportPresentationSnapshotV2 = {
 };
 
 /**
- * Cuarta remediación — al ABRIR un membrete ya existente que no tiene
- * `logo_mode` (todos los guardados antes de esta remediación), se deriva el
- * modo que reproduce lo que su autor está viendo hoy, no el que nos
- * gustaría que tuviera:
+ * Fourth remediation—when OPENING an existing letterhead without
+ * `logo_mode` (all saves from before this remediation), derive the mode that
+ * reproduces what its author sees today, not the one we would prefer it had:
  *
- *   - con `logo_storage_id`  -> CUSTOM
- *   - encabezado sin logo    -> CELUMA_DEFAULT (el renderer caía al isotipo
- *                               neutral, y guardar no debe cambiárselo de
- *                               golpe sin que lo pida)
- *   - pie sin logo           -> NONE (el pie nunca tuvo ese sustituto)
+ *   - with `logo_storage_id` -> CUSTOM
+ *   - header without logo    -> CELUMA_DEFAULT (the renderer fell back to the
+ *                              neutral isotipo, and saving must not change it
+ *                              abruptly unless requested)
+ *   - footer without logo    -> NONE (the footer never had that substitute)
  *
- * A partir de ahí el modo queda explícito en la nueva versión, y el
- * administrador puede cambiarlo desde el propio editor.
+ * From there, the mode is explicit in the new version, and the administrator
+ * can change it in the editor itself.
  */
 function deriveLogoMode(
     explicit: ReportLogoMode | null | undefined,
@@ -147,25 +146,24 @@ interface ReportLetterheadEditorProps {
 }
 
 /**
- * Editor de una nueva versión (inmutable) de un membrete — post-Fase-2
- * remediation. Absorbe la funcionalidad de presentación que antes vivía en
- * report_template_editor.tsx ("editor de plantilla" que en realidad solo
- * editaba branding); a diferencia de aquel, esta pantalla nunca toca
- * estructura clínica — no recibe ni publica ningún `template`, solo
- * `presentation`. Ver report-letterhead-version-contract.md.
+ * Editor for a new immutable letterhead version—post-Phase 2 remediation.
+ * Absorbs the presentation functionality formerly in
+ * report_template_editor.tsx (a "template editor" that actually only edited
+ * branding); unlike that screen, this one never touches clinical structure:
+ * it neither receives nor publishes a `template`, only `presentation`. See
+ * report-letterhead-version-contract.md.
  */
 function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProps) {
     const navigate = useNavigate();
     const { letterheadId } = useParams<{ letterheadId: string }>();
     const [searchParams] = useSearchParams();
     const fromVersionId = searchParams.get("from");
-    // Segunda remediación post-Fase 2 (UX): "normal" es el flujo principal
-    // ("Editar" desde la lista de membretes) — guarda-y-activa
-    // atómicamente, sin exponer versionamiento. "publish" es el flujo
-    // secundario de historial/rollback ("Nueva versión"/"Nueva versión
-    // desde esta" en la pantalla de versiones) — se mantiene intacto,
-    // publica sin activar automáticamente. Ver report-letterhead-domain-
-    // contract.md.
+    // Second post-Phase 2 remediation (UX): "normal" is the primary flow
+    // ("Edit" from the letterhead list)—it atomically saves and activates
+    // without exposing versioning. "publish" is the secondary history/rollback
+    // flow ("New version"/"New version from this" on the versions screen)—it
+    // remains unchanged and publishes without automatically activating. See
+    // report-letterhead-domain-contract.md.
     const mode = searchParams.get("mode") === "publish" ? "publish" : "normal";
     const { hasPermission } = useUserProfile();
     const canManage = hasPermission(PERMS.MANAGE_TEMPLATES);
@@ -176,18 +174,17 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
     const [presentation, setPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
     const [initialPresentation, setInitialPresentation] = useState<ReportPresentationSnapshotV2>(BLANK_PRESENTATION);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-    // Tercera remediación post-Fase 2 — contrato único de preview de logos
-    // (ver letterhead-logo-persistence-contract.md):
+    // Third post-Phase 2 remediation—single logo-preview contract (see
+    // letterhead-logo-persistence-contract.md):
     //
-    //     1. URL del logo recién subido  (la que devuelve POST .../logo)
-    //     2. URL resuelta por el backend (resolved_resources.*_logo_url)
-    //     3. logo neutral                (SOLO si no hay ningún logo configurado)
+    //     1. Newly uploaded logo URL     (returned by POST .../logo)
+    //     2. Backend-resolved URL         (resolved_resources.*_logo_url)
+    //     3. Neutral logo                 (ONLY when no logo is configured)
     //
-    // Estos dos estados guardan (1) o (2) indistintamente — el renderer no
-    // necesita saber cuál es. La causa raíz de los problemas B y C era que
-    // solo se poblaban en el caso (1): al reabrir el editor quedaban en
-    // `null` y se caía al caso (3) aunque `logo_storage_id` estuviera
-    // perfectamente persistido.
+    // These two states hold either (1) or (2)—the renderer need not know
+    // which. The root cause of issues B and C was that they were populated
+    // only in case (1): when reopening the editor, they remained `null` and
+    // fell back to case (3) even though `logo_storage_id` was persisted.
     const [previewLogoUrl, setPreviewLogoUrl] = useState<string | null>(null);
     const [previewFooterLogoUrl, setPreviewFooterLogoUrl] = useState<string | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -220,27 +217,26 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                     seed = version.configuration;
                     seedResources = version.resolved_resources;
                 } else if (mode === "normal") {
-                    // Flujo principal "Editar": precarga la configuración
-                    // ACTIVE actual — si no hay ninguna todavía (membrete
-                    // recién creado), arranca en blanco.
+                    // Primary "Edit" flow: preload the current ACTIVE
+                    // configuration—if none exists yet (newly created
+                    // letterhead), start blank.
                     const active = await getActiveReportLetterheadVersion(letterheadId);
                     if (active) {
                         seed = active.configuration;
                         seedResources = active.resolved_resources;
                     }
                 }
-                // Tercera remediación: el preview se inicializa con las URLs
-                // que ya resolvió el backend para los logos persistidos. Sin
-                // este paso el editor arrancaba siempre sin URLs y mostraba
-                // el logo neutral de Céluma aunque el membrete tuviera uno
-                // guardado — el síntoma exacto de los problemas B y C.
+                // Third remediation: initialize the preview with URLs already
+                // resolved by the backend for persisted logos. Without this,
+                // the editor always started without URLs and showed Céluma's
+                // neutral logo even when the letterhead had a saved logo—the
+                // exact symptom of issues B and C.
                 setPreviewLogoUrl(seedResources?.header_logo_url ?? null);
                 setPreviewFooterLogoUrl(seedResources?.footer_logo_url ?? null);
-                // Cuarta remediación: se materializa `logo_mode` al abrir,
-                // con el valor que reproduce lo que el membrete muestra hoy
-                // (ver deriveLogoMode). A partir de aquí el modo es
-                // explícito y editable, y nunca depende de una regla
-                // implícita del renderer.
+                // Fourth remediation: materialize `logo_mode` on opening with
+                // the value that reproduces the letterhead's current display
+                // (see deriveLogoMode). From here, the mode is explicit and
+                // editable, never dependent on an implicit renderer rule.
                 seed = {
                     ...seed,
                     header: {
@@ -318,17 +314,16 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         }));
 
     /**
-     * Tercera remediación post-Fase 2: seleccionar (o arrastrar) un archivo
-     * lo SUBE de inmediato, en vez de dejarlo en un estado intermedio a la
-     * espera de un segundo botón "Subir logo".
+     * Third post-Phase 2 remediation: selecting (or dragging) a file uploads
+     * it immediately instead of leaving it in an intermediate state awaiting a
+     * second "Upload logo" button.
      *
-     * Aquel paso intermedio causaba dos fallos reales: el drag-and-drop no
-     * mostraba nunca el asset recién soltado (nada actualizaba el preview
-     * hasta pulsar el segundo botón), y quien elegía un archivo y pulsaba
-     * directamente "Guardar" perdía el logo en silencio — el `File` seguía
-     * en memoria y jamás llegó a convertirse en un `logo_storage_id`.
-     * Ahora, al terminar `handleSelectLogo`, `logo_storage_id` ya es
-     * definitivo y "Guardar" nunca depende de un objeto `File`.
+     * That intermediate step caused two real failures: drag-and-drop never
+     * showed the newly dropped asset (nothing updated the preview until the
+     * second button was pressed), and users who selected a file then clicked
+     * "Save" silently lost the logo—the `File` remained in memory and never
+     * became a `logo_storage_id`. When `handleSelectLogo` completes,
+     * `logo_storage_id` is final and "Save" never depends on a `File` object.
      */
     const handleSelectLogo = async (file: RcFile) => {
         const fileObject = extractUploadedFile(file);
@@ -336,9 +331,9 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         setUploadingLogo(true);
         try {
             const resp = await uploadReportLetterheadLogo(letterheadId, fileObject);
-            // Subir un logotipo ES la manera de pedir "logotipo propio": el
-            // modo se pone solo, para que nadie suba una imagen y luego no
-            // la vea porque el modo seguía en NONE.
+            // Uploading a logo IS how users request a "custom logo": set the
+            // mode automatically so no one uploads an image and then cannot
+            // see it because the mode remains NONE.
             updateHeader({ logo_storage_id: resp.storage_object_id, logo_mode: "CUSTOM" });
             setPreviewLogoUrl(resp.url);
             message.success("Logo actualizado");
@@ -349,9 +344,9 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         }
     };
     const handleRemoveLogo = () => {
-        // Quitar el logotipo significa "sin logotipo", no "pon el de
-        // Céluma": si el modo se quedara en CUSTOM/CELUMA_DEFAULT, el
-        // documento acabaría con una imagen que nadie pidió.
+        // Removing the logo means "no logo", not "use Céluma's": if the mode
+        // remained CUSTOM/CELUMA_DEFAULT, the document would end up with an
+        // image nobody requested.
         updateHeader({ logo_storage_id: null, logo_mode: "NONE" });
         setPreviewLogoUrl(null);
     };
@@ -376,9 +371,8 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         setPreviewFooterLogoUrl(null);
     };
 
-    // Guardar queda bloqueado mientras hay una subida en vuelo: publicar en
-    // ese momento persistiría una configuración sin el `logo_storage_id`
-    // que está a punto de llegar.
+    // Saving remains blocked while an upload is in flight: publishing then
+    // would persist configuration without the imminent `logo_storage_id`.
     const uploadInFlight = uploadingLogo || uploadingFooterLogo;
 
     const previewReport = useMemo(
@@ -411,9 +405,9 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         setPublishing(true);
         try {
             if (mode === "normal") {
-                // Segunda remediación post-Fase 2 (UX): "Guardar cambios" —
-                // crea y activa atómicamente, reemplazando el histórico
-                // "Publicar versión" que se quedaba en PUBLISHED sin activar.
+                // Second post-Phase 2 remediation (UX): "Save changes"
+                // atomically creates and activates, replacing the historical
+                // "Publish version", which remained PUBLISHED without activation.
                 await saveCurrentReportLetterheadVersion(letterheadId, { configuration: presentation });
                 message.success("Membrete actualizado. La configuración anterior se conserva en el historial.");
                 clearDraft();
@@ -551,15 +545,14 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                                 error={fieldErrors["header.email"]} />
                         </div>
 
-                        {/* Segunda remediación post-Fase 2 (UX) — paridad Legacy */}
+                        {/* Second post-Phase 2 remediation (UX) — Legacy parity */}
                         <Panel style={{ display: "grid", gap: 10 }}>
                             <Text style={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>Diseño avanzado</Text>
-                            {/* Cuarta remediación: el logotipo del encabezado
-                                deja de ser una consecuencia implícita de
-                                haber subido (o no) un archivo. "Sin
-                                logotipo" no reserva espacio y no dibuja
-                                nada — es lo que necesita el membrete
-                                Legacy, cuyo logotipo vive en el pie. */}
+                            {/* Fourth remediation: the header logo is no longer
+                                an implicit consequence of uploading (or not
+                                uploading) a file. "No logo" reserves no space
+                                and renders nothing—what the Legacy letterhead
+                                needs, because its logo lives in the footer. */}
                             <div>
                                 <label style={{ fontSize: 12, color: tokens.textSecondary, display: "block", marginBottom: 4 }}>Logotipo del encabezado</label>
                                 <AntSelect
@@ -664,9 +657,9 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 </SectionTitle>
                 {presentation.footer.enabled && (
                     <div style={{ display: "grid", gap: 12, opacity: canManage ? 1 : 0.7 }}>
-                        {/* Segunda remediación post-Fase 2 (UX): logo de pie —
-                            necesario para paridad Legacy (su logo vive en el
-                            pie, no en el header). */}
+                        {/* Second post-Phase 2 remediation (UX): footer logo—
+                            required for Legacy parity (its logo lives in the
+                            footer, not the header). */}
                         <Panel style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                             <div style={{ width: 72, height: 72, borderRadius: tokens.radius, border: "2px dashed #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
                                 {previewFooterLogoUrl ? (

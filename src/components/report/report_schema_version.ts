@@ -1,7 +1,7 @@
 /**
- * Explicit report schema version resolution (Céluma 1.3 Fase 2, Bloque A,
- * Historia A3). Pure, side-effect-free — used by ReportRendererResolver
- * (Historia A5) to pick which renderer implementation renders a report.
+ * Explicit report schema version resolution (Céluma 1.3 Phase 2, Block A,
+ * Story A3). Pure, side-effect-free — used by ReportRendererResolver
+ * (Story A5) to pick which renderer implementation renders a report.
  *
  * Rules (see report-schema-versioning.md):
  *   - schema_version absent            -> LEGACY_REPORT_SCHEMA_VERSION (1)

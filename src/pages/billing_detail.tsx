@@ -115,7 +115,7 @@ function BillingDetail() {
     const canRegisterPayment = hasPermission(PERMS.REGISTER_PAYMENT);
     const canEditItems = hasPermission(PERMS.EDIT_ITEMS);
 
-    // Estado para modal de edición
+    // Edit modal state
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [editingItem, setEditingItem] = useState<InvoiceItem | null>(null);
     const [editForm] = Form.useForm();

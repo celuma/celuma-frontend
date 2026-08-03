@@ -122,9 +122,9 @@ export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail
 }
 
 /**
- * Post-Fase-2 remediation: resolves everything the report editor needs to
+ * Post-Phase-2 remediation: resolves everything the report editor needs to
  * bootstrap a brand-new V2 report (clinical template + active version +
- * resolved membrete) in one round trip, replacing the previous
+ * resolved letterhead) in one round trip, replacing the previous
  * 3-sequential-fetch dance. See report-editor-letterhead-selection-contract.md.
  */
 export async function getStudyTypeReportDefaults(
@@ -313,15 +313,22 @@ export interface ReportSignAndPublishResponse extends ReportActionResponse {
     pdf_size_bytes: number | null;
     pdf_page_count: number | null;
     pdf_generated_at: string | null;
+    /** Fifth post-Phase 2 remediation (§8): the EXACT version whose official
+     *  PDF was just generated. The UI uses it to offer the download
+     *  immediately, without deriving it from a refreshed `/full` that could
+     *  be stale. Optional to support a backend deployed before this
+     *  remediation. */
+    report_version_id?: string | null;
+    version_no?: number | null;
+    official_pdf_available?: boolean;
 }
 
-/** Segunda remediación post-Fase 2 (UX): la única acción del flujo
- *  principal en estado APPROVED — genera el PDF oficial (reflejando ya la
- *  firma) y publica, en una sola llamada. Reemplaza el flujo de dos
- *  botones "Generar PDF oficial" + "Firmar y Publicar". Un 409 significa
- *  que ya hay un intento de firmar-y-publicar en curso (doble-click u otra
- *  pestaña) — mostrar el mensaje del backend tal cual, es seguro
- *  reintentar tras esperar. */
+/** Second post-Phase 2 remediation (UX): the only primary-flow action in
+ *  APPROVED status—generates the official PDF (already reflecting the
+ *  signature) and publishes in one call. Replaces the two-button flow:
+ *  "Generate official PDF" + "Sign and publish". A 409 means a
+ *  sign-and-publish attempt is already running (double-click or another
+ *  tab)—display the backend message verbatim; retrying after waiting is safe. */
 export async function signAndPublishReport(
     reportId: string,
     changelog?: string
@@ -466,7 +473,7 @@ export async function deleteReportTemplate(templateId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Report Template Versions (Céluma 1.3 Fase 2, Bloque D) — the immutable,
+// Report Template Versions (Céluma 1.3 Phase 2, Block D) — the immutable,
 // append-only versions of a template's rendering configuration
 // (ReportRenderingSnapshotV2). Distinct from the ReportTemplateListItem/
 // ReportTemplateDetail CRUD above, which is the mutable legacy/V1 template.
@@ -474,7 +481,7 @@ export async function deleteReportTemplate(templateId: string): Promise<void> {
 
 /**
  * Shared request helper for the template-version endpoints. Distinguishes
- * 401/403/404/409/422 with actionable Spanish messages (falling back to the
+ * 401/403/404/409/422 with actionable Spanish UI messages (falling back to the
  * backend's own `detail` when present) and network failures, per
  * report-template-editor-contract.md — the admin UI must never show a
  * generic error when the backend already distinguishes the cause.
@@ -575,7 +582,7 @@ export async function uploadReportTemplateLogo(
 }
 
 // ---------------------------------------------------------------------------
-// Céluma 1.3 Fase 2, Bloque E: internal render route + PDF generation
+// Céluma 1.3 Phase 2, Block E: internal render route + PDF generation
 // ---------------------------------------------------------------------------
 
 /**
@@ -616,13 +623,27 @@ export interface PdfGenerationStatusResponse {
     pdf_error_message: string | null;
 }
 
-interface OfficialPdfDownloadResponse {
+export interface OfficialPdfDownloadResponse {
     version_id: string;
     version_no: number;
     report_id: string;
     pdf_storage_id: string;
     pdf_key: string;
     pdf_url: string;
+}
+
+/** Fifth post-Phase 2 remediation (§9.2): the UI must distinguish 403 / 404
+ *  / 409 to say WHAT happened, rather than "something failed". Previously,
+ *  a plain `Error` was thrown and the editor showed the backend's raw
+ *  `detail` (or a generic message), making an authorization 403 and a PDF
+ *  not yet generated indistinguishable to the reader. */
+export class OfficialPdfDownloadError extends Error {
+    readonly status: number;
+    constructor(status: number, message: string) {
+        super(message);
+        this.name = "OfficialPdfDownloadError";
+        this.status = status;
+    }
 }
 
 /** Fetches a short-lived presigned URL for the persisted official PDF of one report version. Never regenerates. */
@@ -636,11 +657,43 @@ export async function getOfficialPdfDownloadUrl(
     });
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(
+        throw new OfficialPdfDownloadError(
+            res.status,
             parseFastApiErrorDetail(errText) ?? `Error al obtener el PDF oficial: ${res.status}`
         );
     }
     return (await res.json()) as OfficialPdfDownloadResponse;
+}
+
+/** Fifth post-Phase 2 remediation (§9.3) — safe Safari download.
+ *
+ * `window.open(url, "_blank")` ran AFTER awaiting the presigned URL promise,
+ * so Safari no longer considered it part of the user's gesture and treated
+ * it as a popup: it either blocked it or opened an empty tab. A synthetic
+ * `<a download>` is not a popup—it is a download navigation—and works the
+ * same in Chromium, Firefox, and WebKit.
+ *
+ * `Content-Disposition: attachment; filename="..."` is already signed into
+ * the presigned URL itself (see `official_pdf_presigned_url` in the backend),
+ * so the file name does not depend on the `download` attribute, which S3 on
+ * another origin would ignore anyway. */
+export function triggerBrowserDownload(url: string, filename: string): void {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    // Safari does not trigger the download unless the node is in the document.
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+/** Exact mirror of the backend's `official_pdf_filename` (Phase 2, E10):
+ *  never derived from the patient name. */
+export function officialPdfFilename(orderCode: string | undefined, versionNo: number): string {
+    const safe = (orderCode || "reporte").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return `reporte-${safe || "reporte"}-v${versionNo}.pdf`;
 }
 
 /** Triggers (or re-checks, if already READY) official PDF generation for one report version. */

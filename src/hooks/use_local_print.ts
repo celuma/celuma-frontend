@@ -3,31 +3,30 @@ import type { ReportRendererRef } from "../components/report/legacy/legacy_repor
 import type { ReportStatus } from "../models/report";
 
 /**
- * Impresión LOCAL de un reporte (cuarta remediación post-Fase 2,
- * Observación 1). Sucesor directo de `use_pdf_export.ts`, renombrado para
- * que el nombre del módulo no vuelva a sugerir que esto produce "el PDF"
- * del reporte.
+ * LOCAL printing of a report (fourth post-Phase 2 remediation,
+ * Observation 1). Direct successor to `use_pdf_export.ts`, renamed so
+ * the module name no longer suggests this produces "the PDF" of the
+ * report.
  *
- * Esto NO es el PDF oficial. Es una copia operativa que el navegador
- * compone en el momento a partir de las páginas YA renderizadas por el
- * renderer resuelto (`getPages()` de ReportRendererResolver → Legacy V1 o
- * Versioned V2), abre en el diálogo de impresión del sistema y descarta.
- * Explícitamente:
+ * This is NOT the official PDF. It is an operational copy that the browser
+ * composes on demand from pages ALREADY rendered by the resolved renderer
+ * (`getPages()` from ReportRendererResolver → Legacy V1 or Versioned V2),
+ * opens in the system print dialog, and discards. Specifically:
  *
- *   - no llama a ningún endpoint de PDF oficial;
- *   - no persiste ningún archivo ni StorageObject;
- *   - no toca `pdf_generation_status`, `pdf_storage_id`, `pdf_sha256`
- *     ni ningún otro metadato del artefacto oficial;
- *   - no calcula ni compara hashes;
- *   - no usa un segundo renderer: reutiliza el DOM del renderer común.
+ *   - does not call any official PDF endpoint;
+ *   - does not persist any file or StorageObject;
+ *   - does not touch `pdf_generation_status`, `pdf_storage_id`, `pdf_sha256`,
+ *     or any other official-artifact metadata;
+ *   - does not calculate or compare hashes;
+ *   - does not use a second renderer: it reuses the shared renderer's DOM.
  *
- * Ver local-print-contract.md para la política de producto completa
- * (cuándo se ofrece, con qué permiso, y cómo se distingue del documento
- * oficial en la UI).
+ * See local-print-contract.md for the complete product policy (when it is
+ * offered, with which permission, and how the UI distinguishes it from the
+ * official document).
  */
 
-/** Marca visible que se estampa en la copia local cuando el documento no es
- *  —o ya no es— la versión oficial publicada. `null` = sin marca. */
+/** Visible mark stamped on the local copy when the document is not—or is no
+ *  longer—the published official version. `null` = no mark. */
 export type LocalPrintMark = "DRAFT" | "RETRACTED" | null;
 
 const MARK_TEXT: Record<Exclude<LocalPrintMark, null>, string> = {
@@ -41,12 +40,12 @@ const MARK_COLOR: Record<Exclude<LocalPrintMark, null>, string> = {
 };
 
 /**
- * Deriva la marca a estampar a partir del estado del reporte.
+ * Derives the mark to stamp from the report status.
  *
- * PUBLISHED es el ÚNICO estado sin marca de borrador, porque es el único en
- * el que existe un PDF oficial firmado; aun así la copia local lleva su
- * propio pie aclaratorio (ver `LOCAL_COPY_NOTICE`), porque tampoco entonces
- * sustituye al documento oficial.
+ * PUBLISHED is the ONLY status without a draft mark because it is the only
+ * one with a signed official PDF. Even then, the local copy includes its own
+ * explanatory footer (see `LOCAL_COPY_NOTICE`) because it does not replace
+ * the official document.
  */
 export function localPrintMarkForStatus(status: ReportStatus | null | undefined): LocalPrintMark {
     if (status === "RETRACTED") return "RETRACTED";
@@ -54,14 +53,14 @@ export function localPrintMarkForStatus(status: ReportStatus | null | undefined)
     return "DRAFT";
 }
 
-/** Aclaración al pie de CADA página impresa localmente, en todos los estados. */
+/** Footer notice on EVERY locally printed page, in all statuses. */
 export const LOCAL_COPY_NOTICE = "Copia local impresa desde Céluma — no sustituye al PDF oficial.";
 
 export interface LocalPrintOptions {
-    /** Usado solo como `<title>` del documento de impresión (nombre sugerido
-     *  por el diálogo del sistema al "Guardar como PDF"). */
+    /** Used only as the print document's `<title>` (the name suggested by the
+     *  system dialog for "Save as PDF"). */
     filename?: string;
-    /** Marca visible. Usa `localPrintMarkForStatus(report.status)`. */
+    /** Visible mark. Use `localPrintMarkForStatus(report.status)`. */
     mark?: LocalPrintMark;
 }
 
@@ -75,10 +74,10 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Overlay estampado sobre cada página clonada. Se inyecta en el CLON, nunca
- * en el DOM que el renderer controla, de modo que la vista previa en
- * pantalla y —sobre todo— el PDF oficial generado a partir del mismo
- * renderer jamás lo contienen.
+ * Overlay stamped over each cloned page. It is injected into the CLONE,
+ * never into the DOM controlled by the renderer, so the on-screen preview
+ * and—above all—the official PDF generated from the same renderer never
+ * contain it.
  */
 function buildOverlayHtml(mark: LocalPrintMark): string {
     const notice = `<div class="celuma-local-copy-notice">${escapeHtml(LOCAL_COPY_NOTICE)}</div>`;
@@ -114,9 +113,8 @@ export function useLocalPrint() {
                     const clone = page.cloneNode(true) as HTMLElement;
                     clone.style.boxShadow = "none";
                     clone.style.margin = "0";
-                    // Las páginas del renderer ya son `position: relative`,
-                    // pero el clon no debe depender de ello para posicionar
-                    // el overlay.
+                    // Renderer pages are already `position: relative`, but
+                    // the clone must not depend on that to position the overlay.
                     clone.style.position = "relative";
                     if (i < pages.length - 1) {
                         clone.style.pageBreakAfter = "always";

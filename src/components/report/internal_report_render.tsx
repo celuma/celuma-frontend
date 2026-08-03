@@ -6,7 +6,7 @@ import { fetchInternalRenderData } from "../../services/report_service";
 import type { InternalRenderData } from "../../models/report";
 
 /**
- * InternalReportRender (Céluma 1.3 Fase 2, Bloque E, Historia E3).
+ * InternalReportRender (Céluma 1.3 Phase 2, Block E, Story E3).
  *
  * Chrome-free page navigated to by the backend's headless Chromium
  * (ReportPdfGenerationService) to produce the official PDF artifact — never

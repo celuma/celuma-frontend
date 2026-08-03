@@ -16,14 +16,14 @@ import {
 import type { ReportRendererRef, SignerLookupEntry } from "./legacy_report_types";
 
 /**
- * LegacyReportRendererV1 (Céluma 1.3 Fase 2, Bloque A, Historia A4).
+ * LegacyReportRendererV1 (Céluma 1.3 Phase 2, Block A, Story A4).
  *
  * This is the renderer that has produced every report in production to
  * date, extracted VERBATIM from its original location
  * (src/components/report/report_preview_pages.tsx) with no behavioral,
  * visual, or algorithmic changes — see legacy-renderer-contract.md for the
  * full list of what is frozen here and why. It is resolved for
- * schema_version absent/1 by ReportRendererResolver (Historia A5).
+ * schema_version absent/1 by ReportRendererResolver (Story A5).
  *
  * Do NOT optimize, refactor, restyle, or share its pagination algorithm with
  * any future renderer. Do NOT connect it to live Tenant/Branch data — its

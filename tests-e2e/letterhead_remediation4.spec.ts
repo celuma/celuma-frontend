@@ -1,19 +1,19 @@
 /**
- * Real end-to-end — CUARTA remediación post-Fase 2.
+ * real end-to-end — Fourth post-Phase 2 remediation.
  *
- * Cubre los tres flujos que esta remediación toca, contra el backend real:
+ * covers the three flows that this remediation touches, against the real backend:
  *
- *   1. Descripción opcional: crear un membrete SIN descripción, ponerle
- *      una, borrarla, recargar, y confirmar que sigue vacía (Observación 2).
- *   2. Membrete Legacy importado: crear un reporte V2 con él y comprobar en
- *      el DOM real que el encabezado no lleva logotipo, que el pie sí, y
- *      que el layout es el de Legacy (Observación 3).
- *   3. Impresión local: disponible antes de publicar (marcada BORRADOR) y
- *      después de publicar, coexistiendo con "Descargar PDF oficial" sin
- *      sustituirlo ni alterarlo (Observación 1).
+ * 1. Optional description: create a letterhead without a description, add
+ * one, delete it, reload, and confirm that it remains empty (Observation 2).
+ * 2. Legacy letterhead imported: create a report V2 with it and check in
+ * the real DOM that the header does not have a logo, the footer does, and
+ * that the layout is that of Legacy (Observation 3).
+ * 3. Local printing: available before publication (marked as a draft) and
+ * after publish, coexisting with "Download official PDF" without
+ * replace or alter it (Observation 1).
  *
- * Cada bloque crea su propio tenant vía POST /auth/register/unified, así
- * que nunca toca datos reales y se puede repetir.
+ * Each block creates its own tenant via POST /auth/register/unified, so it
+ * never touches real data and can be repeated.
  */
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
@@ -141,11 +141,11 @@ async function login(page: Page, lab: { email: string; password: string }) {
 }
 
 /**
- * Abre "Renombrar" (que edita nombre Y descripción) desde el menú de
- * acciones de la primera fila. El item se localiza dentro del menú
- * desplegable a propósito: el título del propio modal ("Renombrar
- * membrete") permanece en el DOM entre aperturas y haría ambigua una
- * búsqueda por texto suelto.
+ * Open "Rename" (which edits name AND description) from the menu
+ * actions of the first row. The item is located within the menu
+ * dropdown on purpose: the title of the modal itself ("Rename
+ * letterhead") remains in the DOM between openings and would make it ambiguous
+ * search by loose text.
  */
 async function openRenameModal(page: Page) {
     await page.getByRole("button", { name: /Más acciones/i }).first().click();
@@ -154,9 +154,9 @@ async function openRenameModal(page: Page) {
 }
 
 /**
- * Geometría real de la primera hoja previsualizada, medida en el navegador.
- * Las bandas se localizan por posición (no por clase), igual que en la
- * suite de paridad visual.
+ * Actual geometry of the first previewed sheet, measured in the browser.
+ * Bands are located by position (not by class), just like in the
+ * visual parity suite.
  */
 async function readPreviewLayout(page: Page) {
     return page.evaluate(() => {
@@ -186,22 +186,22 @@ async function readPreviewLayout(page: Page) {
 }
 
 // ===========================================================================
-// Observación 2 — descripción opcional
+// Observation 2 — description optional
 // ===========================================================================
 
-test.describe("Cuarta remediación — descripción opcional del membrete", () => {
-    test("crear sin descripción, añadirla, borrarla y confirmar que sigue vacía al reabrir", async ({ page, request }) => {
+test.describe("Fourth remedy — optional letterhead description", () => {
+    test("create without description, add it, delete it and confirm that it remains empty when reopening", async ({ page, request }) => {
         const lab = await createLab(request, "desc");
         await login(page, lab);
 
-        // --- 1. Crear SIN descripción ---
+        // --- 1. Create without a description ---
         await page.goto("/config/report-letterheads");
         await page.getByRole("button", { name: "Nuevo membrete" }).click();
         await page.getByLabel("Nombre").fill("Membrete sin descripción");
         await page.getByRole("button", { name: "Crear y continuar" }).click();
         await expect(page.getByRole("heading", { name: /Editar membrete/ })).toBeVisible({ timeout: 10_000 });
 
-        // --- 2. Reabrir la lista: la fila no muestra descripción ---
+        // --- 2. Reopen the list: the row shows no description ---
         await page.goto("/config/report-letterheads");
         await expect(page.getByText("Membrete sin descripción")).toBeVisible({ timeout: 10_000 });
 
@@ -211,20 +211,20 @@ test.describe("Cuarta remediación — descripción opcional del membrete", () =
         const created = letterheads.letterheads.find((l) => l.name === "Membrete sin descripción")!;
         expect(created.description).toBeNull();
 
-        // --- 3. Ponerle una descripción por la UI ---
+        // --- 3. Set a description for the UI ---
         await openRenameModal(page);
         await page.getByPlaceholder("Descripción (opcional)").fill("Una descripción temporal");
         await page.getByRole("dialog").getByRole("button", { name: "Guardar", exact: true }).click();
         await expect(page.getByText("Una descripción temporal")).toBeVisible({ timeout: 10_000 });
 
-        // --- 4. BORRARLA — el bug reportado ---
+        // --- 4. BORRARLA — the reported bug ---
         await openRenameModal(page);
         const textarea = page.getByPlaceholder("Descripción (opcional)");
         await expect(textarea).toHaveValue("Una descripción temporal");
         await textarea.fill("");
         await page.getByRole("dialog").getByRole("button", { name: "Guardar", exact: true }).click();
 
-        // --- 5. Recargar de verdad y confirmar que quedó vacía ---
+        // --- 5. really reload and confirm that it was empty ---
         await page.reload();
         await expect(page.getByText("Membrete sin descripción")).toBeVisible({ timeout: 10_000 });
         await expect(page.getByText("Una descripción temporal")).toHaveCount(0);
@@ -234,12 +234,12 @@ test.describe("Cuarta remediación — descripción opcional del membrete", () =
         );
         expect(after.letterheads.find((l) => l.id === created.id)!.description).toBeNull();
 
-        // --- 6. Y el textarea rehidrata vacío, no con el texto anterior ---
+        // --- 6. And the textarea rehydrates empty, not with the previous text ---
         await openRenameModal(page);
         await expect(page.getByPlaceholder("Descripción (opcional)")).toHaveValue("");
     });
 
-    test("solo espacios equivale a vacío", async ({ page, request }) => {
+    test("only spaces is equivalent to empty", async ({ page, request }) => {
         const lab = await createLab(request, "space");
         const created = await api<{ id: string }>(request, "POST", "/api/v1/report-letterheads/", {
             data: { name: "Membrete espacios", description: "Texto inicial" },
@@ -264,17 +264,17 @@ test.describe("Cuarta remediación — descripción opcional del membrete", () =
 });
 
 // ===========================================================================
-// Observaciones 1 y 3 — membrete Legacy + impresión local, en un solo flujo
+// Observations 1 and 3 — Legacy letterhead + local printing, in a only flow
 // ===========================================================================
 
-test.describe("Cuarta remediación — membrete Legacy e impresión local", () => {
-    test("importar Legacy, crear reporte V2, imprimir borrador, publicar y descargar el oficial", async ({ page, request }) => {
+test.describe("Fourth Remediation — Legacy letterhead and local printing", () => {
+    test("import Legacy, create V2 report, print draft, publish and download the official PDF", async ({ page, request }) => {
         test.slow();
         const lab = await createLab(request, "legacy");
         const { studyTypeId } = await createClinicalSetup(request, lab);
         const order = await createOrder(request, lab, studyTypeId);
 
-        // --- Exportar el membrete Legacy e importarlo, por la API real ---
+        // --- Export the Legacy letterhead and import it, for the actual API ---
         const legacyEnvelope = await api<Record<string, unknown>>(
             request, "GET", "/api/v1/report-letterheads/legacy/export", { token: lab.token }
         );
@@ -291,52 +291,52 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
         });
         expect(importRes.status(), await importRes.text()).toBe(200);
         const imported = await importRes.json() as { report_letterhead_id: string };
-        // Marcarlo como predeterminado: así el reporte nuevo lo resuelve sin
-        // depender de la interacción con el selector.
+        // Mark it as default: thus the report new resolves it without
+        // depend on the interaction with the selector.
         await api(request, "POST",
             `/api/v1/report-letterheads/${imported.report_letterhead_id}/default`,
             { token: lab.token });
 
         await login(page, lab);
 
-        // --- Crear el reporte V2 con ese membrete ---
+        // --- Create the V2 report with that letterhead ---
         await page.goto(`/reports/editor?orderId=${order.id}`);
         await expect(page.getByLabel("Nombre del reporte")).toBeVisible({ timeout: 20_000 });
         await page.getByLabel("Nombre del reporte").fill(`Reporte Legacy ${lab.suffix}`);
 
-        // --- El membrete Legacy, en el DOM real ---
+        // --- The Legacy letterhead in the real DOM ---
         await expect(async () => {
             const layout = await readPreviewLayout(page);
             expect(layout).not.toBeNull();
-            // Sin logotipo neutral arriba (la queja original).
+            // No neutral logo above (the original complaint).
             expect(layout!.headerImages).toBe(0);
-            // Con logotipo abajo, donde Legacy lo tiene.
+            // With logo below, where Legacy has it.
             expect(layout!.footerImages).toBe(1);
-            // Geometría Legacy: bandas de 28/20mm a ras de hoja, 18mm de
-            // margen lateral y 4mm de relleno superior del cuerpo.
+            // geometry Legacy: 28/20mm bands flush with the blade, 18mm wide
+            // side margins and 4mm of top padding in the body.
             expect(layout!.headerTop).toBe("0mm");
             expect(layout!.headerHeight).toBe("28mm");
             expect(layout!.footerBottom).toBe("0mm");
             expect(layout!.footerHeight).toBe("20mm");
             expect(layout!.bodyLeft).toBe("18mm");
             expect(layout!.bodyPaddingTop).toBe("4mm");
-            // Pie en negrita.
+            // footer a ball.
             expect(layout!.footerWeight).toBe("700");
-            // El bloque institucional de Legacy, y ningún número de página.
+            // The institutional block of Legacy, and no page number.
             expect(layout!.text).toContain("Villanueva");
             expect(layout!.text).not.toMatch(/Página \d+ de \d+/);
         }).toPass({ timeout: 25_000 });
 
-        // --- Imprimir copia local ANTES de publicar ---
+        // --- Print a local copy before publication ---
         await expect(page.getByRole("button", { name: "Imprimir borrador" })).toBeVisible();
         await expect(page.getByText("BORRADOR — DOCUMENTO NO OFICIAL")).toBeVisible();
-        // Antes de publicar no hay PDF oficial que descargar: las dos
-        // acciones son distintas y no se confunden.
+        // Before publication, no official PDF is available for download: the two
+        // actions are different and must not be confused.
         await expect(page.getByRole("button", { name: "Descargar PDF oficial" })).toHaveCount(0);
 
-        // Se intercepta `print()` para que el diálogo del sistema no bloquee
-        // la suite; lo que se comprueba es que se llega a imprimir y qué
-        // documento se compuso.
+        // `print()` is intercepted so that the system dialog does not crash
+        // the suite; What you check is that you get to print and what
+        // document was composed.
         await page.addInitScript(() => {
             (window as unknown as { __printedDocs: string[] }).__printedDocs = [];
         });
@@ -372,7 +372,7 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
             expect(docs.join("\n")).toContain("no sustituye al PDF oficial");
         }).toPass({ timeout: 20_000 });
 
-        // --- Guardar y llevar el reporte hasta APPROVED por API ---
+        // --- save and carry the report until APPROVED by API ---
         await page.getByRole("button", { name: "Guardar reporte" }).click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 20_000 });
 
@@ -396,7 +396,7 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
         await api(request, "POST", `/api/v1/reports/${reportId}/approve`, { token: lab.token, data: {} });
 
-        // --- Firmar y publicar como reviewer ---
+        // --- sign and publish as reviewer ---
         const reviewerContext = await page.context().browser()!.newContext();
         const reviewerPage = await reviewerContext.newPage();
         await login(reviewerPage, {
@@ -406,26 +406,26 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
         await reviewerPage.goto(`/reports/${reportId}`);
         await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" }))
             .toBeVisible({ timeout: 20_000 });
-        // También en APPROVED la impresión local está disponible y marcada.
+        // also in APPROVED local printing is available and checked.
         await expect(reviewerPage.getByRole("button", { name: "Imprimir borrador" })).toBeVisible();
 
         await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
         await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" }))
             .toBeVisible({ timeout: 45_000 });
 
-        // --- PUBLISHED: las dos acciones coexisten y son distintas ---
+        // --- PUBLISHED: the two actions coexist and are different ---
         await expect(reviewerPage.getByRole("button", { name: "Imprimir copia local" })).toBeVisible();
         await expect(reviewerPage.getByRole("button", { name: "Imprimir borrador" })).toHaveCount(0);
         await expect(reviewerPage.getByText("BORRADOR — DOCUMENTO NO OFICIAL")).toHaveCount(0);
 
-        // --- El PDF oficial: hash y estado ANTES de imprimir localmente ---
+        // --- The official PDF: hash and state before printing locally ---
         const before = await api<{ pdf_sha256: string | null; pdf_generation_status: string | null; status: string }>(
             request, "GET", `/api/v1/reports/${reportId}`, { token: lab.token }
         );
         expect(before.status).toBe("PUBLISHED");
         expect(before.pdf_sha256).toBeTruthy();
 
-        // --- Imprimir la copia local de un reporte YA publicado ---
+        // --- Print the local copy of a report ALREADY published ---
         await reviewerPage.evaluate(() => {
             (window as unknown as { __printedDocs: string[] }).__printedDocs = [];
             const originalCreate = document.createElement.bind(document);
@@ -453,13 +453,13 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
                 () => (window as unknown as { __printedDocs: string[] }).__printedDocs,
             );
             expect(docs.length).toBeGreaterThan(0);
-            // Publicado: sin marca de borrador, pero con la aclaración de
-            // que sigue sin ser el documento oficial.
+            // Published: without a draft mark, but with clarification that it
+            // remains separate from the official document.
             expect(docs.join("\n")).not.toContain("BORRADOR");
             expect(docs.join("\n")).toContain("no sustituye al PDF oficial");
         }).toPass({ timeout: 20_000 });
 
-        // --- El artefacto oficial no cambió ni un byte ---
+        // --- The official artifact did not change even byte ---
         const after = await api<{ pdf_sha256: string | null; pdf_generation_status: string | null; status: string }>(
             request, "GET", `/api/v1/reports/${reportId}`, { token: lab.token }
         );
@@ -467,8 +467,8 @@ test.describe("Cuarta remediación — membrete Legacy e impresión local", () =
         expect(after.pdf_generation_status).toBe(before.pdf_generation_status);
         expect(after.status).toBe(before.status);
 
-        // --- Y la descarga oficial sigue funcionando (es un archivo, no la
-        //     impresión del navegador) ---
+        // --- And the official download remains working (it's a file, not the
+        //browser print) ---
         const downloadPromise = reviewerPage.waitForEvent("download");
         await reviewerPage.getByRole("button", { name: "Descargar PDF oficial" }).click();
         const download = await downloadPromise;

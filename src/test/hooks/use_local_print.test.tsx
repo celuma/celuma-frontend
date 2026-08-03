@@ -1,10 +1,10 @@
 /**
- * Cuarta remediación post-Fase 2 (Observación 1) — impresión local.
+ * Fourth post-Phase 2 remediation (Observation 1) — local printing.
  *
- * Lo que estas pruebas fijan es la POLÍTICA, no la estética del diálogo del
- * sistema: qué marca lleva cada estado, que la marca se estampa en un clon
- * y nunca en el DOM del renderer, y —lo más importante— que imprimir no
- * llama a nada del flujo del PDF oficial.
+ * What these tests fix is POLITICS, not the aesthetics of the dialogue of the
+ * system: what brand each state carries, which brand is stamped on the clone
+ * and never in the DOM of the renderer, and—most importantly—that printing does not
+ * calls anything from official PDF's flow.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
@@ -16,8 +16,8 @@ import {
 } from "../../hooks/use_local_print";
 import type { ReportRendererRef } from "../../components/report/legacy/legacy_report_types";
 
-/** Página falsa con la misma forma que produce cualquiera de los dos
- *  renderers: un div de 8.5in con contenido dentro. */
+/** false page with the same form that produces either of the two
+ * renderers: an 8.5in div with content inside. */
 function makePage(text: string): HTMLElement {
     const page = document.createElement("div");
     page.style.width = "8.5in";
@@ -37,9 +37,9 @@ function refWithPages(pages: HTMLElement[]) {
     return ref;
 }
 
-/** El hook escribe en un iframe oculto y llama a `print()`. jsdom no
- *  implementa `print`, así que se sustituye y se inspecciona el documento
- *  que quedó dentro del iframe. */
+/** The hook writes to a hidden iframe and calls `print()`. jsdom no
+ * implements `print`, so that the document is replaced and inspected
+ * that was left inside the iframe. */
 function stubPrint() {
     const printed: Document[] = [];
     const original = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, "contentWindow");
@@ -68,30 +68,30 @@ afterEach(() => {
 });
 
 describe("localPrintMarkForStatus", () => {
-    it("marca como BORRADOR todo lo que no esté publicado", () => {
+    it("mark as draft everything that is not published", () => {
         expect(localPrintMarkForStatus("DRAFT")).toBe("DRAFT");
         expect(localPrintMarkForStatus("IN_REVIEW")).toBe("DRAFT");
         expect(localPrintMarkForStatus("APPROVED")).toBe("DRAFT");
     });
 
-    it("marca RETRACTADO un reporte retractado", () => {
+    it("brand RETRACTADO the report portrayed", () => {
         expect(localPrintMarkForStatus("RETRACTED")).toBe("RETRACTED");
     });
 
-    it("no marca un reporte publicado", () => {
+    it("do not mark the report published", () => {
         expect(localPrintMarkForStatus("PUBLISHED")).toBeNull();
     });
 
-    it("un estado desconocido o ausente se trata como borrador, no como publicado", () => {
-        // Fallar hacia "marcado" es la única opción segura: una copia sin
-        // marca puede confundirse con el documento oficial.
+    it("a state unknown or absent is treated as draft, not as published", () => {
+        // Fail to "checked" is the only safe option: a copy without
+        // mark can be confused with the official document.
         expect(localPrintMarkForStatus(null)).toBe("DRAFT");
         expect(localPrintMarkForStatus(undefined)).toBe("DRAFT");
     });
 });
 
-describe("useLocalPrint — marcas en la salida impresa", () => {
-    it("estampa BORRADOR — DOCUMENTO NO OFICIAL cuando el reporte no está publicado", async () => {
+describe("useLocalPrint — marks on printed output", () => {
+    it("stamp draft — DOCUMENTO NO official when the report is not published", async () => {
         const printed = stubPrint();
         const page = makePage("Contenido clínico");
         const { result } = renderHook(() => useLocalPrint());
@@ -102,7 +102,7 @@ describe("useLocalPrint — marcas en la salida impresa", () => {
         expect(printed[0].body.textContent).toContain("BORRADOR — DOCUMENTO NO OFICIAL");
     });
 
-    it("estampa RETRACTADO en un reporte retractado", async () => {
+    it("stamp RETRACTADO in a retracted report", async () => {
         const printed = stubPrint();
         const page = makePage("Contenido clínico");
         const { result } = renderHook(() => useLocalPrint());
@@ -113,7 +113,7 @@ describe("useLocalPrint — marcas en la salida impresa", () => {
         expect(printed[0].body.textContent).not.toContain("BORRADOR");
     });
 
-    it("un reporte publicado sale sin marca de borrador, pero con la aclaración de copia local", async () => {
+    it("a report published outputs without draft mark, but with local copy clarification", async () => {
         const printed = stubPrint();
         const page = makePage("Contenido clínico");
         const { result } = renderHook(() => useLocalPrint());
@@ -126,7 +126,7 @@ describe("useLocalPrint — marcas en la salida impresa", () => {
         expect(text).toContain(LOCAL_COPY_NOTICE);
     });
 
-    it("la aclaración aparece en TODAS las páginas, no solo en la primera", async () => {
+    it("The clarification appears on all pages, not only on the first", async () => {
         const printed = stubPrint();
         const pages = [makePage("Página 1"), makePage("Página 2"), makePage("Página 3")];
         const { result } = renderHook(() => useLocalPrint());
@@ -139,7 +139,7 @@ describe("useLocalPrint — marcas en la salida impresa", () => {
         expect(bands).toHaveLength(3);
     });
 
-    it("conserva el contenido clínico de todas las páginas", async () => {
+    it("preserve the clinical content of all the pages", async () => {
         const printed = stubPrint();
         const pages = [makePage("Macroscópica"), makePage("Microscópica")];
         const { result } = renderHook(() => useLocalPrint());
@@ -151,8 +151,8 @@ describe("useLocalPrint — marcas en la salida impresa", () => {
     });
 });
 
-describe("useLocalPrint — aislamiento respecto al documento oficial", () => {
-    it("no modifica el DOM del renderer: la marca vive solo en el clon", async () => {
+describe("useLocalPrint — isolation regarding official document", () => {
+    it("does not modify the DOM of the renderer: the flag lives only in the clone", async () => {
         stubPrint();
         const page = makePage("Contenido clínico");
         const before = page.outerHTML;
@@ -160,13 +160,13 @@ describe("useLocalPrint — aislamiento respecto al documento oficial", () => {
 
         await result.current.printLocalCopy(refWithPages([page]), { mark: "DRAFT" });
 
-        // Si la marca se inyectara en el DOM real, acabaría también en el
-        // PDF oficial, que se genera desde ESTE mismo renderer.
+        // If the flag were injected into the real DOM, it would also end up in the
+        // official PDF, which generates from ESTE same renderer.
         expect(page.outerHTML).toBe(before);
         expect(page.textContent).not.toContain("BORRADOR");
     });
 
-    it("no hace ninguna petición de red", async () => {
+    it("does not make network request", async () => {
         stubPrint();
         const fetchSpy = vi.spyOn(globalThis, "fetch");
         const page = makePage("Contenido clínico");
@@ -174,12 +174,12 @@ describe("useLocalPrint — aislamiento respecto al documento oficial", () => {
 
         await result.current.printLocalCopy(refWithPages([page]), { mark: "DRAFT" });
 
-        // Ni descarga del PDF oficial, ni generación, ni firma: la copia se
-        // compone entera con el DOM que ya estaba en pantalla.
+        // No download of the official PDF, no generation, no signature: the copy is
+        // compose integer with the DOM that was already on screen.
         expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it("no abre ventanas ni pestañas nuevas", async () => {
+    it("does not open new windows or tabs", async () => {
         stubPrint();
         const openSpy = vi.spyOn(globalThis, "open").mockReturnValue(null);
         const page = makePage("Contenido clínico");
@@ -190,7 +190,7 @@ describe("useLocalPrint — aislamiento respecto al documento oficial", () => {
         expect(openSpy).not.toHaveBeenCalled();
     });
 
-    it("no hace nada si el renderer aún no ha producido páginas", async () => {
+    it("does nothing if the renderer has not yet produced pages", async () => {
         const printed = stubPrint();
         const { result } = renderHook(() => useLocalPrint());
 
@@ -199,7 +199,7 @@ describe("useLocalPrint — aislamiento respecto al documento oficial", () => {
         expect(printed).toHaveLength(0);
     });
 
-    it("escapa el título para que un nombre de reporte no inyecte markup", async () => {
+    it("escape the title so that the report name does not inject markup", async () => {
         const printed = stubPrint();
         const page = makePage("Contenido");
         const { result } = renderHook(() => useLocalPrint());

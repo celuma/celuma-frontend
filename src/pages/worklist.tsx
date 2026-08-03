@@ -1,9 +1,9 @@
 /**
- * Lista de Trabajo - Vista unificada para asignaciones y revisiones pendientes del usuario
- * 
- * Esta página muestra:
- * - Asignaciones pendientes (items donde el usuario está asignado)
- * - Revisiones pendientes (reportes que el usuario necesita aprobar/rechazar)
+ * Worklist - Unified view of the user's pending assignments and reviews.
+ *
+ * This page shows:
+ * - Pending assignments (items assigned to the user)
+ * - Pending reviews (reports the user needs to approve or reject)
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Layout, Card, Tooltip } from "antd";

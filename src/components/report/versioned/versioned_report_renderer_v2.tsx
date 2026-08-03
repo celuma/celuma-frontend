@@ -13,7 +13,7 @@ import {
 } from "./default_report_presentation_v2";
 
 /**
- * VersionedReportRendererV2 (Céluma 1.3 Fase 2, Bloque C, Historia C4).
+ * VersionedReportRendererV2 (Céluma 1.3 Phase 2, Block C, Story C4).
  *
  * Renders reports with `schema_version = 2` using EXCLUSIVELY
  * `report.report.rendering_snapshot` as the source of presentation/branding
@@ -38,7 +38,7 @@ const CM_TO_MM = 10;
 // Fixed band heights for header/footer content when enabled. Margins from
 // the snapshot control the GAP between these bands and the page edge / body
 // content, not the bands' own height — see versioned-renderer-v2-contract.md
-// "Interpretación de márgenes".
+// "Margin interpretation".
 const HEADER_BAND_MM = 24;
 const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
@@ -48,11 +48,10 @@ const BAND_GAP_MM = 4;
 // fully independent of the legacy module.
 const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
 
-// Segunda remediación post-Fase 2 (UX) — paridad Legacy. Todos los campos
-// que consumen estos helpers son opcionales/aditivos en el snapshot; los
-// defaults reproducen exactamente el comportamiento previo (línea única de
-// 1px en el color primario, Arial, tamaños fijos, logo a la izquierda,
-// contenido centrado).
+// Second post-Phase 2 remediation (UX) — Legacy parity. All fields consumed
+// by these helpers are optional/additive in the snapshot; defaults reproduce
+// the previous behavior exactly (single 1px line in the primary color, Arial,
+// fixed sizes, left-aligned logo, centered content).
 type DividerLike = {
     enabled: boolean;
     style: "SINGLE" | "DOUBLE";
@@ -116,21 +115,21 @@ const DEFAULT_TYPOGRAPHY: ReportTypographyConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// Cuarta remediación post-Fase 2 — capacidades de paridad Legacy.
+// Fourth post-Phase 2 remediation — Legacy-parity capabilities.
 //
-// TODOS los defaults de esta sección reproducen, al píxel, lo que el
-// renderer hacía antes de la remediación, de modo que un snapshot V2 ya
-// persistido (que no lleva ninguno de los campos nuevos) siga renderizando
-// exactamente igual. Ver v2-legacy-parity-capabilities.md.
+// ALL defaults in this section reproduce the renderer's pre-remediation
+// behavior pixel-perfectly, so an already persisted V2 snapshot (without any
+// new fields) continues rendering exactly the same. See
+// v2-legacy-parity-capabilities.md.
 // ---------------------------------------------------------------------------
 
-/** Sub-título del header antes de esta remediación. */
+/** Header subtitle before this remediation. */
 const LEGACY_V2_SUBTITLE_PT = 8;
-/** Dirección / contacto / firmante del header antes de esta remediación. */
+/** Header address / contact / signer before this remediation. */
 const LEGACY_V2_DETAIL_PT = 7;
 const DEFAULT_HEADER_PADDING_MM = 3;
 const DEFAULT_FOOTER_PADDING_MM = 2;
-/** Inset del logo respecto al alto de su banda, antes de esta remediación. */
+/** Logo inset relative to its band's height before this remediation. */
 const DEFAULT_LOGO_INSET_MM = 6;
 const DEFAULT_HEADER_LOGO_MAX_WIDTH_MM = 32;
 const DEFAULT_FOOTER_LOGO_MAX_WIDTH_MM = 28;
@@ -138,19 +137,18 @@ const DEFAULT_FOOTER_LOGO_MAX_WIDTH_MM = 28;
 type LogoMode = "NONE" | "CUSTOM" | "CELUMA_DEFAULT";
 
 /**
- * Resuelve la imagen de una banda.
+ * Resolves a band's image.
  *
- * `mode` ausente/null NO es un modo: es un snapshot anterior a esta
- * remediación, y se resuelve con la expresión LITERAL que el renderer
- * usaba entonces — el header caía al isotipo neutral de Céluma cuando no
- * había URL resuelta, el pie no. Reproducirlo aquí, en vez de "traducir" el
- * snapshot a un modo equivalente, es lo que garantiza que ningún reporte V2
- * histórico cambie (incluido el caso en que había `logo_storage_id` pero la
- * URL no se resolvió).
+ * An absent/null `mode` is NOT a mode: it is a snapshot from before this
+ * remediation and resolves using the LITERAL expression the renderer used at
+ * the time—the header fell back to Céluma's neutral isotipo when no URL
+ * resolved; the footer did not. Reproducing it here rather than "translating"
+ * the snapshot to an equivalent mode ensures no historical V2 report changes,
+ * including when `logo_storage_id` existed but its URL did not resolve.
  *
- * Con un modo EXPLÍCITO, `CUSTOM` nunca sustituye por otra imagen: si la
- * URL no se resuelve, no se dibuja nada. El isotipo de Céluma solo aparece
- * dentro del documento si el membrete lo pidió con `CELUMA_DEFAULT`.
+ * With an EXPLICIT mode, `CUSTOM` never substitutes another image: if the URL
+ * does not resolve, nothing is rendered. Céluma's isotipo appears inside the
+ * document only when the letterhead requested it with `CELUMA_DEFAULT`.
  */
 function resolveBandLogoSrc(
     mode: LogoMode | null | undefined,
@@ -167,7 +165,7 @@ function resolveBandLogoSrc(
     return resolvedUrl || null;
 }
 
-/** `?? fallback` que además trata `null` como "no configurado". */
+/** `?? fallback` that also treats `null` as "not configured". */
 function mmOr(value: number | null | undefined, fallback: number): number {
     return value == null ? fallback : value;
 }
@@ -245,10 +243,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const headerEnabled = presentation.header.enabled;
             const footerEnabled = presentation.footer.enabled;
 
-            // Cuarta remediación — geometría configurable de las bandas.
-            // Cada `mmOr(..., default)` reproduce la constante fija que el
-            // renderer usaba antes, de modo que un snapshot sin estos
-            // campos produce EXACTAMENTE la misma aritmética de siempre.
+            // Fourth remediation — configurable band geometry. Each
+            // `mmOr(..., default)` reproduces the fixed constant the renderer
+            // used before, so a snapshot without these fields produces EXACTLY
+            // the same arithmetic as always.
             const headerHeightMm = headerEnabled ? mmOr(presentation.header.height_mm, HEADER_BAND_MM) : 0;
             const footerHeightMm = footerEnabled ? mmOr(presentation.footer.height_mm, FOOTER_BAND_MM) : 0;
             const headerOffsetMm = headerEnabled ? mmOr(presentation.header.offset_mm, marginTopMm) : 0;
@@ -266,10 +264,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const contentHpx = Math.round((PAGE_H_MM - bodyTopMm - bodyBottomMm) / PX_TO_MM);
 
             const primaryColor = presentation.style.primary_color;
-            // `true` en el header / `false` en el pie = la asimetría real que
-            // el renderer tenía antes de esta remediación (ver
-            // resolveBandLogoSrc). El isotipo neutral deja de aparecer en
-            // cuanto el membrete declara `logo_mode` explícitamente.
+            // `true` in the header / `false` in the footer = the real
+            // asymmetry the renderer had before this remediation (see
+            // resolveBandLogoSrc). The neutral isotipo stops appearing as soon
+            // as the letterhead explicitly declares `logo_mode`.
             const headerLogoSrc = resolveBandLogoSrc(
                 presentation.header.logo_mode,
                 report.resolved_resources?.header_logo_url,
@@ -280,13 +278,12 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 report.resolved_resources?.footer_logo_url,
                 false,
             );
-            // El relleno "Céluma" existe para que un encabezado habilitado
-            // nunca salga sin identidad alguna. Con `signer_placement =
-            // INLINE` el bloque institucional ya se compone de las líneas
-            // del firmante (la forma Legacy: nombre, especialidad,
-            // adscripción, cédulas), así que anteponer "Céluma" sería
-            // inventar una institución que el membrete no pidió. El resto
-            // de los casos conserva el relleno tal cual.
+            // The "Céluma" fallback ensures an enabled header never renders
+            // without any identity. With `signer_placement = INLINE`, the
+            // institutional block already consists of signer lines (the Legacy
+            // form: name, specialty, affiliation, licenses), so prepending
+            // "Céluma" would invent an institution the letterhead did not
+            // request. All other cases retain the fallback unchanged.
             const institutionName = presentation.header.institution_name
                 || (presentation.header.signer_placement === "INLINE" ? null : DEFAULT_INSTITUTION_NAME);
             const subtitle = presentation.header.subtitle;
@@ -295,7 +292,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const email = presentation.header.email;
             const signer = presentation.signer;
             const footerText = presentation.footer.custom_text || DEFAULT_FOOTER_TEXT;
-            // Segunda remediación post-Fase 2 (UX) — paridad Legacy:
+            // Second post-Phase 2 remediation (UX) — Legacy parity:
             const typography = presentation.style.typography ?? DEFAULT_TYPOGRAPHY;
             const bodyFontFamily = fontFamilyCss(typography.font_family);
             const headerFontSizePt = typography.header_font_size_pt ?? DEFAULT_TYPOGRAPHY.header_font_size_pt;
@@ -311,11 +308,11 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     ? "right"
                     : "center";
 
-            // Cuarta remediación — pesos y tamaños secundarios. `null`
-            // conserva la mezcla por línea que el renderer ya tenía
-            // (institución 700 / resto 400, subtítulo 8pt, detalles 7pt);
-            // un valor explícito unifica la propiedad en toda la banda, que
-            // es la forma del encabezado y el pie Legacy.
+            // Fourth remediation — secondary weights and sizes. `null`
+            // preserves the renderer's existing per-line mix (institution 700
+            // / remainder 400, subtitle 8pt, details 7pt); an explicit value
+            // unifies the property across the whole band, matching the Legacy
+            // header and footer form.
             const headerWeightPrimary = typography.header_font_weight ?? 700;
             const headerWeightSecondary = typography.header_font_weight ?? 400;
             const headerSubtitlePt = typography.header_secondary_font_size_pt ?? LEGACY_V2_SUBTITLE_PT;
@@ -382,12 +379,12 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     header.style.paddingBottom = `${headerPaddingMm}mm`;
                     if (bandLineHeight != null) header.style.lineHeight = String(bandLineHeight);
 
-                    // Bloque institucional: nombre/subtítulo/dirección/contacto
-                    // y —cuando `signer_placement = INLINE`— las credenciales
-                    // del firmante institucional como líneas más, con la
-                    // MISMA tipografía. Ésa es exactamente la forma del
-                    // encabezado Legacy: un único bloque de cuatro líneas
-                    // idénticas, sin columna derecha y sin logo.
+                    // Institutional block: name/subtitle/address/contact and,
+                    // when `signer_placement = INLINE`, institutional signer
+                    // credentials as additional lines using the SAME
+                    // typography. This exactly matches the Legacy header:
+                    // one block of four identical lines, without a right
+                    // column or logo.
                     const inlineSignerHtml = signerPlacement === "INLINE"
                         ? signerLines
                             .map((l) => `<div style="font-weight:${l.weight};font-size:${headerDetailPt}pt;">${escapeHtml(l.text)}</div>`)
@@ -404,8 +401,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     `;
 
                     if (headerLogoSrc) {
-                        // Con logo se conserva la envoltura `identity`
-                        // (logo + texto agrupados) que el renderer ya usaba.
+                        // With a logo, preserve the existing `identity`
+                        // wrapper (grouped logo + text).
                         const identity = document.createElement("div");
                         identity.style.display = "flex";
                         identity.style.alignItems = "center";
@@ -424,11 +421,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                         identity.appendChild(identityText);
                         header.appendChild(identity);
                     } else {
-                        // Sin logo NO se envuelve ni se reserva caja alguna:
-                        // el bloque de texto es hijo directo de la banda,
-                        // igual que en LegacyReportRendererV1. Ésta es la
-                        // corrección del "espacio de logo reservado aunque
-                        // el membrete no tenga logo superior".
+                        // Without a logo, do NOT wrap or reserve any box: the
+                        // text block is a direct child of the band, as in
+                        // LegacyReportRendererV1. This fixes the "reserved
+                        // logo space despite no header logo" issue.
                         header.appendChild(identityText);
                     }
 
@@ -462,23 +458,21 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 body.style.fontFamily = bodyFontFamily;
                 body.style.fontSize = `${baseFontSizePt}pt`;
                 body.style.color = "#000000";
-                // Cuarta remediación: `0mm` (el default) es exactamente lo
-                // que el renderer tenía antes — no declaraba `padding-top`.
-                // Legacy declara 4mm dentro de la misma caja `border-box`,
-                // así que el área paginable se reduce igual en ambos.
+                // Fourth remediation: `0mm` (the default) exactly matches the
+                // previous renderer—it did not declare `padding-top`. Legacy
+                // declares 4mm within the same `border-box`, so the pageable
+                // area is reduced equally in both.
                 body.style.paddingTop = `${bodyPaddingTopMm}mm`;
                 if (bodyFontWeight != null) body.style.fontWeight = String(bodyFontWeight);
 
-                // Cuarta remediación: el cuerpo se inserta ANTES del pie
-                // (orden encabezado → cuerpo → pie, el mismo de
-                // LegacyReportRendererV1). Antes iba después, y aunque las
-                // tres bandas están posicionadas en absoluto y no se
-                // solapan —así que no cambia un solo píxel— sí cambiaba el
-                // orden del flujo de contenido del PDF: el texto del pie se
-                // extraía antes que el del cuerpo. Eso afecta a copiar y
-                // pegar, a la búsqueda dentro del PDF y a los lectores de
-                // pantalla, y hacía imposible comparar el texto extraído
-                // página a página contra el PDF Legacy.
+                // Fourth remediation: insert the body BEFORE the footer
+                // (header → body → footer order, matching
+                // LegacyReportRendererV1). It was previously inserted after;
+                // while all three bands are absolutely positioned and do not
+                // overlap—so not a single pixel changes—it changed PDF content
+                // flow order: footer text was extracted before body text. That
+                // affects copy/paste, PDF search, and screen readers, and made
+                // page-by-page comparison with the Legacy PDF impossible.
                 page.appendChild(body);
 
                 if (footerEnabled) {
@@ -513,28 +507,28 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     };
 
                     const text = document.createElement("div");
-                    // `white-space: pre-line` deja que un `custom_text` con
-                    // saltos de línea rinda varias líneas — el pie Legacy
-                    // imprime dirección y contacto en dos renglones. El
-                    // contrato prohíbe markup, así que un `\n` es la única
-                    // forma de expresarlo, y para un texto sin saltos el
-                    // resultado es idéntico al de antes (los espacios
-                    // consecutivos se colapsan igual que con `normal`).
+                    // `white-space: pre-line` lets `custom_text` with line
+                    // breaks render multiple lines—the Legacy footer prints
+                    // address and contact on two lines. The contract forbids
+                    // markup, so `\n` is the only way to express this; for
+                    // text without line breaks, the result matches the prior
+                    // behavior (consecutive spaces collapse as with `normal`).
                     text.textContent = footerText;
                     text.style.whiteSpace = "pre-line";
                     text.style.textAlign = footerTextAlign;
                     if (footerTextMaxWidth) text.style.maxWidth = footerTextMaxWidth;
 
                     if (footerLayout === "SPLIT") {
-                        // Forma Legacy: logo y texto son hermanos DIRECTOS
-                        // separados por `justify-content: space-between` de
-                        // la propia banda — sin caja intermedia, sin `gap`.
+                        // Legacy form: logo and text are DIRECT siblings
+                        // separated by the band's own
+                        // `justify-content: space-between`—no intermediate
+                        // box and no `gap`.
                         const logo = buildFooterLogo();
                         if (logo) footer.appendChild(footerLogoRight ? text : logo);
                         footer.appendChild(logo ? (footerLogoRight ? logo : text) : text);
                     } else {
-                        // Segunda remediación post-Fase 2 (UX): grupo logo+texto,
-                        // como el header.
+                        // Second post-Phase 2 remediation (UX): logo + text
+                        // group, like the header.
                         const identity = document.createElement("div");
                         identity.style.display = "flex";
                         identity.style.alignItems = "center";

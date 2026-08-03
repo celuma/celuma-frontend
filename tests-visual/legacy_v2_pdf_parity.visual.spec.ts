@@ -5,50 +5,48 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 /**
- * Cuarta remediación post-Fase 2 — PARIDAD EN PDF Legacy ↔ V2 (§16 del
- * encargo).
+ * Fourth post-Phase 2 remediation — Legacy ↔ V2 PDF PARITY (§16 of the
+ * brief).
  *
- * `legacy_v2_parity.visual.spec.ts` prueba el DOM en pantalla. Esta suite
- * prueba el ARTEFACTO: genera dos PDFs por la MISMA vía que el backend
- * (`/internal/report-render/...`, `html[data-report-ready="true"]`,
- * `page.pdf({ preferCSSPageSize, printBackground })` — ver
- * `celuma-backend/app/services/report_pdf_generation.py::_render_pdf`) y
- * compara:
+ * `legacy_v2_parity.visual.spec.ts` tests the on-screen DOM. This suite
+ * tests the ARTIFACT: it generates two PDFs through the SAME path as the
+ * backend (`/internal/report-render/...`, `html[data-report-ready="true"]`,
+ * `page.pdf({ preferCSSPageSize, printBackground })` — see
+ * `celuma-backend/app/services/report_pdf_generation.py::_render_pdf`) and
+ * compares:
  *
- *   - número de páginas;
- *   - tamaño físico de cada página (MediaBox);
- *   - ausencia de página en blanco;
- *   - contenido completo (texto extraído, página por página);
- *   - firma incluida;
- *   - logotipos (imágenes incrustadas);
- *   - y, rasterizando cada página a mapa de bits, los PÍXELES.
+ *   - page count;
+ *   - physical size of every page (MediaBox);
+ *   - absence of blank pages;
+ *   - complete content (extracted text, page by page);
+ *   - included signature;
+ *   - logos (embedded images);
+ *   - and, by rasterizing every page into a bitmap, PIXELS.
  *
- * Ninguno de estos PDFs es un artefacto oficial: se generan en un
- * directorio temporal y se borran. Esta suite no toca almacenamiento,
- * hashes ni ningún PDF ya persistido.
+ * None of these PDFs is an official artifact: they are generated in a
+ * temporary directory and removed. This suite does not touch storage, hashes,
+ * or any persisted PDF.
  */
 
 const CASES = [
-    { key: "corto", description: "reporte corto sin imágenes" },
-    { key: "secciones", description: "reporte con varias secciones" },
-    { key: "imagenes", description: "reporte con imágenes" },
-    { key: "firmado", description: "reporte firmado" },
-    { key: "multipagina", description: "reporte multipágina" },
+    { key: "short", description: "short report without images" },
+    { key: "sections", description: "report with multiple sections" },
+    { key: "images", description: "report with images" },
+    { key: "signed", description: "signed report" },
+    { key: "multipage", description: "multipage report" },
 ] as const;
 
-/** Escala de rasterizado. 2 ≈ 144 dpi: suficiente para que un
- *  desplazamiento de medio milímetro sea visible, sin hacer las pruebas
- *  lentas. */
+/** Rasterization scale. 2 ≈ 144 dpi: sufficient for a half-millimeter shift
+ *  to be visible without making tests slow. */
 const RASTER_SCALE = 2;
 
-/** Igual que en la paridad DOM: tolerancia cero, y cualquier diferencia
- *  residual se documenta en legacy-pdf-parity-report.md en vez de subir
- *  este número. */
+/** As in DOM parity: zero tolerance, and any residual difference is
+ *  documented in legacy-pdf-parity-report.md instead of raising this value. */
 const MAX_DIFF_PIXEL_RATIO = 0;
 
 async function renderPdf(page: Page, fixture: string): Promise<Buffer> {
     await page.goto(`/?internal_render=1&fixture=${fixture}`);
-    // Mismo selector que espera el generador oficial.
+    // Same selector awaited by the official generator.
     await page.waitForSelector('html[data-report-ready="true"]', { state: "attached", timeout: 30_000 });
     return page.pdf({ preferCSSPageSize: true, printBackground: true });
 }
@@ -61,9 +59,8 @@ interface PdfFacts {
 }
 
 /**
- * Hechos del PDF leídos con pdf.js — el mismo motor que usa Chromium para
- * mostrar PDFs, así que "lo que dice pdf.js" es lo que verá el usuario al
- * abrir el archivo.
+ * PDF facts read with pdf.js — the same engine Chromium uses to display PDFs,
+ * so "what pdf.js says" is what the user sees when opening the file.
  */
 async function readPdfFacts(bytes: Buffer): Promise<PdfFacts> {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -99,14 +96,13 @@ async function readPdfFacts(bytes: Buffer): Promise<PdfFacts> {
 }
 
 /**
- * Rasteriza cada página a RGBA.
+ * Rasterizes each page to RGBA.
  *
- * `@napi-rs/canvas` no se elige por gusto: es el backend de lienzo que la
- * propia `NodeCanvasFactory` de pdf.js carga cuando se ejecuta fuera del
- * navegador (ver `pdfjs-dist/legacy/build/pdf.mjs`). Con él instalado,
- * pdf.js crea por su cuenta los lienzos auxiliares que necesita para
- * máscaras suaves y grupos de transparencia; sin él, la primera figura con
- * máscara aborta el render con "Image or Canvas expected".
+ * `@napi-rs/canvas` is not chosen arbitrarily: it is the canvas backend
+ * loaded by pdf.js's own `NodeCanvasFactory` outside the browser (see
+ * `pdfjs-dist/legacy/build/pdf.mjs`). When installed, pdf.js creates the
+ * auxiliary canvases required for soft masks and transparency groups; without
+ * it, the first masked shape aborts rendering with "Image or Canvas expected".
  */
 async function rasterizePages(bytes: Buffer): Promise<Array<{ width: number; height: number; data: Uint8ClampedArray }>> {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -119,9 +115,9 @@ async function rasterizePages(bytes: Buffer): Promise<Array<{ width: number; hei
         const viewport = p.getViewport({ scale: RASTER_SCALE });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         const ctx = canvas.getContext("2d");
-        // Fondo blanco explícito: el lienzo nace transparente y una hoja de
-        // papel no lo es. Sin esto, dos páginas idénticas podrían diferir
-        // solo en el canal alfa.
+        // Explicit white background: the canvas starts transparent while a
+        // paper sheet is not. Without this, identical pages could differ only
+        // in the alpha channel.
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await p.render({
@@ -140,7 +136,7 @@ async function rasterizePages(bytes: Buffer): Promise<Array<{ width: number; hei
     return out;
 }
 
-/** Proporción de píxeles distintos entre dos mapas RGBA del mismo tamaño. */
+/** Ratio of different pixels between two equally sized RGBA maps. */
 function diffRatio(
     a: { width: number; height: number; data: Uint8ClampedArray },
     b: { width: number; height: number; data: Uint8ClampedArray },
@@ -160,8 +156,8 @@ function diffRatio(
     return different / (a.width * a.height);
 }
 
-/** Una página "en blanco" no tiene ni texto ni tinta: se comprueban las dos
- *  cosas, porque una página solo con membrete tampoco debería existir aquí. */
+/** A "blank" page has neither text nor ink: both are checked because a page
+ *  containing only a letterhead must not exist here either. */
 function isBlank(
     raster: { width: number; height: number; data: Uint8ClampedArray },
     text: string,
@@ -176,7 +172,7 @@ function isBlank(
 for (const { key, description } of CASES) {
     const capitalized = key.charAt(0).toUpperCase() + key.slice(1);
 
-    test(`paridad PDF Legacy ↔ V2 — ${description}`, async ({ page }) => {
+    test(`Legacy ↔ V2 PDF parity — ${description}`, async ({ page }) => {
         test.slow();
         const legacyBytes = await renderPdf(page, `parity${capitalized}Legacy`);
         const v2Bytes = await renderPdf(page, `parity${capitalized}V2`);
@@ -184,15 +180,15 @@ for (const { key, description } of CASES) {
         const legacy = await readPdfFacts(legacyBytes);
         const v2 = await readPdfFacts(v2Bytes);
 
-        // Misma cantidad de páginas y mismo tamaño físico.
+        // Same page count and physical size.
         expect(v2.pageCount).toBe(legacy.pageCount);
         expect(v2.mediaBoxes).toEqual(legacy.mediaBoxes);
-        // Letter en puntos PostScript: 8.5in x 11in.
+        // Letter in PostScript points: 8.5in x 11in.
         expect(legacy.mediaBoxes.every((m) => m === "612x792")).toBe(true);
-        // Contenido completo, página por página (esto es lo que detecta un
-        // corte de paginación distinto, no solo un total igual).
+        // Complete content, page by page (this detects a different pagination
+        // break, not just an identical total).
         expect(v2.perPageText).toEqual(legacy.perPageText);
-        // Logotipos e imágenes de figura: mismas incrustaciones.
+        // Logos and figure images: same embedded assets.
         expect(v2.imageCount).toBe(legacy.imageCount);
 
         const legacyPages = await rasterizePages(legacyBytes);
@@ -200,43 +196,43 @@ for (const { key, description } of CASES) {
         expect(v2Pages.length).toBe(legacyPages.length);
 
         for (let i = 0; i < legacyPages.length; i += 1) {
-            // Ninguna página en blanco (ni la última, que es donde aparecía
-            // la página fantasma del Bloque E).
-            expect(isBlank(legacyPages[i], legacy.perPageText[i]), `Legacy p.${i + 1} en blanco`).toBe(false);
-            expect(isBlank(v2Pages[i], v2.perPageText[i]), `V2 p.${i + 1} en blanco`).toBe(false);
+            // No blank pages (including the final one, where the Block E
+            // phantom page appeared).
+            expect(isBlank(legacyPages[i], legacy.perPageText[i]), `Legacy p.${i + 1} is blank`).toBe(false);
+            expect(isBlank(v2Pages[i], v2.perPageText[i]), `V2 p.${i + 1} is blank`).toBe(false);
 
             const ratio = diffRatio(legacyPages[i], v2Pages[i]);
             expect(
                 ratio,
-                `Página ${i + 1}: ${(ratio * 100).toFixed(4)}% de píxeles distintos entre el PDF Legacy y el PDF V2`,
+                `Page ${i + 1}: ${(ratio * 100).toFixed(4)}% of pixels differ between the Legacy and V2 PDFs`,
             ).toBeLessThanOrEqual(MAX_DIFF_PIXEL_RATIO);
         }
     });
 }
 
-test("paridad PDF Legacy ↔ V2 — la firma real del reporte viaja en ambos PDFs", async ({ page }) => {
+test("Legacy ↔ V2 PDF parity — the report's real signature appears in both PDFs", async ({ page }) => {
     test.slow();
-    const legacyBytes = await renderPdf(page, "parityFirmadoLegacy");
-    const v2Bytes = await renderPdf(page, "parityFirmadoV2");
+    const legacyBytes = await renderPdf(page, "paritySignedLegacy");
+    const v2Bytes = await renderPdf(page, "paritySignedV2");
     const legacy = await readPdfFacts(legacyBytes);
     const v2 = await readPdfFacts(v2Bytes);
 
     const legacyText = legacy.perPageText.join(" ");
     const v2Text = v2.perPageText.join(" ");
-    // El bloque de firma del reporte (firmante real), no el firmante
-    // institucional del membrete: son cosas distintas y ambas deben salir.
+    // The report signature block (actual signer), not the institutional
+    // letterhead signer: they are distinct and both must appear.
     expect(legacyText).toContain("Firmante de Prueba");
     expect(v2Text).toContain("Firmante de Prueba");
     expect(v2Text).toBe(legacyText);
 });
 
-test("los PDFs de esta suite son temporales y no tocan ningún artefacto oficial", async ({ page }) => {
-    // Documenta (y comprueba) que la suite escribe, como mucho, en un
-    // directorio temporal propio: nunca en storage, nunca con hash oficial.
+test("this suite's PDFs are temporary and do not affect official artifacts", async ({ page }) => {
+    // Documents (and verifies) that the suite writes at most to its own
+    // temporary directory: never to storage or with an official hash.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "celuma-pdf-parity-"));
     try {
-        const bytes = await renderPdf(page, "parityCortoV2");
-        const file = path.join(dir, "copia.pdf");
+        const bytes = await renderPdf(page, "parityShortV2");
+        const file = path.join(dir, "copy.pdf");
         fs.writeFileSync(file, bytes);
         expect(fs.existsSync(file)).toBe(true);
         expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");

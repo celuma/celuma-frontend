@@ -1,7 +1,7 @@
 import type { RcFile, UploadFile } from "antd/es/upload/interface";
 
 /**
- * Post-Fase-2 remediation, Bug 1 root cause: Ant Design's `<Upload
+ * Post-Phase-2 remediation, Bug 1 root cause: Ant Design's `<Upload
  * beforeUpload={(file) => { setState(file); return false; }}>` pattern
  * receives the raw `RcFile` (which extends the native `File`), not an
  * `UploadFile` — `RcFile` has no `.originFileObj`. Storing it in state

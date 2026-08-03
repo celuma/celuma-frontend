@@ -1,18 +1,18 @@
 /**
- * Tercera remediación post-Fase 2 — problema F: "nunca caer a Legacy".
+ * Third post-Phase 2 remediation — issue F: "never fall to Legacy."
  *
- * Con `reports_v2_enabled=true` y una versión clínica válida, el editor debe
- * arrancar SIEMPRE en V2 usando el membrete resuelto, y cuando falte
- * configuración debe mostrar un estado BLOQUEADO explícito. Montar Legacy
- * como sustituto está prohibido: produciría un reporte con un membrete que
- * nadie eligió.
+ * with `reports_v2_enabled=true` and a clinically valid version, the editor must
+ * boot always in V2 using the resolved letterhead, and when missing
+ * configuration must show an explicit blocked state. Riding Legacy
+ * as a substitute is prohibited: it would produce a report with a letterhead that
+ *no one chose.
  *
- * Antes había dos caminos que llevaban a Legacy en silencio:
- *   1. un `catch {}` que se tragaba cualquier fallo de red;
- *   2. la cadena listar-membretes -> listar-versiones -> leer-versión, que
- *      si no encontraba el membrete resuelto en la lista dejaba
- *      `selectedLetterheadPresentation` en null, y sin `rendering_snapshot`
- *      el resolver elige el renderer Legacy.
+ * Before there were two paths that led to Legacy in silence:
+ * 1. `catch {}` swallowing any network failure;
+ * 2. the string list-Letterheads -> list-versions -> read-version, which
+ * if it did not find the resolved letterhead in the list it left
+ * `selectedLetterheadPresentation` in null, and without `rendering_snapshot`
+ * the resolver chooses the Legacy renderer.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -49,8 +49,8 @@ function withPermission(canManage: boolean) {
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
-/** El editor lee la orden y el flag del tenant con su propio `getJSON`
- *  interno (fetch directo), así que se intercepta a nivel de `fetch`. */
+/** The editor reads the tenant's order and flag with its own `getJSON`
+ * internal (fetch direct), thus it is intercepted at the level of `fetch`. */
 function mockFetch(opts: { v2Enabled: boolean; tenantFetchFails?: boolean }) {
     const json = (body: unknown) =>
         Promise.resolve({
@@ -140,8 +140,8 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
-describe("ReportEditor — arranque V2 (problema F)", () => {
-    it("usa el membrete predeterminado del tenant cuando la plantilla no tiene preferencia", async () => {
+describe("ReportEditor — V2 startup (issue F)", () => {
+    it("use the tenant's default letterhead when the template has no preference", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults();
@@ -149,8 +149,8 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
 
         renderEditor();
 
-        // La marca del MEMBRETE aparece en la previsualización — prueba de
-        // que se montó V2 con la presentación resuelta, no Legacy.
+        // The letterhead brand appears in the preview — text from
+        // V2 mounted with the resolved presentation, not Legacy.
         await waitFor(() => {
             expect(document.body.textContent).toContain("Laboratorio Del Membrete");
         });
@@ -159,19 +159,19 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
     });
 
     /**
-     * Regresión encontrada en la verificación manual en navegador (no en
-     * las pruebas): `buildEnvelope()` heredaba `resolved_resources` solo de
-     * `envelope`, que para un reporte NUEVO es null. El membrete tenía sus
-     * logos bien configurados y el editor los conocía, pero el preview
-     * recibía el sobre sin URLs y el renderer dibujaba el logo neutral.
+     * Regression found in manual verification in browser (not in
+     * the tests): `buildEnvelope()` inherited `resolved_resources` only from
+     * `envelope`, which is null for a new report. The letterhead had its
+     * logos configured and the editor knew them, but the preview received
+     * the envelope without URLs and the renderer drew the neutral logo.
      */
-    it("pasa al preview las URLs de logo del membrete resuelto en un reporte nuevo", async () => {
+    it("passes logo URLs of the resolved letterhead to the preview on a new report", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({
             letterhead_resolved_resources: {
-                header_logo_url: "https://cdn.example/membrete-header.png",
-                footer_logo_url: "https://cdn.example/membrete-footer.png",
+                header_logo_url: "https://cdn.example/letterhead-header.png",
+                footer_logo_url: "https://cdn.example/letterhead-footer.png",
             },
         });
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
@@ -180,12 +180,12 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
 
         await waitFor(() => {
             const srcs = Array.from(document.querySelectorAll("img")).map((i) => i.getAttribute("src"));
-            expect(srcs).toContain("https://cdn.example/membrete-header.png");
-            expect(srcs).toContain("https://cdn.example/membrete-footer.png");
+            expect(srcs).toContain("https://cdn.example/letterhead-header.png");
+            expect(srcs).toContain("https://cdn.example/letterhead-footer.png");
         });
     });
 
-    it("muestra la fuente «Configurado en esta plantilla» cuando gana la preferencia de plantilla", async () => {
+    it("shows the font “Configured in this template” when it gains the template preference", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({ letterhead_resolution_source: "TEMPLATE_PREFERRED" });
@@ -199,7 +199,7 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
         });
     });
 
-    it("bloquea explícitamente (nunca Legacy) cuando no hay membrete resoluble", async () => {
+    it("blocks explicitly (never Legacy) when no letterhead can be resolved", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({
@@ -217,11 +217,11 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
             expect(screen.getByText(/Falta el membrete predeterminado del laboratorio/i)).toBeTruthy();
         });
         expect(screen.getByRole("button", { name: /Ir a Membretes/i })).toBeTruthy();
-        // Ni rastro del membrete legado embajador: no se montó Legacy.
+        // No sign of the letterhead legacy ambassador: Legacy was not set up.
         expect(document.body.textContent).not.toMatch(/villanueva/i);
     });
 
-    it("bloquea con el motivo correcto cuando la plantilla no tiene versión activa", async () => {
+    it("blocks with the correct reason when the template does not have an active version", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({
@@ -237,7 +237,7 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
         });
     });
 
-    it("bloquea cuando la configuración de membretes es inconsistente, con el detalle del backend", async () => {
+    it("blocks when the Letterheads configuration is inconsistent, with the backend detail", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({
@@ -255,7 +255,7 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
         expect(document.body.textContent).toContain("2 versiones activas");
     });
 
-    it("bloquea, en vez de caer a Legacy, si falla la consulta de configuración", async () => {
+    it("blocks, instead of falling to Legacy, if the configuration query fails", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
@@ -270,7 +270,7 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
         expect(document.body.textContent).toMatch(/No se pudo consultar la configuración de reportes V2/i);
     });
 
-    it("no bloquea a un tenant Legacy (reports_v2_enabled=false)", async () => {
+    it("does not block a Legacy tenant (reports_v2_enabled=false)", async () => {
         mockFetch({ v2Enabled: false });
         mockStudyTypeAndTemplate();
         const defaultsSpy = mockDefaults();
@@ -280,7 +280,7 @@ describe("ReportEditor — arranque V2 (problema F)", () => {
         await waitFor(() => {
             expect(screen.queryByText(/Falta el membrete predeterminado/i)).toBeNull();
         });
-        // Un tenant Legacy ni siquiera consulta la configuración V2.
+        // A Legacy tenant does not query the V2 configuration.
         expect(defaultsSpy).not.toHaveBeenCalled();
     });
 });

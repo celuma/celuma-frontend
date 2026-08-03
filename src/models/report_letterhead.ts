@@ -1,6 +1,6 @@
 /**
  * TypeScript types for the shared, tenant-owned letterhead ("membrete")
- * domain — post-Fase-2 remediation. Mirrors
+ * domain — post-Phase-2 remediation. Mirrors
  * celuma-backend/app/schemas/report_letterhead.py field-for-field, the
  * same way models/report.ts mirrors the template-version schemas.
  *
@@ -19,13 +19,13 @@ export interface ReportLetterheadSummary {
     is_default: boolean;
     is_active: boolean;
     created_at: string;
-    /** Tercera remediación: el backend precalcula qué acciones son válidas
-     *  para que la UI muestre "Eliminar" solo cuando de verdad se puede, en
-     *  vez de ofrecerlo siempre y responder 409 después del clic. Ver
+    /** Third remediation: the backend precomputes valid actions so the UI
+     *  shows "Delete" only when it is actually allowed, rather than always
+     *  offering it and responding with 409 after the click. See
      *  letterhead-delete-deactivate-contract.md. */
     has_active_version?: boolean;
     can_hard_delete?: boolean;
-    /** Motivos legibles del bloqueo; vacío si `can_hard_delete`. */
+    /** Human-readable blocking reasons; empty when `can_hard_delete`. */
     blocking_references?: string[];
 }
 
@@ -39,10 +39,10 @@ export interface ReportLetterheadsListResponse {
 
 /** Payload for POST /api/v1/report-letterheads/
  *
- *  Cuarta remediación post-Fase 2 (Observación 2): `description` es
- *  opcional Y anulable. `undefined` = campo omitido; `null` = "sin
- *  descripción". El backend normaliza además `""`/solo-espacios a `null`.
- *  Ver optional-letterhead-description-contract.md. */
+ *  Fourth post-Phase 2 remediation (Observation 2): `description` is
+ *  optional AND nullable. `undefined` = omitted field; `null` = "no
+ *  description". The backend also normalizes `""`/whitespace-only values to
+ *  `null`. See optional-letterhead-description-contract.md. */
 export interface CreateReportLetterheadPayload {
     name: string;
     description?: string | null;
@@ -50,22 +50,23 @@ export interface CreateReportLetterheadPayload {
 
 /** Payload for PUT /api/v1/report-letterheads/{id}
  *
- *  `description: undefined` NO se serializa (JSON.stringify lo omite) y el
- *  backend deja el valor previo intacto; `description: null` lo limpia. */
+ *  `description: undefined` is NOT serialized (JSON.stringify omits it), so
+ *  the backend leaves the previous value unchanged; `description: null`
+ *  clears it. */
 export interface UpdateReportLetterheadPayload {
     name?: string;
     description?: string | null;
     is_active?: boolean;
 }
 
-/** Normaliza el valor de un campo de descripción del formulario al valor
- *  que debe viajar en el payload: vacío o solo espacios -> `null` (limpiar),
- *  cualquier otro texto -> el texto recortado.
+/** Normalizes a form description field to the value that must be sent in the
+ *  payload: empty or whitespace-only -> `null` (clear), any other text ->
+ *  the trimmed text.
  *
- *  Existe como función exportada, y no como expresión suelta en cada
- *  pantalla, precisamente porque el bug original venía de repetir
- *  `description || undefined` en dos sitios: ese patrón convierte `""` en
- *  "campo omitido" y hace imposible limpiar la descripción. */
+ *  This is an exported function rather than a loose expression in each
+ *  screen because the original bug came from repeating
+ *  `description || undefined` in two places: that pattern turns `""` into an
+ *  "omitted field" and makes clearing the description impossible. */
 export function normalizeLetterheadDescription(value: string | null | undefined): string | null {
     const trimmed = (value ?? "").trim();
     return trimmed.length > 0 ? trimmed : null;
@@ -87,11 +88,11 @@ export interface ReportLetterheadVersionSummary {
     archived_at: string | null;
 }
 
-/** URLs efímeras de los logos de un membrete — nunca se persisten; el
- *  contrato único es "storage_id persistente + URL resuelta efímera"
- *  (ver letterhead-logo-persistence-contract.md). Misma forma que
- *  `ReportEnvelope.resolved_resources`, a propósito: el editor y el
- *  renderer consumen ambos orígenes con el mismo código. */
+/** Ephemeral URLs for letterhead logos—never persisted; the single contract
+ *  is "persistent storage_id + ephemeral resolved URL" (see
+ *  letterhead-logo-persistence-contract.md). It intentionally has the same
+ *  shape as `ReportEnvelope.resolved_resources`: the editor and renderer
+ *  consume both sources with the same code. */
 export interface LetterheadResolvedResources {
     header_logo_url?: string | null;
     footer_logo_url?: string | null;
@@ -100,9 +101,9 @@ export interface LetterheadResolvedResources {
 /** Full version detail, including the immutable configuration. */
 export interface ReportLetterheadVersionDetail extends ReportLetterheadVersionSummary {
     configuration: ReportPresentationSnapshotV2;
-    /** Tercera remediación: sin esto el editor no podía previsualizar un
-     *  logo ya persistido al reabrirse y siempre caía al logo neutral
-     *  (problemas B y C del brief). */
+    /** Third remediation: without this, the editor could not preview an
+     *  persisted logo when reopened and always fell back to the neutral logo
+     *  (brief issues B and C). */
     resolved_resources?: LetterheadResolvedResources | null;
 }
 
@@ -116,8 +117,8 @@ export interface CreateReportLetterheadVersionPayload {
 }
 
 /** Payload for PUT /api/v1/report-letterheads/{id}/versions/current —
- *  segunda remediación post-Fase 2 (UX): "Guardar cambios" del editor
- *  visual, crea+activa una versión nueva atómicamente. */
+ *  second post-Phase 2 remediation (UX): the visual editor's "Save changes"
+ *  atomically creates and activates a new version. */
 export type SaveCurrentReportLetterheadVersionPayload = CreateReportLetterheadVersionPayload;
 
 /** Response from POST /api/v1/report-letterheads/{id}/logo. */
@@ -138,11 +139,11 @@ export type V2BlockedReason =
 
 /** Response from GET /api/v1/study-types/{id}/report-defaults.
  *
- *  Tercera remediación: incluye la `presentation` ya resuelta y el motivo
- *  exacto de bloqueo. Antes el editor tenía que encadenar
- *  listar-membretes -> listar-versiones -> leer-versión para reconstruirla,
- *  y si cualquier eslabón fallaba se quedaba sin presentación y montaba
- *  Legacy en silencio (problema F). */
+ *  Third remediation: includes the already-resolved `presentation` and the
+ *  exact blocking reason. Previously, the editor had to chain
+ *  list-letterheads -> list-versions -> read-version to reconstruct it; if
+ *  any step failed, it had no presentation and silently rendered Legacy
+ *  (issue F). */
 export interface StudyTypeReportDefaults {
     template_id: string | null;
     active_template_version_id: string | null;
@@ -157,7 +158,7 @@ export interface StudyTypeReportDefaults {
 }
 
 // ---------------------------------------------------------------------------
-// .celuma portable file format — post-Fase-2 remediation, R12/R13.
+// .celuma portable file format — post-Phase 2 remediation, R12/R13.
 // Mirrors app/schemas/report_letterhead.py's Celuma* schemas.
 // ---------------------------------------------------------------------------
 

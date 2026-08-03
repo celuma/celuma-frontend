@@ -1,29 +1,29 @@
 /**
- * Real end-to-end test — post-Fase-2 remediation R17; actualizado en la
- * segunda remediación post-Fase 2 (UX).
+ * real end-to-end test — post-Phase-2 remediation R17; updated in the
+ * Second post-Phase 2 remediation (UX).
  *
- * Drives the actual app (`npm run dev`) against a real FastAPI backend +
+ * Drives the current app (`npm run dev`) against a real FastAPI backend +
  * real Postgres + real S3 (see playwright.e2e.config.ts). Creates its own
  * isolated tenant/admin user via POST /auth/register/unified so it never
  * touches real tenant data and is repeatable.
  *
- * Flujo cubierto (actualizado a la UX simplificada): login -> admin ->
- * crear membrete (redirige de inmediato al editor) -> subir logo via
- * setInputFiles() -> "Guardar cambios" (crea+activa atómicamente, sin paso
- * de "Publicar"/"Activar" separado) -> marcar predeterminado (menú
- * secundario) -> asociar a 2 plantillas -> nuevo reporte -> confirmar
- * V2-desde-el-inicio con el selector "Membrete" -> escribir texto clínico
- * -> cambiar de membrete -> confirmar que el texto no se alteró, solo el
- * branding -> guardar -> aprobar -> "Firmar y publicar" (acción única,
- * como el reviewer — el admin no tiene el rol reviewer) -> descargar PDF
- * oficial -> reabrir y confirmar que el snapshot persistido es inmutable.
+ * flow covered (updated to simplified UX): login -> admin ->
+ * create letterhead (immediately redirects to editor) -> upload logo via
+ * setInputFiles() -> "save changes" (create+active atomically, without step
+ * of "publish"/"activate" separate) -> check default (menu
+ * secondary) -> associate to 2 templates -> new report -> confirm
+ * V2-from-start with "letterhead" selector -> write clinical text
+ * -> change letterhead -> confirm that the text was not altered, only the
+ * branding -> save -> approve -> "sign and publish" (action single,
+ * as the reviewer — the admin does not have the reviewer role) -> download PDF
+ * official -> reopen and confirm that the persisted snapshot is immutable.
  *
  * Secondary fixture setup (second template/study type, the order itself)
  * is done via direct API calls for speed — the same backend endpoints
  * already covered by the HTTP integration suite — so this spec's browser
- * time is spent on the parts that are actually new/risky: la UI de
- * membretes, el selector "Membrete" del editor, y el flujo de firma/PDF de
- * una sola acción.
+ * time is spent on the parts that are actually new/risky: the UI
+ * Letterheads, the editor's letterhead selector, and the signature/PDF flow
+ * single action.
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import path from "path";
@@ -55,7 +55,7 @@ async function apiJson<T>(
     return (await res.json()) as T;
 }
 
-test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () => {
+test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", () => {
     test("full flow: create, upload logo, publish, associate, report editor, save, PDF", async ({
         page,
         request,
@@ -128,7 +128,7 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
             { token }
         );
 
-        // A second clinical template, to prove a membrete can be associated
+        // A second clinical template, to prove a letterhead can be associated
         // to more than one template (step 8 of the requested flow).
         const secondTemplate = await apiJson<{ id: string }>(request, "POST", "/api/v1/reports/templates/", {
             data: {
@@ -160,22 +160,22 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
                 branch_id: registration.branch_id,
                 patient_id: patient.id,
                 study_type_id: studyType.id,
-                samples: [{ sample_code: `E2E-S-${suffix}`, sample_type: "Bloque", collected_at: "2026-08-01", received_at: "2026-08-01" }],
+                samples: [{ sample_code: `E2E-S-${suffix}`, sample_type: "Block", collected_at: "2026-08-01", received_at: "2026-08-01" }],
             },
             token,
         });
 
-        // ---- Real UI: login ----
+        // ---- real UI: login ----
         await page.goto("/");
         await page.getByRole("textbox", { name: "Usuario o email" }).fill(adminEmail);
         await page.getByRole("textbox", { name: "Contraseña" }).fill(adminPassword);
         await page.getByRole("button", { name: "Iniciar Sesión" }).click();
         await expect(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 
-        // ---- Real UI: create membrete — segunda remediación post-Fase 2
-        // (UX). "Nuevo membrete" crea la identidad y redirige de inmediato
-        // al editor visual; no hay paso "Versiones"/"Publicar versión"/
-        // "Activar" separado en el flujo normal. ----
+        // ---- real UI: create letterhead — Second post-Phase 2 remediation
+        // (UX). "new letterhead" creates the identity and redirects immediately
+        // to visual editor; there is no "Versions"/"publish version"/ step
+        // "activate" separated in the normal flow. ----
         await page.goto("/config/report-letterheads");
         await page.getByRole("button", { name: "Nuevo membrete" }).click();
         await page.getByLabel("Nombre").fill(`Membrete E2E ${suffix}`);
@@ -184,13 +184,13 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
             .toBeVisible({ timeout: 10_000 });
 
         // The real Ant Design file input, driven with a real File via
-        // setInputFiles(). Tercera remediación: seleccionar el archivo lo
-        // sube de inmediato — ya no hay un segundo botón "Subir logo".
+        // setInputFiles(). Third remedy: select the file
+        // uploads immediately — there is no longer a second "upload logo" button.
         const logoPath = path.join(__dirname, "fixtures", "e2e-logo.png");
         await page.locator('input[type="file"]').nth(0).setInputFiles(logoPath);
         await expect(page.getByAltText("Logo", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
-        // Logo de PIE — su propio input, su propia previsualización.
+        // footer logo — your own input, your own preview.
         await page.locator('input[type="file"]').nth(1).setInputFiles(logoPath);
         await expect(page.getByAltText("Logo de pie", { exact: true })).toBeVisible({ timeout: 10_000 });
 
@@ -199,21 +199,21 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         const saveModal = page.getByRole("dialog");
         await expect(saveModal.getByText("Guardar cambios del membrete")).toBeVisible();
         await saveModal.getByRole("button", { name: "Guardar", exact: true }).click();
-        // No paso de "Activar" — segunda remediación UX: guardar activa de
-        // inmediato. Confirma que volvimos a la lista sin pasos extra.
+        // No step of "activate" — second UX remediation: save active de
+        // immediate. confirms that we returned to the list without extra steps.
         await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
         await expect(page.getByText(`Membrete E2E ${suffix}`)).toBeVisible({ timeout: 10_000 });
 
-        // ---- Tercera remediación: reabrir el editor y confirmar que AMBOS
-        // logos y la configuración se rehidratan (problemas B y C). Antes
-        // aquí aparecía el logo neutral de Céluma. ----
+        // ---- Third remedy: reopen the editor and confirm that both
+        // logos and configuration are rehydrated (problems B and C). before
+        // here the neutral Céluma logo appeared. ----
         const letterheadRow = page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) });
         await letterheadRow.getByRole("button", { name: "Editar" }).click();
         await expect(page.getByRole("heading", { name: /Editar membrete/ })).toBeVisible({ timeout: 10_000 });
         await expect(page.getByLabel("Nombre institucional")).toHaveValue(`E2E Lab ${suffix}`);
         await expect(page.getByAltText("Logo", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
         await expect(page.getByAltText("Logo de pie", { exact: true })).toBeVisible();
-        // Los dos logos llegan a la previsualización, cada uno en su banda.
+        // The two logos arrive at the preview, each one in their band.
         const bands = await page.evaluate(() => {
             const pageEl = document.querySelector('[style*="8.5in"]');
             if (!pageEl) return [];
@@ -230,16 +230,16 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await page.getByRole("button", { name: "Cancelar" }).click();
         await expect(page).toHaveURL(/\/report-letterheads$/, { timeout: 10_000 });
 
-        // Marcar como predeterminado — ahora vive en el menú secundario "...".
+        // Mark as default — now lives in the secondary "..." menu.
         const row = page.getByRole("row", { name: new RegExp(`Membrete E2E ${suffix}`) });
         await row.getByRole("button", { name: "Más acciones" }).click();
         await page.getByRole("menuitem", { name: "Marcar como predeterminado" }).click();
         await expect(page.getByText("Predeterminado").first()).toBeVisible({ timeout: 10_000 });
 
-        // A second membrete, published+activated via API (setup speed —
+        // A second letterhead, published+activated via API (setup speed —
         // the letterhead-creation UI itself is already fully exercised
         // above for the first one). Needed so the report editor's
-        // "Membrete" selector actually renders — it only appears when 2+
+        // "letterhead" selector actually renders — it only appears when 2+
         // letterhead versions are available to choose from — and so the
         // non-destructive-switch step below has something to switch to.
         const secondLetterhead = await apiJson<{ id: string }>(request, "POST", "/api/v1/report-letterheads/", {
@@ -266,7 +266,7 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
             { token }
         );
 
-        // ---- Real UI: new report shows V2 from the very first paint ----
+        // ---- real UI: new report shows V2 from the very first paint ----
         await page.goto(`/reports/editor?orderId=${order.id}`);
         await expect(page.getByText("Membrete", { exact: true })).toBeVisible({ timeout: 15_000 });
         // The Legacy renderer's frozen letterhead text must never appear —
@@ -274,7 +274,7 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await expect(page.getByText("Dra. Arisbeth Villanueva Pérez.")).toHaveCount(0);
         await expect(page.getByText(`E2E Lab ${suffix}`, { exact: false })).toBeVisible({ timeout: 10_000 });
 
-        // ---- Type clinical content, then switch membrete (bug 3 check) ----
+        // ---- Type clinical content, then switch letterhead (bug 3 check) ----
         const clinicalText = `TEXTO CLINICO E2E ${suffix} - NO DEBE BORRARSE`;
         await page.getByLabel("Nombre del reporte").fill(clinicalText);
         await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
@@ -333,11 +333,12 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await apiJson(request, "POST", `/api/v1/reports/${reportId}/submit`, { token, data: {} });
         await apiJson(request, "POST", `/api/v1/reports/${reportId}/approve`, { token, data: {} });
 
-        // ---- Real UI, as the reviewer (only role with reports:sign) —
-        // segunda remediación post-Fase 2 (UX): "Firmar y publicar" es la
-        // ÚNICA acción en APPROVED — reemplaza "Generar PDF oficial" +
-        // "Firmar y Publicar" separados. Sesión aparte porque el admin
-        // (superuser) no tiene el rol "reviewer" que sign_report exige. ----
+        // ---- real UI, as the reviewer (only role with reports:sign) —
+        // Second post-Phase 2 remediation (UX): "Firmar y publicar" is the
+        // only action in APPROVED — replaces the former separate "Generate
+        // official PDF" + "Sign and publish" buttons. Separate session because
+        // the admin (superuser) does not have the "reviewer" role that
+        // sign_report requires. ----
         const reviewerContext = await page.context().browser()!.newContext();
         const reviewerPage = await reviewerContext.newPage();
         await reviewerPage.goto("/");
@@ -349,18 +350,18 @@ test.describe("Letterhead (membrete) lifecycle — post-Fase-2 remediation", () 
         await reviewerPage.goto(`/reports/${reportId}`);
         await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" })).toBeVisible({ timeout: 15_000 });
         // The persisted snapshot must still show the branding of the
-        // membrete that was active when the report was saved, and the
+        // letterhead that was active when the report was saved, and the
         // clinical text must still be intact.
         await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible();
         await expect(reviewerPage.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
         // Once persisted, the report is locked to its saved letterhead —
-        // the "Membrete" selector must not reappear on an existing report.
+        // the "letterhead" selector must not reappear on an existing report.
         await expect(reviewerPage.getByText("Membrete", { exact: true })).toHaveCount(0);
-        // Cuarta remediación (Observación 1): la impresión local existe otra
-        // vez, pero en APPROVED se ofrece como "Imprimir borrador" — nunca
-        // como "copia local" (ese rótulo se reserva a PUBLISHED/RETRACTED) y
-        // nunca como algo que pueda confundirse con el PDF oficial, que en
-        // este estado todavía no existe.
+        // Fourth remedy (Observation 1): local printing exists another
+        // once, but in APPROVED it is offered as "Print draft" — never
+        // as "local copy" (this label is reserved for PUBLISHED/RETRACTED) y
+        // never as something that could be confused with the official PDF, which in
+        // this state does not yet exist.
         await expect(reviewerPage.getByRole("button", { name: "Imprimir borrador" })).toBeVisible();
         await expect(reviewerPage.getByRole("button", { name: "Imprimir copia local" })).toHaveCount(0);
         await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" })).toHaveCount(0);

@@ -199,7 +199,7 @@ export async function updateSampleAssignees(sampleId: string, assigneeIds: strin
 }
 
 export async function updateSampleLabels(sampleId: string, ownLabelIds: string[]): Promise<SampleDetail> {
-    // ownLabelIds: solo las labels PROPIAS del sample, no incluir las heredadas
+    // ownLabelIds: only labels owned by the sample; do not include inherited labels.
     return await putJSON<{ label_ids: string[] }, SampleDetail>(
         `/v1/laboratory/samples/${sampleId}/labels`,
         { label_ids: ownLabelIds }

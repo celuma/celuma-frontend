@@ -1,5 +1,5 @@
 /**
- * Unit tests for extractUploadedFile — post-Fase-2 remediation, R8/R16.
+ * Unit tests for extractUploadedFile — post-Phase-2 remediation, R8/R16.
  * Covers both shapes it must handle: the raw RcFile stored directly (the
  * pattern used after the Bug 1 fix) and an Ant-managed UploadFile with
  * originFileObj populated (the shape the pre-fix code assumed always

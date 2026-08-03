@@ -43,13 +43,13 @@ const { Text } = Typography;
 const PREDEFINED_BASE_KEYS = Object.keys(DEFAULT_BASE_FIELDS);
 const PREDEFINED_SECTION_KEYS = Object.keys(DEFAULT_SECTIONS);
 
-// Tipos para campos base: solo texto y numérico
+// Types for base fields: text and numeric only.
 const BASE_FIELD_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "text",    label: "Texto" },
     { value: "numeric", label: "Numérico" },
 ];
 
-// Tipos para secciones: todos
+// Types for sections: all.
 const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "text",     label: "Texto" },
     { value: "numeric",  label: "Numérico" },
@@ -130,7 +130,7 @@ function EditableRow({
                 width: "100%",
             }}
         >
-            {/* Grupo izquierdo: checkbox + label */}
+            {/* Left group: checkbox + label */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", maxWidth: "100%" }}>
                 <Checkbox
                     checked={isVisible}
@@ -172,7 +172,7 @@ function EditableRow({
                 )}
             </div>
 
-            {/* Grupo derecho: tipo + tags + botones de acción */}
+            {/* Right group: type + tags + action buttons */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                 {isPredefined && type && (
                     <span style={FIELD_TYPE_CHIP_STYLE}>
@@ -384,12 +384,12 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
 
-    // ---- Lista ----
+    // ---- List ----
     const [loadingList, setLoadingList] = useState(false);
     const [templates, setTemplates] = useState<ReportTemplateListItem[]>([]);
     const [templateSearch, setTemplateSearch] = useState("");
 
-    // ---- Panel derecho ----
+    // ---- Right panel ----
     const [editingId, setEditingId] = useState<string | null>(null);
     const [panelVisible, setPanelVisible] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
@@ -423,10 +423,10 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     } | null>(null);
     const [defaultDraftValue, setDefaultDraftValue] = useState<string>("");
 
-    // ---- Membrete predeterminado (segunda remediación post-Fase 2, UX) ----
-    // Vive dentro del formulario normal de la plantilla — un simple <Select>
-    // de membretes lógicos (nunca versiones). Selecciona
-    // ReportTemplate.preferred_letterhead_id; nunca edita presentación.
+    // ---- Default letterhead (second post-Phase 2 remediation, UX) ----
+    // Lives inside the template's standard form — a simple <Select> of
+    // logical letterheads (never versions). It selects
+    // ReportTemplate.preferred_letterhead_id and never edits presentation.
     const [letterheadOptions, setLetterheadOptions] = useState<{ value: string; label: string }[]>([]);
     const [letterheadOptionsLoading, setLetterheadOptionsLoading] = useState(false);
     const [selectedLetterheadId, setSelectedLetterheadId] = useState<string | undefined>(undefined);
@@ -479,9 +479,9 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
     }, []);
 
-    // Segunda remediación post-Fase 2 (UX): membretes lógicos disponibles
-    // para el selector "Membrete predeterminado" — se cargan una vez, no
-    // dependen de qué plantilla se esté editando.
+    // Second post-Phase 2 remediation (UX): logical letterheads available to
+    // the "Default letterhead" selector — loaded once and independent of the
+    // template being edited.
     const loadLetterheadOptions = async () => {
         setLetterheadOptionsLoading(true);
         try {
@@ -884,7 +884,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         >
                 <Spin spinning={loadingDetail}>
                     <Form form={form} layout="vertical">
-                        {/* ---- Nombre / descripción / estado ---- */}
+                        {/* ---- Name / description / status ---- */}
                         <Form.Item
                             name="name"
                             rules={[{ required: true, message: "El nombre es requerido" }]}
@@ -914,7 +914,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Campos base ---- */}
+                        {/* ---- Base fields ---- */}
                         <SectionTitle
                             extra={
                                 <CelumaButton
@@ -945,7 +945,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Secciones ---- */}
+                        {/* ---- Sections ---- */}
                         <SectionTitle
                             extra={
                                 <CelumaButton
@@ -976,7 +976,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Firma (T7) ---- */}
+                        {/* ---- Signature (T7) ---- */}
                         <SectionTitle icon={<SafetyCertificateOutlined />}>Firma</SectionTitle>
                         <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
                             Estos valores se usan como predeterminados al crear nuevos informes con esta plantilla.
@@ -1020,7 +1020,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             <>
                                 <Divider />
 
-                                {/* ---- Membrete predeterminado (segunda remediación UX) ---- */}
+                                {/* ---- Default letterhead (second UX remediation) ---- */}
                                 <SectionTitle icon={<BgColorsOutlined />}>Membrete predeterminado</SectionTitle>
                                 <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
                                     Se preseleccionará al crear un reporte con esta plantilla. Si no eliges
@@ -1044,7 +1044,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Acciones ---- */}
+                        {/* ---- Actions ---- */}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                             <CelumaButton size="small" onClick={closePanel} icon={<CloseOutlined />}>
                                 Cancelar
@@ -1090,7 +1090,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </div>
             </div>
 
-            {/* ---- Modal: crear campo base custom ---- */}
+            {/* ---- Modal: create custom base field ---- */}
             <CelumaModal
                 title="Crear campo"
                 open={baseFieldModalOpen}
@@ -1125,7 +1125,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </Form>
             </CelumaModal>
 
-            {/* ---- Modal: crear sección custom ---- */}
+            {/* ---- Modal: create custom section ---- */}
             <CelumaModal
                 title="Crear sección"
                 open={sectionModalOpen}
@@ -1160,7 +1160,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </Form>
             </CelumaModal>
 
-            {/* ---- Modal: valor / contenido por defecto ---- */}
+            {/* ---- Modal: default value / content ---- */}
             <CelumaModal
                 title={
                     defaultValueModal

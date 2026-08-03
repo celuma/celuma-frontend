@@ -1,12 +1,12 @@
 /**
  * Neutral Céluma defaults for optional fields of a valid V2 rendering
- * snapshot (Céluma 1.3 Fase 2, Bloque C, Historia C1/C3). These are UI
+ * snapshot (Céluma 1.3 Phase 2, Block C, Story C1/C3). These are UI
  * fallbacks applied ONLY to `null`/absent optional fields inside an
  * otherwise-valid `ReportRenderingSnapshotV2` — never used to reinterpret an
  * invalid snapshot (see report_snapshot_validation.ts, which rejects those
  * before this module is ever consulted).
  *
- * Deliberately contains no tenant-embajador data: no physician names, no
+ * Deliberately contains no ambassador-tenant data: no physician names, no
  * professional licenses, no addresses, no phone numbers, no client emails,
  * and none of the legacy letterhead ink color or bitmap asset (see
  * legacy_letterhead_config.ts for those — this module must never reference

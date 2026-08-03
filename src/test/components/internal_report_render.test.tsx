@@ -1,5 +1,5 @@
 /**
- * Tests for InternalReportRender (Céluma 1.3 Fase 2, Bloque E, Historia
+ * Tests for InternalReportRender (Céluma 1.3 Phase 2, Block E, Story
  * E3/E16): the chrome-free route the backend's headless Chromium navigates
  * to. Covers the token-from-fragment contract, the error state when it's
  * missing, and the `data-report-ready` readiness signal on success.

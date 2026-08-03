@@ -4,19 +4,19 @@ import CelumaButton from "./button";
 type Props = {
     /** Called when the user cancels (closes the form without saving). */
     onCancel: () => void;
-    /** Label for the primary submit button (e.g. "Crear", "Guardar cambios"). */
+    /** Label for the primary submit button (e.g. "Create", "Save changes"). */
     submitLabel: string;
     /** Submit in-flight — disables both buttons and spins the primary. */
     loading?: boolean;
     /** Disable only the submit button (e.g. nothing selected yet). */
     submitDisabled?: boolean;
-    /** Hide the "* obligatorios" note (for forms with no required fields). */
+    /** Hide the "* required" note (for forms with no required fields). */
     hideRequiredNote?: boolean;
 };
 
 /**
  * ModalFormFooter — the standard footer for Céluma create/edit form modals:
- * a left-aligned "campos obligatorios" note and a right-aligned Cancelar
+ * a left-aligned "required fields" note and a right-aligned Cancel
  * (outline/danger) + primary submit pair. Rendered inside the form's `<form>`
  * so the primary button submits it. Shared so every config form reads the same.
  */

@@ -16,6 +16,9 @@ import {
     submitReport, approveReport, requestChanges, signAndPublishReport,
     getReportTemplateVersion,
     getOfficialPdfDownloadUrl,
+    OfficialPdfDownloadError,
+    triggerBrowserDownload,
+    officialPdfFilename,
     getStudyTypeReportDefaults,
 } from "../../services/report_service";
 import {
@@ -117,10 +120,10 @@ function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
 
-/** Tercera remediación post-Fase 2: mensajes del estado bloqueado, uno por
- *  motivo devuelto por `report-defaults`. Cada uno dice qué falta y dónde
- *  arreglarlo — nunca se monta Legacy como sustituto (ver
- *  deterministic-letterhead-resolution-contract.md, "Nunca Legacy"). */
+/** Third post-Phase 2 remediation: blocked-state messages, one per reason
+ *  returned by `report-defaults`. Each states what is missing and where to
+ *  fix it—Legacy is never rendered as a substitute (see
+ *  deterministic-letterhead-resolution-contract.md, "Never Legacy"). */
 const V2_BLOCKED_COPY: Record<V2BlockedReason, { title: string; admin: string; user: string }> = {
     NO_TEMPLATE: {
         title: "Este tipo de estudio no tiene plantilla de reporte",
@@ -144,7 +147,7 @@ const V2_BLOCKED_COPY: Record<V2BlockedReason, { title: string; admin: string; u
     },
 };
 
-/** Post-Fase-2 remediation: one selectable "Membrete" option — the ACTIVE
+/** Post-Phase-2 remediation: one selectable "Membrete" option — the ACTIVE
  * version of a shared, tenant-owned letterhead. `letterheadId` is carried
  * alongside `value` (the version id) because fetching a version's full
  * configuration requires both (GET .../report-letterheads/{letterheadId}/versions/{versionId}). */
@@ -254,7 +257,7 @@ const ReportEditor: React.FC = () => {
     // Study type name (for display)
     const [studyTypeName, setStudyTypeName] = useState<string>("");
 
-    // Céluma 1.3 Fase 2, Bloque D, Historia D10 / post-Fase-2 remediation:
+    // Céluma 1.3 Phase 2, Block D, Story D10 / post-Phase 2 remediation:
     // resolved (never user-selected) clinical template + its single ACTIVE
     // version, for new V2 reports only. Only ever populated when creating a
     // new report (prefilledOrderId branch) — never touched when editing an
@@ -264,7 +267,7 @@ const ReportEditor: React.FC = () => {
     // control to change it here (see report-editor-letterhead-selection-contract.md).
     const [resolvedTemplateId, setResolvedTemplateId] = useState<string | null>(null);
     const [resolvedTemplateVersionId, setResolvedTemplateVersionId] = useState<string | null>(null);
-    // Post-Fase-2 remediation: the "Membrete" selector — this is the only
+    // Post-Phase-2 remediation: the "Membrete" selector — this is the only
     // thing the user may change before first save. Switching it never
     // touches `template`/`baseValues`/`sectionContent` (see
     // handleChangeLetterheadVersion below).
@@ -274,26 +277,32 @@ const ReportEditor: React.FC = () => {
     const [availableLetterheadVersions, setAvailableLetterheadVersions] = useState<LetterheadVersionOption[]>([]);
     // True when reports_v2_enabled is on for this tenant but the resolved
     // template has no ACTIVE version to select — creation must block rather
-    // than silently falling back to Legacy (Céluma1.3-Fase2.md §D10).
+    // than silently falling back to Legacy (Céluma1.3-Phase2.md §D10).
     const [v2ConfigBlocked, setV2ConfigBlocked] = useState(false);
-    // Tercera remediación post-Fase 2: el motivo EXACTO del bloqueo, tal
-    // como lo devuelve `report-defaults`, para poder decir qué falta y a
-    // dónde ir a arreglarlo en vez de un mensaje genérico.
+    // Third post-Phase 2 remediation: the EXACT blocking reason as returned
+    // by `report-defaults`, so the UI can say what is missing and where to
+    // fix it instead of showing a generic message.
     const [v2BlockedReason, setV2BlockedReason] = useState<V2BlockedReason | null>(null);
     const [v2BlockedDetail, setV2BlockedDetail] = useState<string | null>(null);
-    // De dónde salió el membrete resuelto — se muestra en modo
-    // administrativo (§6.3 del brief), traducido y sin ids técnicos.
+    // Where the resolved letterhead originated—shown in administrative mode
+    // (§6.3 of the brief), translated and without technical IDs.
     const [selectedLetterheadName, setSelectedLetterheadName] = useState<string | null>(null);
     const [letterheadResolutionSource, setLetterheadResolutionSource] =
         useState<LetterheadResolutionSource | null>(null);
-    // URLs efímeras de los logos del membrete resuelto. Para un reporte
-    // NUEVO no hay `envelope` del que heredarlas, así que sin esto el
-    // preview se quedaba sin `resolved_resources` y el renderer caía al
-    // logo neutral de Céluma aunque el membrete tuviera logos configurados
-    // — detectado en la verificación manual en navegador de esta
-    // remediación, no en las pruebas.
+    // Ephemeral URLs for resolved letterhead logos. A NEW report has no
+    // `envelope` to inherit them from, so without this the preview lacked
+    // `resolved_resources` and the renderer fell back to Céluma's neutral
+    // logo even when the letterhead configured logos—found during this
+    // remediation's manual browser verification, not in tests.
     const [selectedLetterheadResources, setSelectedLetterheadResources] =
         useState<LetterheadResolvedResources | null>(null);
+    // Fifth post-Phase 2 remediation (Observation A): true as soon as the
+    // user chooses a letterhead DIFFERENT from the one saved on the report.
+    // It simultaneously makes the preview use the new presentation, marks
+    // the form modified (§4.4), and warns before leaving with unsaved changes.
+    // It is cleared on save.
+    const [letterheadDirty, setLetterheadDirty] = useState(false);
+    const [letterheadChanging, setLetterheadChanging] = useState(false);
 
     // Modals
     const [isApproveModalVisible, setIsApproveModalVisible] = useState(false);
@@ -314,23 +323,41 @@ const ReportEditor: React.FC = () => {
     const leftColumnRef = useRef<HTMLDivElement>(null);
     const previewColumnRef = useRef<HTMLDivElement>(null);
 
-    // Segunda remediación post-Fase 2 (UX): "Firmar y publicar" es la única
-    // acción en estado APPROVED — orquesta generación+firma+publicación en
-    // una sola llamada (POST .../sign-and-publish). Reemplaza los dos
-    // hooks/botones separados que existían antes (usePdfGeneration +
-    // handleSign).
+    // Second post-Phase 2 remediation (UX): "Sign and publish" is the only
+    // APPROVED-state action—it orchestrates generation, signing, and
+    // publication in one call (POST .../sign-and-publish), replacing the
+    // former separate hooks/buttons (usePdfGeneration + handleSign).
     const [isSigningAndPublishing, setIsSigningAndPublishing] = useState(false);
+    // Fifth post-Phase 2 remediation (§9.1): official PDF version number as
+    // returned by `sign-and-publish`. Avoids making the UI derive it from a
+    // refreshed `/full`, as it did previously, which risked requesting the
+    // wrong version.
+    const [officialPdfVersionNo, setOfficialPdfVersionNo] = useState<number | null>(null);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-    // Cuarta remediación post-Fase 2 (Observación 1): la impresión local
-    // vuelve como acción SECUNDARIA y explícitamente distinta del PDF
-    // oficial. Reutiliza el renderer ya montado en la vista previa
-    // (`previewPagesRef.getPages()`) — no hay un segundo renderer, ni se
-    // toca ningún endpoint del PDF oficial. Ver local-print-contract.md.
+    // Fourth post-Phase 2 remediation (Observation 1): local printing returns
+    // as a SECONDARY action explicitly distinct from the official PDF. It
+    // reuses the renderer mounted in the preview (`previewPagesRef.getPages()`);
+    // there is no second renderer and no official-PDF endpoint is touched. See
+    // local-print-contract.md.
     const { printLocalCopy } = useLocalPrint();
 
     // Read-only when not DRAFT
     const isReadOnly = useMemo(
         () => Boolean(envelope?.status && envelope.status !== "DRAFT"),
+        [envelope?.status]
+    );
+
+    // Fifth post-Phase 2 remediation (Observation A / §4.1). The letterhead
+    // immutability boundary. It was previously `!reportId`—"the report has no
+    // ID yet"—which froze the letterhead on first save, long before business
+    // rules made the document immutable. It now matches the rest of the
+    // editor: it can change while the report remains DRAFT (or does not yet
+    // exist) and is fixed upon submission for review. The backend applies the
+    // same rule and returns 409 for payload attempts. See
+    // letterhead-freeze-at-review-contract.md.
+    const canChangeLetterhead = useMemo(
+        () => !envelope?.status || envelope.status === "DRAFT",
         [envelope?.status]
     );
 
@@ -526,7 +553,7 @@ const ReportEditor: React.FC = () => {
                                 const tpl = await getReportTemplateById(templateId);
                                 tmplRaw = tpl.template_json;
 
-                                // Céluma 1.3 Fase 2, Bloque D, Historia D10: with
+                                // Céluma 1.3 Phase 2, Block D, Story D10: with
                                 // reports_v2_enabled on, prefer the template's
                                 // ACTIVE version — its frozen `configuration.template`
                                 // is what VersionedReportRendererV2 actually renders
@@ -535,29 +562,27 @@ const ReportEditor: React.FC = () => {
                                 // ReportTemplate.template_json. No ACTIVE version means
                                 // V2 creation is blocked below, never silently Legacy.
                                 //
-                                // Post-Fase-2 remediation: also resolves the membrete
+                                // Post-Phase 2 remediation: also resolves the letterhead
                                 // (letterhead) to use for the live preview — this is
                                 // the actual fix for "preview shows Legacy initially"
                                 // (bug 2): previously nothing here ever set
                                 // `selectedLetterheadPresentation`, so buildEnvelope()
                                 // had no rendering_snapshot to seed before first save.
                                 //
-                                // Tercera remediación post-Fase 2 — problema F: aquí
-                                // había DOS caminos que terminaban montando Legacy sin
-                                // decir nada. (1) Un `catch {}` que se tragaba cualquier
-                                // fallo de red y "seguía como Legacy". (2) La cadena
-                                // listar-membretes -> listar-versiones -> leer-versión
-                                // para reconstruir la `presentation`: si el membrete
-                                // resuelto no aparecía en `options` (por ejemplo por
-                                // estar desactivado, o porque una de esas N+1 llamadas
-                                // fallaba), `selectedLetterheadPresentation` se quedaba
-                                // en null, buildEnvelope() no producía
-                                // `rendering_snapshot` y el resolver elegía Legacy.
+                                // Third post-Phase 2 remediation—issue F: two paths
+                                // rendered Legacy silently. (1) A `catch {}` swallowed
+                                // any network failure and "continued as Legacy". (2) The
+                                // list-letterheads -> list-versions -> read-version chain
+                                // reconstructed `presentation`: if the resolved letterhead
+                                // did not appear in `options` (for example, deactivated or
+                                // due to a failed N+1 request), selectedLetterheadPresentation
+                                // remained null, buildEnvelope() produced no
+                                // `rendering_snapshot`, and the resolver chose Legacy.
                                 //
-                                // Ahora `report-defaults` devuelve la `presentation` ya
-                                // resuelta en una sola llamada, y cualquier fallo lleva
-                                // a un estado BLOQUEADO explícito. Con
-                                // reports_v2_enabled=true nunca se monta Legacy.
+                                // `report-defaults` now returns the resolved
+                                // `presentation` in one call, and every failure leads to
+                                // an explicit BLOCKED state. With reports_v2_enabled=true,
+                                // Legacy is never rendered.
                                 let tenantV2Enabled = false;
                                 try {
                                     const tenantInfo = await getJSON<{ reports_v2_enabled?: boolean }>(
@@ -565,11 +590,11 @@ const ReportEditor: React.FC = () => {
                                     );
                                     tenantV2Enabled = !!tenantInfo.reports_v2_enabled;
                                 } catch {
-                                    // No se pudo leer el flag del tenant: es un fallo de
-                                    // red, no evidencia de que el tenant sea Legacy.
-                                    // Se deja `tenantV2Enabled=false` y el editor sigue
-                                    // el camino Legacy — el mismo comportamiento que un
-                                    // tenant sin V2, sin inventar un estado V2 a medias.
+                                    // The tenant flag could not be read: this is a network
+                                    // failure, not evidence that the tenant is Legacy.
+                                    // Keep `tenantV2Enabled=false` and follow the Legacy
+                                    // path—the same behavior as a tenant without V2,
+                                    // without inventing a partial V2 state.
                                 }
 
                                 if (tenantV2Enabled) {
@@ -594,9 +619,9 @@ const ReportEditor: React.FC = () => {
                                             if (cfg.template) tmplRaw = cfg.template;
                                             setResolvedTemplateVersionId(defaults.active_template_version_id);
 
-                                            // La presentación resuelta llega ya en la
-                                            // misma respuesta — sin encadenar llamadas
-                                            // que puedan fallar a medias.
+                                            // The resolved presentation arrives in the same
+                                            // response—without chaining calls that can
+                                            // partially fail.
                                             setSelectedLetterheadVersionId(defaults.letterhead_version_id);
                                             setSelectedLetterheadPresentation(defaults.letterhead_presentation);
                                             setSelectedLetterheadName(defaults.letterhead_name ?? null);
@@ -607,10 +632,10 @@ const ReportEditor: React.FC = () => {
                                                 defaults.letterhead_resolved_resources ?? null
                                             );
 
-                                            // El selector de membrete es secundario: si
-                                            // su carga falla, el usuario simplemente no
-                                            // puede cambiar de membrete — la creación V2
-                                            // con el resuelto sigue funcionando.
+                                            // The letterhead selector is secondary: if it
+                                            // fails to load, the user simply cannot change
+                                            // letterheads—V2 creation with the resolved one
+                                            // still works.
                                             try {
                                                 const { letterheads } = await listReportLetterheads();
                                                 const options: LetterheadVersionOption[] = [];
@@ -630,9 +655,9 @@ const ReportEditor: React.FC = () => {
                                             } catch { /* selector opcional */ }
                                         }
                                     } catch {
-                                        // Con V2 activo, un fallo resolviendo la
-                                        // configuración es un estado bloqueado, nunca
-                                        // una excusa para montar Legacy.
+                                        // With V2 enabled, a configuration-resolution
+                                        // failure is a blocked state, never an excuse to
+                                        // render Legacy.
                                         setV2BlockedReason("NO_LETTERHEAD");
                                         setV2BlockedDetail(
                                             "No se pudo consultar la configuración de reportes V2. " +
@@ -677,6 +702,64 @@ const ReportEditor: React.FC = () => {
             }
         })();
     }, [reportId, prefilledOrderId, session.tenantId]);
+
+    // Fifth post-Phase 2 remediation (Observation A). The bootstrap above
+    // loads letterheads only in the NEW-report (`prefilledOrderId`) branch.
+    // A reopened saved report never loaded them, so even if the selector
+    // appeared it had nothing to offer or show as the current letterhead name.
+    // This effect covers that branch.
+    //
+    // It also runs in non-editable statuses: §4.5 requires displaying the
+    // fixed letterhead as a read-only value, which requires its logical name
+    // (never its version number, §4.3).
+    useEffect(() => {
+        if (!reportId || loadingData) return;
+        if (envelope?.schema_version !== 2) return;  // Legacy has no letterhead.
+        let cancelled = false;
+        (async () => {
+            try {
+                const { letterheads } = await listReportLetterheads();
+                const options: LetterheadVersionOption[] = [];
+                for (const lh of letterheads) {
+                    const { versions: lhVersions } = await listReportLetterheadVersions(lh.id);
+                    const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
+                    if (activeLh) {
+                        options.push({ value: activeLh.id, label: lh.name, letterheadId: lh.id });
+                    }
+                }
+                if (cancelled) return;
+                setAvailableLetterheadVersions(options);
+                const currentId = envelope?.letterhead_version_id ?? null;
+                if (currentId) {
+                    setSelectedLetterheadVersionId(currentId);
+                    const current = options.find((o) => o.value === currentId);
+                    // If the current letterhead is no longer active (it was
+                    // deactivated or its version was archived), preserve the
+                    // report unchanged and merely lose its display name:
+                    // historical snapshots are never rewritten.
+                    if (current) setSelectedLetterheadName(current.label);
+                }
+            } catch {
+                // The selector is secondary: if it fails to load, the report
+                // remains fully editable with its current letterhead.
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [reportId, loadingData, envelope?.schema_version, envelope?.letterhead_version_id]);
+
+    // Fifth remediation (§4.4): warn before leaving with an unsaved letterhead
+    // change. The editor had no dirty-state tracking; this covers exactly the
+    // case introduced by this remediation without attempting to track the
+    // entire form.
+    useEffect(() => {
+        if (!letterheadDirty) return;
+        const handler = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", handler);
+        return () => window.removeEventListener("beforeunload", handler);
+    }, [letterheadDirty]);
 
     // User role fetched via useUserProfile hook above (no separate effect needed)
 
@@ -748,7 +831,7 @@ const ReportEditor: React.FC = () => {
             ...(preservedSignatureUrl ? { signature_url: preservedSignatureUrl } : {}),
         };
 
-        // Céluma 1.3 Fase 2, Bloque C, Historia C9: this function rebuilds
+        // Céluma 1.3 Phase 2, Block C, Story C9: this function rebuilds
         // `report` from scratch from the template definition, which has no
         // notion of `schema_version`/`rendering_snapshot` — those live only
         // on the previously loaded V2 envelope. Without this, saving edited
@@ -760,11 +843,11 @@ const ReportEditor: React.FC = () => {
         // round-trip, and keeps this payload honest about what the report
         // actually is.
         //
-        // Post-Fase-2 remediation, bug 2 fix: for a brand-new report,
+        // Post-Phase-2 remediation, bug 2 fix: for a brand-new report,
         // `envelope` is null, so the block above never had anything to
         // copy — schema_version/rendering_snapshot stayed undefined and
         // the preview always resolved to Legacy, even after a V2 template
-        // + membrete had already been resolved by the bootstrap effect.
+        // + letterhead had already been resolved by the bootstrap effect.
         // This is the missing fallback: seed both directly from the
         // resolved/selected bootstrap state whenever there is no envelope
         // yet to inherit from.
@@ -776,7 +859,20 @@ const ReportEditor: React.FC = () => {
             report.schema_version = 2;
         }
         if (existingRenderingSnapshot !== undefined) {
-            report.rendering_snapshot = existingRenderingSnapshot;
+            // Fifth post-Phase 2 remediation: if the user just changed the
+            // letterhead of an already saved DRAFT, the preview must reflect
+            // it NOW, without waiting for saving. Replace only `presentation`
+            // on the frozen snapshot—`template` and clinical content remain
+            // byte-for-byte unchanged, precisely the §3.3 invariant. This is
+            // preview-only: the backend authoritatively resolves presentation
+            // from `letterhead_version_id` and never trusts the client snapshot.
+            report.rendering_snapshot =
+                letterheadDirty && selectedLetterheadPresentation
+                    ? {
+                        ...(existingRenderingSnapshot as Record<string, unknown>),
+                        presentation: selectedLetterheadPresentation,
+                    }
+                    : existingRenderingSnapshot;
         } else if (resolvedTemplateVersionId && selectedLetterheadPresentation) {
             report.rendering_snapshot = {
                 schema_version: 2,
@@ -803,25 +899,39 @@ const ReportEditor: React.FC = () => {
             // through only for the live preview's benefit, never trusted by
             // the backend as an instruction to change these. For a brand-new
             // report, `envelope` is still null, so `resolvedTemplateVersionId`/
-            // `selectedLetterheadVersionId` (Bloque D Historia D10 / post-Fase-2
+            // `selectedLetterheadVersionId` (Block D Story D10 / post-Phase-2
             // remediation) are what actually reach the backend; once a report
             // exists, its own template_version_id/letterhead_version_id always
-            // win and are never reconsidered (D10: "no reconsultar la versión activa").
+            // win and are never reconsidered (D10: "do not re-query the active version").
             schema_version: envelope?.schema_version ?? (resolvedTemplateVersionId ? 2 : undefined),
             template_version_id: envelope?.template_version_id ?? resolvedTemplateVersionId ?? undefined,
-            letterhead_version_id: envelope?.letterhead_version_id ?? selectedLetterheadVersionId ?? undefined,
+            // Fifth post-Phase 2 remediation (Observation A): the user's
+            // selection wins over the saved value. The order was reversed, so
+            // a persisted report's envelope always reinstated its own
+            // letterhead and the backend never saw the new choice. For a
+            // non-DRAFT report, selectedLetterheadVersionId is initialized
+            // from the envelope and the selector is disabled, so this cannot
+            // bypass the freeze—the backend also rejects it with 409.
+            letterhead_version_id: selectedLetterheadVersionId ?? envelope?.letterhead_version_id ?? undefined,
             generated_by_renderer_version: envelope?.generated_by_renderer_version,
-            // Un reporte ya guardado trae sus propias URLs resueltas por el
-            // backend. Uno nuevo todavía no existe, así que se usan las del
-            // membrete resuelto/seleccionado — si no, el preview renderiza
-            // el logo neutral aunque el membrete tenga logos configurados.
-            resolved_resources: envelope?.resolved_resources ?? selectedLetterheadResources ?? undefined,
+            // A saved report has its own backend-resolved URLs. A new report
+            // does not yet exist, so use those of the resolved/selected
+            // letterhead—otherwise the preview renders the neutral logo even
+            // when the letterhead configures logos.
+            //
+            // Fifth remediation: after an unsaved letterhead change, envelope
+            // URLs belong to the PREVIOUS letterhead; the preview must use the
+            // new ones (including no-logo cases, which is why `letterheadDirty`
+            // decides instead of a chained `??`).
+            resolved_resources: letterheadDirty
+                ? (selectedLetterheadResources ?? undefined)
+                : (envelope?.resolved_resources ?? selectedLetterheadResources ?? undefined),
         };
     }, [
         template, fullData, customBaseFields, baseValues, sectionContent, envelope, session,
         reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
         resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
-        selectedLetterheadResources,
+        selectedLetterheadResources, letterheadDirty,
     ]);
 
     // Live preview envelope
@@ -832,24 +942,29 @@ const ReportEditor: React.FC = () => {
     }, [
         template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope,
         showSignatureSection, requireDigitalSignature,
-        // Post-Fase-2 remediation: without these, switching the "Membrete"
+        // Post-Phase-2 remediation: without these, switching the "Membrete"
         // selector updated selectedLetterheadPresentation but this memo
         // never recomputed, so the preview kept showing the old branding
         // (a real bug caught during live verification, not just a fix on
         // paper — see remediation-local-validation-report.md).
         resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
-        selectedLetterheadResources,
+        selectedLetterheadResources, letterheadDirty,
     ]);
 
-    // Post-Fase-2 remediation (bug 3 fix): the "Membrete" selector — only
-    // available while creating a brand-new report (D10). Unlike the old
-    // "Versión de plantilla" selector this replaces, this NEVER touches
-    // `template`/`baseValues`/`sectionContent`: a membrete change is a pure
+    // Post-Phase 2 remediation (bug 3 fix): the "Letterhead" selector. Unlike
+    // the old "Template version" selector it replaces, this NEVER touches
+    // `template`/`baseValues`/`sectionContent`: a letterhead change is a pure
     // presentation swap. Only `selectedLetterheadPresentation` changes,
     // which flows into `buildEnvelope()`'s `rendering_snapshot.presentation`
     // and re-renders the preview immediately — clinical content already
     // typed by the user is never rebuilt or reset.
+    //
+    // Fifth post-Phase 2 remediation: this is no longer limited to a new
+    // report. It still saves nothing on its own (§4.4: "do not save
+    // automatically"): it marks the form modified and the change is sent with
+    // visible content on the next "Save".
     const handleChangeLetterheadVersion = async (option: LetterheadVersionOption) => {
+        setLetterheadChanging(true);
         try {
             const versionDetail = await getReportLetterheadVersion(option.letterheadId, option.value);
             setSelectedLetterheadVersionId(option.value);
@@ -857,8 +972,11 @@ const ReportEditor: React.FC = () => {
             setSelectedLetterheadName(option.label);
             setLetterheadResolutionSource("EXPLICIT");
             setSelectedLetterheadResources(versionDetail.resolved_resources ?? null);
+            setLetterheadDirty(option.value !== (envelope?.letterhead_version_id ?? null));
         } catch {
             message.error("Error al cargar el membrete seleccionado");
+        } finally {
+            setLetterheadChanging(false);
         }
     };
 
@@ -878,6 +996,9 @@ const ReportEditor: React.FC = () => {
                 saved = { ...env, status: "DRAFT" as ReportStatus };
                 setEnvelope(saved);
             }
+            // Fifth remediation: the letterhead change is persisted, so it is
+            // no longer pending (and the "leave without saving" warning ends).
+            setLetterheadDirty(false);
             message.success("Reporte guardado");
             if (saved.order_id) navigate(`/orders/${saved.order_id}`);
         } catch (err) {
@@ -929,23 +1050,62 @@ const ReportEditor: React.FC = () => {
         });
     };
 
+    /**
+     * Fifth post-Phase 2 remediation (Observation B, §9.2/§9.3).
+     *
+     * Two changes from the previous version:
+     *
+     *  1. The requested version is the one announced by `sign-and-publish`
+     *     (`officialPdfVersionNo`), not `envelope.version_no` derived from a
+     *     refreshed `/full`. See sign-and-publish-response-contract.md.
+     *
+     *  2. Download uses a synthetic `<a download>` instead of
+     *     `window.open(url, "_blank")`. `window.open` ran AFTER awaiting the
+     *     presigned URL promise, so Safari no longer associated it with the
+     *     user gesture and treated it as a popup: empty tab or silent block.
+     *     See safari-pdf-download-contract.md.
+     *
+     * Errors are distinguished instead of displayed raw: this remediation's
+     * actual failure was a 403 that the UI presented using the backend's
+     * `detail` without identifying the problem type.
+     */
     const handleDownloadOfficialPdf = async () => {
-        if (!envelope?.id || envelope.version_no == null) return;
+        const versionNo = officialPdfVersionNo ?? envelope?.version_no ?? null;
+        if (!envelope?.id || versionNo == null) return;
+        setIsDownloadingPdf(true);
         try {
-            const { pdf_url } = await getOfficialPdfDownloadUrl(envelope.id, envelope.version_no);
-            window.open(pdf_url, "_blank");
+            const { pdf_url, version_no } = await getOfficialPdfDownloadUrl(envelope.id, versionNo);
+            triggerBrowserDownload(
+                pdf_url,
+                officialPdfFilename(fullData?.order?.order_code, version_no ?? versionNo)
+            );
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al descargar el PDF oficial");
+            if (err instanceof OfficialPdfDownloadError) {
+                if (err.status === 403) {
+                    message.error("No tienes permiso para descargar este reporte.");
+                } else if (err.status === 404) {
+                    message.error("El reporte o su PDF oficial no está disponible.");
+                } else if (err.status === 409) {
+                    message.error("El PDF oficial aún no está listo. Inténtalo de nuevo en unos segundos.");
+                } else {
+                    message.error(err.message || "No se pudo obtener el enlace de descarga del PDF oficial.");
+                }
+                return;
+            }
+            message.error(
+                err instanceof Error ? err.message : "Error al descargar el PDF oficial"
+            );
+        } finally {
+            setIsDownloadingPdf(false);
         }
     };
 
     /**
-     * Cuarta remediación (Observación 1) — impresión LOCAL. Nunca toca el
-     * PDF oficial: no llama a `getOfficialPdfDownloadUrl`, no invoca
-     * `sign-and-publish`, no persiste nada, y no modifica el estado del
-     * reporte. La marca visible (BORRADOR / RETRACTADO) se deriva SIEMPRE
-     * del estado real del envelope — no hay forma de imprimir un reporte
-     * no publicado sin marca desde esta pantalla.
+     * Fourth remediation (Observation 1)—LOCAL printing. It never touches the
+     * official PDF: does not call `getOfficialPdfDownloadUrl`, invoke
+     * `sign-and-publish`, persist anything, or alter report status. The
+     * visible mark (DRAFT / RETRACTED) ALWAYS derives from the envelope's real
+     * status—this screen cannot print an unpublished report without a mark.
      */
     const handlePrintLocalCopy = async () => {
         await printLocalCopy(previewPagesRef, {
@@ -984,9 +1144,40 @@ const ReportEditor: React.FC = () => {
         setIsSigningAndPublishing(true);
         try {
             const result = await signAndPublishReport(envelope.id);
+            // Fifth remediation (§9.1): status and official version come from
+            // the publication response ITSELF, so "Download official PDF"
+            // appears immediately and targets the correct version without
+            // depending on the refresh below or a manual reload.
+            if (result.version_no != null) setOfficialPdfVersionNo(result.version_no);
+            setEnvelope((e) =>
+                e
+                    ? {
+                        ...e,
+                        status: (result.status as ReportStatus) ?? e.status,
+                        version_no: result.version_no ?? e.version_no,
+                    }
+                    : e
+            );
             message.success(result.message || "Reporte firmado y publicado. PDF oficial disponible.");
-            const full = await getReportFull(envelope.id);
-            setEnvelope(full.report);
+            try {
+                const full = await getReportFull(envelope.id);
+                // §8: the refresh enriches (signature, resolved resources,
+                // PDF metadata) but NEVER degrades what publication itself
+                // just confirmed. A lagging read replica still returning
+                // APPROVED would otherwise hide the download button for an
+                // already published report.
+                setEnvelope({
+                    ...full.report,
+                    status: (result.status as ReportStatus) ?? full.report?.status,
+                    version_no: result.version_no ?? full.report?.version_no,
+                });
+                if (result.version_no == null && full.report?.version_no != null) {
+                    setOfficialPdfVersionNo(full.report.version_no);
+                }
+            } catch {
+                // The report is ALREADY signed and published: a refresh failure
+                // must not appear as a publication failure or hide the download.
+            }
         } catch (err) {
             if (isSignatureMissingError(err)) {
                 promptUploadSignature();
@@ -1074,10 +1265,9 @@ const ReportEditor: React.FC = () => {
     }
 
     if (v2ConfigBlocked) {
-        // Tercera remediación post-Fase 2 — problema F: estado BLOQUEADO,
-        // explícito y accionable. Nunca se monta Legacy como sustituto: un
-        // reporte con el membrete equivocado es peor que un reporte que no
-        // se puede crear todavía.
+        // Third post-Phase 2 remediation—issue F: explicit, actionable
+        // BLOCKED status. Never render Legacy as a substitute: a report with
+        // the wrong letterhead is worse than one that cannot yet be created.
         const canManageTemplates = userHasPermission(PERMS.MANAGE_TEMPLATES);
         const copy = V2_BLOCKED_COPY[v2BlockedReason ?? "NO_LETTERHEAD"];
         const isLetterheadProblem =
@@ -1252,14 +1442,13 @@ const ReportEditor: React.FC = () => {
                             </>
                         )}
                         {/*
-                          * Segunda remediación post-Fase 2 (UX): en estado
-                          * APPROVED, "Firmar y publicar" es la ÚNICA acción
-                          * — genera el PDF oficial (reflejando ya la firma)
-                          * y publica en una sola llamada. No se muestra
-                          * "Generar PDF" por separado. En PUBLISHED, la
-                          * descarga se muestra siempre con solo
-                          * reports:read (bug 4 de la primera remediación,
-                          * sin cambios aquí — ver
+                          * Second post-Phase 2 remediation (UX): in APPROVED,
+                          * "Sign and publish" is the ONLY action—it generates
+                          * the official PDF (already reflecting the signature)
+                          * and publishes in one call. "Generate PDF" is not
+                          * shown separately. In PUBLISHED, download always
+                          * displays with only reports:read (bug 4 from the
+                          * first remediation; unchanged here—see
                           * pdf-download-authorization-contract.md).
                           */}
                         {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
@@ -1275,36 +1464,43 @@ const ReportEditor: React.FC = () => {
                             </CelumaButton>
                         )}
                         {envelope?.status === "PUBLISHED" && userHasPermission(PERMS.REPORTS_READ) && (
-                            <CelumaButton type="primary" size="small" icon={<FilePdfOutlined />} onClick={handleDownloadOfficialPdf}>
+                            <CelumaButton
+                                type="primary"
+                                size="small"
+                                icon={<FilePdfOutlined />}
+                                loading={isDownloadingPdf}
+                                disabled={isDownloadingPdf}
+                                onClick={handleDownloadOfficialPdf}
+                                data-testid="download-official-pdf"
+                            >
                                 Descargar PDF oficial
                             </CelumaButton>
                         )}
                         {/*
-                          * Cuarta remediación post-Fase 2 (Observación 1) —
-                          * la impresión local vuelve, como acción SECUNDARIA
-                          * y con un rótulo que nunca puede confundirse con
-                          * el documento oficial:
+                          * Fourth post-Phase 2 remediation (Observation 1)—
+                          * local printing returns as a SECONDARY action with a
+                          * label that can never be confused with the official
+                          * document:
                           *
-                          *   no publicado -> "Imprimir borrador"
-                          *   PUBLISHED    -> "Imprimir copia local" (junto a
-                          *                   "Descargar PDF oficial", que es
-                          *                   la acción primaria)
-                          *   RETRACTED    -> "Imprimir copia local", marcada
-                          *                   RETRACTADO en la salida
+                          *   unpublished -> "Print draft"
+                          *   PUBLISHED   -> "Print local copy" (alongside
+                          *                  "Download official PDF", the
+                          *                  primary action)
+                          *   RETRACTED   -> "Print local copy", marked
+                          *                  RETRACTED in output
                           *
-                          * Permiso: solo reports:read. Quien puede ver
-                          * legítimamente el reporte puede imprimir su propia
-                          * copia; exigir reports:sign o
-                          * reports:generate_pdf aquí sería exigir permisos
-                          * de un flujo distinto. Ver local-print-contract.md.
+                          * Permission: reports:read only. Anyone legitimately
+                          * able to view the report can print their own copy;
+                          * requiring reports:sign or reports:generate_pdf here
+                          * would require permissions from a separate flow. See
+                          * local-print-contract.md.
                           */}
                         {/*
-                          * No se exige que el reporte esté guardado: un
-                          * reporte todavía sin `id` ya tiene vista previa
-                          * renderizada, y "imprimir un borrador antes de
-                          * publicar" incluye ese momento. Sin `status`,
-                          * `localPrintMarkForStatus` devuelve DRAFT, así que
-                          * la salida va marcada igualmente.
+                          * The report need not be saved: a report without an
+                          * `id` already has a rendered preview, and "print a
+                          * draft before publishing" includes that moment.
+                          * Without `status`, `localPrintMarkForStatus`
+                          * returns DRAFT, so output remains marked.
                           */}
                         {userHasPermission(PERMS.REPORTS_READ) && (
                             <CelumaButton
@@ -1408,7 +1604,7 @@ const ReportEditor: React.FC = () => {
                 )}
 
                 {/* ============================================================
-                    CARDS 4 + 5 — Contenido + Vista previa (dos columnas)
+                    CARDS 4 + 5 — Content + preview (two columns)
                 ============================================================ */}
                 <div className="re-two-column">
                     {/* --- Left column: Content editor --- */}
@@ -1435,28 +1631,70 @@ const ReportEditor: React.FC = () => {
                                 </Panel>
                             )}
 
-                            {!reportId && selectedLetterheadName && (
-                                <Panel style={{ marginBottom: 16, display: "grid", gap: 8 }}>
-                                    {availableLetterheadVersions.length > 1 ? (
-                                        <FloatingCaptionSelect
-                                            label="Membrete"
-                                            value={selectedLetterheadVersionId ?? undefined}
-                                            onChange={(v) => {
-                                                const option = availableLetterheadVersions.find((o) => o.value === v);
-                                                if (option) handleChangeLetterheadVersion(option);
-                                            }}
-                                            options={availableLetterheadVersions}
-                                            allowClear={false}
-                                        />
-                                    ) : (
-                                        <div style={{ fontSize: 13 }}>
-                                            Membrete: <b>{selectedLetterheadName}</b>
+                            {/*
+                              * Fifth post-Phase 2 remediation (Observation A, §4).
+                              *
+                              * The condition was `!reportId`, meaning "only before the
+                              * first save"—the direct root cause of "I save the draft
+                              * and can no longer change the letterhead". The panel now
+                              * appears whenever a letterhead can be named; EDITING is
+                              * what closes upon submission for review (§4.5: in IN_REVIEW
+                              * and later, the fixed letterhead remains visible as a
+                              * read-only value).
+                              */}
+                            {selectedLetterheadName && (
+                                <Panel
+                                    style={{ marginBottom: 16, display: "grid", gap: 8 }}
+                                    data-testid="letterhead-panel"
+                                >
+                                    {/* §4.2: even if only one letterhead exists, display
+                                        the field (disabled); never hide it. §4.3: list
+                                        logical names; the version number does not appear
+                                        in the normal flow. */}
+                                    <FloatingCaptionSelect
+                                        label="Membrete"
+                                        value={selectedLetterheadVersionId ?? undefined}
+                                        disabled={
+                                            !canChangeLetterhead ||
+                                            letterheadChanging ||
+                                            availableLetterheadVersions.length <= 1
+                                        }
+                                        loading={letterheadChanging}
+                                        onChange={(v) => {
+                                            const option = availableLetterheadVersions.find((o) => o.value === v);
+                                            if (option) handleChangeLetterheadVersion(option);
+                                        }}
+                                        options={
+                                            availableLetterheadVersions.length > 0
+                                                ? availableLetterheadVersions
+                                                : [{
+                                                    value: selectedLetterheadVersionId ?? "current",
+                                                    label: selectedLetterheadName,
+                                                }]
+                                        }
+                                        allowClear={false}
+                                        data-testid="letterhead-select"
+                                    />
+                                    {!canChangeLetterhead && (
+                                        <div
+                                            style={{ fontSize: 12, color: "#6b7280" }}
+                                            data-testid="letterhead-frozen-note"
+                                        >
+                                            El membrete quedó fijado al enviar el reporte a revisión.
                                         </div>
                                     )}
-                                    {/* Tercera remediación (§6.3 del brief): por qué salió
-                                        ESTE membrete, en lenguaje de negocio — nunca ids ni
-                                        números de versión. */}
-                                    {letterheadResolutionSource && (
+                                    {canChangeLetterhead && letterheadDirty && (
+                                        <div
+                                            style={{ fontSize: 12, color: "#b45309" }}
+                                            data-testid="letterhead-dirty-note"
+                                        >
+                                            Membrete cambiado — guarda el reporte para aplicarlo.
+                                        </div>
+                                    )}
+                                    {/* Third remediation (§6.3 of the brief): why THIS
+                                        letterhead was selected, in business language—
+                                        never IDs or version numbers. */}
+                                    {canChangeLetterhead && letterheadResolutionSource && (
                                         <div style={{ fontSize: 12, color: "#6b7280" }} data-testid="letterhead-resolution-source">
                                             {letterheadResolutionSource === "TENANT_DEFAULT" &&
                                                 "Predeterminado del laboratorio"}
@@ -1470,7 +1708,7 @@ const ReportEditor: React.FC = () => {
                             )}
 
                             <Form layout="vertical" style={{ display: "grid", gap: 20 }}>
-                                {/* Detalles del reporte — report name + custom base fields, grouped */}
+                                {/* Report details — report name + custom base fields, grouped */}
                                 <div>
                                     <SectionTitle style={{ marginBottom: 12 }}>Detalles del reporte</SectionTitle>
                                     <div style={{ display: "grid", gap: 16 }}>

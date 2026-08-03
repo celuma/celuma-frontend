@@ -1,6 +1,6 @@
 # Visual regression tests — legacy report renderer
 
-Added in Céluma 1.3 Fase 2, Bloque A (Historia A2). Protects layout, margins,
+Added in Céluma 1.3 Phase 2, Block A (Story A2). Protects layout, margins,
 header/footer, page breaks, and visible content of the report renderer using
 a **real Chromium browser** via Playwright — `report_preview_pages.test.tsx`
 (Vitest + jsdom) cannot protect this because jsdom has no layout engine
@@ -17,7 +17,7 @@ a **real Chromium browser** via Playwright — `report_preview_pages.test.tsx`
 - `__snapshots__/` — the approved golden images. **Committed to git.**
 
 No real patient data: fixtures are the same anonymized, synthetic ones used
-by the Vitest suite (Fase 1, Workstream 5).
+by the Vitest suite (Phase 1, Workstream 5).
 
 ## Running locally
 
@@ -50,7 +50,7 @@ Before running that command:
 
 1. Confirm *why* the output changed (which code change, which case).
 2. Confirm it was an intended change to `report_preview_pages.tsx` (or, after
-   Historia A4, `legacy/legacy_report_renderer_v1.tsx`) — not an accidental
+   Story A4, `legacy/legacy_report_renderer_v1.tsx`) — not an accidental
    regression.
 3. Review the diff of the resulting PNGs, not just re-approve blindly.
 4. Mention the change and its cause in the commit/PR description.
@@ -59,15 +59,15 @@ Before running that command:
 
 | Case | Fixture | Protects |
 |---|---|---|
-| `reporte-corto` | `draftSingleSampleNoImages` | Short content, single sample, no images, draft |
-| `reporte-largo-multipagina` | `longContentMultipage` | Real pagination into multiple physical pages |
-| `reporte-con-imagenes-y-firma` | `publishedMultiSampleWithImages` | Image grid across samples + required/signed digital signature |
-| `reporte-secciones-opcionales-ausentes` | `emptyOptionalSections` | Empty/hidden optional sections |
-| `reporte-historico-campos-ausentes` | `legacyOldestStructure` | Oldest structure: no `base_order`/`section_order`, no `signatureMetadata` |
-| `reporte-caracteres-especiales` | `specialCharactersAccents` | Accents and special symbols |
-| `membrete-legado-pagina-1` | `draftSingleSampleNoImages` (page 1 only) | Institutional letterhead (A1–A7): header, footer, logo, color |
+| `report-short` | `draftSingleSampleNoImages` | Short content, single sample, no images, draft |
+| `report-long-multipage` | `longContentMultipage` | Real pagination into multiple physical pages |
+| `report-with-images-and-signature` | `publishedMultiSampleWithImages` | Image grid across samples + required/signed digital signature |
+| `report-optional-sections-absent` | `emptyOptionalSections` | Empty/hidden optional sections |
+| `report-historic-fields-absent` | `legacyOldestStructure` | Oldest structure: no `base_order`/`section_order`, no `signatureMetadata` |
+| `report-special-characters` | `specialCharactersAccents` | Accents and special symbols |
+| `legacy-letterhead-page-1` | `draftSingleSampleNoImages` (page 1 only) | Institutional letterhead (A1–A7): header, footer, logo, color |
 
 The letterhead is unconditional (renders on every report regardless of
 tenant — see `ambassador-hardcoding-inventory.md`), so it is implicitly
 covered by every case above; the last row names it explicitly per the
-Fase 2 acceptance criteria.
+Phase 2 acceptance criteria.

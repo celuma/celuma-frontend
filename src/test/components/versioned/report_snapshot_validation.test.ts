@@ -5,7 +5,7 @@ import {
 } from "../../../components/report/versioned/report_snapshot_validation";
 import { v2CompleteBranding, v2MinimalNeutral } from "../../fixtures/reports/versioned_v2";
 
-// Céluma 1.3 Fase 2, Bloque C, Historia C2/C7.
+// Cell 1.3 Phase 2, Block C, History C2/C7.
 
 function validSnapshot() {
     return (v2CompleteBranding.report as unknown as { rendering_snapshot: unknown }).rendering_snapshot;

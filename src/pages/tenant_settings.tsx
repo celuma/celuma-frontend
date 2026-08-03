@@ -101,7 +101,7 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Céluma 1.3 Fase 2, Bloque D, Historia D9: advisory check — before letting
+    // Céluma 1.3 Phase 2, Block D, Story D9: advisory check — before letting
     // an admin turn reports_v2_enabled ON, confirm the tenant has at least one
     // ReportTemplateVersion with status ACTIVE, otherwise turning the flag on
     // would let staff create V2 reports with nothing valid to select (see D10).

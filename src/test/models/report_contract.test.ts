@@ -15,7 +15,7 @@ import {
     specialCharactersAccents,
 } from "../fixtures/reports";
 
-// Regression coverage for Céluma 1.3 Fase 1 (Workstream 5). These protect the
+// Regression coverage for Céluma 1.3 Phase 1 (Workstream 5). These protect the
 // backward-compatibility logic in src/models/report.ts, which is the ONLY
 // place today that tolerates historical/partial report JSON (the backend
 // stores it as an opaque dict — see report-rendering-inventory.md §6).

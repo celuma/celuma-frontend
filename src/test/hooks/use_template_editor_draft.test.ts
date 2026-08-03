@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useTemplateEditorDraft } from "../../hooks/use_template_editor_draft";
 
-// Céluma 1.3 Fase 2, Bloque D, Historia D11/D14.
+// Cell 1.3 Phase 2, Block D, History D11/D14.
 
 const TENANT_ID = "tenant-1";
 const TEMPLATE_ID = "template-1";

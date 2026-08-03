@@ -183,7 +183,7 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
     };
 
     // Users eligible to be added as reviewers: active, without the reviewer role,
-    // and holding at least one of the eligible roles (Patólogo, Admin o Superadmin).
+    // and holding at least one of the eligible roles (Patólogo, Admin or Superadmin).
     const eligibleUsers = allUsers.filter(
         (u) =>
             u.is_active &&

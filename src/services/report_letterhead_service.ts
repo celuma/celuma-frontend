@@ -1,6 +1,6 @@
 /**
- * API client for the shared, tenant-owned letterhead ("membrete") domain —
- * post-Fase-2 remediation. Kept as its own file, not appended to
+ * API client for the shared, tenant-owned letterhead domain —
+ * post-Phase-2 remediation. Kept as its own file, not appended to
  * report_service.ts, matching how other distinct domains (signatures,
  * collaboration) already get their own service file — see
  * report-letterhead-domain-contract.md.
@@ -195,9 +195,9 @@ export async function createReportLetterheadVersion(
     );
 }
 
-/** Segunda remediación post-Fase 2 (UX): configuración ACTIVE actual de un
- *  membrete, para precargar el editor visual en modo "Editar". `null` si el
- *  membrete todavía no tiene ninguna versión (recién creado). */
+/** Second post-Phase 2 remediation (UX): the current ACTIVE configuration of
+ *  a letterhead, used to preload the visual editor in "Edit" mode. `null` if
+ *  the letterhead has no version yet (it was just created). */
 export async function getActiveReportLetterheadVersion(
     letterheadId: string
 ): Promise<ReportLetterheadVersionDetail | null> {
@@ -216,10 +216,10 @@ export async function getActiveReportLetterheadVersion(
     return (await res.json()) as ReportLetterheadVersionDetail;
 }
 
-/** Segunda remediación post-Fase 2 (UX): "Guardar cambios" del editor
- *  visual — crea y activa una versión nueva atómicamente (reemplaza el
- *  antiguo flujo de "Publicar versión" + "Activar" manuales). No-op si la
- *  configuración enviada es idéntica a la ya activa. */
+/** Second post-Phase 2 remediation (UX): visual editor "Save changes" —
+ *  atomically creates and activates a new version (replacing the former
+ *  manual "Publish version" + "Activate" workflow). No-op if the submitted
+ *  configuration is identical to the active one. */
 export async function saveCurrentReportLetterheadVersion(
     letterheadId: string,
     payload: SaveCurrentReportLetterheadVersionPayload
@@ -271,7 +271,7 @@ export async function uploadReportLetterheadLogo(
 }
 
 // ---------------------------------------------------------------------------
-// .celuma portable file format — post-Fase-2 remediation, R12/R13
+// .celuma portable file format — post-Phase-2 remediation, R12/R13
 // ---------------------------------------------------------------------------
 
 function downloadJSONAsFile(data: unknown, filename: string): void {

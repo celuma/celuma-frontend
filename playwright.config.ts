@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Golden visual tests for the legacy report renderer (Céluma 1.3 Fase 2,
-// Bloque A / Historia A2). Separate from vitest.config.ts: this drives a real
+// Golden visual tests for the legacy report renderer (Céluma 1.3 Phase 2,
+// Block A / Story A2). Separate from vitest.config.ts: this drives a real
 // Chromium browser against the isolated harness in tests-visual/harness
 // (served by vite.harness.config.ts), because jsdom cannot protect real
 // layout, page breaks, or pagination — see report_preview_pages.test.tsx for

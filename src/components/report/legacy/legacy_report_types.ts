@@ -1,6 +1,6 @@
 /**
- * Shared types for the report renderer contract (Céluma 1.3 Fase 2, Bloque A,
- * Historia A4/A5). LegacyReportRendererV1 implements this ref contract today;
+ * Shared types for the report renderer contract (Céluma 1.3 Phase 2, Block A,
+ * Story A4/A5). LegacyReportRendererV1 implements this ref contract today;
  * any future renderer resolved by ReportRendererResolver must implement the
  * same shape so use_local_print.ts keeps working unmodified regardless of
  * which schema_version produced the report.

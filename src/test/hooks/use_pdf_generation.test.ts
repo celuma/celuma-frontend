@@ -1,5 +1,5 @@
 /**
- * Tests for usePdfGeneration (Céluma 1.3 Fase 2, Bloque E, Historia E12/E16).
+ * Tests for usePdfGeneration (Cell 1.3 Phase 2, Block E, History E12/E16).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";

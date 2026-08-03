@@ -1,6 +1,6 @@
 /**
  * Editor-side validation for `ReportPresentationSnapshotV2` (Céluma 1.3
- * Fase 2, Bloque D, Historia D5). Stricter than report_snapshot_validation.ts
+ * Phase 2, Block D, Story D5). Stricter than report_snapshot_validation.ts
  * on purpose: that module only needs to keep an already-rendered V2 report
  * from crashing the UI, so it is deliberately lenient on free-text fields.
  * This module exists so the admin editor can never submit a configuration

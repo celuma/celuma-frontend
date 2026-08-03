@@ -17,7 +17,7 @@ describe("report_schema_version — constants", () => {
     });
 });
 
-describe("resolveReportSchemaVersion — existing fixtures (Fase 1, Workstream 5)", () => {
+describe("resolveReportSchemaVersion — existing fixtures (Phase 1, Workstream 5)", () => {
     for (const [name, envelope] of Object.entries(allReportFixtures)) {
         it(`resolves "${name}" (no schema_version field) as legacy (1)`, () => {
             expect(resolveReportSchemaVersion(envelope.report)).toBe(LEGACY_REPORT_SCHEMA_VERSION);

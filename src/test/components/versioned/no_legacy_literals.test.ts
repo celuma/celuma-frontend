@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Céluma 1.3 Fase 2, Bloque C, Historia C7. Confirms the tenant-embajador
+// Cell 1.3 Phase 2, Block C, History C7. Confirms the tenant-ambassador
 // letterhead (A1-A8 in ambassador-hardcoding-inventory.md) never leaks into
 // the V2 module — those literals must remain exclusively inside
 // src/components/report/legacy/, frozen and untouched by this block.
@@ -24,7 +24,7 @@ function sourceFiles(dir: string): string[] {
         .map((entry) => join(dir, entry.name));
 }
 
-describe("versioned/ — no legacy tenant-embajador literals", () => {
+describe("versioned/ — no legacy tenant-ambassador literals", () => {
     const files = sourceFiles(VERSIONED_DIR);
 
     it("finds at least one source file to check (sanity check for the test itself)", () => {

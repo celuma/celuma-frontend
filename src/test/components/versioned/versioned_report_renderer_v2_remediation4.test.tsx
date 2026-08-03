@@ -6,25 +6,25 @@ import VersionedReportRendererV2, {
 } from "../../../components/report/versioned/versioned_report_renderer_v2";
 import { v2CompleteBranding, v2MinimalNeutral } from "../../fixtures/reports/versioned_v2";
 import {
-    parityCortoV2,
-    parityFirmadoV2,
-    parityMultipaginaV2,
+    parityMultipageV2,
+    parityShortV2,
+    paritySignedV2,
 } from "../../fixtures/reports/legacy_v2_parity";
 import type { ReportEnvelope } from "../../../models/report";
 
 /**
- * Cuarta remediación post-Fase 2 — capacidades de paridad Legacy conectadas
- * al renderer V2 (Observación 3).
+ * Fourth post-Phase 2 remediation — Legacy parity capabilities connected
+ * to the V2 renderer (Observation 3).
  *
- * Complementa, sin sustituirla, la suite visual
- * `tests-visual/legacy_v2_parity.visual.spec.ts`: allí se compara el
- * resultado (píxeles); aquí se fija el MECANISMO — qué campo del snapshot
- * gobierna qué propiedad — para que un fallo apunte directamente a la
- * causa en vez de a una imagen distinta.
+ * Complements, without replacing, the visual suite
+ * `tests-visual/legacy_v2_parity.visual.spec.ts`: there is compared the
+ * result (pixels); MECANISMO — which snapshot field is posted here
+ * governs which property — so that failure points directly to the
+ * cause instead of a a different image.
  *
- * Cada `describe` incluye al menos una prueba de COMPATIBILIDAD: un
- * snapshot sin el campo nuevo debe conservar exactamente el valor fijo que
- * el renderer usaba antes de esta remediación.
+ * each `describe` includes at least a compatibility test: a
+ * snapshot without the field new must preserve exactly the fixed value that
+ * the renderer used before this remediation.
  */
 
 function renderReport(report: ReportEnvelope) {
@@ -50,9 +50,9 @@ function presentationOf(report: ReportEnvelope): MutablePresentation {
     return (report.report.rendering_snapshot as { presentation: MutablePresentation }).presentation;
 }
 
-/** Tipografía completa; los fixtures V2 históricos no traen el objeto
- *  `typography`, así que las pruebas que ejercitan un campo tipográfico lo
- *  ponen entero en vez de mutar una clave sobre `undefined`. */
+/** typography complete; historical V2 fixtures do not come with the object
+ * `typography`, so the tests that exercise field typographic do
+ * they put integer instead of mutating to key about `undefined`. */
 function withTypography(report: ReportEnvelope, overrides: Record<string, unknown>): ReportEnvelope {
     presentationOf(report).style.typography = {
         font_family: "ARIAL",
@@ -64,8 +64,8 @@ function withTypography(report: ReportEnvelope, overrides: Record<string, unknow
     return report;
 }
 
-/** Las tres bandas son hijos directos de la página: encabezado (`top` sin
- *  `bottom`), pie (`bottom` sin `top`) y cuerpo (ambos). */
+/** The three bands are direct children of the page: header (`top` without
+ *  `bottom`), footer (`bottom` without `top`), and body (both). */
 function bandsOf(page: HTMLElement) {
     const children = Array.from(page.children).filter(
         (el): el is HTMLElement => el instanceof HTMLElement,
@@ -82,16 +82,16 @@ function bandsOf(page: HTMLElement) {
 // ===========================================================================
 
 describe("VersionedReportRendererV2 — header.logo_mode", () => {
-    it("compatibilidad: sin logo_mode y sin logo resuelto, sigue apareciendo el isotipo neutral", () => {
-        // Ésta es la regla que NO puede cambiar: los reportes V2 ya
-        // publicados no llevan `logo_mode` y deben renderizarse igual que
-        // antes de la remediación.
+    it("compatibility: without logo_mode and without logo resolved, the neutral isotype remains appearing", () => {
+        // This is the rule that CANNOT change: V2 reports are already
+        // published do not carry `logo_mode` and must be rendered the same as
+        // before remediation.
         const { pages } = renderReport(v2MinimalNeutral);
         const header = bandsOf(pages[0] as HTMLElement).header!;
         expect(header.querySelectorAll("img")).toHaveLength(1);
     });
 
-    it("logo_mode = NONE no dibuja imagen alguna en el encabezado", () => {
+    it("logo_mode = NONE does not draw any image in the header", () => {
         const report = clone(v2MinimalNeutral);
         presentationOf(report).header.logo_mode = "NONE";
         const { pages } = renderReport(report);
@@ -99,10 +99,10 @@ describe("VersionedReportRendererV2 — header.logo_mode", () => {
         expect(header.querySelectorAll("img")).toHaveLength(0);
     });
 
-    it("logo_mode = NONE tampoco reserva la caja del logo: el texto es hijo directo de la banda", () => {
-        // La diferencia reportada no era solo "aparece un logo": era que V2
-        // envolvía el bloque institucional en una caja logo+texto aunque no
-        // hubiera logo, desplazando el texto respecto a Legacy.
+    it("logo_mode = NONE also does not reserve the logo box: the text is a direct child of the band", () => {
+        // The difference reported was not just "appears a logo": it was that V2
+        // wrapped the institutional block in a logo+text box although not
+        // there would be a logo, moving the text with respect to Legacy.
         const report = clone(v2MinimalNeutral);
         presentationOf(report).header.logo_mode = "NONE";
         const { pages } = renderReport(report);
@@ -113,7 +113,7 @@ describe("VersionedReportRendererV2 — header.logo_mode", () => {
         expect(wrappers).toHaveLength(0);
     });
 
-    it("logo_mode = CUSTOM sin URL resuelta no sustituye por el isotipo neutral", () => {
+    it("logo_mode = CUSTOM without URL resolved not replaces by the neutral isotype", () => {
         const report = clone(v2MinimalNeutral);
         presentationOf(report).header.logo_mode = "CUSTOM";
         report.resolved_resources = {};
@@ -122,7 +122,7 @@ describe("VersionedReportRendererV2 — header.logo_mode", () => {
         expect(header.querySelectorAll("img")).toHaveLength(0);
     });
 
-    it("logo_mode = CUSTOM con URL resuelta dibuja ESA imagen", () => {
+    it("logo_mode = CUSTOM with URL resolved draws ESA image", () => {
         const report = clone(v2MinimalNeutral);
         presentationOf(report).header.logo_mode = "CUSTOM";
         report.resolved_resources = { header_logo_url: "https://cdn.example.invalid/propio.png" };
@@ -132,7 +132,7 @@ describe("VersionedReportRendererV2 — header.logo_mode", () => {
         expect(srcs).toEqual(["https://cdn.example.invalid/propio.png"]);
     });
 
-    it("compatibilidad: el PIE nunca cayó al isotipo neutral, y sigue sin hacerlo", () => {
+    it("compatibility: the footer never fell to the neutral isotype, and remains without doing so", () => {
         const report = clone(v2MinimalNeutral);
         report.resolved_resources = {};
         const { pages } = renderReport(report);
@@ -142,11 +142,11 @@ describe("VersionedReportRendererV2 — header.logo_mode", () => {
 });
 
 // ===========================================================================
-// Alturas, offsets y separaciones configurables
+// Configurable heights, offsets and separations
 // ===========================================================================
 
-describe("VersionedReportRendererV2 — geometría configurable de las bandas", () => {
-    it("compatibilidad: sin height_mm/offset_mm el encabezado conserva 24mm y el margen superior", () => {
+describe("VersionedReportRendererV2 — configurable band geometry", () => {
+    it("compatibility: without height_mm/offset_mm the header keeps 24mm and the top margin", () => {
         const { pages } = renderReport(v2CompleteBranding);
         const { header, footer } = bandsOf(pages[0] as HTMLElement);
         expect(header!.style.height).toBe("24mm");
@@ -155,21 +155,21 @@ describe("VersionedReportRendererV2 — geometría configurable de las bandas", 
         expect(footer!.style.paddingTop).toBe("2mm");
     });
 
-    it("header.height_mm se aplica de verdad (antes se persistía y se ignoraba)", () => {
+    it("header.height_mm is actually applied (before was persisted and ignored)", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).header.height_mm = 28;
         const { pages } = renderReport(report);
         expect(bandsOf(pages[0] as HTMLElement).header!.style.height).toBe("28mm");
     });
 
-    it("footer.height_mm se aplica de verdad", () => {
+    it("footer.height_mm is actually applied", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).footer.height_mm = 20;
         const { pages } = renderReport(report);
         expect(bandsOf(pages[0] as HTMLElement).footer!.style.height).toBe("20mm");
     });
 
-    it("offset_mm coloca las bandas contra el borde de la hoja (el caso Legacy)", () => {
+    it("offset_mm places the bands against the edge of the sheet (the Legacy case)", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).header.offset_mm = 0;
         presentationOf(report).footer.offset_mm = 0;
@@ -179,7 +179,7 @@ describe("VersionedReportRendererV2 — geometría configurable de las bandas", 
         expect(footer!.style.bottom).toBe("0mm");
     });
 
-    it("content_gap_mm y body_padding_top_mm definen el área paginable", () => {
+    it("content_gap_mm and body_padding_top_mm define the paginable area", () => {
         const report = clone(v2CompleteBranding);
         const p = presentationOf(report);
         p.header.offset_mm = 0;
@@ -191,14 +191,14 @@ describe("VersionedReportRendererV2 — geometría configurable de las bandas", 
         p.paper.body_padding_top_mm = 4;
         const { pages } = renderReport(report);
         const body = bandsOf(pages[0] as HTMLElement).body!;
-        // Exactamente la caja de LegacyReportRendererV1.
+        // exactly the LegacyReportRendererV1 box.
         expect(body.style.top).toBe("28mm");
         expect(body.style.bottom).toBe("20mm");
         expect(body.style.paddingTop).toBe("4mm");
         expect(body.style.boxSizing).toBe("border-box");
     });
 
-    it("padding_mm controla el relleno interior de cada banda", () => {
+    it("padding_mm controls the inner padding of each band", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).header.padding_mm = 4;
         presentationOf(report).footer.padding_mm = 0;
@@ -210,22 +210,22 @@ describe("VersionedReportRendererV2 — geometría configurable de las bandas", 
 });
 
 // ===========================================================================
-// Tipografía y pesos
+// Typography and weights
 // ===========================================================================
 
-describe("VersionedReportRendererV2 — pesos y tamaños tipográficos", () => {
-    it("compatibilidad: sin footer_font_weight el pie no declara peso", () => {
+describe("VersionedReportRendererV2 — font weights and sizes", () => {
+    it("compatibility: without footer_font_weight the footer declares no weight", () => {
         const { pages } = renderReport(v2CompleteBranding);
         expect(bandsOf(pages[0] as HTMLElement).footer!.style.fontWeight).toBe("");
     });
 
-    it("footer_font_weight = 700 pone el pie en negrita (el pie Legacy)", () => {
+    it("footer_font_weight = 700 makes the footer bold (Legacy footer)", () => {
         const report = withTypography(clone(v2CompleteBranding), { footer_font_weight: 700 });
         const { pages } = renderReport(report);
         expect(bandsOf(pages[0] as HTMLElement).footer!.style.fontWeight).toBe("700");
     });
 
-    it("compatibilidad: sin header_font_weight, la institución va en 700 y el resto en 400", () => {
+    it("compatibility: without header_font_weight, the institution goes at 700 and the rest at 400", () => {
         const { pages } = renderReport(v2CompleteBranding);
         const header = bandsOf(pages[0] as HTMLElement).header!;
         const weights = Array.from(header.querySelectorAll("div"))
@@ -235,7 +235,7 @@ describe("VersionedReportRendererV2 — pesos y tamaños tipográficos", () => {
         expect(weights).toContain("400");
     });
 
-    it("header_font_weight unifica el peso de TODAS las líneas del encabezado", () => {
+    it("header_font_weight unifies the weight of all the header lines", () => {
         const report = withTypography(clone(v2CompleteBranding), { header_font_weight: 700 });
         const { pages } = renderReport(report);
         const header = bandsOf(pages[0] as HTMLElement).header!;
@@ -245,7 +245,7 @@ describe("VersionedReportRendererV2 — pesos y tamaños tipográficos", () => {
         expect(new Set(weights)).toEqual(new Set(["700"]));
     });
 
-    it("header_secondary_font_size_pt unifica el tamaño de las líneas secundarias", () => {
+    it("header_secondary_font_size_pt unifies the size of secondary lines", () => {
         const report = withTypography(clone(v2CompleteBranding), {
             header_font_size_pt: 8,
             header_secondary_font_size_pt: 8,
@@ -260,11 +260,11 @@ describe("VersionedReportRendererV2 — pesos y tamaños tipográficos", () => {
 });
 
 // ===========================================================================
-// Layout del encabezado y del pie
+// Header and footer layout
 // ===========================================================================
 
 describe("VersionedReportRendererV2 — signer_placement", () => {
-    it("compatibilidad: sin signer_placement, el firmante va en su bloque derecho", () => {
+    it("compatibility: without signer_placement, the signer goes in its right block", () => {
         const { pages } = renderReport(v2CompleteBranding);
         const header = bandsOf(pages[0] as HTMLElement).header!;
         const rightBlocks = Array.from(header.children).filter(
@@ -273,7 +273,7 @@ describe("VersionedReportRendererV2 — signer_placement", () => {
         expect(rightBlocks).toHaveLength(1);
     });
 
-    it("INLINE fusiona las credenciales en el bloque institucional (forma Legacy)", () => {
+    it("INLINE merges credentials into institutional block (Legacy form)", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).header.signer_placement = "INLINE";
         const { pages } = renderReport(report);
@@ -282,13 +282,13 @@ describe("VersionedReportRendererV2 — signer_placement", () => {
             (el): el is HTMLElement => el instanceof HTMLElement && el.style.textAlign === "right",
         );
         expect(rightBlocks).toHaveLength(0);
-        // El texto sigue estando: se movió, no se perdió.
+        // The text remains: moved, not lost.
         const signer = presentationOf(report).signer as Record<string, string>;
         expect(header.textContent).toContain(signer.display_name);
         expect(header.textContent).toContain(signer.license_number);
     });
 
-    it("HIDDEN no imprime las credenciales en el encabezado", () => {
+    it("HIDDEN does not print credentials in the header", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).header.signer_placement = "HIDDEN";
         const signer = presentationOf(report).signer as Record<string, string>;
@@ -297,7 +297,7 @@ describe("VersionedReportRendererV2 — signer_placement", () => {
         expect(header.textContent).not.toContain(signer.license_number);
     });
 
-    it("INLINE no antepone el relleno \"Céluma\" cuando no hay nombre institucional", () => {
+    it("INLINE does not prepend the \"Céluma\" padding when there is no institutional name", () => {
         const report = clone(v2MinimalNeutral);
         presentationOf(report).header.signer_placement = "INLINE";
         presentationOf(report).header.institution_name = null;
@@ -311,13 +311,13 @@ describe("VersionedReportRendererV2 — signer_placement", () => {
 });
 
 describe("VersionedReportRendererV2 — footer.layout", () => {
-    it("compatibilidad: sin layout, logo y texto van agrupados en una caja flexible", () => {
+    it("compatibility: without layout, logo and text are grouped in a flexible box", () => {
         const report = clone(v2CompleteBranding);
-        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/pie.png" };
+        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/footer.png" };
         const { pages } = renderReport(report);
         const footer = bandsOf(pages[0] as HTMLElement).footer!;
-        // El logo NO es hijo directo de la banda: cuelga de la caja
-        // agrupadora, que es justo lo que `SPLIT` deshace.
+        // The logo is NOT a direct child of the band: it hangs from the box
+        // grouper, which is just what `SPLIT` undoes.
         expect(footer.querySelector(":scope > img")).toBeNull();
         const group = Array.from(footer.children).find(
             (el): el is HTMLElement => el instanceof HTMLElement && el.querySelector("img") !== null,
@@ -326,14 +326,14 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
         expect(group!.style.display).toBe("flex");
     });
 
-    it("SPLIT deja logo y texto como hermanos directos (forma Legacy)", () => {
+    it("SPLIT leaves logo and text as direct siblings (Legacy form)", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).footer.layout = "SPLIT";
         presentationOf(report).footer.show_page_number = false;
         presentationOf(report).footer.divider = {
             enabled: false, style: "SINGLE", primary_width_px: 1, secondary_width_px: 1, gap_mm: 1, color: null,
         };
-        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/pie.png" };
+        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/footer.png" };
         const { pages } = renderReport(report);
         const footer = bandsOf(pages[0] as HTMLElement).footer!;
         const children = Array.from(footer.children);
@@ -342,7 +342,7 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
         expect(footer.style.justifyContent).toBe("space-between");
     });
 
-    it("logo_height_mm / logo_max_width_pct / text_max_width_pct definen la caja Legacy", () => {
+    it("logo_height_mm / logo_max_width_pct / text_max_width_pct define the Legacy box", () => {
         const report = clone(v2CompleteBranding);
         const footer = presentationOf(report).footer;
         footer.layout = "SPLIT";
@@ -350,7 +350,7 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
         footer.logo_max_width_pct = 35;
         footer.text_max_width_pct = 65;
         footer.show_page_number = false;
-        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/pie.png" };
+        report.resolved_resources = { footer_logo_url: "https://cdn.example.invalid/footer.png" };
         const { pages } = renderReport(report);
         const band = bandsOf(pages[0] as HTMLElement).footer!;
         const img = band.querySelector("img") as HTMLImageElement;
@@ -362,7 +362,7 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
         expect(text.style.maxWidth).toBe("65%");
     });
 
-    it("un custom_text con salto de línea rinde dos renglones (dirección + contacto)", () => {
+    it("to custom_text with line break renders two lines (address + contact)", () => {
         const report = clone(v2CompleteBranding);
         presentationOf(report).footer.custom_text = "Calle Falsa 123\nTel. 555";
         const { pages } = renderReport(report);
@@ -372,17 +372,17 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
         expect(text!.textContent).toBe("Calle Falsa 123\nTel. 555");
     });
 
-    it("show_page_number = false no imprime numeración (Legacy nunca la imprimió)", () => {
-        // jsdom no calcula layout, así que aquí siempre sale UNA página: el
-        // recuento real y los cortes se verifican en la suite visual
-        // (`legacy_v2_parity.visual.spec.ts`, "geometría y paginación").
-        // Lo que sí es comprobable en jsdom es la ausencia del rótulo.
-        const { text } = renderReport(clone(parityMultipaginaV2));
+    it("show_page_number = false does not print numbering (Legacy never printed it)", () => {
+        // jsdom does not calculate layout, so it always outputs one page here.
+        // The actual count and page breaks are checked in the visual suite
+        // (`legacy_v2_parity.visual.spec.ts`, "geometry and pagination").
+        // What is verifiable in jsdom is the absence of the label.
+        const { text } = renderReport(clone(parityMultipageV2));
         expect(text).not.toMatch(/Página \d+ de \d+/);
     });
 
-    it("show_page_number = true sí lo imprime (el rótulo no desapareció para todos)", () => {
-        const report = clone(parityMultipaginaV2);
+    it("show_page_number = true does print it (the label did not disappear for all)", () => {
+        const report = clone(parityMultipageV2);
         presentationOf(report).footer.show_page_number = true;
         const { text } = renderReport(report);
         expect(text).toMatch(/Página \d+ de \d+/);
@@ -390,22 +390,22 @@ describe("VersionedReportRendererV2 — footer.layout", () => {
 });
 
 // ===========================================================================
-// El membrete Legacy completo
+// Complete Legacy letterhead
 // ===========================================================================
 
-describe("VersionedReportRendererV2 — membrete Legacy importado", () => {
-    it("no muestra ningún logotipo en el encabezado", () => {
-        const { pages } = renderReport(parityCortoV2);
+describe("VersionedReportRendererV2 — imported Legacy letterhead", () => {
+    it("shows no logo in the header", () => {
+        const { pages } = renderReport(parityShortV2);
         expect(bandsOf(pages[0] as HTMLElement).header!.querySelectorAll("img")).toHaveLength(0);
     });
 
-    it("muestra el logotipo en el pie", () => {
-        const { pages } = renderReport(parityCortoV2);
+    it("shows the logo in the footer", () => {
+        const { pages } = renderReport(parityShortV2);
         expect(bandsOf(pages[0] as HTMLElement).footer!.querySelectorAll("img")).toHaveLength(1);
     });
 
-    it("reproduce la caja de página de Legacy (18mm laterales, bandas de 28/20mm a ras)", () => {
-        const { pages } = renderReport(parityCortoV2);
+    it("reproduces the Legacy page box (18mm sides, 28/20mm bands flush)", () => {
+        const { pages } = renderReport(parityShortV2);
         const { header, footer, body } = bandsOf(pages[0] as HTMLElement);
         expect(header!.style.top).toBe("0mm");
         expect(header!.style.height).toBe("28mm");
@@ -418,11 +418,11 @@ describe("VersionedReportRendererV2 — membrete Legacy importado", () => {
         expect(body!.style.paddingTop).toBe("4mm");
     });
 
-    it("imprime las cuatro líneas del encabezado a 8pt en negrita", () => {
-        const { pages } = renderReport(parityCortoV2);
+    it("print the four lines of the header at 8pt in bold", () => {
+        const { pages } = renderReport(parityShortV2);
         const header = bandsOf(pages[0] as HTMLElement).header!;
-        // El único hijo de la banda es el bloque institucional; sus hijos
-        // son las cuatro líneas.
+        // The band's only child is the institutional block; its children are
+        // the four lines.
         const block = header.firstElementChild as HTMLElement;
         const lines = Array.from(block.children) as HTMLElement[];
         expect(lines).toHaveLength(4);
@@ -434,8 +434,8 @@ describe("VersionedReportRendererV2 — membrete Legacy importado", () => {
         expect(header.textContent).toContain("DGP3833349 | DGP. ESP 6133871");
     });
 
-    it("pone el pie en negrita y sin divisores", () => {
-        const { pages } = renderReport(parityCortoV2);
+    it("puts the footer in bold and without dividers", () => {
+        const { pages } = renderReport(parityShortV2);
         const page = pages[0] as HTMLElement;
         const footer = bandsOf(page).footer!;
         expect(footer.style.fontWeight).toBe("700");
@@ -444,18 +444,18 @@ describe("VersionedReportRendererV2 — membrete Legacy importado", () => {
         expect(dividers).toHaveLength(0);
     });
 
-    it("mantiene el bloque de firma real del reporte", () => {
-        const { text } = renderReport(parityFirmadoV2);
-        // El firmante institucional del membrete y la firma real del
-        // reporte son cosas distintas: ambas deben salir.
+    it("keeps the actual signature block of the report", () => {
+        const { text } = renderReport(paritySignedV2);
+        // The institutional signer of the letterhead and the actual signature of the
+        // report are different things: both must be present.
         expect(text).toContain("Dra. Arisbeth Villanueva Pérez.");
         expect(text).toMatch(/Firma|Firmado/i);
     });
 
-    it("inserta las bandas en el orden encabezado → cuerpo → pie", () => {
-        // Ese orden es el de Legacy, y es el que determina el flujo de
-        // contenido del PDF (copiar/pegar, búsqueda, lectores de pantalla).
-        const { pages } = renderReport(parityCortoV2);
+    it("insert the bands in the order header → body → footer", () => {
+        // That order is that of Legacy, and it is what determines the flow of
+        // PDF content (copy/paste, search, screen readers).
+        const { pages } = renderReport(parityShortV2);
         const children = Array.from((pages[0] as HTMLElement).children) as HTMLElement[];
         const roles = children.map((el) => {
             if (el.style.top && el.style.bottom) return "body";

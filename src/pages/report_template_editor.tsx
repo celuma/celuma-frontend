@@ -31,11 +31,11 @@ interface ReportTemplateEditorProps {
 }
 
 /**
- * Post-Fase-2 remediation: this screen used to be a full "membrete" editor
- * (papel/márgenes/logo/firmante/color) bundled with clinical-template
+ * Post-Phase-2 remediation: this screen used to be a full letterhead editor
+ * (paper/margins/logo/signer/color) bundled with clinical-template
  * publishing. That editing surface moved to
  * report_letterhead_editor.tsx (`/config/report-letterheads/...`) — a
- * membrete is now a shared, independently-versioned tenant resource, never
+ * letterhead is now a shared, independently-versioned tenant resource, never
  * owned by a single template.
  *
  * What remains here is a much smaller flow: publish a new immutable
@@ -46,7 +46,7 @@ interface ReportTemplateEditorProps {
  * remediation-architecture-decision.md), so this flow resolves the
  * tenant's default letterhead automatically and carries its
  * `presentation` forward transparently — no visual editor, no logo upload,
- * no risk of this screen being mistaken for a full template/membrete editor.
+ * no risk of this screen being mistaken for a full template/letterhead editor.
  */
 function ReportTemplateEditor({ embedded = false }: ReportTemplateEditorProps) {
     const navigate = useNavigate();
@@ -73,7 +73,7 @@ function ReportTemplateEditor({ embedded = false }: ReportTemplateEditorProps) {
                 setTemplateName(template.name);
                 setClinicalTemplate(template.template_json as unknown as Record<string, unknown>);
 
-                // Post-Fase-2 remediation: resolve the tenant's default
+                // Post-Phase-2 remediation: resolve the tenant's default
                 // letterhead for this publish. A template's own
                 // `preferred_letterhead_version_id` (if set) is honored by
                 // the backend at report-creation time (create_report) —

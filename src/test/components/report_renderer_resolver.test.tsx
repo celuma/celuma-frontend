@@ -7,7 +7,7 @@ import { draftSingleSampleNoImages } from "../fixtures/reports";
 import { v2CompleteBranding, v2MissingSnapshot } from "../fixtures/reports/versioned_v2";
 import type { ReportEnvelope } from "../../models/report";
 
-// Céluma 1.3 Fase 2, Bloque A/C, Historias A5/C5. Covers the full resolution
+// Cell 1.3 Phase 2, Block A/C, Stories A5/C5. Covers the full resolution
 // matrix required by the acceptance criteria: absent/1 -> legacy, 2 ->
 // VersionedReportRendererV2 (never the legacy renderer, even when its own
 // snapshot is invalid — it renders its own controlled fallback), unknown ->

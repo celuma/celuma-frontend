@@ -18,7 +18,7 @@ import AlertText from "../components/ui/error_text";
 import CelumaModal from "../components/ui/celuma_modal";
 import { usePageTitle } from "../hooks/use_page_title";
 
-/* --------- Validación --------- */
+/* --------- Validation --------- */
 const schema = z.object({
     identifier: z.string().trim().nonempty("El usuario o email es obligatorio."),
     password: z
@@ -220,7 +220,7 @@ export default function Login() {
                 )}
 
                 <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
-                    {/* Usuario / email */}
+                    {/* Username / email */}
                     <FormField
                         control={control}
                         name="identifier"
@@ -240,7 +240,7 @@ export default function Login() {
                         )}
                     />
 
-                    {/* Contraseña */}
+                    {/* Password */}
                     <FormField
                         control={control}
                         name="password"
@@ -259,7 +259,7 @@ export default function Login() {
                         )}
                     />
 
-                    {/* Recordarme */}
+                    {/* Remember me */}
                     <FormField
                         control={control}
                         name="remember"
@@ -272,10 +272,10 @@ export default function Login() {
                         )}
                     />
 
-                    {/* Error del servidor */}
+                    {/* Server error */}
                     {serverError && <AlertText variant="error">{serverError}</AlertText>}
 
-                    {/* Botón */}
+                    {/* Button */}
                     <Button type="primary" htmlType="submit" loading={isSubmitting} fullWidth style={{ marginTop: 8 }}>
                         Iniciar Sesión
                     </Button>
