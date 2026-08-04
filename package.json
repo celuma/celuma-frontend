@@ -18,7 +18,7 @@
     "@hookform/resolvers": "^5.2.1",
     "antd": "^5.27.1",
     "dayjs": "^1.11.18",
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.4.13",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.0.0",
