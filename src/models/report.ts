@@ -107,6 +107,13 @@ export interface ReportTemplateListItem {
     description?: string;
     is_active: boolean;
     created_at: string;
+    /** Post-Phase 2 remediation: administrative preference, not ownership —
+     *  see template-letterhead-association-contract.md. Legacy, read-only
+     *  since the second UX remediation — use preferred_letterhead_id. */
+    preferred_letterhead_version_id?: string | null;
+    /** Second post-Phase 2 remediation (UX): the preferred logical letterhead
+     *  (not a specific version) — see template-simplification-contract.md. */
+    preferred_letterhead_id?: string | null;
 }
 
 /** Template returned from GET /api/v1/reports/templates/{id} (detail) */
@@ -128,6 +135,55 @@ export interface UpdateReportTemplatePayload {
     description?: string;
     template_json?: ReportTemplateJSON;
     is_active?: boolean;
+    preferred_letterhead_version_id?: string | null;
+    preferred_letterhead_id?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Report Template Versions — Céluma 1.3 Phase 2, Block D. Mirrors
+// celuma-backend/app/schemas/report_template_version.py field-for-field.
+// The full `configuration` shape (ReportRenderingSnapshotV2) lives in
+// components/report/versioned/versioned_report_types.ts and must always be
+// validated via report_snapshot_validation.ts before use — never assumed
+// valid just because it came back from the API.
+// ---------------------------------------------------------------------------
+
+export type ReportTemplateVersionStatus = "PUBLISHED" | "ACTIVE" | "ARCHIVED";
+
+/** Lightweight version metadata — never includes `configuration`. */
+export interface ReportTemplateVersionSummary {
+    id: string;
+    tenant_id: string;
+    report_template_id: string;
+    version_number: number;
+    schema_version: number;
+    status: ReportTemplateVersionStatus;
+    created_by: string | null;
+    published_at: string;
+    activated_at: string | null;
+    archived_at: string | null;
+}
+
+/** Full version detail, including the immutable configuration. */
+export interface ReportTemplateVersionDetail extends ReportTemplateVersionSummary {
+    configuration: Record<string, unknown>;
+}
+
+export interface ReportTemplateVersionsListResponse {
+    versions: ReportTemplateVersionSummary[];
+}
+
+/** Payload for POST /api/v1/reports/templates/{id}/versions. */
+export interface CreateReportTemplateVersionPayload {
+    configuration: Record<string, unknown>;
+}
+
+/** Response from POST /api/v1/reports/templates/{id}/logo. */
+export interface ReportTemplateLogoUploadResponse {
+    storage_object_id: string;
+    url: string;
+    content_type: string;
+    size_bytes: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,8 +192,35 @@ export interface UpdateReportTemplatePayload {
 
 export type ReportStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" | "RETRACTED";
 
-/** The content of the report: same shape as ReportTemplateJSON but with values filled in */
-export type ReportContent = ReportTemplateJSON;
+/**
+ * The content of the report: same shape as ReportTemplateJSON but with
+ * values filled in, plus two fields the backend embeds directly in this
+ * same JSON body for V2 reports only (Céluma 1.3 Phase 2, Block C). Kept as
+ * `unknown`/loosely-typed here deliberately — the strict shape
+ * (`ReportRenderingSnapshotV2`) lives in
+ * components/report/versioned/versioned_report_types.ts and must be
+ * obtained through report_snapshot_validation.ts, never assumed valid just
+ * because the key is present.
+ */
+export type ReportContent = ReportTemplateJSON & {
+    /** Only present for V2 reports; absent for legacy. */
+    schema_version?: number;
+    /** Only present for V2 reports; absent for legacy. Validate before use. */
+    rendering_snapshot?: unknown;
+};
+
+/**
+ * Ephemeral resources resolved server-side from a V2 report's
+ * `rendering_snapshot` (Céluma 1.3 Phase 2, Block C, Story C1). Never
+ * part of the snapshot itself — recomputed on every read, never persisted.
+ * Absent for legacy reports and for V2 reports with nothing to resolve.
+ */
+export interface ReportResolvedResources {
+    header_logo_url?: string | null;
+    /** Second post-Phase 2 remediation (UX): counterpart to
+     *  presentation.footer.logo_storage_id. */
+    footer_logo_url?: string | null;
+}
 
 /** Full report envelope returned by GET /api/v1/reports/{id} and POST /api/v1/reports/ */
 export interface ReportEnvelope {
@@ -156,6 +239,47 @@ export interface ReportEnvelope {
     template: ReportTemplateJSON;
     /** Content of the report (same shape as template but with values filled) */
     report: ReportContent;
+    /**
+     * Céluma 1.3 Phase 2, Block B/C: V2 metadata sourced from ReportVersion.
+     * Absent/null for legacy reports (schema_version absent/1 inside `report`).
+     * Do NOT use this top-level field to pick a renderer — resolveReportSchemaVersion
+     * reads `report.schema_version` (inside the JSON body), not this one.
+     */
+    schema_version?: number | null;
+    template_version_id?: string | null;
+    /** Post-Phase-2 remediation: administrative twin of `template_version_id`
+     *  — which ReportLetterheadVersion produced this version's `presentation`
+     *  block. Null for legacy reports and for V2 reports created before this
+     *  remediation. */
+    letterhead_version_id?: string | null;
+    generated_by_renderer_version?: string | null;
+    /** Resolved, ephemeral resources for the current version (e.g. header logo URL). */
+    resolved_resources?: ReportResolvedResources | null;
+    /**
+     * Céluma 1.3 Phase 2, Block E: official PDF artifact status for the
+     * current version. `pdf_generation_status` absent/null means no
+     * generation attempt has ever run (including every historical version
+     * from before this block existed) — distinct from "GENERATING"/"READY"/"FAILED".
+     */
+    pdf_generation_status?: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_generated_at?: string | null;
+    pdf_sha256?: string | null;
+    pdf_size_bytes?: number | null;
+    pdf_page_count?: number | null;
+    pdf_error_code?: string | null;
+    pdf_error_message?: string | null;
+}
+
+/**
+ * Céluma 1.3 Phase 2, Block E: response of
+ * GET /api/v1/reports/internal/render-data/{report_id}/{version_no},
+ * consumed only by the internal, token-authenticated render route driven by
+ * the backend's headless-Chromium PDF generator. Same shape as
+ * `ReportEnvelope` plus the reviewer id->name lookup needed to render a real
+ * signature block.
+ */
+export interface InternalRenderData extends ReportEnvelope {
+    signer_lookup: { id: string; name: string }[];
 }
 
 /** Full report response from GET /api/v1/reports/{id}/full */

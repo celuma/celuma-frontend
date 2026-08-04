@@ -6,7 +6,7 @@ import {
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
-    DollarOutlined, ClockCircleOutlined
+    DollarOutlined, ClockCircleOutlined, PrinterOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -21,7 +21,7 @@ import CelumaTextArea from "../components/ui/textarea_field";
 import CelumaTabs from "../components/ui/celuma_tabs";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
-import { getReport } from "../services/report_service";
+import { getReport, getOfficialPdfDownloadUrl } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -254,6 +254,28 @@ export default function OrderDetail() {
         } finally {
             setReportLoading(false);
         }
+    };
+
+    // Second post-Phase 2 remediation (UX): the only downloadable document
+    // for a published report — replaces the former "Export PDF" (which was
+    // only a local print view via usePdfExport, not the persisted official
+    // PDF). See signed-pdf-publication-workflow.md.
+    const handleDownloadOfficialPdf = async () => {
+        if (!latestReport?.id || latestReport.version_no == null) return;
+        try {
+            const { pdf_url } = await getOfficialPdfDownloadUrl(latestReport.id, latestReport.version_no);
+            window.open(pdf_url, "_blank");
+        } catch (err) {
+            showCelumaApiError(err, "Error al descargar el PDF oficial.");
+        }
+    };
+
+    // Fourth post-Phase 2 remediation (Observation 1): local printing is NOT
+    // the official PDF and never replaces it. Delegates to ReportPreview,
+    // which prints the already-mounted renderer pages and derives the mark
+    // (DRAFT / RETRACTED) from the report's own status.
+    const handlePrintLocalCopy = async () => {
+        await previewRef.current?.printLocalCopy();
     };
 
     // Function to refresh order data.
@@ -758,14 +780,38 @@ export default function OrderDetail() {
                             >
                                 Actualizar
                             </CelumaButton>
-                            <CelumaButton
-                                size="small"
-                                type="primary"
-                                icon={<FilePdfOutlined />}
-                                onClick={() => previewRef.current?.exportPDF()}
-                            >
-                                Exportar PDF
-                            </CelumaButton>
+                            {latestReport?.status === "PUBLISHED" && hasPermission("reports:read") && (
+                                <CelumaButton
+                                    size="small"
+                                    type="primary"
+                                    icon={<FilePdfOutlined />}
+                                    onClick={handleDownloadOfficialPdf}
+                                >
+                                    Descargar PDF oficial
+                                </CelumaButton>
+                            )}
+                            {/* Fourth remediation (Observation 1): a secondary
+                                action, always distinct from the official PDF.
+                                Prints the preview already mounted below
+                                (`previewRef`), with a DRAFT/RETRACTED mark
+                                based on the status. See local-print-contract.md. */}
+                            {latestReport && hasPermission("reports:read") && (
+                                <CelumaButton
+                                    size="small"
+                                    icon={<PrinterOutlined />}
+                                    onClick={handlePrintLocalCopy}
+                                    data-testid="print-local-copy"
+                                    title={
+                                        latestReport.status === "PUBLISHED"
+                                            ? "Copia local impresa por el navegador — no sustituye al PDF oficial firmado"
+                                            : "Copia local de trabajo — se marca como BORRADOR y no genera ningún documento oficial"
+                                    }
+                                >
+                                    {latestReport.status === "PUBLISHED" || latestReport.status === "RETRACTED"
+                                        ? "Imprimir copia local"
+                                        : "Imprimir borrador"}
+                                </CelumaButton>
+                            )}
                         </div>
                     </Panel>
 

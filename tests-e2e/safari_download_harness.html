@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+  Quinta remediación post-Fase 2 — banco de pruebas manual para Safari.
+
+  El build de WebKit que trae Playwright no arranca en macOS 26 arm64
+  (Segmentation fault: 11), así que la verificación del comportamiento
+  específico de Safari se hace a mano con esta página. Aísla EXACTAMENTE la
+  diferencia entre el mecanismo antiguo y el nuevo, sin necesidad de
+  credenciales, backend ni datos clínicos.
+
+  Uso:
+      open -a Safari celuma-frontend/tests-e2e/safari_download_harness.html
+
+  Ambos botones esperan una promesa antes de descargar — esa espera es lo
+  que rompe el gesto del usuario y lo que hacía que Safari tratara el
+  `window.open` como un popup. Ver safari-pdf-download-contract.md.
+-->
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Céluma — descarga del PDF oficial en Safari</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 20px; color: #0d1b2a; }
+        h1 { font-size: 22px; }
+        button { font-size: 15px; padding: 10px 16px; border-radius: 10px; border: 2px solid #49b6ad; background: #fff; cursor: pointer; margin-right: 10px; }
+        button.primary { background: #49b6ad; color: #fff; }
+        .box { border: 2px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 18px 0; background: #fafbfc; }
+        code { background: #eef2f5; padding: 2px 5px; border-radius: 4px; }
+        #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px; background: #0d1b2a; color: #d7f5f2; padding: 14px; border-radius: 10px; min-height: 90px; }
+        .ok { color: #059669; font-weight: 700; }
+        .bad { color: #e5484d; font-weight: 700; }
+    </style>
+</head>
+<body>
+<h1>Descarga del PDF oficial — comportamiento de Safari</h1>
+
+<p>
+    Los dos botones hacen lo mismo: <b>esperan una promesa</b> (como hace el
+    editor al pedir la URL presignada) y después intentan descargar un PDF.
+    Solo cambia el mecanismo final.
+</p>
+
+<div class="box">
+    <b>1. Mecanismo ANTERIOR</b> — <code>window.open(url, "_blank")</code> tras el <code>await</code>.<br>
+    Resultado esperado en Safari: <span class="bad">no descarga</span> — o se bloquea como
+    popup, o abre una pestaña en blanco.
+    <p><button id="old">Descargar (window.open)</button></p>
+</div>
+
+<div class="box">
+    <b>2. Mecanismo ACTUAL</b> — <code>&lt;a download&gt;</code> sintético tras el mismo <code>await</code>.<br>
+    Resultado esperado en Safari: <span class="ok">descarga el archivo</span>, sin pestaña nueva
+    y sin permitir popups.
+    <p><button id="new" class="primary">Descargar (&lt;a download&gt;)</button></p>
+</div>
+
+<div id="log">Listo. Pulsa un botón.</div>
+
+<p style="font-size:13px;color:#6b7280">
+    Qué anotar en <code>remediation-5-e2e-report.md</code>: para cada botón, si
+    apareció el archivo en Descargas, con qué nombre, si Safari mostró el aviso
+    de «bloqueó una ventana emergente» y si se abrió alguna pestaña vacía.
+</p>
+
+<script>
+    const log = (msg, cls) => {
+        const el = document.getElementById("log");
+        el.innerHTML += `\n<span class="${cls || ""}">${msg}</span>`;
+    };
+
+    // Un PDF mínimo pero real, en un blob: URL. Sustituye a la URL
+    // presignada de S3 sin necesitar red ni credenciales; para lo que se
+    // mide aquí (¿el navegador deja descargar tras un await?) es equivalente.
+    function tinyPdfUrl() {
+        const pdf = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+            "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+            "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n" +
+            "trailer<</Root 1 0 R>>\n%%EOF";
+        return URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+    }
+
+    /** La espera que rompe el gesto del usuario. */
+    const awaitLikeTheApp = () => new Promise((r) => setTimeout(r, 250));
+
+    document.getElementById("old").addEventListener("click", async () => {
+        log("\n[ANTERIOR] esperando la URL presignada…");
+        await awaitLikeTheApp();
+        const win = window.open(tinyPdfUrl(), "_blank");
+        if (!win) {
+            log("[ANTERIOR] window.open devolvió null → BLOQUEADO como popup.", "bad");
+        } else {
+            log("[ANTERIOR] window.open devolvió una ventana. Comprueba si descargó o si quedó una pestaña vacía.", "bad");
+        }
+    });
+
+    document.getElementById("new").addEventListener("click", async () => {
+        log("\n[ACTUAL] esperando la URL presignada…");
+        await awaitLikeTheApp();
+        const link = document.createElement("a");
+        link.href = tinyPdfUrl();
+        link.download = "reporte-CTM-27-v1.pdf";
+        link.rel = "noopener";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        log("[ACTUAL] <a download> pulsado. Debe aparecer reporte-CTM-27-v1.pdf en Descargas, sin pestaña nueva.", "ok");
+    });
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import ActionButtonPanel from "../components/ui/action_button_panel";
 import Checkbox from "../components/ui/checkbox";
 import Tooltip from "../components/ui/tooltip";
 import FloatingCaptionSelect from "../components/ui/floating_caption_select";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined, SaveOutlined, FileTextOutlined, FormOutlined, SafetyCertificateOutlined, BgColorsOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -25,6 +25,7 @@ import Panel from "../components/ui/panel";
 import { renderActiveChip } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
 import { getReportTemplates, getReportTemplateById, createReportTemplate, updateReportTemplate, deleteReportTemplate } from "../services/report_service";
+import { listReportLetterheads } from "../services/report_letterhead_service";
 import type {
     ReportTemplateListItem,
     ReportTemplateJSON,
@@ -42,13 +43,13 @@ const { Text } = Typography;
 const PREDEFINED_BASE_KEYS = Object.keys(DEFAULT_BASE_FIELDS);
 const PREDEFINED_SECTION_KEYS = Object.keys(DEFAULT_SECTIONS);
 
-// Tipos para campos base: solo texto y numérico
+// Types for base fields: text and numeric only.
 const BASE_FIELD_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "text",    label: "Texto" },
     { value: "numeric", label: "Numérico" },
 ];
 
-// Tipos para secciones: todos
+// Types for sections: all.
 const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "text",     label: "Texto" },
     { value: "numeric",  label: "Numérico" },
@@ -129,7 +130,7 @@ function EditableRow({
                 width: "100%",
             }}
         >
-            {/* Grupo izquierdo: checkbox + label */}
+            {/* Left group: checkbox + label */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", maxWidth: "100%" }}>
                 <Checkbox
                     checked={isVisible}
@@ -171,7 +172,7 @@ function EditableRow({
                 )}
             </div>
 
-            {/* Grupo derecho: tipo + tags + botones de acción */}
+            {/* Right group: type + tags + action buttons */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                 {isPredefined && type && (
                     <span style={FIELD_TYPE_CHIP_STYLE}>
@@ -383,12 +384,12 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
 
-    // ---- Lista ----
+    // ---- List ----
     const [loadingList, setLoadingList] = useState(false);
     const [templates, setTemplates] = useState<ReportTemplateListItem[]>([]);
     const [templateSearch, setTemplateSearch] = useState("");
 
-    // ---- Panel derecho ----
+    // ---- Right panel ----
     const [editingId, setEditingId] = useState<string | null>(null);
     const [panelVisible, setPanelVisible] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
@@ -421,6 +422,14 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         currentValue: string;
     } | null>(null);
     const [defaultDraftValue, setDefaultDraftValue] = useState<string>("");
+
+    // ---- Default letterhead (second post-Phase 2 remediation, UX) ----
+    // Lives inside the template's standard form — a simple <Select> of
+    // logical letterheads (never versions). It selects
+    // ReportTemplate.preferred_letterhead_id and never edits presentation.
+    const [letterheadOptions, setLetterheadOptions] = useState<{ value: string; label: string }[]>([]);
+    const [letterheadOptionsLoading, setLetterheadOptionsLoading] = useState(false);
+    const [selectedLetterheadId, setSelectedLetterheadId] = useState<string | undefined>(undefined);
 
     // Convert template_json ↔ ordered arrays
     const templateJSONFromArrays = (): ReportTemplateJSON => ({
@@ -470,12 +479,37 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
     }, []);
 
+    // Second post-Phase 2 remediation (UX): logical letterheads available to
+    // the "Default letterhead" selector — loaded once and independent of the
+    // template being edited.
+    const loadLetterheadOptions = async () => {
+        setLetterheadOptionsLoading(true);
+        try {
+            const { letterheads } = await listReportLetterheads();
+            setLetterheadOptions(
+                letterheads.map((lh) => ({
+                    value: lh.id,
+                    label: lh.is_default ? `${lh.name} (predeterminado del laboratorio)` : lh.name,
+                }))
+            );
+        } catch (err) {
+            message.error(err instanceof Error ? err.message : "Error al cargar los membretes disponibles");
+        } finally {
+            setLetterheadOptionsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadLetterheadOptions();
+    }, []);
+
     // Panel helpers
     const openNewPanel = () => {
         setEditingId(null);
         form.resetFields();
         form.setFieldsValue({ is_active: true });
         arraysFromTemplateJSON(buildDefaultTemplateJSON());
+        setSelectedLetterheadId(undefined);
         setPanelVisible(true);
     };
 
@@ -490,6 +524,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 description: detail.description,
                 is_active:   detail.is_active,
             });
+            setSelectedLetterheadId(detail.preferred_letterhead_id ?? undefined);
             const stored = detail.template_json ?? {};
             const defaults = buildDefaultTemplateJSON();
 
@@ -553,12 +588,13 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             const templateJSON = templateJSONFromArrays();
             if (editingId) {
                 await updateReportTemplate(editingId, {
-                    name:          values.name,
-                    description:   values.description,
-                    template_json: templateJSON,
-                    is_active:     values.is_active,
+                    name:                    values.name,
+                    description:             values.description,
+                    template_json:           templateJSON,
+                    is_active:               values.is_active,
+                    preferred_letterhead_id: selectedLetterheadId ?? null,
                 });
-                message.success("Plantilla actualizada");
+                message.success("Plantilla guardada");
             } else {
                 await createReportTemplate({
                     name:          values.name,
@@ -848,7 +884,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
         >
                 <Spin spinning={loadingDetail}>
                     <Form form={form} layout="vertical">
-                        {/* ---- Nombre / descripción / estado ---- */}
+                        {/* ---- Name / description / status ---- */}
                         <Form.Item
                             name="name"
                             rules={[{ required: true, message: "El nombre es requerido" }]}
@@ -878,7 +914,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Campos base ---- */}
+                        {/* ---- Base fields ---- */}
                         <SectionTitle
                             extra={
                                 <CelumaButton
@@ -909,7 +945,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Secciones ---- */}
+                        {/* ---- Sections ---- */}
                         <SectionTitle
                             extra={
                                 <CelumaButton
@@ -940,7 +976,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
 
                         <Divider />
 
-                        {/* ---- Firma (T7) ---- */}
+                        {/* ---- Signature (T7) ---- */}
                         <SectionTitle icon={<SafetyCertificateOutlined />}>Firma</SectionTitle>
                         <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
                             Estos valores se usan como predeterminados al crear nuevos informes con esta plantilla.
@@ -980,9 +1016,35 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             </div>
                         </Panel>
 
+                        {editingId && (
+                            <>
+                                <Divider />
+
+                                {/* ---- Default letterhead (second UX remediation) ---- */}
+                                <SectionTitle icon={<BgColorsOutlined />}>Membrete predeterminado</SectionTitle>
+                                <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+                                    Se preseleccionará al crear un reporte con esta plantilla. Si no eliges
+                                    ninguno, se usa el membrete predeterminado del laboratorio.
+                                </Text>
+                                <FloatingCaptionSelect
+                                    label="Membrete"
+                                    value={selectedLetterheadId}
+                                    onChange={(v) => setSelectedLetterheadId(v)}
+                                    options={letterheadOptions}
+                                    allowClear
+                                    disabled={letterheadOptionsLoading}
+                                />
+                                {letterheadOptions.length === 0 && !letterheadOptionsLoading && (
+                                    <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 8 }}>
+                                        No hay membretes todavía. Créalos en Configuración → Membretes.
+                                    </Text>
+                                )}
+                            </>
+                        )}
+
                         <Divider />
 
-                        {/* ---- Acciones ---- */}
+                        {/* ---- Actions ---- */}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                             <CelumaButton size="small" onClick={closePanel} icon={<CloseOutlined />}>
                                 Cancelar
@@ -1028,7 +1090,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </div>
             </div>
 
-            {/* ---- Modal: crear campo base custom ---- */}
+            {/* ---- Modal: create custom base field ---- */}
             <CelumaModal
                 title="Crear campo"
                 open={baseFieldModalOpen}
@@ -1063,7 +1125,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </Form>
             </CelumaModal>
 
-            {/* ---- Modal: crear sección custom ---- */}
+            {/* ---- Modal: create custom section ---- */}
             <CelumaModal
                 title="Crear sección"
                 open={sectionModalOpen}
@@ -1098,7 +1160,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 </Form>
             </CelumaModal>
 
-            {/* ---- Modal: valor / contenido por defecto ---- */}
+            {/* ---- Modal: default value / content ---- */}
             <CelumaModal
                 title={
                     defaultValueModal
@@ -1179,6 +1241,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                     </div>
                 )}
             </CelumaModal>
+
         </>
     );
 

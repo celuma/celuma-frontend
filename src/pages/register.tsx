@@ -171,7 +171,7 @@ export default function RegisterAllOneClick() {
                     style={cardStyle}
                 >
                     <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-                        {/* Sección Empresa */}
+                        {/* Company section */}
                         <section>
                             <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Empresa</h3>
                             <div style={{ display: "grid", gap: 12 }}>
@@ -195,7 +195,7 @@ export default function RegisterAllOneClick() {
 
                         <Divider style={{ margin: "8px 0" }} />
 
-                        {/* Sección Sucursal */}
+                        {/* Branch section */}
                         <section>
                             <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Sucursal</h3>
                             <p style={{ margin: "0 0 12px 0", color: "#6b7280", fontSize: 13 }}>
@@ -256,7 +256,7 @@ export default function RegisterAllOneClick() {
 
                         <Divider style={{ margin: "8px 0" }} />
 
-                        {/* Sección Usuario */}
+                        {/* User section */}
                         <section>
                             <h3 style={{ ...cardTitleStyle, fontSize: 18, margin: "0 0 12px 0" }}>Usuario</h3>
                             <div style={{ display: "grid", gap: 12 }}>

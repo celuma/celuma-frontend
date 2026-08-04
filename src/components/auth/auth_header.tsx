@@ -6,7 +6,7 @@ import { tokens } from "../design/tokens";
 const { Header } = Layout;
 
 type Props = {
-    // Mantenido para compatibilidad mientras los enlaces de navegación están ocultos.
+    // Kept for compatibility while navigation links remain hidden.
     activeLink?: "login" | "register";
 };
 
@@ -57,8 +57,8 @@ export default function AuthHeader(_props: Props) {
                 </span>
             </Link>
 
-            {/* Navigation Links — temporalmente ocultos para evitar múltiples registros
-                mientras se terminan otras partes del proyecto.
+            {/* Navigation links — temporarily hidden to prevent multiple registrations
+                while other parts of the project are completed.
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <Link
                     to="/login"

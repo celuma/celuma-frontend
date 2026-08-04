@@ -3,6 +3,10 @@ import React from "react";
 type Props = {
     children: React.ReactNode;
     style?: React.CSSProperties;
+    /** Fifth post-Phase 2 remediation: without this, the attribute was silently
+     *  discarded, so identifying a panel in tests required wrapping it in an
+     *  extra `div` just to locate it. */
+    "data-testid"?: string;
 };
 
 /**
@@ -11,9 +15,10 @@ type Props = {
  * border width and 12px radius so it sits consistently among inputs, with a
  * soft neutral fill. Pass layout props (display, etc.) via `style`.
  */
-export default function Panel({ children, style }: Props) {
+export default function Panel({ children, style, "data-testid": dataTestId }: Props) {
     return (
         <div
+            data-testid={dataTestId}
             style={{
                 border: "2px solid #e5e7eb",
                 borderRadius: 12,

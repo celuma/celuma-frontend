@@ -36,6 +36,11 @@ import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import ReportTemplates from "./pages/report_templates";
+import ReportTemplateVersions from "./pages/report_template_versions";
+import ReportTemplateEditor from "./pages/report_template_editor";
+import ReportLetterheads from "./pages/report_letterheads";
+import ReportLetterheadVersions from "./pages/report_letterhead_versions";
+import ReportLetterheadEditor from "./pages/report_letterhead_editor";
 import Config from "./pages/config";
 import ConfigAbout from "./pages/config_about";
 import BranchesList from "./pages/branches_list";
@@ -44,6 +49,7 @@ import BranchDetail from "./pages/branch_detail";
 import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
+import InternalReportRender from "./components/report/internal_report_render";
 
 createRoot(document.getElementById("root")!).render(
     <ConfigProvider theme={{
@@ -71,6 +77,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route path="/patient-portal" element={<PatientPortal />} />
             <Route path="/access-denied" element={<AccessDenied />} />
+            {/* Céluma 1.3 Phase 2, Block E: internal render route for the backend's
+                headless-Chromium PDF generator. Chrome-free, no RequireAuth/
+                RequirePermission — authorized by a short-lived render token in the
+                URL fragment instead. Never linked to from the app UI. */}
+            <Route path="/internal/report-render/:reportId/:versionNo" element={<InternalReportRender />} />
 
             {/* Lab read access */}
             <Route path="/home" element={<RequirePermission permission="lab:read"><Home /></RequirePermission>} />
@@ -116,6 +127,21 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="profile" element={<Profile embedded />} />
                 <Route path="catalog" element={<RequirePermission permission="admin:manage_catalog"><PriceCatalog embedded /></RequirePermission>} />
                 <Route path="report-templates" element={<RequirePermission permission="admin:manage_catalog"><ReportTemplates embedded /></RequirePermission>} />
+                {/* Céluma 1.3 Phase 2, Block D: gated with reports:manage_templates
+                    (not admin:manage_catalog like the row above) because that is
+                    the permission the backend template-version endpoints actually
+                    enforce — see phase-2-block-d-architecture-decision.md for the
+                    pre-existing admin:manage_catalog/reports:manage_templates
+                    mismatch on the legacy route, left undisturbed here. */}
+                <Route path="report-templates/:templateId/versions" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateVersions embedded /></RequirePermission>} />
+                <Route path="report-templates/:templateId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportTemplateEditor embedded /></RequirePermission>} />
+                {/* Post-Phase-2 remediation: letterheads are a shared domain
+                    independent of clinical templates — the same
+                    reports:manage_templates permission that already manages
+                    report configuration (see remediation-architecture-decision.md §5). */}
+                <Route path="report-letterheads" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheads embedded /></RequirePermission>} />
+                <Route path="report-letterheads/:letterheadId/versions" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheadVersions embedded /></RequirePermission>} />
+                <Route path="report-letterheads/:letterheadId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheadEditor embedded /></RequirePermission>} />
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />

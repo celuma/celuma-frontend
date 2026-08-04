@@ -6,7 +6,14 @@ import type {
     ReportTemplateDetail,
     CreateReportTemplatePayload,
     UpdateReportTemplatePayload,
+    ReportTemplateVersionsListResponse,
+    ReportTemplateVersionDetail,
+    ReportTemplateVersionSummary,
+    CreateReportTemplateVersionPayload,
+    ReportTemplateLogoUploadResponse,
+    InternalRenderData,
 } from "../models/report";
+import type { StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
@@ -112,6 +119,26 @@ export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail
         throw new Error(`Error al obtener tipo de estudio: ${res.status} - ${errText}`);
     }
     return (await res.json()) as StudyTypeDetail;
+}
+
+/**
+ * Post-Phase-2 remediation: resolves everything the report editor needs to
+ * bootstrap a brand-new V2 report (clinical template + active version +
+ * resolved letterhead) in one round trip, replacing the previous
+ * 3-sequential-fetch dance. See report-editor-letterhead-selection-contract.md.
+ */
+export async function getStudyTypeReportDefaults(
+    studyTypeId: string
+): Promise<StudyTypeReportDefaults> {
+    const res = await fetch(`${base}/v1/study-types/${studyTypeId}/report-defaults`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al resolver la configuración del tipo de estudio: ${res.status} - ${errText}`);
+    }
+    return (await res.json()) as StudyTypeReportDefaults;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +307,45 @@ export async function signReport(reportId: string, changelog?: string): Promise<
     return await res.json();
 }
 
+export interface ReportSignAndPublishResponse extends ReportActionResponse {
+    pdf_generation_status: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_sha256: string | null;
+    pdf_size_bytes: number | null;
+    pdf_page_count: number | null;
+    pdf_generated_at: string | null;
+    /** Fifth post-Phase 2 remediation (§8): the EXACT version whose official
+     *  PDF was just generated. The UI uses it to offer the download
+     *  immediately, without deriving it from a refreshed `/full` that could
+     *  be stale. Optional to support a backend deployed before this
+     *  remediation. */
+    report_version_id?: string | null;
+    version_no?: number | null;
+    official_pdf_available?: boolean;
+}
+
+/** Second post-Phase 2 remediation (UX): the only primary-flow action in
+ *  APPROVED status—generates the official PDF (already reflecting the
+ *  signature) and publishes in one call. Replaces the two-button flow:
+ *  "Generate official PDF" + "Sign and publish". A 409 means a
+ *  sign-and-publish attempt is already running (double-click or another
+ *  tab)—display the backend message verbatim; retrying after waiting is safe. */
+export async function signAndPublishReport(
+    reportId: string,
+    changelog?: string
+): Promise<ReportSignAndPublishResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/sign-and-publish`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ changelog }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        const detail = parseFastApiErrorDetail(errText);
+        throw new Error(detail ?? `Error al firmar y publicar el reporte (${res.status})`);
+    }
+    return await res.json();
+}
+
 export async function retractReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/retract`, {
         method: "POST",
@@ -404,4 +470,246 @@ export async function deleteReportTemplate(templateId: string): Promise<void> {
         const errText = await res.text();
         throw new Error(`Error al eliminar plantilla: ${res.status} - ${errText}`);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Report Template Versions (Céluma 1.3 Phase 2, Block D) — the immutable,
+// append-only versions of a template's rendering configuration
+// (ReportRenderingSnapshotV2). Distinct from the ReportTemplateListItem/
+// ReportTemplateDetail CRUD above, which is the mutable legacy/V1 template.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared request helper for the template-version endpoints. Distinguishes
+ * 401/403/404/409/422 with actionable Spanish UI messages (falling back to the
+ * backend's own `detail` when present) and network failures, per
+ * report-template-editor-contract.md — the admin UI must never show a
+ * generic error when the backend already distinguishes the cause.
+ */
+async function requestTemplateVersionJSON<T>(
+    url: string,
+    init: RequestInit,
+    fallbackMessage: string
+): Promise<T> {
+    let res: Response;
+    try {
+        res = await fetch(url, init);
+    } catch {
+        throw new Error("Error de red: no se pudo contactar al servidor. Verifica tu conexión.");
+    }
+    if (!res.ok) {
+        const errText = await res.text();
+        const detail = parseFastApiErrorDetail(errText);
+        if (res.status === 401) throw new Error(detail ?? "Tu sesión expiró. Vuelve a iniciar sesión.");
+        if (res.status === 403) throw new Error(detail ?? "No tienes permiso para realizar esta acción.");
+        if (res.status === 404) throw new Error(detail ?? "No se encontró el recurso solicitado.");
+        if (res.status === 409) throw new Error(detail ?? "La operación entra en conflicto con el estado actual de la versión.");
+        if (res.status === 422) throw new Error(detail ?? "Los datos enviados no son válidos.");
+        throw new Error(detail ?? `${fallbackMessage} (${res.status})`);
+    }
+    return (await res.json()) as T;
+}
+
+export async function listReportTemplateVersions(
+    templateId: string
+): Promise<ReportTemplateVersionsListResponse> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions`,
+        { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
+        "Error al listar versiones de la plantilla"
+    );
+}
+
+export async function getReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionDetail> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}`,
+        { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
+        "Error al obtener la versión de la plantilla"
+    );
+}
+
+export async function createReportTemplateVersion(
+    templateId: string,
+    payload: CreateReportTemplateVersionPayload
+): Promise<ReportTemplateVersionDetail> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions`,
+        {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify(payload),
+        },
+        "Error al publicar la versión de la plantilla"
+    );
+}
+
+export async function activateReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionSummary> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}/activate`,
+        { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }) },
+        "Error al activar la versión de la plantilla"
+    );
+}
+
+export async function archiveReportTemplateVersion(
+    templateId: string,
+    versionId: string
+): Promise<ReportTemplateVersionSummary> {
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/versions/${versionId}/archive`,
+        { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }) },
+        "Error al archivar la versión de la plantilla"
+    );
+}
+
+export async function uploadReportTemplateLogo(
+    templateId: string,
+    file: File
+): Promise<ReportTemplateLogoUploadResponse> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestTemplateVersionJSON(
+        `${base}/v1/reports/templates/${templateId}/logo`,
+        { method: "POST", headers: authHeaders(), body: form },
+        "Error al subir el logo"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Céluma 1.3 Phase 2, Block E: internal render route + PDF generation
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the render envelope for the internal, chrome-free render route
+ * consumed by the backend's headless-Chromium PDF generator. Deliberately
+ * does NOT use `authHeaders()` — this is authorized by a short-lived render
+ * token (passed via the URL fragment by the caller), never by the normal
+ * user session in localStorage/sessionStorage.
+ */
+export async function fetchInternalRenderData(
+    renderToken: string,
+    reportId: string,
+    versionNo: number | string
+): Promise<InternalRenderData> {
+    const res = await fetch(`${base}/v1/reports/internal/render-data/${reportId}/${versionNo}`, {
+        method: "GET",
+        headers: { Accept: "application/json", Authorization: `Bearer ${renderToken}` },
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            parseFastApiErrorDetail(errText) ?? `Error al obtener datos de renderizado: ${res.status}`
+        );
+    }
+    return (await res.json()) as InternalRenderData;
+}
+
+export interface PdfGenerationStatusResponse {
+    version_id: string;
+    version_no: number;
+    report_id: string;
+    pdf_generation_status: "GENERATING" | "READY" | "FAILED" | null;
+    pdf_generated_at: string | null;
+    pdf_sha256: string | null;
+    pdf_size_bytes: number | null;
+    pdf_page_count: number | null;
+    pdf_error_code: string | null;
+    pdf_error_message: string | null;
+}
+
+export interface OfficialPdfDownloadResponse {
+    version_id: string;
+    version_no: number;
+    report_id: string;
+    pdf_storage_id: string;
+    pdf_key: string;
+    pdf_url: string;
+}
+
+/** Fifth post-Phase 2 remediation (§9.2): the UI must distinguish 403 / 404
+ *  / 409 to say WHAT happened, rather than "something failed". Previously,
+ *  a plain `Error` was thrown and the editor showed the backend's raw
+ *  `detail` (or a generic message), making an authorization 403 and a PDF
+ *  not yet generated indistinguishable to the reader. */
+export class OfficialPdfDownloadError extends Error {
+    readonly status: number;
+    constructor(status: number, message: string) {
+        super(message);
+        this.name = "OfficialPdfDownloadError";
+        this.status = status;
+    }
+}
+
+/** Fetches a short-lived presigned URL for the persisted official PDF of one report version. Never regenerates. */
+export async function getOfficialPdfDownloadUrl(
+    reportId: string,
+    versionNo: number
+): Promise<OfficialPdfDownloadResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/versions/${versionNo}/pdf`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new OfficialPdfDownloadError(
+            res.status,
+            parseFastApiErrorDetail(errText) ?? `Error al obtener el PDF oficial: ${res.status}`
+        );
+    }
+    return (await res.json()) as OfficialPdfDownloadResponse;
+}
+
+/** Fifth post-Phase 2 remediation (§9.3) — safe Safari download.
+ *
+ * `window.open(url, "_blank")` ran AFTER awaiting the presigned URL promise,
+ * so Safari no longer considered it part of the user's gesture and treated
+ * it as a popup: it either blocked it or opened an empty tab. A synthetic
+ * `<a download>` is not a popup—it is a download navigation—and works the
+ * same in Chromium, Firefox, and WebKit.
+ *
+ * `Content-Disposition: attachment; filename="..."` is already signed into
+ * the presigned URL itself (see `official_pdf_presigned_url` in the backend),
+ * so the file name does not depend on the `download` attribute, which S3 on
+ * another origin would ignore anyway. */
+export function triggerBrowserDownload(url: string, filename: string): void {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    // Safari does not trigger the download unless the node is in the document.
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+/** Exact mirror of the backend's `official_pdf_filename` (Phase 2, E10):
+ *  never derived from the patient name. */
+export function officialPdfFilename(orderCode: string | undefined, versionNo: number): string {
+    const safe = (orderCode || "reporte").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return `reporte-${safe || "reporte"}-v${versionNo}.pdf`;
+}
+
+/** Triggers (or re-checks, if already READY) official PDF generation for one report version. */
+export async function generateReportPdf(
+    reportId: string,
+    versionNo: number
+): Promise<PdfGenerationStatusResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/versions/${versionNo}/generate-pdf`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            parseFastApiErrorDetail(errText) ?? `Error al generar el PDF: ${res.status}`
+        );
+    }
+    return (await res.json()) as PdfGenerationStatusResponse;
 }

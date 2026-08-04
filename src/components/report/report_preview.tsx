@@ -1,10 +1,9 @@
-import { Spin, Button } from "antd";
+import { Spin } from "antd";
 import React, { useRef, forwardRef, useImperativeHandle } from "react";
-import { FilePdfOutlined } from "@ant-design/icons";
 import type { ReportEnvelope } from "../../models/report";
 import Panel from "../ui/panel";
-import ReportPreviewPages, { type ReportPreviewPagesRef, type SignerLookupEntry } from "./report_preview_pages";
-import { usePdfExport } from "../../hooks/use_pdf_export";
+import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef, type SignerLookupEntry } from "./report_renderer_resolver";
+import { useLocalPrint, localPrintMarkForStatus } from "../../hooks/use_local_print";
 
 interface ReportPreviewProps {
     report: ReportEnvelope;
@@ -15,19 +14,26 @@ interface ReportPreviewProps {
 }
 
 export interface ReportPreviewRef {
-    exportPDF: () => Promise<void>;
+    /** Fourth remediation (Observation 1): LOCAL printing — never the
+     *  official PDF. The draft/retracted mark is derived from the report
+     *  status, not the caller, so no screen can print an unpublished report
+     *  without a mark. See local-print-contract.md. */
+    printLocalCopy: () => Promise<void>;
 }
 
 const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report, loading = false, style, signerLookup }, ref) => {
     const previewPagesRef = useRef<ReportPreviewPagesRef>(null);
-    const { exportToPDF } = usePdfExport();
+    const { printLocalCopy } = useLocalPrint();
 
-    const handleExportPDF = async () => {
-        await exportToPDF(previewPagesRef, report.title ?? undefined);
+    const handlePrintLocalCopy = async () => {
+        await printLocalCopy(previewPagesRef, {
+            filename: report.title ?? undefined,
+            mark: localPrintMarkForStatus(report.status),
+        });
     };
 
     useImperativeHandle(ref, () => ({
-        exportPDF: handleExportPDF
+        printLocalCopy: handlePrintLocalCopy
     }));
 
     if (loading) {
@@ -40,18 +46,6 @@ const ReportPreview = forwardRef<ReportPreviewRef, ReportPreviewProps>(({ report
 
     return (
         <Panel style={{ ...style, padding: 16, overflowY: "auto", maxHeight: 600 }}>
-            <div style={{ marginBottom: 12 }}>
-                <Button
-                    type="primary"
-                    icon={<FilePdfOutlined />}
-                    onClick={handleExportPDF}
-                    size="small"
-                    data-pdf-export
-                    style={{ display: "none" }} // Hidden since we're using external button
-                >
-                    Exportar PDF
-                </Button>
-            </div>
             <ReportPreviewPages ref={previewPagesRef} report={report} signerLookup={signerLookup} />
         </Panel>
     );

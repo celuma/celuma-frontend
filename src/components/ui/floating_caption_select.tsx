@@ -22,6 +22,11 @@ type Props = {
     showSearch?: boolean;
     allowClear?: boolean;
     style?: React.CSSProperties;
+    /** Fifth post-Phase 2 remediation: the letterhead selector resolves the
+     *  selected letterhead's configuration with a network request, and without
+     *  this the field remained silent in the meantime. */
+    loading?: boolean;
+    "data-testid"?: string;
 };
 
 /**
@@ -43,6 +48,8 @@ export default function FloatingCaptionSelect({
     showSearch = false,
     allowClear = true,
     style,
+    loading = false,
+    "data-testid": dataTestId,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
     const [hovered, setHovered] = useState(false);
@@ -149,6 +156,7 @@ export default function FloatingCaptionSelect({
     return (
         <div
             style={{ position: "relative", zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
+            data-testid={dataTestId}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -186,6 +194,7 @@ export default function FloatingCaptionSelect({
                     options={options}
                     placeholder={placeholder}
                     disabled={disabled}
+                    loading={loading}
                     showSearch={showSearch}
                     optionFilterProp="label"
                     onFocus={() => setFocused(true)}

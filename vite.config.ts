@@ -23,6 +23,16 @@ export default defineConfig(({ mode }) => {
             }),
         },
         server: {
+            // Céluma 1.3 Phase 2, Block E: the backend's headless-Chromium PDF
+            // generator (running inside the `api` Docker container) needs to
+            // reach this dev server to render `/internal/report-render/...`.
+            // Docker Desktop's `host.docker.internal` only resolves back here
+            // if the dev server actually binds beyond loopback, and Vite's own
+            // host-header check must be told to trust that hostname. Only
+            // affects `vite dev`/`vite preview` — never the static `vite build`
+            // output actually served in production.
+            host: true,
+            allowedHosts: ["localhost", "host.docker.internal"],
             proxy: {
                 "/api": {
                     target: proxy_target,
