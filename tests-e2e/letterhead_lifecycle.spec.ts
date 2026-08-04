@@ -130,7 +130,7 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
 
         // A second clinical template, to prove a letterhead can be associated
         // to more than one template (step 8 of the requested flow).
-        const secondTemplate = await apiJson<{ id: string }>(request, "POST", "/api/v1/reports/templates/", {
+        await apiJson<{ id: string }>(request, "POST", "/api/v1/reports/templates/", {
             data: {
                 name: `E2E Template Two ${suffix}`,
                 template_json: { base: {}, sections: {}, base_order: [], section_order: [] },
