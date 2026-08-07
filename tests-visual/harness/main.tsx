@@ -12,6 +12,8 @@ import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/repo
 // Fourth post-Phase 2 remediation: PAIRED Legacy ↔ V2 fixtures (same
 // clinical content, two renderers) for legacy_v2_parity.visual.spec.ts.
 import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
+import { NotificationHarness } from "./notification_scenarios";
+import { NotificationPreferenceHarness } from "./notification_preference_scenarios";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Phase 2, Block A / Story
@@ -157,6 +159,21 @@ function Root() {
     const fixtureKey = params.get("fixture") ?? "";
     if (params.get("internal_render") === "1") {
         return <InternalRenderHarness fixtureKey={fixtureKey} />;
+    }
+    // Céluma 1.3 Phase 3, Block C: Notification Center surfaces, via
+    // /?notifications=<scenario>. Same fetch-stub approach as the
+    // internal-render mode above; the report fixtures and their goldens are
+    // untouched by it.
+    const notificationScenario = params.get("notifications");
+    if (notificationScenario) {
+        return <NotificationHarness scenarioKey={notificationScenario} />;
+    }
+    // Céluma 1.3 Phase 3, Block D: the Profile page's notification-preference
+    // section, via /?preferences=<scenario>. A separate mode from the one
+    // above so the two features' goldens never share a code path.
+    const preferenceScenario = params.get("preferences");
+    if (preferenceScenario) {
+        return <NotificationPreferenceHarness scenarioKey={preferenceScenario} />;
     }
     return <Harness />;
 }

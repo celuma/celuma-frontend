@@ -15,6 +15,11 @@ import {
     NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION, isSignatureMissingError,
 } from "../services/signature_service";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+// Céluma 1.3 Phase 3, Block D: the notification-preferences section. Kept in
+// its own component so it renders identically here and under /config/profile
+// (this page's `embedded` mode changes only what wraps the section list), and
+// so it is testable without standing up the rest of the profile page.
+import NotificationPreferencesSection from "../components/ui/notification_preferences_section";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import PasswordField from "../components/ui/password_field";
@@ -739,6 +744,13 @@ const Profile: React.FC<ProfileProps> = ({ embedded = false }) => {
                             />
                         </Card>
                     )}
+
+                    {/* Notification preferences (Céluma 1.3 Phase 3, Block D).
+                        Rendered unconditionally: the preference endpoints need
+                        authentication only, so every user who can receive a
+                        notification can manage how they receive it — the same
+                        reasoning that made /notifications RequireAuth. */}
+                    <NotificationPreferencesSection />
         </div>
     );
 

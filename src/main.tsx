@@ -50,6 +50,8 @@ import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
 import InternalReportRender from "./components/report/internal_report_render";
+import NotificationsPage from "./pages/notifications";
+import { NotificationProvider } from "./providers/notification_provider";
 
 createRoot(document.getElementById("root")!).render(
     <ConfigProvider theme={{
@@ -67,6 +69,14 @@ createRoot(document.getElementById("root")!).render(
     <AntApp>
         <CelumaNotificationProxy />
         <BrowserRouter>
+        {/* Céluma 1.3 Phase 3, Block C. The single owner of Notification Center
+            state — unread count, recent items and the one polling interval.
+            Mounted here, above <Routes>, rather than inside SidebarCeluma:
+            every page renders its own sidebar, so state living there would be
+            torn down and re-polled on every navigation. Public routes are
+            inside it too, harmlessly — it polls only while a session token is
+            stored, so the login screen makes no notification request. */}
+        <NotificationProvider>
         <Routes>
             {/* Public routes */}
             <Route path="/" element={<App />} />
@@ -118,6 +128,14 @@ createRoot(document.getElementById("root")!).render(
             {/* Profile — any authenticated user, no specific permission required */}
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
+            {/* Céluma 1.3 Phase 3, Block C: the Notification Center.
+                RequireAuth, not RequirePermission — the notifications API
+                enforces no permission (every query is self-scoped to the
+                caller's own user and tenant), so gating the inbox on lab:read
+                would let a user receive notifications they could not open.
+                See phase-3-block-c-architecture-decision.md §2. */}
+            <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+
             {/* Settings — redirect to config/tenant */}
             <Route path="/settings" element={<Navigate to="/config/tenant" replace />} />
 
@@ -159,6 +177,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/report-templates" element={<RequirePermission permission="lab:read"><ReportTemplates /></RequirePermission>} />
             <Route path="/users" element={<RequirePermission permission="admin:manage_users"><UsersManagement /></RequirePermission>} />
         </Routes>
+        </NotificationProvider>
         </BrowserRouter>
     </AntApp>
     </ConfigProvider>
