@@ -16,6 +16,7 @@
  * `extra="forbid"`s those fields, so sending one is a 422 rather than a
  * silently ignored parameter.
  */
+import { DEFAULT_LOCALE, resolveLocale, type Locale } from "../lib/locale";
 import type { NotificationType } from "./notification";
 
 /**
@@ -122,15 +123,36 @@ export function emailSwitchLabel(typeLabel: string): string {
 }
 
 /**
- * A short line of context per type, so a user is choosing between described
- * events rather than between enum labels. Deliberately generic: these describe
- * *when* a notification happens, never what a report contains.
+ * A short line of context per type, per locale, so a user is choosing between
+ * described events rather than between enum labels. Deliberately generic:
+ * these describe *when* a notification happens, never what a report contains.
+ *
+ * Céluma 1.3, Phase 3, Block F — same locale-keyed shape as
+ * `NOTIFICATION_TYPE_LABELS_BY_LOCALE`, same unchanged copy.
  */
-export const NOTIFICATION_TYPE_DESCRIPTIONS: Record<NotificationType, string> = {
-    REPORT_SUBMITTED: "Cuando un reporte se envía a revisión y eres revisor.",
-    REPORT_PDF_READY: "Cuando el PDF oficial de un reporte queda listo para firma.",
-    REPORT_PUBLISHED: "Cuando un reporte se publica y firma.",
-    REPORT_RETRACTED: "Cuando un reporte publicado se retracta.",
-    ASSIGNMENT_ADDED: "Cuando se te asigna una orden o una muestra.",
-    SAMPLE_STATUS_CHANGED: "Cuando cambia el estado de una muestra de tus órdenes.",
+export const NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE: Record<
+    Locale,
+    Record<NotificationType, string>
+> = {
+    "es-MX": {
+        REPORT_SUBMITTED: "Cuando un reporte se envía a revisión y eres revisor.",
+        REPORT_PDF_READY: "Cuando el PDF oficial de un reporte queda listo para firma.",
+        REPORT_PUBLISHED: "Cuando un reporte se publica y firma.",
+        REPORT_RETRACTED: "Cuando un reporte publicado se retracta.",
+        ASSIGNMENT_ADDED: "Cuando se te asigna una orden o una muestra.",
+        SAMPLE_STATUS_CHANGED: "Cuando cambia el estado de una muestra de tus órdenes.",
+    },
 };
+
+/** The default-locale descriptions, under their Block D name. */
+export const NOTIFICATION_TYPE_DESCRIPTIONS: Record<NotificationType, string> =
+    NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE[DEFAULT_LOCALE];
+
+/** Description for a type in `locale`; empty for a type this build predates. */
+export function notificationTypeDescription(
+    value: string,
+    locale: string = DEFAULT_LOCALE,
+): string {
+    const descriptions = NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE[resolveLocale(locale)];
+    return descriptions[value as NotificationType] ?? "";
+}

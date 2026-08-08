@@ -14,6 +14,8 @@
  * Sending a notification_id to the read endpoint returns 404.
  */
 
+import { DEFAULT_LOCALE, resolveLocale, type Locale } from "../lib/locale";
+
 // ---------------------------------------------------------------------------
 // Enums (API values — never displayed directly)
 // ---------------------------------------------------------------------------
@@ -134,18 +136,39 @@ export type NotificationReadAllFilters = Pick<NotificationListFilters, "types" |
 // ---------------------------------------------------------------------------
 
 /**
- * Labels for the notification *type* chip. These are UI chrome only — the
- * notification's own `title`/`body` arrive already rendered in Spanish from the
- * backend and are never reconstructed from these.
+ * Labels for the notification *type* chip, per locale.
+ *
+ * Céluma 1.3, Phase 3, Block F — localization readiness. One locale, `es-MX`,
+ * with exactly the strings Block C shipped: this restructures the lookup, not
+ * the copy, which is why every visual golden stays byte-identical.
+ *
+ * These are UI chrome only. The notification's own `title`/`body` arrive
+ * already rendered from the backend, frozen at creation, in the locale
+ * recorded on `Notification.locale` — and are never reconstructed from these.
  */
-export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
-    REPORT_SUBMITTED: "Enviado a revisión",
-    REPORT_PDF_READY: "PDF oficial listo",
-    REPORT_PUBLISHED: "Reporte publicado",
-    REPORT_RETRACTED: "Reporte retractado",
-    ASSIGNMENT_ADDED: "Nueva asignación",
-    SAMPLE_STATUS_CHANGED: "Estado de muestra actualizado",
+export const NOTIFICATION_TYPE_LABELS_BY_LOCALE: Record<
+    Locale,
+    Record<NotificationType, string>
+> = {
+    "es-MX": {
+        REPORT_SUBMITTED: "Enviado a revisión",
+        REPORT_PDF_READY: "PDF oficial listo",
+        REPORT_PUBLISHED: "Reporte publicado",
+        REPORT_RETRACTED: "Reporte retractado",
+        ASSIGNMENT_ADDED: "Nueva asignación",
+        SAMPLE_STATUS_CHANGED: "Estado de muestra actualizado",
+    },
 };
+
+/**
+ * The default-locale labels.
+ *
+ * Kept under its Block C name and shape — it is the natural way to ask "what
+ * does this type read as", which is what every consumer wants, and it keeps
+ * the Block C/D tests that index it working unchanged.
+ */
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> =
+    NOTIFICATION_TYPE_LABELS_BY_LOCALE[DEFAULT_LOCALE];
 
 export const NOTIFICATION_STATUS_LABELS: Record<NotificationRecipientStatus, string> = {
     UNREAD: "Sin leer",
@@ -199,11 +222,19 @@ export function isKnownNotificationSeverity(value: string): value is Notificatio
     return (NOTIFICATION_SEVERITIES as readonly string[]).includes(value);
 }
 
-/** Spanish label for a type, falling back to a neutral noun for unknown values. */
-export function notificationTypeLabel(value: string): string {
-    return isKnownNotificationType(value)
-        ? NOTIFICATION_TYPE_LABELS[value]
-        : UNKNOWN_NOTIFICATION_TYPE_LABEL;
+/**
+ * Label for a type in `locale`, falling back to a neutral noun for a type this
+ * build does not know about.
+ *
+ * Two independent fallbacks, and they answer different questions.
+ * `resolveLocale` handles "Céluma has no copy in that language"; the
+ * `isKnownNotificationType` check handles "the backend sent a type this build
+ * predates" — the enum-compatibility policy, which must degrade one item
+ * rather than reject the inbox.
+ */
+export function notificationTypeLabel(value: string, locale: string = DEFAULT_LOCALE): string {
+    if (!isKnownNotificationType(value)) return UNKNOWN_NOTIFICATION_TYPE_LABEL;
+    return NOTIFICATION_TYPE_LABELS_BY_LOCALE[resolveLocale(locale)][value];
 }
 
 export function notificationTypeChip(value: string): { color: string; bg: string } {

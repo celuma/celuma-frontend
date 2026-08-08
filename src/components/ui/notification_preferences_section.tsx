@@ -37,7 +37,7 @@ import { showCelumaApiError, showCelumaSuccess } from "../../lib/celuma_feedback
 import { useNotificationPreferences } from "../../hooks/use_notification_preferences";
 import { notificationTypeLabel } from "../../models/notification";
 import {
-    NOTIFICATION_TYPE_DESCRIPTIONS,
+    notificationTypeDescription,
     PREFERENCES_DEFAULT_BADGE,
     PREFERENCES_EMAIL_UNSUPPORTED,
     PREFERENCES_LOAD_ERROR,
@@ -122,10 +122,13 @@ export default function NotificationPreferencesSection() {
                     <div style={{ display: "grid", gap: 10 }}>
                         {preferences.map((item) => {
                             const label = notificationTypeLabel(item.notification_type);
-                            const description =
-                                NOTIFICATION_TYPE_DESCRIPTIONS[
-                                    item.notification_type as NotificationType
-                                ];
+                            // Block F: through the locale-aware helper rather
+                            // than indexing the map, so an unknown type
+                            // degrades to an empty description instead of
+                            // `undefined` reaching the DOM.
+                            const description = notificationTypeDescription(
+                                item.notification_type,
+                            );
                             return (
                                 <Panel
                                     key={item.notification_type}
