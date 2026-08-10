@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Dropdown, Badge, Empty } from "antd";
+import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Badge, Empty } from "antd";
 import type { UploadProps } from "antd";
 import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/lib/interface";
 import {
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, FileImageOutlined,
     InboxOutlined, ContainerOutlined, EditOutlined,
-    ClockCircleOutlined, CheckOutlined, FlagOutlined
+    ClockCircleOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
@@ -25,7 +25,8 @@ import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat } from "../c
 import { tokens, cardStyle } from "../components/design/tokens";
 import AssigneesSection from "../components/collaboration/AssigneesSection";
 import LabelsSection from "../components/collaboration/LabelsSection";
-import { RailSectionHeader, RailConfigButton } from "../components/collaboration/RailSectionHeader";
+import SampleStatusPicker from "../components/collaboration/SampleStatusPicker";
+import { SAMPLE_STATE_CONFIG } from "../components/ui/status_configs";
 import type { Label, LabUser, LabelWithInheritance } from "../services/collaboration_service";
 import {
     getLabels,
@@ -52,17 +53,6 @@ const LABEL_COLORS = [
     { color: "#14b8a6", bg: "#f0fdfa" },
 ];
 
-// Sample state configuration - matches backend SampleState enum
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
-    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
-    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
-};
-
-// All valid sample states for the dropdown
-const SAMPLE_STATES = ["RECEIVED", "PROCESSING", "READY", "DAMAGED", "CANCELLED"] as const;
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -138,8 +128,6 @@ export default function SampleDetailPage() {
     const [events, setEvents] = useState<TimelineEvent[]>([]);
     // Active tab in the content card ("timeline" by default so it shows first)
     const [activeTab, setActiveTab] = useState<string>("timeline");
-    // State picker dropdown open state (controlled so it closes on selection)
-    const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
     // Image pending delete confirmation (null = dialog closed)
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     // Notes editing state
@@ -382,74 +370,6 @@ export default function SampleDetailPage() {
 
     const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
     const typeConfig = getSampleTypeConfig(detail?.type || "");
-
-    // State picker popup — same Céluma language as the Asignados/Etiquetas pickers:
-    // rounded card + brand shadow, soft-circle icon rows with navy labels, the
-    // current state highlighted in teal tint with a check.
-    const stateDropdownContent = (
-        <div
-            style={{
-                background: "#fff",
-                borderRadius: 14,
-                boxShadow: tokens.shadow,
-                border: "1px solid #eef1f0",
-                width: 260,
-                maxWidth: "92vw",
-                overflow: "hidden",
-                padding: "6px 8px",
-                display: "grid",
-                gap: 2,
-            }}
-        >
-            {SAMPLE_STATES.map((state) => {
-                const config = SAMPLE_STATE_CONFIG[state];
-                const active = detail?.state === state;
-                const baseBg = active ? "#eaf7f5" : "transparent";
-                return (
-                    <div
-                        key={state}
-                        role="button"
-                        onClick={() => {
-                            setStateDropdownOpen(false);
-                            if (!active) updateState(state);
-                        }}
-                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "#f1faf8"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = baseBg; }}
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "7px 10px",
-                            borderRadius: 10,
-                            cursor: active ? "default" : "pointer",
-                            background: baseBg,
-                            transition: "background .15s ease",
-                        }}
-                    >
-                        <span style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            background: `${config.color}1a`,
-                            color: config.color,
-                            border: `2px solid ${config.color}33`,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 13,
-                            flexShrink: 0,
-                        }}>
-                            {config.icon}
-                        </span>
-                        <span style={{ flex: 1, fontWeight: 600, fontSize: 13.5, color: tokens.textPrimary }}>
-                            {config.label}
-                        </span>
-                        {active && <CheckOutlined style={{ color: tokens.primary, fontSize: 13, flexShrink: 0 }} />}
-                    </div>
-                );
-            })}
-        </div>
-    );
 
     // Event type configuration for timeline display
     const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -773,52 +693,11 @@ export default function SampleDetailPage() {
                 style={{ ...cardStyle, padding: 0 }}
                 bodyStyle={{ padding: 16 }}
             >
-                <RailSectionHeader
-                    icon={<FlagOutlined />}
-                    color={tokens.primary}
-                    title="Estado"
-                    trigger={
-                        <Dropdown
-                            popupRender={() => stateDropdownContent}
-                            trigger={["click"]}
-                            disabled={updatingState}
-                            open={stateDropdownOpen}
-                            onOpenChange={setStateDropdownOpen}
-                            placement="bottomRight"
-                        >
-                            <RailConfigButton disabled={updatingState} />
-                        </Dropdown>
-                    }
+                <SampleStatusPicker
+                    state={detail?.state || "RECEIVED"}
+                    onChange={updateState}
+                    updating={updatingState}
                 />
-                {/* Current state shown the same way assignees are: soft-circle + label row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 7,
-                        background: `${stateConfig.color}1a`,
-                        color: stateConfig.color,
-                        border: `2px solid ${stateConfig.color}33`,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 12,
-                        flexShrink: 0,
-                    }}>
-                        {updatingState ? <SettingOutlined spin /> : stateConfig.icon}
-                    </span>
-                    <span style={{
-                        flex: 1,
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: tokens.textPrimary,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                    }}>
-                        {stateConfig.label}
-                    </span>
-                </div>
             </Card>
 
             {/* Assignees */}
