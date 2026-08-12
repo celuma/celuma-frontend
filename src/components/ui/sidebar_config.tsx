@@ -12,6 +12,7 @@ import {
     ShopOutlined,
     BankOutlined,
     BgColorsOutlined,
+    PieChartOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -51,6 +52,21 @@ const tenantMenuItem: Required<MenuProps>["items"][number] = {
     label: "Empresa",
 };
 
+/**
+ * Céluma 1.3 Phase 4, Block F. "Uso y límites" — not "Facturación", "Plan" or
+ * "Suscripción": Phase 4 reports consumption against configured limits and has
+ * no plan catalog, no checkout and no enforcement, so commercial wording would
+ * name a surface that does not exist.
+ *
+ * Shown under the same `canManageTenant` condition that gates the route, so the
+ * item never appears to a user who would only be bounced by RequirePermission.
+ */
+const usageMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/usage",
+    icon: <PieChartOutlined />,
+    label: "Uso y límites",
+};
+
 const aboutMenuItem: Required<MenuProps>["items"][number] = {
     key: "/config/about",
     icon: <InfoCircleOutlined />,
@@ -78,7 +94,7 @@ const SidebarConfig: React.FC = () => {
         ...(canManageCatalog ? catalogMenuItems : []),
         ...(canManageUsers ? [adminMenuItem, reviewersMenuItem] : []),
         ...(canManageBranches ? [branchesMenuItem] : []),
-        ...(canManageTenant ? [tenantMenuItem] : []),
+        ...(canManageTenant ? [tenantMenuItem, usageMenuItem] : []),
         aboutMenuItem,
     ];
 

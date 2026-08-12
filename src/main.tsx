@@ -31,6 +31,7 @@ import ReviewersManagement from "./pages/reviewers_management";
 import PasswordResetRequest from "./pages/password_reset_request";
 import PasswordResetConfirm from "./pages/password_reset_confirm";
 import TenantSettings from "./pages/tenant_settings";
+import TenantUsage from "./pages/tenant_usage";
 import PhysicianPortal from "./pages/physician_portal";
 import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
@@ -168,6 +169,12 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="branches/:branchId" element={<RequirePermission permission="admin:manage_branches"><BranchDetail embedded /></RequirePermission>} />
                 <Route path="branches/:branchId/edit" element={<RequirePermission permission="admin:manage_branches"><BranchForm embedded /></RequirePermission>} />
                 <Route path="tenant" element={<RequirePermission permission="admin:manage_tenant"><TenantSettings embedded /></RequirePermission>} />
+                {/* Céluma 1.3 Phase 4, Block F: the tenant usage dashboard.
+                    Gated on admin:manage_tenant — the exact permission both
+                    usage endpoints enforce (usage-rbac-contract.md §1), so the
+                    route and the API agree by construction rather than by a
+                    role-name check that would drift from the RBAC catalog. */}
+                <Route path="usage" element={<RequirePermission permission="admin:manage_tenant"><TenantUsage embedded /></RequirePermission>} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
 

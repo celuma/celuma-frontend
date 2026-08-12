@@ -14,6 +14,7 @@ import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/repo
 import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
 import { NotificationHarness } from "./notification_scenarios";
 import { NotificationPreferenceHarness } from "./notification_preference_scenarios";
+import { UsageHarness } from "./usage_scenarios";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Phase 2, Block A / Story
@@ -174,6 +175,15 @@ function Root() {
     const preferenceScenario = params.get("preferences");
     if (preferenceScenario) {
         return <NotificationPreferenceHarness scenarioKey={preferenceScenario} />;
+    }
+    // Céluma 1.3 Phase 4, Block F: the tenant usage dashboard, via
+    // /?usage=<scenario>. Again its own mode — the states worth a golden here
+    // are the ones jsdom cannot show (a bar's width, an absent bar, the
+    // two-column layout collapsing), and they share no code path with the
+    // report fixtures.
+    const usageScenario = params.get("usage");
+    if (usageScenario) {
+        return <UsageHarness scenarioKey={usageScenario} />;
     }
     return <Harness />;
 }
