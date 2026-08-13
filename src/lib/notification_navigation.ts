@@ -14,7 +14,7 @@
  * matrix rule 5).
  *
  * The routes below are the ones registered in main.tsx:
- *   /reports/:reportId   /orders/:orderId   /samples/:sampleId
+ *   /reports/:reportId   /orders/:orderId   /samples/:sampleId   /config/usage
  *
  * Note on home.tsx's handleActivityClick: it switches on the same shape but
  * over a different domain (dashboard activity, which also includes `patient`,
@@ -27,10 +27,31 @@ import {
     type NotificationResourceType,
 } from "../models/notification";
 
+/**
+ * Céluma 1.3, Phase 4, Block G — the tenant route, and why it ignores its id.
+ *
+ * `/config/usage` is a singleton page scoped to the caller's own tenant by the
+ * token, exactly like the endpoint behind it. The notification's `resource_id`
+ * is the tenant id, and interpolating it would produce `/config/usage/<uuid>`
+ * — a route that does not exist and, if it ever did, would be a
+ * client-supplied tenant selector on a page whose whole security model is that
+ * the tenant comes from the session. Discarding the id here is the point, not
+ * an omission; the parameter stays in the signature so every entry in this map
+ * has one shape.
+ *
+ * The permission asymmetry Block F flagged is resolved on the backend rather
+ * than here: usage notifications are addressed only to holders of
+ * `admin:manage_tenant`, the same permission `/config/usage`'s
+ * `RequirePermission` guard enforces, so a recipient can always open what they
+ * were sent. This module still pre-flights nothing — a recipient who has since
+ * lost the permission gets the guard's ordinary redirect, the same as a stale
+ * bookmark would give them.
+ */
 const RESOURCE_ROUTES: Record<NotificationResourceType, (id: string) => string> = {
     report: (id) => `/reports/${id}`,
     order: (id) => `/orders/${id}`,
     sample: (id) => `/samples/${id}`,
+    tenant: () => "/config/usage",
 };
 
 /**

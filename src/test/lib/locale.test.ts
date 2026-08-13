@@ -59,7 +59,15 @@ describe("the locale identifier", () => {
 
 describe("the type labels are unchanged by the restructure", () => {
     it("still reads exactly what Block C shipped", () => {
-        expect(NOTIFICATION_TYPE_LABELS).toEqual({
+        // `toMatchObject`, not `toEqual`: the assertion is that Block F's
+        // locale restructure did not change a single one of Block C's six
+        // strings, and that stays exactly as strong under a map that has since
+        // grown. Céluma 1.3, Phase 4, Block G added four usage-threshold
+        // labels; they are covered by their own suite
+        // (test/models/usage_threshold_notifications.test.ts) and by the
+        // "covers every type in every supported locale" case below, which is
+        // what actually guards against a type with no label.
+        expect(NOTIFICATION_TYPE_LABELS).toMatchObject({
             REPORT_SUBMITTED: "Enviado a revisión",
             REPORT_PDF_READY: "PDF oficial listo",
             REPORT_PUBLISHED: "Reporte publicado",

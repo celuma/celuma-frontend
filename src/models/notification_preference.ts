@@ -6,7 +6,7 @@
  * it. The two describe different endpoints with different lifetimes: the
  * inbox model is polled by the one provider and rendered on three surfaces,
  * while these types are loaded once by one section of the Profile page. Every
- * shared vocabulary item — the six `NotificationType` values, their Spanish
+ * shared vocabulary item — every `NotificationType` value, their Spanish
  * labels, the type chip — is **imported** from `models/notification.ts`, never
  * restated, so the two files cannot drift into two competing lists of what a
  * notification type is.
@@ -22,7 +22,7 @@ import type { NotificationType } from "./notification";
 /**
  * One notification type's **effective** preference.
  *
- * "Effective", not "stored": the backend returns all six types whether or not
+ * "Effective", not "stored": the backend returns every type whether or not
  * a `notification_preference` row exists for them, so a client never has to
  * decide what a missing entry would have meant. `is_explicit` is the only
  * thing distinguishing "the user chose this" from "this is the default".
@@ -75,7 +75,9 @@ export interface NotificationPreferenceUpdateItem {
 /**
  * A **partial** batch — only the types the user actually changed. The API
  * leaves every unmentioned type exactly as it was, so a client that knows
- * about five of six types cannot silently reset the sixth.
+ * about only some of the types cannot silently reset the rest — a real
+ * hazard, and the reason Phase 4 Block G could add four types without
+ * touching this contract.
  */
 export interface NotificationPreferenceUpdateRequest {
     preferences: NotificationPreferenceUpdateItem[];
@@ -141,6 +143,20 @@ export const NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE: Record<
         REPORT_RETRACTED: "Cuando un reporte publicado se retracta.",
         ASSIGNMENT_ADDED: "Cuando se te asigna una orden o una muestra.",
         SAMPLE_STATUS_CHANGED: "Cuando cambia el estado de una muestra de tus órdenes.",
+        // Céluma 1.3, Phase 4, Block G. These four reach only users who can
+        // administer the laboratory, so their descriptions say "el
+        // laboratorio" rather than "tus" — they describe a tenant-level fact,
+        // not the reader's own work. They state when the notification happens
+        // and nothing about consequences, because there are none: Phase 4
+        // measures usage and enforces no limit.
+        STORAGE_USAGE_APPROACHING:
+            "Cuando el almacenamiento del laboratorio se acerca al límite configurado.",
+        STORAGE_LIMIT_REACHED:
+            "Cuando el almacenamiento del laboratorio alcanza el límite configurado.",
+        USER_LIMIT_APPROACHING:
+            "Cuando los usuarios internos del laboratorio se acercan al límite configurado.",
+        USER_LIMIT_REACHED:
+            "Cuando los usuarios internos del laboratorio alcanzan el límite configurado.",
     },
 };
 

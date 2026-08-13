@@ -20,6 +20,25 @@ import { DEFAULT_LOCALE, resolveLocale, type Locale } from "../lib/locale";
 // Enums (API values — never displayed directly)
 // ---------------------------------------------------------------------------
 
+/**
+ * Every type the backend can send, in the backend's own declaration order —
+ * six clinical events from Phase 3, four usage-threshold events from Phase 4
+ * Block G.
+ *
+ * The order matters in one place: the preferences endpoint returns its list in
+ * `NotificationType` order, and `use_notification_preferences` renders it as
+ * received, so keeping these in step keeps the Profile page's rows in the same
+ * order as the API's.
+ *
+ * The four usage types are backend-owned in a way the clinical six are not.
+ * The threshold percentages that decide when they fire live entirely in the
+ * backend (`app/services/usage_thresholds.py`); `lib/usage_ui.ts`'s
+ * `USAGE_WARNING_PERCENT` / `USAGE_OVER_LIMIT_PERCENT` are presentation values
+ * that colour a progress bar and are **not** related to these — they may share
+ * a number, they must never share an implementation. Nothing in this app
+ * decides that a threshold was crossed; it renders notifications the backend
+ * already created.
+ */
 export const NOTIFICATION_TYPES = [
     "REPORT_SUBMITTED",
     "REPORT_PDF_READY",
@@ -27,6 +46,10 @@ export const NOTIFICATION_TYPES = [
     "REPORT_RETRACTED",
     "ASSIGNMENT_ADDED",
     "SAMPLE_STATUS_CHANGED",
+    "STORAGE_USAGE_APPROACHING",
+    "STORAGE_LIMIT_REACHED",
+    "USER_LIMIT_APPROACHING",
+    "USER_LIMIT_REACHED",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -45,7 +68,13 @@ export const NOTIFICATION_RECIPIENT_STATUSES = ["UNREAD", "READ", "DISMISSED"] a
 /** DISMISSED is modeled but unreachable — no endpoint produces it. */
 export type NotificationRecipientStatus = (typeof NOTIFICATION_RECIPIENT_STATUSES)[number];
 
-export const NOTIFICATION_RESOURCE_TYPES = ["report", "order", "sample"] as const;
+/**
+ * `tenant` (Céluma 1.3, Phase 4, Block G) is the one value that does not name a
+ * clinical record. A usage-threshold notification is about the laboratory
+ * itself, so its `resource_id` is the tenant id and its destination is the
+ * fixed `/config/usage` route — see `lib/notification_navigation.ts`.
+ */
+export const NOTIFICATION_RESOURCE_TYPES = ["report", "order", "sample", "tenant"] as const;
 
 export type NotificationResourceType = (typeof NOTIFICATION_RESOURCE_TYPES)[number];
 
@@ -157,6 +186,16 @@ export const NOTIFICATION_TYPE_LABELS_BY_LOCALE: Record<
         REPORT_RETRACTED: "Reporte retractado",
         ASSIGNMENT_ADDED: "Nueva asignación",
         SAMPLE_STATUS_CHANGED: "Estado de muestra actualizado",
+        // Céluma 1.3, Phase 4, Block G. Chip labels only — the notification's
+        // own title and body arrive rendered and frozen from the backend, and
+        // are never reconstructed from these. Written to the same constraints
+        // as the backend copy: no plan, price or upgrade language, no cloud
+        // provider, and no claim that anything is blocked or suspended
+        // (Phase 4 measures; it enforces nothing).
+        STORAGE_USAGE_APPROACHING: "Almacenamiento cercano al límite",
+        STORAGE_LIMIT_REACHED: "Límite de almacenamiento alcanzado",
+        USER_LIMIT_APPROACHING: "Usuarios cercanos al límite",
+        USER_LIMIT_REACHED: "Límite de usuarios alcanzado",
     },
 };
 
@@ -190,6 +229,15 @@ export const NOTIFICATION_TYPE_CHIP: Record<NotificationType, { color: string; b
     REPORT_RETRACTED: { color: "#ef4444", bg: "#fef2f2" },
     ASSIGNMENT_ADDED: { color: "#f59e0b", bg: "#fffbeb" },
     SAMPLE_STATUS_CHANGED: { color: "#06b6d4", bg: "#ecfeff" },
+    // Céluma 1.3, Phase 4, Block G. The two APPROACHING types reuse the same
+    // amber as the dashboard's warning band and the two REACHED types the same
+    // red as its over-limit band (`lib/usage_ui.ts`), so a chip in the inbox
+    // and a bar on `/config/usage` read as the same condition. Both pairs are
+    // the palette's existing values — this introduces no new colour.
+    STORAGE_USAGE_APPROACHING: { color: "#f59e0b", bg: "#fffbeb" },
+    STORAGE_LIMIT_REACHED: { color: "#ef4444", bg: "#fef2f2" },
+    USER_LIMIT_APPROACHING: { color: "#f59e0b", bg: "#fffbeb" },
+    USER_LIMIT_REACHED: { color: "#ef4444", bg: "#fef2f2" },
 };
 
 export const UNKNOWN_NOTIFICATION_TYPE_CHIP = { color: "#6b7280", bg: "#f3f4f6" };

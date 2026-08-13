@@ -11,7 +11,8 @@
  * state only; a `PUT` happens when the user presses Guardar. Three reasons,
  * in order of weight:
  *
- *   1. A user reviewing six switches would otherwise fire up to six writes
+ *   1. A user reviewing every switch would otherwise fire one write per
+ *      toggle — a burst that grows with the number of notification types,
  *      against a 100-request/60s budget shared with the rest of the app.
  *   2. The backend applies a batch atomically, so an explicit save is one
  *      all-or-nothing decision rather than a sequence that can half-apply.
@@ -37,7 +38,7 @@ import {
 import { getStoredToken } from "../lib/auth_session";
 
 export interface NotificationPreferencesState {
-    /** The six types in the backend's order, with the user's local edits applied. */
+    /** Every type, in the backend's order, with the user's local edits applied. */
     preferences: NotificationPreferenceItem[];
     loading: boolean;
     saving: boolean;

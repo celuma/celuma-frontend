@@ -49,7 +49,11 @@ function item(overrides: Partial<NotificationListItem> = {}): NotificationListIt
 }
 
 describe("enum sets match the Block B contract", () => {
-    it("declares exactly the six notification types the backend produces", () => {
+    it("declares exactly the notification types the backend produces, in its order", () => {
+        // Order is asserted, not just membership: the preferences endpoint
+        // returns its list in the backend's `NotificationType` order and the
+        // Profile page renders it as received, so a divergence here is a
+        // visibly reordered settings screen.
         expect([...NOTIFICATION_TYPES]).toEqual([
             "REPORT_SUBMITTED",
             "REPORT_PDF_READY",
@@ -57,6 +61,11 @@ describe("enum sets match the Block B contract", () => {
             "REPORT_RETRACTED",
             "ASSIGNMENT_ADDED",
             "SAMPLE_STATUS_CHANGED",
+            // Céluma 1.3, Phase 4, Block G.
+            "STORAGE_USAGE_APPROACHING",
+            "STORAGE_LIMIT_REACHED",
+            "USER_LIMIT_APPROACHING",
+            "USER_LIMIT_REACHED",
         ]);
     });
 
@@ -65,8 +74,15 @@ describe("enum sets match the Block B contract", () => {
         expect([...NOTIFICATION_RECIPIENT_STATUSES]).toEqual(["UNREAD", "READ", "DISMISSED"]);
     });
 
-    it("declares the three resource types, lowercase as the API sends them", () => {
-        expect([...NOTIFICATION_RESOURCE_TYPES]).toEqual(["report", "order", "sample"]);
+    it("declares the resource types, lowercase as the API sends them", () => {
+        expect([...NOTIFICATION_RESOURCE_TYPES]).toEqual([
+            "report",
+            "order",
+            "sample",
+            // Céluma 1.3, Phase 4, Block G — the tenant itself, for usage
+            // thresholds. The only value that is not a clinical record.
+            "tenant",
+        ]);
     });
 
     it("has a Spanish label and a chip colour for every type", () => {
