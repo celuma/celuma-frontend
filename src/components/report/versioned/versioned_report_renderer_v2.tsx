@@ -4,8 +4,10 @@ import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetad
 import { markdownTableToHtml } from "../table_utils";
 import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
-import type { ReportTypographyConfig } from "./versioned_report_types";
+import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
+import type { PageLayout } from "./page_layout";
 import { extractRenderingSnapshot } from "./report_snapshot_validation";
+import { resolvePageLayout } from "./page_layout";
 import {
     DEFAULT_FOOTER_TEXT,
     DEFAULT_INSTITUTION_NAME,
@@ -35,10 +37,16 @@ const PX_TO_MM = 0.264583;
 const PAGE_W_MM = 215.9;
 const PAGE_H_MM = 279.4;
 const CM_TO_MM = 10;
-// Fixed band heights for header/footer content when enabled. Margins from
-// the snapshot control the GAP between these bands and the page edge / body
-// content, not the bands' own height — see versioned-renderer-v2-contract.md
-// "Margin interpretation".
+// Fixed band heights for header/footer content when enabled.
+//
+// Pre-Phase-5 final margin remediation: `margins_cm` is the EFFECTIVE page
+// margin — the exact distance from the page edge to the usable content
+// area (`bodyTopMm`/`bodyBottomMm` below). Header/footer band geometry
+// (height/offset/gap) is a separate, internal-to-the-margin concern: by
+// default a band sits flush against the body boundary (ending exactly
+// where the configured margin ends), but it NEVER adds to the margin
+// itself. See
+// docs/celuma-1.3/pre-phase-5-legacy-margin-remediation/legacy-margin-contract.md.
 const HEADER_BAND_MM = 24;
 const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
@@ -170,6 +178,38 @@ function mmOr(value: number | null | undefined, fallback: number): number {
     return value == null ? fallback : value;
 }
 
+/**
+ * Maps a presentation snapshot onto the deterministic geometry model in
+ * page_layout.ts. Called from BOTH the pagination effect and the render
+ * path (to decide whether the configuration is renderable at all), so the
+ * two can never disagree about where the body starts.
+ */
+function layoutForPresentation(presentation: ReportPresentationSnapshotV2): PageLayout {
+    const margins = presentation.paper.margins_cm;
+    return resolvePageLayout({
+        pageWidthMm: PAGE_W_MM,
+        pageHeightMm: PAGE_H_MM,
+        margins: {
+            topMm: margins.top * CM_TO_MM,
+            rightMm: margins.right * CM_TO_MM,
+            bottomMm: margins.bottom * CM_TO_MM,
+            leftMm: margins.left * CM_TO_MM,
+        },
+        header: {
+            enabled: presentation.header.enabled,
+            heightMm: mmOr(presentation.header.height_mm, HEADER_BAND_MM),
+            offsetMm: presentation.header.offset_mm ?? null,
+            gapMm: mmOr(presentation.header.content_gap_mm, BAND_GAP_MM),
+        },
+        footer: {
+            enabled: presentation.footer.enabled,
+            heightMm: mmOr(presentation.footer.height_mm, FOOTER_BAND_MM),
+            offsetMm: presentation.footer.offset_mm ?? null,
+            gapMm: mmOr(presentation.footer.content_gap_mm, BAND_GAP_MM),
+        },
+    });
+}
+
 function alignItemsForHeaderAlignment(alignment: string | undefined): string {
     if (alignment === "TOP") return "flex-start";
     if (alignment === "BOTTOM") return "flex-end";
@@ -235,33 +275,41 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             if (!sourceInDOM) return;
 
             const { presentation } = effectValidation.snapshot;
-            const marginTopMm = presentation.paper.margins_cm.top * CM_TO_MM;
-            const marginRightMm = presentation.paper.margins_cm.right * CM_TO_MM;
-            const marginBottomMm = presentation.paper.margins_cm.bottom * CM_TO_MM;
-            const marginLeftMm = presentation.paper.margins_cm.left * CM_TO_MM;
-
             const headerEnabled = presentation.header.enabled;
             const footerEnabled = presentation.footer.enabled;
 
-            // Fourth remediation — configurable band geometry. Each
-            // `mmOr(..., default)` reproduces the fixed constant the renderer
-            // used before, so a snapshot without these fields produces EXACTLY
-            // the same arithmetic as always.
-            const headerHeightMm = headerEnabled ? mmOr(presentation.header.height_mm, HEADER_BAND_MM) : 0;
-            const footerHeightMm = footerEnabled ? mmOr(presentation.footer.height_mm, FOOTER_BAND_MM) : 0;
-            const headerOffsetMm = headerEnabled ? mmOr(presentation.header.offset_mm, marginTopMm) : 0;
-            const footerOffsetMm = footerEnabled ? mmOr(presentation.footer.offset_mm, marginBottomMm) : 0;
-            const headerGapMm = headerEnabled ? mmOr(presentation.header.content_gap_mm, BAND_GAP_MM) : 0;
-            const footerGapMm = footerEnabled ? mmOr(presentation.footer.content_gap_mm, BAND_GAP_MM) : 0;
+            // Page geometry is resolved by `resolvePageLayout` (page_layout.ts)
+            // — one deterministic, unit-tested function that keeps the page
+            // margin literal while guaranteeing the body never overlaps an
+            // occupied header/footer band. Band heights/gaps keep their
+            // pre-existing `mmOr(..., CONSTANT)` defaults so a snapshot
+            // without these fields produces the same band size as always.
+            const layout = layoutForPresentation(presentation);
+
+            const headerHeightMm = layout.header.heightMm;
+            const footerHeightMm = layout.footer.heightMm;
+            const headerOffsetMm = layout.header.topMm;
+            const footerOffsetMm = layout.footer.bottomMm;
+            const bodyTopMm = layout.body.topMm;
+            const bodyBottomMm = layout.body.bottomMm;
+            // Horizontal insets are always the literal margins — this
+            // letterhead model has no side bands (see page_layout.ts).
+            const marginLeftMm = layout.body.leftMm;
+            const marginRightMm = layout.body.rightMm;
+
             const headerPaddingMm = mmOr(presentation.header.padding_mm, DEFAULT_HEADER_PADDING_MM);
             const footerPaddingMm = mmOr(presentation.footer.padding_mm, DEFAULT_FOOTER_PADDING_MM);
             const bodyPaddingTopMm = mmOr(presentation.paper.body_padding_top_mm, 0);
 
-            const bodyTopMm = headerEnabled ? headerOffsetMm + headerHeightMm + headerGapMm : marginTopMm;
-            const bodyBottomMm = footerEnabled ? footerOffsetMm + footerHeightMm + footerGapMm : marginBottomMm;
+            // A configuration whose bands + margins consume the whole page
+            // leaves no usable body area. Paginating into a zero/negative
+            // height box would make `fits()` reject EVERY node and emit one
+            // page per paragraph, so bail out to the controlled fallback the
+            // component renders below instead of drawing overlapping content.
+            if (!layout.usable) return;
 
-            const contentWpx = Math.round((PAGE_W_MM - marginLeftMm - marginRightMm) / PX_TO_MM);
-            const contentHpx = Math.round((PAGE_H_MM - bodyTopMm - bodyBottomMm) / PX_TO_MM);
+            const contentWpx = Math.round(layout.body.availableWidthMm / PX_TO_MM);
+            const contentHpx = Math.round(layout.body.availableHeightMm / PX_TO_MM);
 
             const primaryColor = presentation.style.primary_color;
             // `true` in the header / `false` in the footer = the real
@@ -298,7 +346,31 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const headerFontSizePt = typography.header_font_size_pt ?? DEFAULT_TYPOGRAPHY.header_font_size_pt;
             const footerFontSizePt = typography.footer_font_size_pt ?? DEFAULT_TYPOGRAPHY.footer_font_size_pt;
             const baseFontSizePt = typography.base_font_size_pt ?? DEFAULT_TYPOGRAPHY.base_font_size_pt;
-            const headerAlignItems = alignItemsForHeaderAlignment(presentation.header.content_alignment);
+            // Outer-margin rule (pre-Phase-5 final outer-margin remediation).
+            //
+            // The configured page margin must be the distance from the
+            // physical page edge to the FIRST PRINTED INK, not merely to the
+            // band's invisible box. A band is normally taller than its
+            // content (`height_mm` reserves body clearance), so aligning
+            // content anywhere other than against the margin edge leaves that
+            // leftover space between the margin and the first ink — measured
+            // at +6.8mm (Legacy) and +3.0mm (custom V2) before this fix, on
+            // every margin value alike.
+            //
+            // So when the band is positioned BY the margin, its content is
+            // pinned to the margin edge: the header's content to the band's
+            // top, the footer's to the band's bottom. `height_mm` still
+            // reserves the same clearance, so the body safe area is
+            // unchanged and non-overlap still holds.
+            //
+            // An explicit `offset_mm` means Legacy compatibility mode (the
+            // band is pinned to the physical page edge to reproduce
+            // LegacyReportRendererV1); there the historical internal
+            // alignment is preserved untouched.
+            const headerAlignItems = layout.header.marginPositioned
+                ? "flex-start"
+                : alignItemsForHeaderAlignment(presentation.header.content_alignment);
+            const footerAlignItems = layout.footer.marginPositioned ? "flex-end" : "center";
             const headerLogoRight = presentation.header.logo_position === "RIGHT";
             const footerLogoRight = presentation.footer.logo_position === "RIGHT";
             const footerContentJustify = justifyContentForAlignment(presentation.footer.content_alignment);
@@ -483,7 +555,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     footer.style.right = `${marginRightMm}mm`;
                     footer.style.height = `${footerHeightMm}mm`;
                     footer.style.display = "flex";
-                    footer.style.alignItems = "center";
+                    footer.style.alignItems = footerAlignItems;
                     footer.style.justifyContent = "space-between";
                     footer.style.color = primaryColor;
                     footer.style.fontSize = `${footerFontSizePt}pt`;
@@ -644,6 +716,38 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
         }
 
         const snapshot = validation.snapshot;
+
+        // Pre-Phase-5 final layout remediation: a schema-valid configuration
+        // can still be geometrically unrenderable (margins plus header/footer
+        // bands consuming the whole page height). The effect above refuses to
+        // paginate in that case; surface WHY here rather than showing a blank
+        // page or silently overlapping content. Same controlled-fallback
+        // convention as an invalid snapshot.
+        const pageLayout = layoutForPresentation(snapshot.presentation);
+        if (!pageLayout.usable) {
+            return (
+                <div
+                    style={{
+                        ...style,
+                        padding: 24,
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        background: "#fafbfc",
+                        color: "#374151",
+                        fontFamily: "Arial, sans-serif",
+                    }}
+                    data-testid="unusable-page-layout"
+                >
+                    <p style={{ margin: 0, fontWeight: 700 }}>Configuración de página sin área útil</p>
+                    <p style={{ margin: "8px 0 0 0" }}>
+                        Los márgenes y las bandas de encabezado/pie ocupan toda la página, por lo que no
+                        queda espacio para el contenido del reporte. Reduce los márgenes o la altura del
+                        encabezado/pie en el membrete.
+                    </p>
+                </div>
+            );
+        }
+
         const tmpl = normalizeReportTemplateJSON(
             (snapshot.template ?? { base: {}, sections: {} }) as unknown as TemplateOrderInput,
         );

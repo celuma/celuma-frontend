@@ -18,7 +18,16 @@ import type { ReportRenderingSnapshotV2 } from "./versioned_report_types";
 
 // Exported so report_presentation_editor_schema.ts (Block D) can validate
 // admin-entered values against the exact same bounds without drifting.
-export const MIN_MARGIN_CM = 0.5;
+/**
+ * `0` is a VALID, explicit margin: "no intentional page-margin gap", i.e.
+ * the outermost visible printed content sits on the physical page edge. It
+ * is not "unset" — a missing/null margin is a different thing entirely and
+ * falls back to a default. Never test a margin for truthiness; `margin || d`
+ * would silently turn an explicit 0 into `d`.
+ *
+ * Negative margins remain invalid, and the upper bound is unchanged.
+ */
+export const MIN_MARGIN_CM = 0.0;
 export const MAX_MARGIN_CM = 4.0;
 export const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 

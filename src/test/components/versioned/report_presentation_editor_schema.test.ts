@@ -44,17 +44,27 @@ describe("validatePresentationDraft — valid inputs", () => {
         expect(validatePresentationDraft(neutral)).toEqual({ valid: true });
     });
 
-    it("accepts the boundary margin values 0.5 and 4.0", () => {
+    it("accepts the boundary margin values 0 and 4.0", () => {
         const p = validPresentation();
-        p.paper.margins_cm = { top: 0.5, right: 4.0, bottom: 0.5, left: 4.0 };
+        p.paper.margins_cm = { top: 0, right: 4.0, bottom: 0, left: 4.0 };
         expect(validatePresentationDraft(p)).toEqual({ valid: true });
     });
 });
 
 describe("validatePresentationDraft — margins", () => {
-    it("rejects a margin below 0.5cm", () => {
+    it("accepts an explicit 0cm margin — 'no intentional page-margin gap'", () => {
+        // Zero-margin boundary remediation: the minimum is now 0, not 0.5.
+        // `0` is a real configured value (the outermost printed content sits
+        // on the physical page edge), NOT "unset" — see
+        // legacy-margin-contract.md, "Zero is an explicit margin".
         const p = validPresentation();
-        p.paper.margins_cm.top = 0.4;
+        p.paper.margins_cm = { top: 0, right: 0, bottom: 0, left: 0 };
+        expect(validatePresentationDraft(p)).toEqual({ valid: true });
+    });
+
+    it("rejects a negative margin", () => {
+        const p = validPresentation();
+        p.paper.margins_cm.top = -0.1;
         const result = validatePresentationDraft(p);
         expect(result.valid).toBe(false);
         if (!result.valid) expect(result.fieldErrors["paper.margins_cm.top"]).toBeDefined();

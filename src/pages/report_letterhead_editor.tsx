@@ -17,6 +17,7 @@ import CelumaTextArea from "../components/ui/textarea_field";
 import ReportRendererResolver from "../components/report/report_renderer_resolver";
 import { buildPreviewReportEnvelope } from "../components/report/versioned/editor_preview_fixture";
 import { validatePresentationDraft } from "../components/report/versioned/report_presentation_editor_schema";
+import { MAX_MARGIN_CM, MIN_MARGIN_CM } from "../components/report/versioned/report_snapshot_validation";
 import type {
     ReportPresentationSnapshotV2,
     ReportMarginsCm,
@@ -261,11 +262,33 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [letterheadId, fromVersionId, mode]);
 
+    // Pre-Phase-5 remediation: an imported Legacy letterhead pins
+    // `header.offset_mm`/`footer.offset_mm` to an explicit `0` (never
+    // `null`) so a fresh import reproduces LegacyReportRendererV1
+    // pixel-for-pixel — see legacy_letterhead_adapter.py. The renderer only
+    // falls back to `margins_cm.top`/`.bottom` when that offset is `null`
+    // (mmOr() in versioned_report_renderer_v2.tsx), and this editor never
+    // exposes offset_mm as an editable field. Left unchecked, that imported
+    // pin shadows margins_cm.top/bottom forever — editing the only margin
+    // control this screen has for them does nothing, in the preview or in
+    // any report. The moment the user explicitly edits top/bottom here,
+    // their choice must win over the imported pin (see
+    // legacy-margin-contract.md), so the shadowing field is cleared back to
+    // `null` in that same update.
     const updateMargin = (field: keyof ReportMarginsCm, value: number) => {
-        setPresentation((prev) => ({
-            ...prev,
-            paper: { ...prev.paper, margins_cm: { ...prev.paper.margins_cm, [field]: value } },
-        }));
+        setPresentation((prev) => {
+            const next: ReportPresentationSnapshotV2 = {
+                ...prev,
+                paper: { ...prev.paper, margins_cm: { ...prev.paper.margins_cm, [field]: value } },
+            };
+            if (field === "top" && next.header.offset_mm != null) {
+                next.header = { ...next.header, offset_mm: null };
+            }
+            if (field === "bottom" && next.footer.offset_mm != null) {
+                next.footer = { ...next.footer, offset_mm: null };
+            }
+            return next;
+        });
     };
     const updateHeader = (patch: Partial<ReportPresentationSnapshotV2["header"]>) =>
         setPresentation((prev) => ({ ...prev, header: { ...prev.header, ...patch } }));
@@ -456,10 +479,14 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                                     {MARGIN_LABELS[side]} (cm)
                                 </label>
                                 <InputNumber
-                                    min={0.5}
-                                    max={4.0}
+                                    min={MIN_MARGIN_CM}
+                                    max={MAX_MARGIN_CM}
                                     step={0.1}
                                     value={presentation.paper.margins_cm[side]}
+                                    // `typeof v === "number"` (not `v ?? …`, and
+                                    // certainly not `v || …`): 0 is a valid explicit
+                                    // margin and must reach `updateMargin` as 0. Only
+                                    // a cleared/invalid input (null) falls back.
                                     onChange={(v) => updateMargin(side, typeof v === "number" ? v : 1.0)}
                                     style={{ width: "100%" }}
                                     status={fieldErrors[`paper.margins_cm.${side}`] ? "error" : undefined}
