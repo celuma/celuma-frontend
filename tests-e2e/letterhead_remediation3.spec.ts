@@ -54,6 +54,11 @@ interface Lab {
     branchId: string;
 }
 
+interface LetterheadConfiguration extends Record<string, unknown> {
+    header: Record<string, unknown> & { logo_storage_id?: string };
+    footer: Record<string, unknown> & { logo_storage_id?: string };
+}
+
 /** An isolated lab with reports_v2_enabled. */
 async function createLab(request: APIRequestContext, label: string): Promise<Lab> {
     const suffix = uniqueSuffix();
@@ -202,7 +207,7 @@ test.describe("Third Remediation — Letterheads", () => {
             request, "GET", "/api/v1/report-letterheads/?active_only=false", { token: labA.token }
         );
         const sourceId = letterheads.find((l) => l.name === "Membrete Origen")!.id;
-        const activeA = await api<{ id: string; configuration: Record<string, any> }>(
+        const activeA = await api<{ id: string; configuration: LetterheadConfiguration }>(
             request, "GET", `/api/v1/report-letterheads/${sourceId}/versions/active`, { token: labA.token }
         );
         const envelope = await api<Record<string, unknown>>(
@@ -227,8 +232,8 @@ test.describe("Third Remediation — Letterheads", () => {
         expect(importedBody.status).toBe("ACTIVE");
 
         // Field-by-field equality, ignoring only StorageObject ids.
-        const scrub = (c: Record<string, any>) => {
-            const copy = JSON.parse(JSON.stringify(c));
+        const scrub = (configuration: LetterheadConfiguration): LetterheadConfiguration => {
+            const copy = structuredClone(configuration);
             copy.header.logo_storage_id = "<id>";
             copy.footer.logo_storage_id = "<id>";
             return copy;

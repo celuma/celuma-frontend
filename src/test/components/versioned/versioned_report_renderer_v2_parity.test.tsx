@@ -129,7 +129,7 @@ describe("VersionedReportRendererV2 — dividers (header/footer)", () => {
 });
 
 describe("VersionedReportRendererV2 — imported ambassador letterhead: snapshot data only", () => {
-    // values ​​that imitate (but do not literally matter) those that
+    // Values that imitate (but do not literally matter) those that
     // legacy_letterhead_adapter.py would export for the Legacy letterhead — the
     // test is that this renderer treats it as normal data
     // CUALQUIER letterhead, with no special code path for them.
