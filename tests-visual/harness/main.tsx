@@ -6,12 +6,16 @@ import ReportRendererResolver, {
     type SignerLookupEntry,
 } from "../../src/components/report/report_renderer_resolver";
 import InternalReportRender from "../../src/components/report/internal_report_render";
+import type { ReportEnvelope } from "../../src/models/report";
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
 import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/reports/versioned_v2_legacy_parity";
 // Fourth post-Phase 2 remediation: PAIRED Legacy ↔ V2 fixtures (same
 // clinical content, two renderers) for legacy_v2_parity.visual.spec.ts.
 import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
+import { NotificationHarness } from "./notification_scenarios";
+import { NotificationPreferenceHarness } from "./notification_preference_scenarios";
+import { UsageHarness } from "./usage_scenarios";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Phase 2, Block A / Story
@@ -62,10 +66,50 @@ function waitForImages(host: HTMLElement): Promise<void> {
     ).then(() => undefined);
 }
 
+/**
+ * Test-only geometry overrides, used by page_outer_margin.visual.spec.ts.
+ *
+ * `?margins=0.5,1.5,4,2` replaces `paper.margins_cm` (top,right,bottom,left)
+ * and `?clearOffsets=1` nulls `header.offset_mm`/`footer.offset_mm` — exactly
+ * what `report_letterhead_editor.tsx::updateMargin` does when a user edits a
+ * margin on an imported Legacy letterhead. Together they let a real browser
+ * measure the OUTER margin (page edge -> first printed ink) across margin
+ * values, which the screenshot suite cannot resolve: its 2% pixel tolerance
+ * absorbs a few-millimetre shift of a small header block.
+ *
+ * Absent both params the fixture is returned untouched, so every existing
+ * visual spec is unaffected.
+ */
+function applyGeometryOverrides(fixture: ReportEnvelope, params: URLSearchParams): ReportEnvelope {
+    const margins = params.get("margins");
+    const clearOffsets = params.get("clearOffsets") === "1";
+    if (!margins && !clearOffsets) return fixture;
+
+    const next = JSON.parse(JSON.stringify(fixture)) as ReportEnvelope;
+    const presentation = (next.report.rendering_snapshot as {
+        presentation: {
+            paper: { margins_cm: { top: number; right: number; bottom: number; left: number } };
+            header: { offset_mm?: number | null };
+            footer: { offset_mm?: number | null };
+        };
+    }).presentation;
+
+    if (margins) {
+        const [top, right, bottom, left] = margins.split(",").map(Number);
+        presentation.paper.margins_cm = { top, right, bottom, left };
+    }
+    if (clearOffsets) {
+        presentation.header.offset_mm = null;
+        presentation.footer.offset_mm = null;
+    }
+    return next;
+}
+
 function Harness() {
     const params = new URLSearchParams(window.location.search);
     const fixtureKey = params.get("fixture") ?? "";
-    const fixture = allFixtures[fixtureKey];
+    const rawFixture = allFixtures[fixtureKey];
+    const fixture = rawFixture ? applyGeometryOverrides(rawFixture, params) : rawFixture;
     const ref = createRef<ReportPreviewPagesRef>();
     const [ready, setReady] = useState(false);
 
@@ -157,6 +201,30 @@ function Root() {
     const fixtureKey = params.get("fixture") ?? "";
     if (params.get("internal_render") === "1") {
         return <InternalRenderHarness fixtureKey={fixtureKey} />;
+    }
+    // Céluma 1.3 Phase 3, Block C: Notification Center surfaces, via
+    // /?notifications=<scenario>. Same fetch-stub approach as the
+    // internal-render mode above; the report fixtures and their goldens are
+    // untouched by it.
+    const notificationScenario = params.get("notifications");
+    if (notificationScenario) {
+        return <NotificationHarness scenarioKey={notificationScenario} />;
+    }
+    // Céluma 1.3 Phase 3, Block D: the Profile page's notification-preference
+    // section, via /?preferences=<scenario>. A separate mode from the one
+    // above so the two features' goldens never share a code path.
+    const preferenceScenario = params.get("preferences");
+    if (preferenceScenario) {
+        return <NotificationPreferenceHarness scenarioKey={preferenceScenario} />;
+    }
+    // Céluma 1.3 Phase 4, Block F: the tenant usage dashboard, via
+    // /?usage=<scenario>. Again its own mode — the states worth a golden here
+    // are the ones jsdom cannot show (a bar's width, an absent bar, the
+    // two-column layout collapsing), and they share no code path with the
+    // report fixtures.
+    const usageScenario = params.get("usage");
+    if (usageScenario) {
+        return <UsageHarness scenarioKey={usageScenario} />;
     }
     return <Harness />;
 }

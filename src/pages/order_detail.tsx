@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
-import { 
-    ReloadOutlined, FilePdfOutlined, CheckCircleOutlined, 
-    FileTextOutlined, InboxOutlined, 
-    ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined, 
+import {
+    ReloadOutlined, FilePdfOutlined,
+    FileTextOutlined, InboxOutlined,
+    ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined,
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
-    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, SettingOutlined, EditOutlined,
+    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, EditOutlined,
     DollarOutlined, ClockCircleOutlined, PrinterOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -21,6 +21,7 @@ import CelumaTextArea from "../components/ui/textarea_field";
 import CelumaTabs from "../components/ui/celuma_tabs";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
+import { SAMPLE_STATE_CONFIG } from "../components/ui/status_configs";
 import { getReport, getOfficialPdfDownloadUrl } from "../services/report_service";
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
@@ -151,14 +152,6 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; 
     CANCELLED: { color: "#ef4444", bg: "#fef2f2", label: "Cancelada", icon: <CloseCircleOutlined /> },
 };
 
-// Sample state configuration - matches backend SampleState enum
-const SAMPLE_STATE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
-    RECEIVED: { color: "#3b82f6", bg: "#eff6ff", label: "Recibida", icon: <InboxOutlined /> },
-    PROCESSING: { color: "#f59e0b", bg: "#fffbeb", label: "En Proceso", icon: <SettingOutlined /> },
-    READY: { color: "#10b981", bg: "#ecfdf5", label: "Lista", icon: <CheckCircleOutlined /> },
-    DAMAGED: { color: "#ef4444", bg: "#fef2f2", label: "Insuficiente", icon: <ExperimentOutlined /> },
-    CANCELLED: { color: "#6b7280", bg: "#f3f4f6", label: "Cancelada", icon: <ExperimentOutlined /> },
-};
 
 
 export default function OrderDetail() {

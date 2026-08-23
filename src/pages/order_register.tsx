@@ -14,6 +14,7 @@ import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardTitleStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
+import { sortByLabel } from "../lib/sort";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -343,7 +344,12 @@ export default function OrderRegister() {
                                                 value={typeof p.value === "string" ? p.value : undefined}
                                                 onChange={(val) => p.onChange(val)}
                                                 placeholder="Seleccionar tipo de estudio"
-                                                options={studyTypes.map((st) => ({ value: st.id, label: `${st.name} (${st.code})` }))}
+                                                // C-003: alphabetical by the label the user actually
+                                                // scans — here "{name} ({code})" — not by API order.
+                                                options={sortByLabel(
+                                                    studyTypes.map((st) => ({ value: st.id, label: `${st.name} (${st.code})` })),
+                                                    (option) => option.label,
+                                                )}
                                                 error={p.error}
                                             />
                                         )}

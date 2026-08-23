@@ -18,6 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
 import { PERMS } from "../../lib/rbac";
+import NotificationBell from "./notification_bell";
 
 const { Sider } = Layout;
 
@@ -88,6 +89,30 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
         mq.addEventListener("change", handler);
         return () => mq.removeEventListener("change", handler);
     }, []);
+
+    /**
+     * Céluma 1.3 Phase 3, Block C. Which notification bell to mount.
+     *
+     * The sider/hamburger swap above is CSS-driven, but the bell is decided in
+     * JS on the same 767px breakpoint, because CSS `display: none` still leaves
+     * the hidden trigger mounted — two bells would mean two overlays and a
+     * duplicated accessible name. Exactly one is mounted at any viewport, and
+     * both read the same NotificationProvider, so there is still only ever one
+     * polling owner.
+     */
+    const [isMobileViewport, setIsMobileViewport] = useState(() => {
+        if (typeof window === "undefined" || !window.matchMedia) return false;
+        return window.matchMedia("(max-width: 767px)").matches;
+    });
+
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.matchMedia) return;
+        const mq = window.matchMedia("(max-width: 767px)");
+        const handler = (e: MediaQueryListEvent) => setIsMobileViewport(e.matches);
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+    }, []);
+
     const [drawerOpen, setDrawerOpen] = useState(false);
     const navigate = useNavigate();
     const { hasPermission } = useUserProfile();
@@ -144,15 +169,27 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
                     {(inDrawer || !collapsed) && <span style={styles.brand}>{title}</span>}
                 </div>
                 {!inDrawer && (
-                    <Button
-                        type="text"
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={toggleCollapsed}
-                        style={{
-                            ...styles.collapseButton,
-                            ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
-                        }}
-                    />
+                    <div
+                        style={
+                            collapsed
+                                ? { display: "flex", flexDirection: "column", gap: 8, alignItems: "center", width: "100%" }
+                                : { display: "flex", alignItems: "center", gap: 8 }
+                        }
+                    >
+                        {/* Notification Center entry point (Phase 3, Block C).
+                            Mounted only on the desktop viewport; the mobile
+                            viewport gets the fixed floating bell below. */}
+                        {!isMobileViewport && <NotificationBell variant="sidebar" />}
+                        <Button
+                            type="text"
+                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                            onClick={toggleCollapsed}
+                            style={{
+                                ...styles.collapseButton,
+                                ...(collapsed ? styles.collapseButtonCollapsed : styles.collapseButtonExpanded),
+                            }}
+                        />
+                    </div>
                 )}
             </div>
 
@@ -229,6 +266,12 @@ const SidebarCeluma: React.FC<SidebarCelumaProps> = ({
             >
                 <MenuUnfoldOutlined style={{ fontSize: 20, color: "#fff" }} />
             </button>
+
+            {/* Mobile notification bell — the top-right mirror of the hamburger.
+                Deliberately not rendered inside the drawer as well: the bell must
+                stay one tap away, and a second trigger would duplicate the
+                accessible name. */}
+            {isMobileViewport && <NotificationBell variant="floating" />}
 
             {/* Mobile drawer */}
             <Drawer

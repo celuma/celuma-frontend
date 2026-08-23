@@ -19,6 +19,7 @@ const routeTitleMap: Record<string, string> = {
     "/samples": "Muestras - Céluma",
     "/samples/register": "Registrar Muestra - Céluma",
     "/profile": "Mi Perfil - Céluma",
+    "/notifications": "Notificaciones - Céluma",
     "/users": "Usuarios - Céluma",
     "/settings": "Configuración - Céluma",
     "/catalog": "Catálogo de Precios - Céluma",

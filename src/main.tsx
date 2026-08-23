@@ -31,6 +31,7 @@ import ReviewersManagement from "./pages/reviewers_management";
 import PasswordResetRequest from "./pages/password_reset_request";
 import PasswordResetConfirm from "./pages/password_reset_confirm";
 import TenantSettings from "./pages/tenant_settings";
+import TenantUsage from "./pages/tenant_usage";
 import PhysicianPortal from "./pages/physician_portal";
 import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
@@ -50,6 +51,8 @@ import AccessDenied from "./pages/access_denied";
 import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
 import InternalReportRender from "./components/report/internal_report_render";
+import NotificationsPage from "./pages/notifications";
+import { NotificationProvider } from "./providers/notification_provider";
 
 createRoot(document.getElementById("root")!).render(
     <ConfigProvider theme={{
@@ -67,6 +70,14 @@ createRoot(document.getElementById("root")!).render(
     <AntApp>
         <CelumaNotificationProxy />
         <BrowserRouter>
+        {/* Céluma 1.3 Phase 3, Block C. The single owner of Notification Center
+            state — unread count, recent items and the one polling interval.
+            Mounted here, above <Routes>, rather than inside SidebarCeluma:
+            every page renders its own sidebar, so state living there would be
+            torn down and re-polled on every navigation. Public routes are
+            inside it too, harmlessly — it polls only while a session token is
+            stored, so the login screen makes no notification request. */}
+        <NotificationProvider>
         <Routes>
             {/* Public routes */}
             <Route path="/" element={<App />} />
@@ -118,6 +129,14 @@ createRoot(document.getElementById("root")!).render(
             {/* Profile — any authenticated user, no specific permission required */}
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
+            {/* Céluma 1.3 Phase 3, Block C: the Notification Center.
+                RequireAuth, not RequirePermission — the notifications API
+                enforces no permission (every query is self-scoped to the
+                caller's own user and tenant), so gating the inbox on lab:read
+                would let a user receive notifications they could not open.
+                See phase-3-block-c-architecture-decision.md §2. */}
+            <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+
             {/* Settings — redirect to config/tenant */}
             <Route path="/settings" element={<Navigate to="/config/tenant" replace />} />
 
@@ -150,6 +169,12 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="branches/:branchId" element={<RequirePermission permission="admin:manage_branches"><BranchDetail embedded /></RequirePermission>} />
                 <Route path="branches/:branchId/edit" element={<RequirePermission permission="admin:manage_branches"><BranchForm embedded /></RequirePermission>} />
                 <Route path="tenant" element={<RequirePermission permission="admin:manage_tenant"><TenantSettings embedded /></RequirePermission>} />
+                {/* Céluma 1.3 Phase 4, Block F: the tenant usage dashboard.
+                    Gated on admin:manage_tenant — the exact permission both
+                    usage endpoints enforce (usage-rbac-contract.md §1), so the
+                    route and the API agree by construction rather than by a
+                    role-name check that would drift from the RBAC catalog. */}
+                <Route path="usage" element={<RequirePermission permission="admin:manage_tenant"><TenantUsage embedded /></RequirePermission>} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
 
@@ -159,6 +184,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/report-templates" element={<RequirePermission permission="lab:read"><ReportTemplates /></RequirePermission>} />
             <Route path="/users" element={<RequirePermission permission="admin:manage_users"><UsersManagement /></RequirePermission>} />
         </Routes>
+        </NotificationProvider>
         </BrowserRouter>
     </AntApp>
     </ConfigProvider>

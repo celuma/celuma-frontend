@@ -191,11 +191,37 @@ describe("VersionedReportRendererV2 — configurable band geometry", () => {
         p.paper.body_padding_top_mm = 4;
         const { pages } = renderReport(report);
         const body = bandsOf(pages[0] as HTMLElement).body!;
-        // exactly the LegacyReportRendererV1 box.
+        // exactly the LegacyReportRendererV1 box: bands pinned at the page
+        // edges (offset_mm = 0) occupy 0-28mm and 0-20mm, and the body
+        // starts/ends immediately after them. The 1.5cm page margins are a
+        // LOWER bound here, not the body position — see page_layout.ts and
+        // legacy-margin-contract.md for the three-concept model.
         expect(body.style.top).toBe("28mm");
         expect(body.style.bottom).toBe("20mm");
         expect(body.style.paddingTop).toBe("4mm");
         expect(body.style.boxSizing).toBe("border-box");
+    });
+
+    it("0.5cm/4.0cm margins are literal page-edge insets, with the body clearing the bands (§27)", () => {
+        // Pre-Phase-5 final layout remediation: the page margin is proven by
+        // where the BANDS sit (the topmost/bottommost occupied elements),
+        // never by bodyTop — with a header present, bodyTop is the safe-area
+        // boundary below it. An earlier revision of this test asserted
+        // bodyTop === "5mm", which drew report content on top of the header.
+        const report = clone(v2CompleteBranding);
+        const p = presentationOf(report);
+        const paper = p.paper as unknown as { margins_cm: { top: number; right: number; bottom: number; left: number } };
+        paper.margins_cm = { ...paper.margins_cm, top: 0.5, bottom: 4.0 };
+        const { pages } = renderReport(report);
+        const { header, footer, body } = bandsOf(pages[0] as HTMLElement);
+
+        // Literal page margins: 0.5cm -> 5mm, 4.0cm -> 40mm.
+        expect(header!.style.top).toBe("5mm");
+        expect(footer!.style.bottom).toBe("40mm");
+        // Body safe area: clears each band (default 24mm/16mm heights,
+        // default 4mm gaps).
+        expect(body!.style.top).toBe("33mm"); // 5 + 24 + 4
+        expect(body!.style.bottom).toBe("60mm"); // 40 + 16 + 4
     });
 
     it("padding_mm controls the inner padding of each band", () => {

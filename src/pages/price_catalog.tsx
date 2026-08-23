@@ -21,6 +21,7 @@ import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
 import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
+import { sortByLabel } from "../lib/sort";
 import type { ColumnsType } from "antd/es/table";
 
 const priceSchema = z.object({
@@ -367,7 +368,12 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                                 value={typeof p.value === "string" ? p.value : undefined}
                                 onChange={(v) => p.onChange(v ?? "")}
                                 placeholder="Seleccionar tipo de estudio"
-                                options={studyTypes.map((st) => ({ value: st.id, label: `${st.code} - ${st.name}` }))}
+                                // C-003: alphabetical by the label the user actually scans —
+                                // here "{code} - {name}" — not by API order.
+                                options={sortByLabel(
+                                    studyTypes.map((st) => ({ value: st.id, label: `${st.code} - ${st.name}` })),
+                                    (option) => option.label,
+                                )}
                                 showSearch
                                 error={p.error}
                             />
