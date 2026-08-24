@@ -8,10 +8,6 @@ export const FRONTEND_DEPENDENCIES = `\
 @hookform/resolvers
 antd
 dayjs
-dompurify
-html2canvas
-html2pdf.js
-jspdf
 quill
 react
 react-colorful
