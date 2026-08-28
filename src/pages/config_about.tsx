@@ -27,15 +27,31 @@ const sectionLabelStyle: React.CSSProperties = {
     letterSpacing: "0.08em",
 };
 
-function VersionStat({ label, value, color }: { label: string; value: string; color: string }) {
+/** H-0c. Shows the RELEASE identity prominently and keeps the source
+ *  provenance available underneath (and in the `title`, in full). Displaying
+ *  the semantic version must not cost SHA-level traceability. */
+function VersionStat({
+    label, value, color, provenance,
+}: { label: string; value: string; color: string; provenance?: string | null }) {
     return (
         <div>
             <p style={{ margin: "0 0 2px 0", fontSize: 10, fontWeight: 600, color: tokens.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 {label}
             </p>
-            <p style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 16, fontWeight: 700, color }}>
+            <p
+                style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 16, fontWeight: 700, color }}
+                title={provenance ? `${value} · ${provenance}` : value}
+            >
                 {value}
             </p>
+            {provenance && provenance !== value && (
+                <p
+                    style={{ margin: "2px 0 0 0", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 10, color: tokens.textSecondary }}
+                    title={provenance}
+                >
+                    {provenance.slice(0, 12)}
+                </p>
+            )}
         </div>
     );
 }
@@ -66,16 +82,25 @@ function DepBlock({ title, deps }: { title: string; deps: string }) {
 export default function ConfigAbout() {
     usePageTitle();
 
-    const { version: uiVersion } = __CELUMA_APP_INFO__;
+    const { version: uiVersion, commit: uiCommit } = __CELUMA_APP_INFO__;
     const [serverVersion, setServerVersion] = useState<string | null>(null);
+    const [serverCommit, setServerCommit] = useState<string | null>(null);
 
     useEffect(() => {
         fetch(`${getApiBase()}/v1/health`)
             .then((r) => r.json())
-            .then((data: { celuma_version?: string }) => {
-                setServerVersion(data.celuma_version ?? null);
+            .then((data: { celuma_version?: string; celuma_release?: string }) => {
+                // H-0c: prefer the RELEASE identity; `celuma_version` is the
+                // commit SHA by design (Block G, D-5) and is what made the UI
+                // display "dev". Falls back to it so an older backend that
+                // does not send `celuma_release` still reports something.
+                setServerVersion(data.celuma_release ?? data.celuma_version ?? null);
+                setServerCommit(data.celuma_version ?? null);
             })
-            .catch(() => setServerVersion(null));
+            .catch(() => {
+                setServerVersion(null);
+                setServerCommit(null);
+            });
     }, []);
 
     return (
@@ -87,8 +112,18 @@ export default function ConfigAbout() {
                 extra={
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end", textAlign: "right" }}>
                         <div style={{ display: "flex", gap: 28 }}>
-                            <VersionStat label="Servidor" value={serverVersion ?? "—"} color={tokens.primary} />
-                            <VersionStat label="Interfaz" value={uiVersion} color={tokens.textPrimary} />
+                            <VersionStat
+                                label="Servidor"
+                                value={serverVersion ?? "—"}
+                                color={tokens.primary}
+                                provenance={serverCommit}
+                            />
+                            <VersionStat
+                                label="Interfaz"
+                                value={uiVersion}
+                                color={tokens.textPrimary}
+                                provenance={uiCommit}
+                            />
                         </div>
                         <p style={{ margin: 0, fontSize: 12, color: tokens.textSecondary, lineHeight: 1.5 }}>
                             © {CURRENT_YEAR} Céluma. Todos los derechos reservados.

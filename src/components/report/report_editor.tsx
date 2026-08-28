@@ -20,6 +20,7 @@ import {
     triggerBrowserDownload,
     officialPdfFilename,
     getStudyTypeReportDefaults,
+    ReportConfigRequestError,
 } from "../../services/report_service";
 import {
     listReportLetterheads,
@@ -120,11 +121,20 @@ function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
 
+/** H-0c. The editor distinguishes MORE states than the backend reports:
+ *  `V2BlockedReason` covers genuine CONFIGURATION gaps, and these two extra
+ *  reasons cover a configuration request that never produced an answer.
+ *  Conflating them is what made a pathologist's 403 read as "the laboratory
+ *  has no letterhead" — a false statement about the tenant's data that sent
+ *  administrators to a Membretes page which was already correct. */
+type V2BlockedState = V2BlockedReason | "CONFIG_UNAUTHORIZED" | "CONFIG_UNAVAILABLE";
+
 /** Third post-Phase 2 remediation: blocked-state messages, one per reason
- *  returned by `report-defaults`. Each states what is missing and where to
- *  fix it—Legacy is never rendered as a substitute (see
- *  deterministic-letterhead-resolution-contract.md, "Never Legacy"). */
-const V2_BLOCKED_COPY: Record<V2BlockedReason, { title: string; admin: string; user: string }> = {
+ *  returned by `report-defaults`, plus the two H-0c request-failure states.
+ *  Each states what is missing and where to fix it—Legacy is never rendered
+ *  as a substitute (see deterministic-letterhead-resolution-contract.md,
+ *  "Never Legacy"). */
+const V2_BLOCKED_COPY: Record<V2BlockedState, { title: string; admin: string; user: string }> = {
     NO_TEMPLATE: {
         title: "Este tipo de estudio no tiene plantilla de reporte",
         admin: "Asigna una plantilla de reporte al tipo de estudio antes de crear reportes.",
@@ -145,7 +155,31 @@ const V2_BLOCKED_COPY: Record<V2BlockedReason, { title: string; admin: string; u
         admin: "Revisa Configuración → Membretes: hay que dejar exactamente un predeterminado con una configuración activa.",
         user: "Contacta a un administrador para revisar la configuración de membretes.",
     },
+    // H-0c. 401/403: says nothing about whether a letterhead exists.
+    CONFIG_UNAUTHORIZED: {
+        title: "No tienes acceso a la configuración de reportes",
+        admin: "Tu sesión pudo haber expirado. Vuelve a iniciar sesión; si el problema persiste, revisa los permisos de tu usuario.",
+        user: "Tu sesión pudo haber expirado. Vuelve a iniciar sesión; si el problema persiste, contacta a un administrador.",
+    },
+    // H-0c. 5xx or no response at all: also says nothing about the tenant.
+    CONFIG_UNAVAILABLE: {
+        title: "No se pudo consultar la configuración de reportes",
+        admin: "No fue posible contactar al servicio de configuración. Revisa tu conexión e inténtalo de nuevo.",
+        user: "No fue posible contactar al servicio de configuración. Revisa tu conexión e inténtalo de nuevo.",
+    },
 };
+
+/** H-0c. Maps a failed configuration READ to the state it actually proves.
+ *  A request that failed proves nothing about the tenant's letterhead, so it
+ *  must never land on NO_LETTERHEAD. */
+function classifyConfigFailure(err: unknown): V2BlockedState {
+    const status = err instanceof ReportConfigRequestError ? err.status : undefined;
+    if (status === 401 || status === 403) return "CONFIG_UNAUTHORIZED";
+    // Includes `status === null` (the request never reached the server) and
+    // any 5xx. A 404 on this endpoint means the study type is not visible to
+    // this tenant, which is likewise not a letterhead statement.
+    return "CONFIG_UNAVAILABLE";
+}
 
 /** Post-Phase-2 remediation: one selectable "Membrete" option — the ACTIVE
  * version of a shared, tenant-owned letterhead. `letterheadId` is carried
@@ -282,7 +316,7 @@ const ReportEditor: React.FC = () => {
     // Third post-Phase 2 remediation: the EXACT blocking reason as returned
     // by `report-defaults`, so the UI can say what is missing and where to
     // fix it instead of showing a generic message.
-    const [v2BlockedReason, setV2BlockedReason] = useState<V2BlockedReason | null>(null);
+    const [v2BlockedReason, setV2BlockedReason] = useState<V2BlockedState | null>(null);
     const [v2BlockedDetail, setV2BlockedDetail] = useState<string | null>(null);
     // Where the resolved letterhead originated—shown in administrative mode
     // (§6.3 of the brief), translated and without technical IDs.
@@ -654,14 +688,21 @@ const ReportEditor: React.FC = () => {
                                                 setAvailableLetterheadVersions(options);
                                             } catch { /* selector opcional */ }
                                         }
-                                    } catch {
+                                    } catch (cfgErr) {
                                         // With V2 enabled, a configuration-resolution
                                         // failure is a blocked state, never an excuse to
                                         // render Legacy.
-                                        setV2BlockedReason("NO_LETTERHEAD");
+                                        //
+                                        // H-0c: but it is not a LETTERHEAD state either.
+                                        // This catch used to hard-code NO_LETTERHEAD, so
+                                        // a pathologist's 403 on the template-version read
+                                        // was reported as "Falta el membrete
+                                        // predeterminado del laboratorio" — pointing at
+                                        // configuration that was in fact correct. The
+                                        // failure is now classified by HTTP status.
+                                        setV2BlockedReason(classifyConfigFailure(cfgErr));
                                         setV2BlockedDetail(
-                                            "No se pudo consultar la configuración de reportes V2. " +
-                                            "Revisa tu conexión e inténtalo de nuevo."
+                                            cfgErr instanceof Error ? cfgErr.message : null
                                         );
                                         setV2ConfigBlocked(true);
                                     }
@@ -1269,7 +1310,9 @@ const ReportEditor: React.FC = () => {
         // BLOCKED status. Never render Legacy as a substitute: a report with
         // the wrong letterhead is worse than one that cannot yet be created.
         const canManageTemplates = userHasPermission(PERMS.MANAGE_TEMPLATES);
-        const copy = V2_BLOCKED_COPY[v2BlockedReason ?? "NO_LETTERHEAD"];
+        // H-0c: the fallback is the state that claims the LEAST. An unknown
+        // blocked state must not assert that the letterhead is missing.
+        const copy = V2_BLOCKED_COPY[v2BlockedReason ?? "CONFIG_UNAVAILABLE"];
         const isLetterheadProblem =
             v2BlockedReason === "NO_LETTERHEAD" || v2BlockedReason === "LETTERHEAD_MISCONFIGURED";
         return (
