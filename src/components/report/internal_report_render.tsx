@@ -45,6 +45,31 @@ function waitForImages(host: HTMLElement): Promise<void> {
     ).then(() => undefined);
 }
 
+/** H-0c Blocker B. Returns an error code when the report requires a digital
+ *  signature but its autograph is not actually on the page and decoded;
+ *  `null` when there is nothing to enforce.
+ *
+ *  Intrinsic dimensions are the check that matters: `complete` is true for a
+ *  failed load too, and a failed <img> stays in the DOM at zero width — which
+ *  is precisely what a viewer sees as "the signature is missing from the
+ *  official PDF". */
+function requiredAutographFailure(data: InternalRenderData): string | null {
+    const meta = (data as { report?: { signatureMetadata?: Record<string, unknown> } })
+        .report?.signatureMetadata;
+    const requiresAutograph = Boolean(
+        meta?.show_signature_section && meta?.require_digital_signature,
+    );
+    // Only a SIGNED report can be expected to carry one; an unsigned preview
+    // legitimately renders the pending state.
+    if (!requiresAutograph || !data.signed_at) return null;
+
+    if (!meta?.signature_url) return "SIGNATURE_URL_MISSING";
+    const img = document.querySelector<HTMLImageElement>('img[data-signature-autograph="required"]');
+    if (!img) return "SIGNATURE_NOT_RENDERED";
+    if (!img.naturalWidth) return "SIGNATURE_NOT_LOADED";
+    return null;
+}
+
 /** Render tokens live in the URL fragment (`#token=...`), never the query
  * string — fragments are never sent to the server, so they can't leak into
  * access logs the way a `?token=...` query param would. */
@@ -131,9 +156,26 @@ export default function InternalReportRender() {
                         host2.style.marginTop = `${-gap}px`;
                     }
                 }
-                if (!cancelled) {
-                    document.documentElement.dataset.reportReady = "true";
+                if (cancelled) return;
+
+                // H-0c Blocker B. An official PDF is a clinical artifact: if
+                // the report REQUIRES a digital signature and the autograph
+                // did not actually decode, publishing anyway produces a
+                // document that silently misrepresents itself as signed while
+                // showing an empty box where the signature belongs.
+                //
+                // `waitForImages` above intentionally treats a FAILED image as
+                // settled (see its comment — requiring naturalWidth there would
+                // hang forever on an already-failed load). That is correct for
+                // readiness, but it means "ready" alone never distinguished a
+                // loaded autograph from a broken one. This does, and refuses to
+                // signal ready when a required autograph is missing.
+                const failure = requiredAutographFailure(data);
+                if (failure) {
+                    document.documentElement.dataset.reportRenderError = failure;
+                    return;
                 }
+                document.documentElement.dataset.reportReady = "true";
             });
         });
         return () => {

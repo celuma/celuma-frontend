@@ -52,12 +52,28 @@ const PRESENTATION = {
     signer: null,
 };
 
-/** A pathologist: authors reports, cannot manage templates or letterheads. */
-function asPathologist() {
+/** A pathologist + reviewer: authors and reviews reports, holds neither
+ *  `reports:manage_templates` nor `admin:manage_tenant`. This is the exact
+ *  role combination the H-0c addendum was reported against. */
+function asPathologistReviewer() {
     mockedUseUserProfile.mockReturnValue({
         profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
         error: null, canManageUsers: false, canManageBranches: false, canManageCatalog: false,
-        canManageTenant: false, hasPermission: () => false, hasRole: () => false,
+        canManageTenant: false,
+        // Holds every authoring/review permission, but not manage_templates.
+        hasPermission: (p: string) =>
+            ["reports:read", "reports:create", "reports:edit", "reports:submit",
+             "reports:approve", "reports:sign", "reports:retract", "lab:read"].includes(p),
+        hasRole: (r: string) => ["pathologist", "reviewer"].includes(r),
+    } as unknown as ReturnType<typeof useUserProfile>);
+}
+
+/** An administrator: holds `reports:manage_templates`. */
+function asAdmin() {
+    mockedUseUserProfile.mockReturnValue({
+        profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
+        error: null, canManageUsers: true, canManageBranches: true, canManageCatalog: true,
+        canManageTenant: true, hasPermission: () => true, hasRole: (r: string) => r === "admin",
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
@@ -141,7 +157,7 @@ function renderEditor() {
 const MISSING_LETTERHEAD = /Falta el membrete predeterminado/i;
 
 beforeEach(() => {
-    asPathologist();
+    asPathologistReviewer();
     localStorage.setItem("tenant_id", "t1");
     localStorage.setItem("branch_id", "b1");
 });
@@ -323,6 +339,138 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         });
         // Issue F still holds: blocked, never a Legacy substitute.
         expect(document.body.textContent).not.toMatch(/villanueva/i);
+    });
+});
+
+describe("ReportEditor — role-gated administration controls (H-0c addendum)", () => {
+    /**
+     * The operator suspected the blocker was introduced when the report editor
+     * gained letterhead-editing functionality — i.e. that the editor calls a
+     * management endpoint just to render a report. It does not. The editor's
+     * letterhead panel is a SELECTOR: it chooses which letterhead THIS REPORT
+     * uses, which is an authoring action on the report, and it reads through
+     * `reports:read` endpoints only. The single administrative affordance is
+     * the navigation offered in the blocked state, and it is gated on the
+     * capability rather than gating the report data.
+     *
+     * These tests pin both halves of §6: the admin control is absent for an
+     * author, and its absence never prevents the editor from loading.
+     */
+    it("loads the editor for a pathologist+reviewer and renders the letterhead", async () => {
+        asPathologistReviewer();
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockTemplateVersionOk();
+        mockDefaults();
+        vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain("Laboratorio Del Membrete");
+        });
+        expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
+        // No administrative control is rendered for an author...
+        expect(screen.queryByRole("button", { name: /Ir a Membretes/i })).toBeNull();
+        expect(
+            screen.queryByRole("button", { name: /administración de plantillas/i })
+        ).toBeNull();
+    });
+
+    it("loads the editor for an admin and renders the same letterhead", async () => {
+        asAdmin();
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockTemplateVersionOk();
+        mockDefaults();
+        vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain("Laboratorio Del Membrete");
+        });
+        // ...and the report itself renders identically for both roles: the
+        // administrative capability changes the CONTROLS, never the data.
+        expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
+    });
+
+    it("offers the Membretes action to an admin in the genuine missing-default state", async () => {
+        asAdmin();
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockTemplateVersionOk();
+        mockDefaults({
+            letterhead_version_id: null,
+            letterhead_id: null,
+            letterhead_name: null,
+            letterhead_presentation: null,
+            letterhead_resolution_source: null,
+            v2_blocked_reason: "NO_LETTERHEAD",
+        });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(MISSING_LETTERHEAD)).toBeTruthy();
+        });
+        expect(screen.getByRole("button", { name: /Ir a Membretes/i })).toBeTruthy();
+    });
+
+    it("withholds the Membretes action from a pathologist+reviewer in that same state", async () => {
+        asPathologistReviewer();
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockTemplateVersionOk();
+        mockDefaults({
+            letterhead_version_id: null,
+            letterhead_id: null,
+            letterhead_name: null,
+            letterhead_presentation: null,
+            letterhead_resolution_source: null,
+            v2_blocked_reason: "NO_LETTERHEAD",
+        });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(MISSING_LETTERHEAD)).toBeTruthy();
+        });
+        // The state is reported, but the author is told to contact an admin
+        // rather than being sent to a page they cannot use.
+        expect(screen.queryByRole("button", { name: /Ir a Membretes/i })).toBeNull();
+        expect(document.body.textContent).toMatch(/Contacta a un administrador/i);
+    });
+
+    it("does not call any letterhead-management endpoint while authoring", async () => {
+        // Guards the §5 conclusion: if the editor ever starts loading
+        // administrative letterhead configuration to render a report, this
+        // fails rather than silently reintroducing the blocker.
+        asPathologistReviewer();
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockTemplateVersionOk();
+        mockDefaults();
+        const listSpy = vi
+            .spyOn(letterheadService, "listReportLetterheads")
+            .mockResolvedValue({ letterheads: [] });
+        const saveSpy = vi.spyOn(letterheadService, "saveCurrentReportLetterheadVersion");
+        const createSpy = vi.spyOn(letterheadService, "createReportLetterheadVersion");
+        const activateSpy = vi.spyOn(letterheadService, "activateReportLetterheadVersion");
+        const defaultSpy = vi.spyOn(letterheadService, "setDefaultReportLetterhead");
+        const exportSpy = vi.spyOn(letterheadService, "exportReportLetterheadVersion");
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain("Laboratorio Del Membrete");
+        });
+        expect(listSpy).toHaveBeenCalled();          // read-only, allowed
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(activateSpy).not.toHaveBeenCalled();
+        expect(defaultSpy).not.toHaveBeenCalled();
+        expect(exportSpy).not.toHaveBeenCalled();
     });
 });
 

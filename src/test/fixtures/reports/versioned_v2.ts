@@ -1,6 +1,11 @@
 import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../../models/report";
 import type { ReportRenderingSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 
+/** A real 120x40 PNG stroke — decodes to non-zero intrinsic dimensions. */
+export const AUTOGRAPH_PNG_DATA_URI =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAAoCAYAAAA16j4lAAAAy0lEQVR42u3asRHDIBAEQBWh6tx/Hyh24JHHAj8cG1yMxD4z8HC01g7JjUkALIAFsAAWwAJYAAOWt5znq/0SwIGos2HDHAxbjQ31C9hRxQK4EHbVcQAXT/insQEHwFZAb4+bXnBgw79xO9zdivF2IKt27cKMqfwU2N7/EjVRSbi9FpsNSvhqjjtiOBE82EXv1iRIQF6qGzTzvWs19JBzcHqjfiXooY2O1Ks2T3b+fFkObJJWJdiNHt1B9ehOAAtgAQxYAAtgASyApUsu3GUp+zy6mK8AAAAASUVORK5CYII=";
+
+
 /**
  * Anonymized V2 fixtures for Céluma 1.3 Phase 2, Block C (Story C6). No
  * real patient data, no tenant-embajador branding — every fixture uses its
@@ -74,7 +79,13 @@ const v2CompleteContent: ReportContent = {
     signatureMetadata: {
         show_signature_section: true,
         require_digital_signature: true,
-        signature_url: "https://cdn.example.invalid/synthetic/v2-signature.png",
+        // H-0c Blocker B: a REAL, loadable autograph. This used to point at
+        // `cdn.example.invalid`, so every signed fixture could only ever
+        // exercise the broken-image path — which is how a defect in the
+        // autograph itself stayed invisible to the whole visual suite. The
+        // 70px signature wrapper is fixed-height, so making it load changes
+        // the ink inside that box and nothing about pagination.
+        signature_url: AUTOGRAPH_PNG_DATA_URI,
     },
 };
 
@@ -381,6 +392,103 @@ export const v2MalformedSnapshot: ReportEnvelope = {
     report: v2MalformedSnapshotContent as unknown as ReportContent,
 };
 
+
+// ---------------------------------------------------------------------------
+// H-0c Blocker B — autograph signature parity fixtures.
+//
+// Every pre-existing signed fixture points `signature_url` at
+// `cdn.example.invalid`, which by design never loads: they were built to
+// exercise LAYOUT, so they can only ever show SignatureBlock's graceful
+// fallback. That left the autograph itself — the one thing Blocker B is
+// about — with no real-browser coverage at all in either render path.
+//
+// These two fixtures close that gap. The autograph is an inline data: URI so
+// the assertion is about RENDERING semantics and is deterministic offline;
+// the deliberately-broken twin proves the fallback still works and still
+// signals readiness (an official PDF must never hang because an image 404s).
+// ---------------------------------------------------------------------------
+
+
+const signedContent = (signatureUrl: string | null) => ({
+    ...v2CompleteContent,
+    signatureMetadata: {
+        show_signature_section: true,
+        require_digital_signature: true,
+        ...(signatureUrl ? { signature_url: signatureUrl } : {}),
+    },
+});
+
+function signedEnvelope(id: string, signatureUrl: string | null): ReportEnvelope {
+    const content = signedContent(signatureUrl);
+    return {
+        ...v2CompleteBranding,
+        id,
+        title: "Reporte V2 — firma autógrafa",
+        report: { ...content, schema_version: 2, rendering_snapshot: v2CompleteSnapshot },
+        // Signed: SignatureBlock derives `isSigned` from signed_at alone.
+        signed_by: "00000000-0000-0000-0000-000000000199",
+        signed_at: "2026-02-01T10:00:00Z",
+        // No header logo, so the only external image on the page is the
+        // autograph — a failure cannot be masked by another image.
+        resolved_resources: {},
+    };
+}
+
+/** require_digital_signature=true, signed, autograph loads. */
+export const v2SignedWithAutograph = signedEnvelope(
+    "fixture-v2-signed-autograph",
+    AUTOGRAPH_PNG_DATA_URI,
+);
+
+/** Same, but the autograph URL is unreachable — must fall back, not hang. */
+export const v2SignedBrokenAutograph = signedEnvelope(
+    "fixture-v2-signed-broken-autograph",
+    "https://cdn.example.invalid/synthetic/missing-signature.png",
+);
+
+/** Signed, but the report does not require a digital signature: no autograph
+ *  in EITHER path — the state that must not be confused with a broken one. */
+export const v2SignedNoDigitalRequirement: ReportEnvelope = {
+    ...signedEnvelope("fixture-v2-signed-no-digital", null),
+    report: {
+        ...v2CompleteContent,
+        signatureMetadata: {
+            show_signature_section: true,
+            require_digital_signature: false,
+        },
+        schema_version: 2,
+        rendering_snapshot: v2CompleteSnapshot,
+    },
+};
+
+/** H-0c Blocker B — the state the OFFICIAL renderer is actually served while
+ *  the PDF is being captured, which is the state the whole defect lived in.
+ *
+ *  During `sign-and-publish` the report is still APPROVED (finalize has not
+ *  run), yet the signature URL is already embedded and the publish claim
+ *  already records who is signing and when. `get_internal_render_data` reports
+ *  that claim as the effective signature state, so `signed_at` IS set here
+ *  even though the report is not yet PUBLISHED. */
+export const v2MidPublicationSigned: ReportEnvelope = {
+    ...signedEnvelope("fixture-v2-midpub-signed", AUTOGRAPH_PNG_DATA_URI),
+    status: "APPROVED",
+    published_at: null,
+    signed_by: "00000000-0000-0000-0000-000000000199",
+    signed_at: "2026-02-01T10:00:00Z",
+};
+
+/** The SAME moment as it looked BEFORE the fix: the renderer was served
+ *  `signed_at: null`, so SignatureBlock's `isSigned` was false and the
+ *  autograph was never drawn — the official PDF's missing signature. Kept as
+ *  an executable record of the defect. */
+export const v2MidPublicationUnsigned: ReportEnvelope = {
+    ...signedEnvelope("fixture-v2-midpub-unsigned", AUTOGRAPH_PNG_DATA_URI),
+    status: "APPROVED",
+    published_at: null,
+    signed_by: null,
+    signed_at: null,
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -389,4 +497,9 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2TightMargins,
     v2MissingSnapshot,
     v2MalformedSnapshot,
+    v2SignedWithAutograph,
+    v2SignedBrokenAutograph,
+    v2SignedNoDigitalRequirement,
+    v2MidPublicationSigned,
+    v2MidPublicationUnsigned,
 };

@@ -1,6 +1,7 @@
 import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../../models/report";
 import type { ReportRenderingSnapshotV2 } from "../../../components/report/versioned/versioned_report_types";
 import legacyLogo from "../../../images/report_logo.png";
+import { AUTOGRAPH_PNG_DATA_URI } from "./versioned_v2";
 
 /**
  * Fourth post-Phase 2 remediation — PAIRED fixtures for the Legacy ↔ V2
@@ -308,7 +309,11 @@ const signedContent: ReportContent = {
     signatureMetadata: {
         show_signature_section: true,
         require_digital_signature: true,
-        signature_url: "https://cdn.example.invalid/synthetic/signature.png",
+        // H-0c Blocker B: a real, loadable autograph — see versioned_v2.ts.
+        // The parity test asserts "the report's real signature appears in
+        // both PDFs"; with an unreachable URL it could only ever compare two
+        // reports that both failed to draw one.
+        signature_url: AUTOGRAPH_PNG_DATA_URI,
     },
 };
 
