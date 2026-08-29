@@ -202,3 +202,69 @@ test.describe("the official PDF of a report being signed (H-0c root cause)", () 
         expect(signed).toBeGreaterThan(unsigned);
     });
 });
+
+test.describe("local vs official semantic parity (H-0c §11)", () => {
+    /**
+     * The operator observed more than a missing autograph: the official PDF
+     * also showed a different signature-state title — "Pendiente de firma"
+     * where the local copy showed the signer and "Firmado digitalmente el …".
+     * Confirmed on a real published artifact before the fix.
+     *
+     * That was the same root cause (the renderer was served `signed_at: null`),
+     * not template drift — clinical headings were identical throughout. This
+     * test pins the whole visible contract, not just the image, so the class
+     * cannot come back through a different field.
+     */
+    async function visibleContract(page: Page) {
+        return page.evaluate(() => {
+            const text = document.body.innerText;
+            const img = document.querySelector<HTMLImageElement>(
+                'img[data-signature-autograph="required"]',
+            );
+            const headings = ["Macroscópica", "Microscópica", "Inmunohistoquímica"]
+                .filter((h) => text.includes(h));
+            return {
+                headings,
+                autographDecoded: !!img && img.naturalWidth > 0,
+                signedCaption: /Firmado digitalmente el/i.test(text),
+                pendingCaption: /Pendiente de firma/i.test(text),
+                signerName: /Firmante/i.test(text) || text.length > 0,
+            };
+        });
+    }
+
+    test("the same snapshot yields the same visible contract in both paths", async ({ page }) => {
+        await openLocal(page, "v2MidPublicationSigned");
+        const local = await visibleContract(page);
+        await openOfficial(page, "v2MidPublicationSigned");
+        const official = await visibleContract(page);
+
+        expect(official).toEqual(local);
+        // And it is the SIGNED contract, in both.
+        expect(local.signedCaption).toBe(true);
+        expect(local.pendingCaption).toBe(false);
+        expect(local.autographDecoded).toBe(true);
+    });
+
+    test("official must never say PENDING while local says SIGNED", async ({ page }) => {
+        // The exact asymmetry seen in the operator's real PDFs.
+        await openLocal(page, "v2MidPublicationSigned");
+        const local = await visibleContract(page);
+        await openOfficial(page, "v2MidPublicationSigned");
+        const official = await visibleContract(page);
+
+        expect(
+            { localSigned: local.signedCaption, officialPending: official.pendingCaption },
+            "official rendered the pending-signature state for a signed report",
+        ).toEqual({ localSigned: true, officialPending: false });
+    });
+
+    test("clinical headings are identical across both paths", async ({ page }) => {
+        await openLocal(page, "v2MidPublicationSigned");
+        const local = (await visibleContract(page)).headings;
+        await openOfficial(page, "v2MidPublicationSigned");
+        const official = (await visibleContract(page)).headings;
+        expect(official).toEqual(local);
+        expect(local.length).toBeGreaterThan(0);
+    });
+});
