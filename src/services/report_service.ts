@@ -13,6 +13,7 @@ import type {
     ReportTemplateLogoUploadResponse,
     InternalRenderData,
 } from "../models/report";
+import { buildReportPdfFilename } from "../lib/report_filename";
 import type { StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -732,10 +733,18 @@ export function triggerBrowserDownload(url: string, filename: string): void {
 }
 
 /** Exact mirror of the backend's `official_pdf_filename` (Phase 2, E10):
- *  never derived from the patient name. */
-export function officialPdfFilename(orderCode: string | undefined, versionNo: number): string {
-    const safe = (orderCode || "reporte").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-    return `reporte-${safe || "reporte"}-v${versionNo}.pdf`;
+ *  never derived from the patient name.
+ *
+ *  H-0c: delegates to the canonical contract shared with the local copy
+ *  (`lib/report_filename.ts`). The version parameter is gone — the official
+ *  filename names the canonical artifact and must not expose an internal
+ *  version number; provenance lives in the report id, version, object key,
+ *  sha256 and audit history. */
+export function officialPdfFilename(
+    orderCode: string | undefined,
+    studyType?: string | null,
+): string {
+    return buildReportPdfFilename(orderCode, studyType, { localCopy: false });
 }
 
 /** Triggers (or re-checks, if already READY) official PDF generation for one report version. */

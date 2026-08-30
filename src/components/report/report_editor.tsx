@@ -40,6 +40,7 @@ import {
     isSignatureMissingError,
 } from "../../services/signature_service";
 import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback";
+import { buildReportPdfFilename } from "../../lib/report_filename";
 import type { ReportImage } from "./report_images";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
@@ -1115,10 +1116,12 @@ const ReportEditor: React.FC = () => {
         if (!envelope?.id || versionNo == null) return;
         setIsDownloadingPdf(true);
         try {
-            const { pdf_url, version_no } = await getOfficialPdfDownloadUrl(envelope.id, versionNo);
+            const { pdf_url } = await getOfficialPdfDownloadUrl(envelope.id, versionNo);
+            // H-0c: canonical name, shared with the local copy. No version and
+            // no patient identity — see lib/report_filename.ts.
             triggerBrowserDownload(
                 pdf_url,
-                officialPdfFilename(fullData?.order?.order_code, version_no ?? versionNo)
+                officialPdfFilename(fullData?.order?.order_code, studyTypeName)
             );
         } catch (err) {
             if (err instanceof OfficialPdfDownloadError) {
@@ -1150,7 +1153,14 @@ const ReportEditor: React.FC = () => {
      */
     const handlePrintLocalCopy = async () => {
         await printLocalCopy(previewPagesRef, {
-            filename: reportTitle || "reporte",
+            // H-0c: the SAME canonical base as the official PDF, plus the
+            // version and the LOCAL marker. Never the report's display title:
+            // that carries the patient's name into the filename.
+            filename: buildReportPdfFilename(
+                fullData?.order?.order_code,
+                studyTypeName,
+                { version: envelope?.version_no ?? versionNo, localCopy: true },
+            ),
             mark: localPrintMarkForStatus(envelope?.status),
         });
     };
