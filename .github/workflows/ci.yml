@@ -102,7 +102,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECRPushRole
           aws-region: ${{ env.AWS_REGION }}
@@ -180,7 +180,7 @@ jobs:
           path: dist
 
       - name: Configure AWS (OIDC, deploy role)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::385511156241:role/GitHubActionsECSDeployRole
           aws-region: ${{ env.AWS_REGION }}
