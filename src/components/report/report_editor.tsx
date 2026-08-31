@@ -1159,7 +1159,7 @@ const ReportEditor: React.FC = () => {
             filename: buildReportPdfFilename(
                 fullData?.order?.order_code,
                 studyTypeName,
-                { version: envelope?.version_no ?? versionNo, localCopy: true },
+                { version: envelope?.version_no, localCopy: true },
             ),
             mark: localPrintMarkForStatus(envelope?.status),
         });
