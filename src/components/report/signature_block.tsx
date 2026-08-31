@@ -111,6 +111,12 @@ const SignatureBlock: React.FC<SignatureBlockProps> = ({
                         alt="Firma digital del revisor"
                         style={imageStyle}
                         crossOrigin="anonymous"
+                        // H-0c Blocker B: a stable hook for the official render
+                        // route's readiness check. It must be able to find THIS
+                        // image without depending on alt text, and must be able
+                        // to tell "required autograph" apart from any other
+                        // image on the page (logos, clinical figures).
+                        data-signature-autograph="required"
                         onError={() => setImageFailed(true)}
                     />
                 </div>

@@ -255,6 +255,15 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         expect(document.body.textContent).toContain("2 versiones activas");
     });
 
+    /**
+     * H-0c amended this test. It previously asserted that a FAILED
+     * configuration request rendered "Falta el membrete predeterminado del
+     * laboratorio" — i.e. it pinned the defect in place. Blocking instead of
+     * falling to Legacy is still required (issue F); asserting a missing
+     * letterhead when the request never answered is not. The
+     * request-failure states are covered in
+     * report_editor_h0c_config_states.test.tsx.
+     */
     it("blocks, instead of falling to Legacy, if the configuration query fails", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
@@ -265,9 +274,14 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         renderEditor();
 
         await waitFor(() => {
-            expect(screen.getByText(/Falta el membrete predeterminado del laboratorio/i)).toBeTruthy();
+            expect(
+                screen.getByText(/No se pudo consultar la configuración de reportes/i)
+            ).toBeTruthy();
         });
-        expect(document.body.textContent).toMatch(/No se pudo consultar la configuración de reportes V2/i);
+        // Never Legacy...
+        expect(document.body.textContent).not.toMatch(/villanueva/i);
+        // ...and never a false claim about the tenant's letterhead.
+        expect(screen.queryByText(/Falta el membrete predeterminado/i)).toBeNull();
     });
 
     it("does not block a Legacy tenant (reports_v2_enabled=false)", async () => {

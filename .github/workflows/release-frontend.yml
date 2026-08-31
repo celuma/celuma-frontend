@@ -81,7 +81,15 @@ jobs:
           cache: "npm"
 
       - run: npm ci
+      # H-0c (section 10). The release version comes from package.json — this
+      # step deliberately does NOT set VITE_APP_VERSION, so there is exactly
+      # one source of truth for the public release identity and no chance of
+      # the workflow and the repo disagreeing. Before H-0c this plain build
+      # fell back to package.json's "0.0.0", which is what production
+      # displayed. Only the commit SHA is stamped here, as provenance.
       - run: npm run build
+        env:
+          VITE_APP_COMMIT: ${{ env.CELUMA_SHA }}
 
       - name: Configure AWS (OIDC, deploy role)
         uses: aws-actions/configure-aws-credentials@v4

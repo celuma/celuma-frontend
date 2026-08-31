@@ -102,8 +102,16 @@ export function useLocalPrint() {
 
             const { filename, mark = null } = options;
 
+            // H-0c: `filename` is now the canonical local-copy name built by
+            // lib/report_filename.ts (`CTM-35-CitologiaMamaria-v1-LOCAL.pdf`),
+            // not a free-form title. The document `<title>` is what the browser
+            // suggests as the save name and it appends `.pdf` itself, so the
+            // extension is stripped here — otherwise the saved file would be
+            // `...LOCAL.pdf.pdf`. Only characters unsafe in a filename are
+            // removed; the dots, hyphens and the `-LOCAL` marker are kept.
             const safeName = (filename ?? "Reporte")
-                .replace(/[^\p{L}\p{N}_\-\s]/gu, "")
+                .replace(/\.pdf$/i, "")
+                .replace(/[/\\:*?"<>|]/g, "")
                 .trim() || "Reporte";
 
             const overlayHtml = buildOverlayHtml(mark);
@@ -128,7 +136,7 @@ export function useLocalPrint() {
 <html>
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(safeName)}${mark ? ` — ${escapeHtml(MARK_TEXT[mark])}` : " (copia local)"}</title>
+<title>${escapeHtml(safeName)}</title>
 <style>
   @page { size: letter; margin: 0; }
   html, body { margin: 0; padding: 0; }

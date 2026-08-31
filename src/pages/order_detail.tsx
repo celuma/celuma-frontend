@@ -814,6 +814,10 @@ export default function OrderDetail() {
                             report={latestReport}
                             loading={reportLoading}
                             style={{ margin: 0 }}
+                            // H-0c: the authoritative order code for the
+                            // canonical local-copy filename. The study type
+                            // falls back to the report's own content.
+                            orderCode={data?.order.order_code}
                             signerLookup={(data?.order.reviewers ?? []).map((r) => ({
                                 id: r.id,
                                 name: r.name,

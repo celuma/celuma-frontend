@@ -17,6 +17,11 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ARG VITE_APP_VERSION=dev
 ENV VITE_APP_VERSION=${VITE_APP_VERSION}
 
+# H-0c: source provenance, separate from the release version above. Empty by
+# default; the release workflow stamps it with the commit SHA.
+ARG VITE_APP_COMMIT=
+ENV VITE_APP_COMMIT=${VITE_APP_COMMIT}
+
 RUN npm run build
 
 # Production image

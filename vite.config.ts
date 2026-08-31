@@ -19,7 +19,16 @@ export default defineConfig(({ mode }) => {
         plugins: [react()],
         define: {
             __CELUMA_APP_INFO__: JSON.stringify({
+                // RELEASE identity. `package.json` is the source of truth, so
+                // the production release workflow (which runs a plain
+                // `npm run build`) no longer falls back to "0.0.0" — that
+                // fallback is exactly why the production UI displayed 0.0.0
+                // (H-0c, section 10). `VITE_APP_VERSION` still overrides it,
+                // which is what staging/PR builds use to stamp a SHA.
                 version: env.VITE_APP_VERSION || packageJson.version,
+                // PROVENANCE, kept separate so displaying the semantic
+                // version never costs SHA-level traceability.
+                commit: env.VITE_APP_COMMIT || null,
             }),
         },
         server: {

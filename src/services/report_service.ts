@@ -13,6 +13,7 @@ import type {
     ReportTemplateLogoUploadResponse,
     InternalRenderData,
 } from "../models/report";
+import { buildReportPdfFilename } from "../lib/report_filename";
 import type { StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -121,6 +122,26 @@ export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail
     return (await res.json()) as StudyTypeDetail;
 }
 
+/** H-0c. Carries the HTTP status of a failed report-CONFIGURATION read so
+ *  the report editor can tell three states apart that it previously
+ *  collapsed into "Falta el membrete predeterminado":
+ *
+ *    401/403 -> session/authorization problem
+ *    5xx or `status === null` (transport) -> service/connectivity problem
+ *    a successful response that reports no default -> real configuration gap
+ *
+ *  `message` keeps the same human text these calls already threw, so
+ *  existing callers that only read `.message` are unaffected. */
+export class ReportConfigRequestError extends Error {
+    /** null when the request never reached the server (network/CORS/abort). */
+    readonly status: number | null;
+    constructor(status: number | null, message: string) {
+        super(message);
+        this.name = "ReportConfigRequestError";
+        this.status = status;
+    }
+}
+
 /**
  * Post-Phase-2 remediation: resolves everything the report editor needs to
  * bootstrap a brand-new V2 report (clinical template + active version +
@@ -130,13 +151,28 @@ export async function getStudyType(studyTypeId: string): Promise<StudyTypeDetail
 export async function getStudyTypeReportDefaults(
     studyTypeId: string
 ): Promise<StudyTypeReportDefaults> {
-    const res = await fetch(`${base}/v1/study-types/${studyTypeId}/report-defaults`, {
-        method: "GET",
-        headers: authHeaders({ Accept: "application/json" }),
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${base}/v1/study-types/${studyTypeId}/report-defaults`, {
+            method: "GET",
+            headers: authHeaders({ Accept: "application/json" }),
+        });
+    } catch {
+        // H-0c: a transport failure is NOT evidence about configuration.
+        // `status: null` lets the editor say "connection", never "the
+        // letterhead is missing".
+        throw new ReportConfigRequestError(
+            null,
+            "Error de red: no se pudo contactar al servidor. Verifica tu conexión."
+        );
+    }
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Error al resolver la configuración del tipo de estudio: ${res.status} - ${errText}`);
+        throw new ReportConfigRequestError(
+            res.status,
+            parseFastApiErrorDetail(errText)
+                ?? `Error al resolver la configuración del tipo de estudio (${res.status})`
+        );
     }
     return (await res.json()) as StudyTypeReportDefaults;
 }
@@ -495,17 +531,24 @@ async function requestTemplateVersionJSON<T>(
     try {
         res = await fetch(url, init);
     } catch {
-        throw new Error("Error de red: no se pudo contactar al servidor. Verifica tu conexión.");
+        // H-0c: same text as before, now carrying `status: null` so the
+        // report editor can classify it as a connectivity failure.
+        throw new ReportConfigRequestError(
+            null,
+            "Error de red: no se pudo contactar al servidor. Verifica tu conexión."
+        );
     }
     if (!res.ok) {
         const errText = await res.text();
         const detail = parseFastApiErrorDetail(errText);
-        if (res.status === 401) throw new Error(detail ?? "Tu sesión expiró. Vuelve a iniciar sesión.");
-        if (res.status === 403) throw new Error(detail ?? "No tienes permiso para realizar esta acción.");
-        if (res.status === 404) throw new Error(detail ?? "No se encontró el recurso solicitado.");
-        if (res.status === 409) throw new Error(detail ?? "La operación entra en conflicto con el estado actual de la versión.");
-        if (res.status === 422) throw new Error(detail ?? "Los datos enviados no son válidos.");
-        throw new Error(detail ?? `${fallbackMessage} (${res.status})`);
+        const message =
+            res.status === 401 ? detail ?? "Tu sesión expiró. Vuelve a iniciar sesión."
+            : res.status === 403 ? detail ?? "No tienes permiso para realizar esta acción."
+            : res.status === 404 ? detail ?? "No se encontró el recurso solicitado."
+            : res.status === 409 ? detail ?? "La operación entra en conflicto con el estado actual de la versión."
+            : res.status === 422 ? detail ?? "Los datos enviados no son válidos."
+            : detail ?? `${fallbackMessage} (${res.status})`;
+        throw new ReportConfigRequestError(res.status, message);
     }
     return (await res.json()) as T;
 }
@@ -690,10 +733,18 @@ export function triggerBrowserDownload(url: string, filename: string): void {
 }
 
 /** Exact mirror of the backend's `official_pdf_filename` (Phase 2, E10):
- *  never derived from the patient name. */
-export function officialPdfFilename(orderCode: string | undefined, versionNo: number): string {
-    const safe = (orderCode || "reporte").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-    return `reporte-${safe || "reporte"}-v${versionNo}.pdf`;
+ *  never derived from the patient name.
+ *
+ *  H-0c: delegates to the canonical contract shared with the local copy
+ *  (`lib/report_filename.ts`). The version parameter is gone — the official
+ *  filename names the canonical artifact and must not expose an internal
+ *  version number; provenance lives in the report id, version, object key,
+ *  sha256 and audit history. */
+export function officialPdfFilename(
+    orderCode: string | undefined,
+    studyType?: string | null,
+): string {
+    return buildReportPdfFilename(orderCode, studyType, { localCopy: false });
 }
 
 /** Triggers (or re-checks, if already READY) official PDF generation for one report version. */

@@ -403,7 +403,16 @@ describe("Observation B — official PDF download", () => {
 
         await waitFor(() => expect(clicks.length).toBe(1));
         expect(clicks[0].href).toBe("https://s3.example/signed.pdf");
-        expect(clicks[0].getAttribute("download")).toBe("reporte-CTM-27-v1.pdf");
+        // H-0c filename contract: `<ORDER_CODE>-<StudyTypePascalCase>.pdf`,
+        // replacing the old `reporte-<code>-v<n>.pdf`. The official name
+        // deliberately carries NO version — provenance comes from the report
+        // id, version, object key and sha256, never from the filename.
+        //
+        // `Reporte` here is the documented study-type fallback, not an
+        // accident: this fixture's order has no `study_type_id` and the test
+        // never mocks `getStudyType`, so the editor's `studyTypeName` is
+        // legitimately empty. See src/lib/report_filename.ts.
+        expect(clicks[0].getAttribute("download")).toBe("CTM-27-Reporte.pdf");
         expect(clicks[0].rel).toBe("noopener");
         expect(openSpy).not.toHaveBeenCalled();
     });
