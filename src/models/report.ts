@@ -396,15 +396,39 @@ export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
     study_type:             { is_visible: true,  label: "Tipo de estudio",      value: "" },
     patient_age:            { is_visible: true,  label: "Edad",                 value: "" },
     requesting_physician:   { is_visible: true,  label: "Médico solicitante",   value: "" },
+    // Céluma 1.3.1 Block D (CEL-131-04): server-resolved, like the fields
+    // above — the backend overwrites these on every save
+    // (report_metadata.py) and the report editor never renders them as
+    // editable inputs (they carry no `is_custom`, so they are excluded from
+    // `customBaseFields` the same way `patient_age` already is).
+    reception_date:         { is_visible: true,  label: "Fecha de recepción",                value: "" },
+    delivery_date:          { is_visible: true,  label: "Fecha de entrega de resultados",     value: "" },
 };
+
+/** The three official system metadata fields (Céluma 1.3.1, CEL-131-04).
+ *  Server-owned: the backend resolves their values authoritatively and
+ *  guarantees their presence whenever the report's effective template
+ *  declares them. Mirrors `report_metadata.py`'s keys of the same names. */
+export const SYSTEM_METADATA_BASE_FIELDS = [
+    "requesting_physician",
+    "reception_date",
+    "delivery_date",
+] as const;
 
 /**
  * Predefined base fields that are new additions absent from older saved templates.
  * When merging defaults into an existing template, these keys are added with
  * `is_visible: false` so they don't silently appear in reports created before
  * the field existed.
+ *
+ * **Intentionally empty since Céluma 1.3.1 (CEL-131-04).** The three system
+ * metadata fields were the only members; the release owner decided they are
+ * visible by default everywhere — in new templates (above) and in existing
+ * ones, which `v1_3_1` §3b migrates to visible. The mechanism is kept for a
+ * future base field that genuinely should arrive hidden; nothing qualifies
+ * today.
  */
-export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set(["requesting_physician"]);
+export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set<string>([]);
 
 /** Predefined sections with empty content (template skeleton).
  *  images is the 3rd section by default. */

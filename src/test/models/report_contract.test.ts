@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+    buildDefaultTemplateJSON,
+    DEFAULT_BASE_FIELDS,
+    LEGACY_PREDEFINED_BASE_HIDDEN,
     mergePersistedContentIntoTemplateSnapshot,
     normalizeReportTemplateJSON,
     resolveBaseOrder,
     resolveDisplayOrder,
     resolveSectionOrder,
     resolveSignatureMetadata,
+    SYSTEM_METADATA_BASE_FIELDS,
 } from "../../models/report";
 import {
     emptyOptionalSections,
@@ -148,5 +152,43 @@ describe("special characters survive the full resolve pipeline unmodified", () =
         const order = resolveBaseOrder({ base: report.base, base_order: report.base_order });
         const patientValue = report.base[order[1]].value;
         expect(patientValue).toBe("María José Muñóz Peña");
+    });
+});
+
+// Céluma 1.3.1 Block D (CEL-131-04). The three system metadata fields are
+// official report content by release-owner decision: visible by default in
+// new templates here, and migrated to visible in existing ones by v1_3_1 §3b.
+describe("system metadata base fields — visible by default", () => {
+    it("declares all three in DEFAULT_BASE_FIELDS, every one visible", () => {
+        for (const key of SYSTEM_METADATA_BASE_FIELDS) {
+            expect(DEFAULT_BASE_FIELDS[key]).toBeDefined();
+            expect(DEFAULT_BASE_FIELDS[key].is_visible).toBe(true);
+        }
+    });
+
+    it("gives a newly built template all three, visible and ordered", () => {
+        const template = buildDefaultTemplateJSON();
+        for (const key of SYSTEM_METADATA_BASE_FIELDS) {
+            expect(template.base[key].is_visible).toBe(true);
+            expect(template.base_order.filter((k) => k === key)).toHaveLength(1);
+        }
+    });
+
+    it("no longer hides any of them through the legacy predefined-hidden rule", () => {
+        // The mechanism is kept for a future field that should arrive hidden;
+        // none of the three qualifies, so merging defaults into an existing
+        // template can never reintroduce a hidden system metadata field.
+        for (const key of SYSTEM_METADATA_BASE_FIELDS) {
+            expect(LEGACY_PREDEFINED_BASE_HIDDEN.has(key)).toBe(false);
+        }
+        expect(LEGACY_PREDEFINED_BASE_HIDDEN.size).toBe(0);
+    });
+
+    it("keeps them out of the editable custom-field set", () => {
+        // They carry no `is_custom`, so the report editor never renders them
+        // as inputs — the author cannot overwrite a server-owned value.
+        for (const key of SYSTEM_METADATA_BASE_FIELDS) {
+            expect(DEFAULT_BASE_FIELDS[key]).not.toHaveProperty("is_custom");
+        }
     });
 });

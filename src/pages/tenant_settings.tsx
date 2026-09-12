@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,6 +14,7 @@ import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import Panel from "../components/ui/panel";
 import Button from "../components/ui/button";
 import CelumaSwitch from "../components/ui/celuma_switch";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import { tokens, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
 import { getReportTemplates, listReportTemplateVersions } from "../services/report_service";
@@ -52,6 +53,17 @@ interface TenantInfo {
     tax_id?: string;
     logo_url?: string;
     reports_v2_enabled?: boolean;
+    // Céluma 1.3.1 Block D (CEL-131-06).
+    default_reviewer_id?: string | null;
+    default_reviewer?: { id: string; full_name?: string | null; email?: string | null } | null;
+}
+
+// Céluma 1.3.1 Block D: same shape list_reviewers already returns to the
+// Reviewers settings screen — the reused "eligible reviewers" source.
+interface EligibleReviewer {
+    id: string;
+    full_name: string;
+    email: string;
 }
 
 const schema = z.object({
@@ -89,6 +101,9 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
     const [uploading, setUploading] = useState(false);
     const [savingReportsV2, setSavingReportsV2] = useState(false);
     const [activeVersionCheck, setActiveVersionCheck] = useState<"checking" | "has_active" | "no_active">("checking");
+    const [eligibleReviewers, setEligibleReviewers] = useState<EligibleReviewer[]>([]);
+    const [loadingEligibleReviewers, setLoadingEligibleReviewers] = useState(false);
+    const [savingDefaultReviewer, setSavingDefaultReviewer] = useState(false);
 
     const { control, handleSubmit, reset } = useForm<TenantFormData>({
         resolver: zodResolver(schema),
@@ -100,6 +115,22 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
         loadTenant();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Céluma 1.3.1 Block D: the same eligible-reviewer source the Reviewers
+    // settings screen uses (already tenant- and active-scoped, already
+    // filtered to the `reviewer` role server-side). Only fetched for an
+    // admin who could actually change the setting — a read-only viewer sees
+    // the current default's name from `tenant.default_reviewer` without it.
+    useEffect(() => {
+        if (!canManageTenant) return;
+        let cancelled = false;
+        setLoadingEligibleReviewers(true);
+        getJSON<{ reviewers: EligibleReviewer[] }>("/v1/users/reviewers")
+            .then((res) => { if (!cancelled) setEligibleReviewers(res.reviewers); })
+            .catch(() => { if (!cancelled) setEligibleReviewers([]); })
+            .finally(() => { if (!cancelled) setLoadingEligibleReviewers(false); });
+        return () => { cancelled = true; };
+    }, [canManageTenant]);
 
     // Céluma 1.3 Phase 2, Block D, Story D9: advisory check — before letting
     // an admin turn reports_v2_enabled ON, confirm the tenant has at least one
@@ -216,6 +247,41 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
         }
     };
 
+    // Céluma 1.3.1 Block D (CEL-131-06): saves immediately on change, same
+    // pattern as `handleToggleReportsV2` above. `undefined` means "clear" —
+    // the backend distinguishes that from "not submitted" via
+    // `clear_default_reviewer`, since a PATCH omitting the field must leave
+    // it untouched.
+    const handleChangeDefaultReviewer = async (newReviewerId: string | undefined) => {
+        if (!tenant) return;
+        setSavingDefaultReviewer(true);
+        try {
+            const updated = await patchJSON<TenantInfo>(`/v1/tenants/${tenant.id}`,
+                newReviewerId
+                    ? { default_reviewer_id: newReviewerId }
+                    : { clear_default_reviewer: true }
+            );
+            setTenant(updated);
+            message.success(newReviewerId ? "Revisor predeterminado actualizado" : "Revisor predeterminado eliminado");
+        } catch (e) {
+            message.error(e instanceof Error ? e.message : "Error al actualizar el revisor predeterminado");
+        } finally {
+            setSavingDefaultReviewer(false);
+        }
+    };
+
+    // Always includes the currently configured default (even for a read-only
+    // viewer, who never fetches the full eligible list) so the Select shows
+    // its real label instead of a blank value.
+    const defaultReviewerOptions = useMemo(() => {
+        const opts = eligibleReviewers.map((u) => ({ value: u.id, label: `${u.full_name} · ${u.email}` }));
+        const current = tenant?.default_reviewer;
+        if (current && !opts.some((o) => o.value === current.id)) {
+            opts.push({ value: current.id, label: current.full_name || current.email || current.id });
+        }
+        return opts;
+    }, [eligibleReviewers, tenant?.default_reviewer]);
+
     const content = (
         <div style={{ display: "grid", gap: tokens.gap }}>
             <style>{`
@@ -327,6 +393,30 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
                                     antes de habilitar este flag.
                                 </div>
                             )}
+                        </Panel>
+                    </section>
+
+                    <section style={{ display: "grid", gap: 16 }}>
+                        <SectionTitle>Revisor predeterminado</SectionTitle>
+                        <Panel style={{ display: "grid", gap: 12 }}>
+                            <div style={{ fontSize: 13, color: tokens.textSecondary, maxWidth: 560 }}>
+                                Se asigna automáticamente como revisor de una orden solo cuando
+                                esa orden no tiene ningún revisor asignado al enviarse a revisión —
+                                nunca remplaza una asignación explícita. Configurar un revisor
+                                predeterminado no le otorga permisos adicionales: debe seguir
+                                teniendo el rol de Revisor para poder aprobar o firmar.
+                            </div>
+                            <FloatingCaptionSelect
+                                label="Revisor predeterminado"
+                                value={tenant?.default_reviewer_id ?? undefined}
+                                onChange={handleChangeDefaultReviewer}
+                                placeholder="Sin revisor predeterminado"
+                                options={defaultReviewerOptions}
+                                showSearch
+                                allowClear
+                                loading={loadingEligibleReviewers || savingDefaultReviewer}
+                                disabled={!canManageTenant}
+                            />
                         </Panel>
                     </section>
 
