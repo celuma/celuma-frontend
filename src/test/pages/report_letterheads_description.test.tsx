@@ -33,6 +33,9 @@ function withPermission(canManage: boolean) {
         canManageTenant: false,
         hasPermission: () => canManage,
         hasRole: () => false,
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

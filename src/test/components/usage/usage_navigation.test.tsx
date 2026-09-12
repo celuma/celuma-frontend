@@ -28,6 +28,9 @@ function withPermissions(overrides: Partial<ReturnType<typeof useUserProfile>> =
         canManageTenant: false,
         hasPermission: () => false,
         hasRole: () => false,
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
         ...overrides,
     } as unknown as ReturnType<typeof useUserProfile>);
 }

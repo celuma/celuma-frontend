@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { hasPermission as _hasPermission, PERMS } from "../lib/rbac";
+import {
+    hasPermission as _hasPermission,
+    canActAsReviewer as _canActAsReviewer,
+    canReopenApprovedReport as _canReopenApprovedReport,
+    isAssignedReviewer as _isAssignedReviewer,
+    PERMS,
+} from "../lib/rbac";
 import { getStoredToken, clearStoredAuth } from "../lib/auth_session";
 
 function getApiBase(): string {
@@ -86,5 +92,25 @@ export function useUserProfile() {
         /** Generic helper — check any permission code at the call site. */
         hasPermission: (code: string) => _hasPermission(perms, code),
         hasRole: (code: string) => roles.includes(code),
+        /**
+         * Céluma 1.3.1 Block A — the reviewer contract (role + capability +
+         * assignment), mirroring the backend. Pass the report order's
+         * reviewer list; returns false for admin/superuser/pathologist, who
+         * are never implicit reviewers however broad their permissions.
+         */
+        canActAsReviewer: (
+            capability: string,
+            reviewers: { id: string }[] | undefined,
+        ) => _canActAsReviewer(roles, perms, capability, profile?.id, reviewers),
+        isAssignedReviewer: (reviewers: { id: string }[] | undefined) =>
+            _isAssignedReviewer(profile?.id, reviewers),
+        /**
+         * Céluma 1.3.1 Block B — the reopen contract (assigned reviewer OR an
+         * administrative `reports:manage_templates` holder). Separate from
+         * `canActAsReviewer` on purpose: admin and superuser may reopen and
+         * must still never approve, sign or edit presentation settings.
+         */
+        canReopenApprovedReport: (reviewers: { id: string }[] | undefined) =>
+            _canReopenApprovedReport(roles, perms, profile?.id, reviewers),
     };
 }

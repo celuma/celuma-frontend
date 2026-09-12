@@ -316,6 +316,68 @@ export async function approveReport(reportId: string, changelog?: string): Promi
     return await res.json();
 }
 
+/**
+ * Céluma 1.3.1 Block A (A4) — the narrow reviewer presentation route.
+ *
+ * The reviewer role deliberately has no `reports:edit`, so a reviewer cannot
+ * save through the normal content path (`POST /{id}/new_version`). This
+ * endpoint is the only way they can change the three presentation settings
+ * that affect the final clinical document, and it accepts nothing else.
+ */
+export interface ReportPresentationUpdate {
+    show_signature_section?: boolean;
+    require_digital_signature?: boolean;
+    letterhead_version_id?: string;
+}
+
+export interface ReportPresentationResponse {
+    id: string;
+    status: string;
+    show_signature_section: boolean;
+    require_digital_signature: boolean;
+    letterhead_version_id: string | null;
+}
+
+export async function updateReportPresentation(
+    reportId: string,
+    update: ReportPresentationUpdate,
+): Promise<ReportPresentationResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/presentation`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(update),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            `Error al actualizar la presentación del reporte: ${res.status} - ${errText}`,
+        );
+    }
+    return await res.json();
+}
+
+/**
+ * Céluma 1.3.1 Block B (CEL-131-03) — reopen an APPROVED report that has not
+ * been signed, returning it to DRAFT.
+ *
+ * Authorized for the assigned reviewer and for administrators
+ * (`reports:manage_templates`); the backend is authoritative and refuses a
+ * signed, published or retracted report outright. See
+ * `canReopenApprovedReport` in `lib/rbac.ts` for the UX mirror.
+ */
+export async function reopenReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/reopen`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ changelog }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al reabrir reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
 export async function requestChanges(reportId: string, comment: string): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/request-changes`, {
         method: "POST",

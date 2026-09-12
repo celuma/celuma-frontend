@@ -14,6 +14,8 @@ import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion,
     submitReport, approveReport, requestChanges, signAndPublishReport,
+    reopenReport,
+    updateReportPresentation,
     getReportTemplateVersion,
     getOfficialPdfDownloadUrl,
     OfficialPdfDownloadError,
@@ -68,6 +70,7 @@ import CelumaButton from "../ui/button";
 import ActionButtonPanel from "../ui/action_button_panel";
 import CelumaSteps, { type CelumaStep } from "../ui/celuma_steps";
 import CelumaModal from "../ui/celuma_modal";
+import ConfirmDialog from "../ui/confirm_dialog";
 import Panel from "../ui/panel";
 import EmptyState from "../ui/empty_state";
 import CelumaTextArea from "../ui/textarea_field";
@@ -287,7 +290,11 @@ const ReportEditor: React.FC = () => {
     const [envelope, setEnvelope] = useState<ReportEnvelope | null>(null);
 
     // User permissions (RBAC)
-    const { hasPermission: userHasPermission } = useUserProfile();
+    const {
+        hasPermission: userHasPermission,
+        canActAsReviewer: userCanActAsReviewer,
+        canReopenApprovedReport: userCanReopenApprovedReport,
+    } = useUserProfile();
 
     // Study type name (for display)
     const [studyTypeName, setStudyTypeName] = useState<string>("");
@@ -344,6 +351,11 @@ const ReportEditor: React.FC = () => {
     const [approveComment, setApproveComment] = useState("");
     const [isChangesModalVisible, setIsChangesModalVisible] = useState(false);
     const [changesComment, setChangesComment] = useState("");
+    // Céluma 1.3.1 Block B: reopening reverses an approval, so it is confirmed
+    // before it runs, using the application's existing ConfirmDialog rather
+    // than a new pattern.
+    const [isReopenConfirmVisible, setIsReopenConfirmVisible] = useState(false);
+    const [isReopening, setIsReopening] = useState(false);
 
     // Modal for table section editing
     const [tableModal, setTableModal] = useState<{ key: string; label: string } | null>(null);
@@ -383,18 +395,71 @@ const ReportEditor: React.FC = () => {
         [envelope?.status]
     );
 
-    // Fifth post-Phase 2 remediation (Observation A / §4.1). The letterhead
-    // immutability boundary. It was previously `!reportId`—"the report has no
-    // ID yet"—which froze the letterhead on first save, long before business
-    // rules made the document immutable. It now matches the rest of the
-    // editor: it can change while the report remains DRAFT (or does not yet
-    // exist) and is fixed upon submission for review. The backend applies the
-    // same rule and returns 409 for payload attempts. See
-    // letterhead-freeze-at-review-contract.md.
-    const canChangeLetterhead = useMemo(
-        () => !envelope?.status || envelope.status === "DRAFT",
-        [envelope?.status]
+    // ── Céluma 1.3.1 Block A — reviewer-only controls ────────────────────
+    //
+    // Every flag below is the reviewer CONTRACT (role + capability +
+    // assignment), never a role-name comparison and never a permission on its
+    // own. Before 1.3.1 these controls were gated on a bare permission, which
+    // showed "Aprobar" to every pathologist (the CEL-131-01 defect as seen
+    // from the UI) and "Firmar y publicar" to superuser, whose broad
+    // permissions the backend correctly refuses.
+    //
+    // The backend is authoritative; this is the UX half, and it exists so the
+    // editor stops offering actions that are guaranteed to 403.
+    const orderReviewers = fullData?.order.reviewers;
+
+    const canApprove = useMemo(
+        () =>
+            envelope?.status === "IN_REVIEW" &&
+            userCanActAsReviewer(PERMS.REPORTS_APPROVE, orderReviewers),
+        [envelope?.status, userCanActAsReviewer, orderReviewers]
     );
+
+    const canSign = useMemo(
+        () =>
+            envelope?.status === "APPROVED" &&
+            userCanActAsReviewer(PERMS.REPORTS_SIGN, orderReviewers),
+        [envelope?.status, userCanActAsReviewer, orderReviewers]
+    );
+
+    // Céluma 1.3.1 Block B (CEL-131-03) — "Reabrir reporte".
+    //
+    // APPROVED + UNSIGNED only. A signed report is PUBLISHED, so the status
+    // test already excludes it; the backend additionally refuses on the
+    // signature itself, which is the authoritative guard.
+    //
+    // NOT `canActAsReviewer`: administrators and superusers may reopen (the
+    // administrative `reports:manage_templates` half of the contract) while
+    // remaining excluded from approving, signing and presentation settings.
+    // Widening `canActAsReviewer` to admit them would hand them all three.
+    const canReopen = useMemo(
+        () =>
+            envelope?.status === "APPROVED" &&
+            userCanReopenApprovedReport(orderReviewers),
+        [envelope?.status, userCanReopenApprovedReport, orderReviewers]
+    );
+
+    // A4/A5: the signature toggles and the letterhead selector are
+    // presentation settings — they decide what the final clinical document
+    // asserts about who signed it and under whose letterhead, so they belong
+    // to the assigned reviewer in EVERY state.
+    //
+    // DRAFT is explicitly NOT an author window for these. The author owns
+    // clinical CONTENT in DRAFT and nothing else; a new report's signature
+    // settings come from the template's defaults, resolved server-side. The
+    // backend enforces the same boundary — a content save carries the
+    // persisted presentation forward regardless of the request body, and a
+    // letterhead change through the content path is refused outright — so
+    // hiding the control here is the UX half, not the security half.
+    const isReviewerPresentationWindow = useMemo(
+        () =>
+            envelope?.status === "IN_REVIEW" &&
+            userCanActAsReviewer(PERMS.REPORTS_APPROVE, orderReviewers),
+        [envelope?.status, userCanActAsReviewer, orderReviewers]
+    );
+
+    /** Whether the presentation controls render as editable at all. */
+    const canEditPresentation = isReviewerPresentationWindow;
 
     // Custom base fields (from template), ordered by template.base_order
     const customBaseFields = useMemo(() => {
@@ -1026,7 +1091,39 @@ const ReportEditor: React.FC = () => {
     // Handlers
     // ---------------------------------------------------------------------------
 
+    /**
+     * Céluma 1.3.1 Block A (A4): the reviewer's save.
+     *
+     * A reviewer has no `reports:edit`, so `saveReportVersion` (which posts a
+     * whole new version) would 403 for them. While the report is IN_REVIEW
+     * their edits are limited to the three presentation settings, which the
+     * narrow PATCH route accepts and nothing else does.
+     */
+    const handleSavePresentation = async () => {
+        if (!envelope?.id) return;
+        try {
+            await updateReportPresentation(envelope.id, {
+                show_signature_section: showSignatureSection,
+                require_digital_signature:
+                    showSignatureSection && requireDigitalSignature,
+                ...(letterheadDirty && selectedLetterheadVersionId
+                    ? { letterhead_version_id: selectedLetterheadVersionId }
+                    : {}),
+            });
+            setLetterheadDirty(false);
+            message.success("Configuración del reporte guardada");
+        } catch (err) {
+            showCelumaApiError(err, "No se pudo guardar la configuración del reporte.");
+        }
+    };
+
     const handleSave = async () => {
+        // A reviewer editing an IN_REVIEW report goes through the narrow
+        // presentation route; only the author's DRAFT save writes content.
+        if (isReviewerPresentationWindow) {
+            await handleSavePresentation();
+            return;
+        }
         try {
             const env = buildEnvelope();
             let saved: ReportEnvelope;
@@ -1077,6 +1174,42 @@ const ReportEditor: React.FC = () => {
             setChangesComment("");
             message.success(result.message);
         } catch (err) { message.error(err instanceof Error ? err.message : "Error al solicitar cambios"); }
+    };
+
+    /**
+     * Céluma 1.3.1 Block B (CEL-131-03) — reopen an approved, unsigned report.
+     *
+     * The report returns to DRAFT and must travel submit -> IN_REVIEW ->
+     * approve again before it can be signed, so the editor's APPROVED actions
+     * ("Firmar y publicar", and this button itself) have to disappear the
+     * moment the call succeeds. Both follow from the status in the response,
+     * which is applied before the `/full` refresh — the same rule the
+     * publication flow uses: the refresh may enrich what the transition
+     * confirmed, never contradict it.
+     */
+    const handleReopen = async () => {
+        if (!envelope?.id || isReopening) return;
+        setIsReopening(true);
+        try {
+            const result = await reopenReport(envelope.id);
+            const newStatus = (result.status as ReportStatus) ?? "DRAFT";
+            setEnvelope((e) => (e ? { ...e, status: newStatus } : e));
+            setIsReopenConfirmVisible(false);
+            message.success(result.message || "Reporte reabierto.");
+            try {
+                const full = await getReportFull(envelope.id);
+                setFullData(full);
+                setEnvelope({ ...full.report, status: newStatus });
+            } catch {
+                // The report is ALREADY back to DRAFT. A refresh failure must
+                // not look like a failed reopen, and must not restore the
+                // APPROVED actions.
+            }
+        } catch (err) {
+            showCelumaApiError(err, "No se pudo reabrir el reporte.");
+        } finally {
+            setIsReopening(false);
+        }
     };
 
     const promptUploadSignature = () => {
@@ -1474,9 +1607,11 @@ const ReportEditor: React.FC = () => {
                     <Divider style={{ margin: "18px 0 16px" }} />
                     <CelumaSteps steps={REPORT_STEPS} current={getReportStep(envelope?.status)} />
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-                        {!isReadOnly && (
+                        {(!isReadOnly || isReviewerPresentationWindow) && (
                             <CelumaButton type="primary" size="small" icon={<SaveOutlined />} onClick={handleSave}>
-                                Guardar reporte
+                                {isReviewerPresentationWindow
+                                    ? "Guardar configuración"
+                                    : "Guardar reporte"}
                             </CelumaButton>
                         )}
                         {envelope?.status === "DRAFT" && (
@@ -1484,7 +1619,7 @@ const ReportEditor: React.FC = () => {
                                 Enviar a Revisión
                             </CelumaButton>
                         )}
-                        {envelope?.status === "IN_REVIEW" && userHasPermission(PERMS.REPORTS_APPROVE) && (
+                        {canApprove && (
                             <>
                                 <CelumaButton type="primary" size="small" icon={<CheckCircleOutlined />} onClick={() => setIsApproveModalVisible(true)}>
                                     Aprobar
@@ -1504,7 +1639,7 @@ const ReportEditor: React.FC = () => {
                           * first remediation; unchanged here—see
                           * pdf-download-authorization-contract.md).
                           */}
-                        {envelope?.status === "APPROVED" && userHasPermission(PERMS.REPORTS_SIGN) && (
+                        {canSign && (
                             <CelumaButton
                                 type="primary"
                                 size="small"
@@ -1514,6 +1649,27 @@ const ReportEditor: React.FC = () => {
                                 onClick={handleSignAndPublish}
                             >
                                 {isSigningAndPublishing ? "Firmando y generando PDF oficial…" : "Firmar y publicar"}
+                            </CelumaButton>
+                        )}
+                        {/*
+                          * Céluma 1.3.1 Block B (CEL-131-03): the supported
+                          * correction path for an approved report that has not
+                          * been signed yet. Sits beside "Firmar y publicar"
+                          * because they are the two things one can do to an
+                          * approved report, and the reviewer chooses between
+                          * them. Administrators see only this one.
+                          */}
+                        {canReopen && (
+                            <CelumaButton
+                                danger
+                                size="small"
+                                icon={<EditOutlined />}
+                                loading={isReopening}
+                                disabled={isReopening}
+                                onClick={() => setIsReopenConfirmVisible(true)}
+                                data-testid="reopen-report"
+                            >
+                                Reabrir reporte
                             </CelumaButton>
                         )}
                         {envelope?.status === "PUBLISHED" && userHasPermission(PERMS.REPORTS_READ) && (
@@ -1708,7 +1864,7 @@ const ReportEditor: React.FC = () => {
                                         label="Membrete"
                                         value={selectedLetterheadVersionId ?? undefined}
                                         disabled={
-                                            !canChangeLetterhead ||
+                                            !canEditPresentation ||
                                             letterheadChanging ||
                                             availableLetterheadVersions.length <= 1
                                         }
@@ -1728,26 +1884,40 @@ const ReportEditor: React.FC = () => {
                                         allowClear={false}
                                         data-testid="letterhead-select"
                                     />
-                                    {!canChangeLetterhead && (
+                                    {/* Céluma 1.3.1 Block A: the note explains WHY the
+                                        selector is read-only, and that now depends on who
+                                        is looking as much as on the report's state — the
+                                        letterhead is the assigned reviewer's decision, made
+                                        during review and frozen at approval. */}
+                                    {!canEditPresentation && (
                                         <div
                                             style={{ fontSize: 12, color: "#6b7280" }}
                                             data-testid="letterhead-frozen-note"
                                         >
-                                            El membrete quedó fijado al enviar el reporte a revisión.
+                                            {envelope?.status === "APPROVED" ||
+                                            envelope?.status === "PUBLISHED" ||
+                                            envelope?.status === "RETRACTED"
+                                                ? "El membrete quedó fijado al aprobar el reporte."
+                                                : "El membrete lo selecciona el revisor asignado durante la revisión."}
                                         </div>
                                     )}
-                                    {canChangeLetterhead && letterheadDirty && (
+                                    {canEditPresentation && letterheadDirty && (
                                         <div
                                             style={{ fontSize: 12, color: "#b45309" }}
                                             data-testid="letterhead-dirty-note"
                                         >
-                                            Membrete cambiado — guarda el reporte para aplicarlo.
+                                            Membrete cambiado — guarda la configuración para aplicarlo.
                                         </div>
                                     )}
                                     {/* Third remediation (§6.3 of the brief): why THIS
                                         letterhead was selected, in business language—
                                         never IDs or version numbers. */}
-                                    {canChangeLetterhead && letterheadResolutionSource && (
+                                    {/* Read-only provenance, shown to everyone who can
+                                        open the report: A6 asks that non-reviewers keep the
+                                        existing read-only rendering and lose only the
+                                        EDITABLE control. Hiding "why this letterhead" would
+                                        cost the author information for no security gain. */}
+                                    {letterheadResolutionSource && (
                                         <div style={{ fontSize: 12, color: "#6b7280" }} data-testid="letterhead-resolution-source">
                                             {letterheadResolutionSource === "TENANT_DEFAULT" &&
                                                 "Predeterminado del laboratorio"}
@@ -1961,7 +2131,7 @@ const ReportEditor: React.FC = () => {
                                             </div>
                                             <CelumaSwitch
                                                 checked={showSignatureSection}
-                                                disabled={isReadOnly}
+                                                disabled={!canEditPresentation}
                                                 onChange={(checked) => {
                                                     setShowSignatureSection(checked);
                                                     if (!checked) setRequireDigitalSignature(false);
@@ -1979,7 +2149,7 @@ const ReportEditor: React.FC = () => {
                                             </div>
                                             <CelumaSwitch
                                                 checked={requireDigitalSignature}
-                                                disabled={isReadOnly || !showSignatureSection}
+                                                disabled={!canEditPresentation || !showSignatureSection}
                                                 onChange={setRequireDigitalSignature}
                                             />
                                         </div>
@@ -2068,6 +2238,23 @@ const ReportEditor: React.FC = () => {
                     onSubmit={async (text) => setChangesComment(text)}
                     placeholder="Describe los cambios necesarios..." rows={4} hideSubmitButton />
             </CelumaModal>
+
+            {/* Reopen confirmation (Block B) */}
+            <ConfirmDialog
+                open={isReopenConfirmVisible}
+                title="¿Reabrir este reporte?"
+                description={
+                    "El reporte volverá a borrador y perderá su aprobación. "
+                    + "Para firmarlo tendrá que enviarse a revisión y aprobarse de nuevo. "
+                    + "Esta acción queda registrada en la auditoría."
+                }
+                confirmText="Reabrir reporte"
+                cancelText="Cancelar"
+                danger
+                loading={isReopening}
+                onConfirm={handleReopen}
+                onCancel={() => setIsReopenConfirmVisible(false)}
+            />
         </>
     );
 };

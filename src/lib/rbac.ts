@@ -52,8 +52,21 @@ export const PERMS = {
     PATIENT_ACCESS: "portal:patient_access",
 } as const;
 
+// Role codes (mirrors backend app/core/rbac.py).
+export const ROLES = {
+    SUPERUSER: "superuser",
+    ADMIN: "admin",
+    PATHOLOGIST: "pathologist",
+    REVIEWER: "reviewer",
+    LAB_TECH: "lab_tech",
+    ASSISTANT: "assistant",
+    BILLING: "billing",
+    VIEWER: "viewer",
+    PHYSICIAN: "physician",
+} as const;
+
 // Roles that have implicit access to all tenant branches (mirrors backend FULL_BRANCH_ACCESS_ROLES).
-const FULL_BRANCH_ACCESS_ROLES = new Set(["admin", "superuser"]);
+const FULL_BRANCH_ACCESS_ROLES = new Set([ROLES.ADMIN, ROLES.SUPERUSER]);
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -71,7 +84,76 @@ export function hasRole(roles: string[], code: string): boolean {
 
 /** Whether the user's roles give them implicit access to every branch (admin / superuser). */
 export function hasFullBranchAccess(roles: string[]): boolean {
-    return roles.some((r) => FULL_BRANCH_ACCESS_ROLES.has(r));
+    return roles.some((r) => FULL_BRANCH_ACCESS_ROLES.has(r as typeof ROLES.ADMIN));
+}
+
+/**
+ * Céluma 1.3.1 Block A — the clinical reviewer contract, mirrored from
+ * `app/services/report_authorization.py`.
+ *
+ * A user may perform a reviewer action only when ALL of these hold:
+ *
+ *   1. they hold the `reviewer` role;
+ *   2. they hold the capability the action requires;
+ *   3. they are an assigned reviewer on this report's order.
+ *
+ * Being a pathologist, an administrator or a superuser is never sufficient —
+ * superuser in particular holds every permission, so a permission-only check
+ * (which is what the editor did before 1.3.1) shows it reviewer controls it
+ * cannot actually use.
+ *
+ * This is a UX boundary, not a security boundary: the backend enforces the
+ * same contract and is authoritative. The point of mirroring it is to avoid
+ * rendering actions that are guaranteed to 403.
+ */
+export function isAssignedReviewer(
+    userId: string | undefined,
+    reviewers: { id: string }[] | undefined,
+): boolean {
+    if (!userId || !reviewers) return false;
+    return reviewers.some((r) => r.id === userId);
+}
+
+export function canActAsReviewer(
+    roles: string[],
+    permissions: string[],
+    capability: string,
+    userId: string | undefined,
+    reviewers: { id: string }[] | undefined,
+): boolean {
+    return (
+        hasRole(roles, ROLES.REVIEWER) &&
+        hasPermission(permissions, capability) &&
+        isAssignedReviewer(userId, reviewers)
+    );
+}
+
+/**
+ * Céluma 1.3.1 Block B (CEL-131-03) — who may reopen an APPROVED report that
+ * has not been signed, mirroring
+ * `app/services/report_authorization.py::can_reopen_approved_report`.
+ *
+ * Deliberately NOT `canActAsReviewer`. Reopening is the one report action an
+ * administrator legitimately performs, through `reports:manage_templates`
+ * (held in the seed by exactly `admin` and `superuser`, and by no clinical
+ * role). Widening `canActAsReviewer` to admit them would hand them approval,
+ * signing and the presentation settings as well — the bypass CEL-131-01
+ * exists to remove — so the two predicates stay separate.
+ *
+ * The administrative half grants reopening and nothing else. A caller who is
+ * true here is not thereby allowed to approve or sign; those flags are built
+ * from `canActAsReviewer` and must stay that way.
+ */
+export function canReopenApprovedReport(
+    roles: string[],
+    permissions: string[],
+    userId: string | undefined,
+    reviewers: { id: string }[] | undefined,
+): boolean {
+    return (
+        canActAsReviewer(roles, permissions, PERMS.REPORTS_APPROVE, userId, reviewers) ||
+        hasPermission(permissions, PERMS.MANAGE_TEMPLATES)
+    );
 }
 
 /** Display label for a role code. */

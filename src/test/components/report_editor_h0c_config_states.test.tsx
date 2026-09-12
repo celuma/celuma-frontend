@@ -65,6 +65,9 @@ function asPathologistReviewer() {
             ["reports:read", "reports:create", "reports:edit", "reports:submit",
              "reports:approve", "reports:sign", "reports:retract", "lab:read"].includes(p),
         hasRole: (r: string) => ["pathologist", "reviewer"].includes(r),
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

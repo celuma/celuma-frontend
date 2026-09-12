@@ -46,6 +46,8 @@ function withPermission(canManage: boolean) {
         profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
         error: null, canManageUsers: false, canManageBranches: false, canManageCatalog: false,
         canManageTenant: false, hasPermission: () => canManage, hasRole: () => false,
+        canActAsReviewer: () => false, isAssignedReviewer: () => false,
+        canReopenApprovedReport: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

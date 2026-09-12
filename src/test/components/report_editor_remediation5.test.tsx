@@ -12,7 +12,7 @@
  * status codes (§9.2).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { message } from "antd";
 import ReportEditor from "../../components/report/report_editor";
@@ -51,11 +51,26 @@ const TEMPLATE_JSON = {
     section_order: ["hallazgos"],
 };
 
-function withPermission() {
+/**
+ * `asReviewer` is the Céluma 1.3.1 Block A axis.
+ *
+ * These tests predate the reviewer contract and were written for a user with
+ * every permission. That is no longer one persona but two, and the letterhead
+ * assertions below differ between them: an assigned reviewer may now change
+ * the letterhead while the report is IN_REVIEW (A5), whereas for everyone
+ * else it stays frozen at submission exactly as remediation 5 established.
+ *
+ * Default `false` keeps each existing assertion testing what it was written
+ * to test; Observation B opts in, because signing has always been an action
+ * only an authorized reviewer can reach.
+ */
+function withPermission(asReviewer = false) {
     mockedUseUserProfile.mockReturnValue({
         profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
         error: null, canManageUsers: false, canManageBranches: false, canManageCatalog: false,
         canManageTenant: false, hasPermission: () => true, hasRole: () => true,
+        canActAsReviewer: () => asReviewer, isAssignedReviewer: () => asReviewer,
+        canReopenApprovedReport: () => asReviewer,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
@@ -163,7 +178,11 @@ afterEach(() => {
  * isolation. */
 const PANEL_TIMEOUT = 8000;
 
-async function openEditor(status: string) {
+async function openEditor(status: string, { asReviewer = false } = {}) {
+    // Céluma 1.3.1 Block A: the letterhead selector's editability now depends
+    // on WHO is looking as well as on the report's state, so the persona is
+    // part of opening the editor.
+    withPermission(asReviewer);
     vi.spyOn(reportService, "getReportFull").mockResolvedValue(buildFull(status));
     mockLetterheadCatalog();
     renderEditor();
@@ -192,9 +211,33 @@ async function expectSelectDisabled(disabled: boolean) {
     );
 }
 
-describe("Observation A — letterhead selector on a persisted DRAFT", () => {
-    it("a saved DRAFT shows the selector ENABLED", async () => {
+describe("Observation A — letterhead selector across the lifecycle", () => {
+    // Céluma 1.3.1 Block A (corrected A5/A6) MOVED this boundary. Remediation 5
+    // established "editable while DRAFT, frozen at submission", on the premise
+    // that the letterhead belongs to whoever is writing the report. The
+    // product contract is that it belongs to the assigned REVIEWER: the
+    // letterhead decides what the final clinical document looks like, so the
+    // window is IN_REVIEW and the actor is the reviewer.
+    //
+    // Remediation 5's other guarantees are untouched and still asserted below —
+    // the field is always shown, never hidden; logical names, never version
+    // numbers; a change replaces `presentation` only and never rebuilds the
+    // clinical content.
+
+    it("a DRAFT shows the selector READ-ONLY, even to a reviewer", async () => {
         await openEditor("DRAFT");
+        await expectSelectDisabled(true);
+        expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
+            "El membrete lo selecciona el revisor asignado durante la revisión."
+        );
+
+        cleanup();
+        await openEditor("DRAFT", { asReviewer: true });
+        await expectSelectDisabled(true);
+    });
+
+    it("IN_REVIEW shows the selector ENABLED to the assigned reviewer", async () => {
+        await openEditor("IN_REVIEW", { asReviewer: true });
         await expectSelectDisabled(false);
     });
 
@@ -207,18 +250,20 @@ describe("Observation A — letterhead selector on a persisted DRAFT", () => {
         expect(screen.getByTestId("letterhead-panel").textContent).not.toContain("lhv-general");
     });
 
-    it("IN_REVIEW shows the letterhead as READ-ONLY with the explanation", async () => {
+    it("IN_REVIEW shows it READ-ONLY to anyone who is not the reviewer", async () => {
         await openEditor("IN_REVIEW");
         await expectSelectDisabled(true);
         expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
-            "El membrete quedó fijado al enviar el reporte a revisión."
+            "El membrete lo selecciona el revisor asignado durante la revisión."
         );
     });
 
-    it("APPROVED blocks the selector", async () => {
-        await openEditor("APPROVED");
+    it("APPROVED blocks the selector, for the reviewer too", async () => {
+        await openEditor("APPROVED", { asReviewer: true });
         await expectSelectDisabled(true);
-        expect(screen.queryByTestId("letterhead-frozen-note")).toBeTruthy();
+        expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
+            "El membrete quedó fijado al aprobar el reporte."
+        );
     });
 
     it("PUBLISHED blocks the selector", async () => {
@@ -244,7 +289,7 @@ describe("Observation A — letterhead selector on a persisted DRAFT", () => {
     });
 
     it("changing the letterhead preserves clinical content and updates the preview", async () => {
-        await openEditor("DRAFT");
+        await openEditor("IN_REVIEW", { asReviewer: true });
         await waitFor(() => {
             expect(document.body.textContent).toContain("Membrete General");
         });
@@ -276,8 +321,21 @@ describe("Observation A — letterhead selector on a persisted DRAFT", () => {
         expect(screen.getByTestId("letterhead-dirty-note")).toBeTruthy();
     });
 
-    it("saving sends the NEW letterhead_version_id", async () => {
-        await openEditor("DRAFT");
+    it("saving sends the NEW letterhead_version_id through the reviewer route", async () => {
+        // Céluma 1.3.1 Block A: the reviewer has no `reports:edit`, so this no
+        // longer goes through `saveReportVersion` (the content path) — it goes
+        // through the narrow presentation route, which accepts these three
+        // fields and nothing else.
+        await openEditor("IN_REVIEW", { asReviewer: true });
+        const updatePresentation = vi
+            .spyOn(reportService, "updateReportPresentation")
+            .mockResolvedValue({
+                id: REPORT_ID,
+                status: "IN_REVIEW",
+                show_signature_section: false,
+                require_digital_signature: false,
+                letterhead_version_id: "lhv-nefro",
+            } as never);
         const saveVersion = vi
             .spyOn(reportService, "saveReportVersion")
             .mockResolvedValue(undefined as never);
@@ -292,12 +350,11 @@ describe("Observation A — letterhead selector on a persisted DRAFT", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
 
-        await waitFor(() => expect(saveVersion).toHaveBeenCalled());
-        const envelope = saveVersion.mock.calls[0][0];
-        expect(envelope.letterhead_version_id).toBe("lhv-nefro");
-        // The clinical content remains intact in the same save.
-        expect(envelope.report?.base?.diagnosis?.value).toBe("Carcinoma ductal");
-        expect(envelope.template_version_id).toBe("tv1");
+        await waitFor(() => expect(updatePresentation).toHaveBeenCalled());
+        expect(updatePresentation.mock.calls[0][1].letterhead_version_id).toBe("lhv-nefro");
+        // And the content path is NOT used: a reviewer must never be able to
+        // write clinical content through a presentation change.
+        expect(saveVersion).not.toHaveBeenCalled();
     });
 
     it("shows the backend error when save returns 409", async () => {
@@ -318,6 +375,13 @@ describe("Observation A — letterhead selector on a persisted DRAFT", () => {
 });
 
 describe("Observation B — official PDF download", () => {
+    // Signing is a reviewer action: only the assigned reviewer ever sees
+    // "Firmar y publicar" from Céluma 1.3.1 onward (Block A). These tests are
+    // about what happens AFTER that click, so they run as that reviewer.
+    beforeEach(() => {
+        withPermission(true);
+    });
+
     it("after sign and publish the download button appears without reload", async () => {
         vi.spyOn(reportService, "getReportFull").mockResolvedValue(buildFull("APPROVED"));
         mockLetterheadCatalog();
