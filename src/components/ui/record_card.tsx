@@ -7,12 +7,28 @@ import { tokens, cardStyle } from "../design/tokens";
  * RecordCard (Céluma "ficha") — the shared entity-detail header used across order,
  * sample and report detail screens. A card with a salmon left border and a fluid
  * badge: avatar + title/subtitle on the left, optional meta row and stats, an
- * optional right-aligned action rail, and code/status chips pinned top-right.
- * Below the badge it renders `children` (typically the description `Panel`).
+ * optional right-aligned action rail, and a right-aligned code/status chip row
+ * above it. Below the badge it renders `children` (typically the description
+ * `Panel`).
  *
  * It's layout-only and slot-driven: callers pass fully-formed nodes (the clickable
  * <h1>, the MetaItems, the Stats, the ActionButtonPanel…) so each screen keeps its
  * own content while sharing one visual language.
+ *
+ * ## Céluma 1.3.1 Block E (CEL-131-10) — why the chips are in the flow
+ *
+ * The chip row used to be `position: absolute; top: 16; right: 20` with no width
+ * bound, while the entity's title — the PATIENT NAME on both the order and the
+ * sample screen — is the first thing in the normal flow, at the top left. The two
+ * never interacted until a chip grew: a descriptive sample name (rather than a
+ * short code) made the row extend leftwards until it was painted straight over
+ * the patient's name and code, which is the defect CEL-131-10 reports.
+ *
+ * Taking the row out of absolute positioning makes the collision structurally
+ * impossible rather than merely unlikely: the chips now occupy their own row, a
+ * long chip wraps inside it, and a wrapped row pushes the badge down instead of
+ * covering it. No information is truncated or hidden — a sample name is clinical
+ * text, and the ticket asks for wrapping over ellipsis.
  */
 
 // ── Shared chip styles (entity code = salmon, status = its palette tint) ──
@@ -24,6 +40,11 @@ export const codeChipStyle: React.CSSProperties = {
     padding: "3px 12px",
     borderRadius: 999,
     lineHeight: 1.5,
+    // CEL-131-10: a chip carries an entity code the laboratory chose, which can
+    // be a long descriptive sample name. It wraps inside its own row — including
+    // mid-token for a value with no spaces — rather than growing past the card.
+    maxWidth: "100%",
+    overflowWrap: "anywhere",
 };
 
 export const statusChipStyle = (cfg: { color: string; bg: string }): React.CSSProperties => ({
@@ -37,6 +58,10 @@ export const statusChipStyle = (cfg: { color: string; bg: string }): React.CSSPr
     display: "inline-flex",
     alignItems: "center",
     gap: 5,
+    // A status label is a short closed vocabulary, but it must not be the thing
+    // that forces the row to overflow either.
+    maxWidth: "100%",
+    flexShrink: 0,
 });
 
 /** A teal-iconed metadata item for the ficha meta row. */
@@ -59,6 +84,7 @@ export const Stat = ({ value, label, color }: { value: number | string; label: s
 export const StatDivider = () => <div className="cf-stat-divider" />;
 
 const FICHA_CSS = `
+.cf-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 12px; min-width: 0; }
 .cf-badge { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: stretch; }
 .cf-badge-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; }
 .cf-name-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -67,6 +93,7 @@ const FICHA_CSS = `
 .cf-stat-divider { width: 1px; background: #eef1f0; }
 .cf-rail { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 12px 20px; margin-left: auto; align-self: flex-end; }
 @media (max-width: 640px) {
+    .cf-chips { justify-content: center; }
     .cf-badge { flex-direction: column; align-items: center; text-align: center; }
     .cf-meta { justify-content: center; }
     .cf-name-row { justify-content: center; }
@@ -83,7 +110,7 @@ type RecordCardProps = {
     title: React.ReactNode;
     /** Small muted subtitle shown next to the title (e.g. a code). */
     subtitle?: React.ReactNode;
-    /** Top-right chips (code + status). */
+    /** Right-aligned chip row above the badge (code + status). */
     chips?: React.ReactNode;
     /** Meta row content — usually a set of <MetaItem>. */
     meta?: React.ReactNode;
@@ -115,11 +142,7 @@ export default function RecordCard({
             style={{ ...cardStyle, borderLeft: `5px solid ${tokens.secondary}`, position: "relative", ...style }}
         >
             <style>{FICHA_CSS}</style>
-            {chips && (
-                <div style={{ position: "absolute", top: 16, right: 20, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    {chips}
-                </div>
-            )}
+            {chips && <div className="cf-chips">{chips}</div>}
             <div className="cf-badge">
                 {avatar}
                 <div className="cf-badge-info">

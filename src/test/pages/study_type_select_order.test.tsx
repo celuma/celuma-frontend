@@ -22,7 +22,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import OrderRegister from "../../pages/order_register";
+import OrderForm from "../../pages/order_form";
 import PriceCatalog from "../../pages/price_catalog";
 
 /**
@@ -45,7 +45,7 @@ const UNSORTED_STUDY_TYPES = [
     { id: "st-eco", code: "NNN", name: "ecografía mamaria", is_active: true },
 ];
 
-/** "{name} ({code})" — what `order_register.tsx` shows. */
+/** "{name} ({code})" — what `order_form.tsx` shows. */
 const EXPECTED_BY_NAME = [
     "anatomía patológica (MMM)",
     "Citología Urinaria (ZZZ)",
@@ -135,7 +135,7 @@ describe("C-003 — register order: study options are alphabetical", () => {
         stubApi();
         const { container } = render(
             <MemoryRouter initialEntries={["/orders/register"]}>
-                <OrderRegister />
+                <OrderForm />
             </MemoryRouter>
         );
 
@@ -156,7 +156,7 @@ describe("C-003 — register order: study options are alphabetical", () => {
         stubApi();
         const { container } = render(
             <MemoryRouter initialEntries={["/orders/register"]}>
-                <OrderRegister />
+                <OrderForm />
             </MemoryRouter>
         );
         await waitFor(() => {

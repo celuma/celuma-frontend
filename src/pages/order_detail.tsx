@@ -26,6 +26,7 @@ import { getReport, getOfficialPdfDownloadUrl } from "../services/report_service
 import type { ReportEnvelope } from "../models/report";
 import ReportPreview, { type ReportPreviewRef } from "../components/report/report_preview";
 import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 import AssigneesSection from "../components/collaboration/AssigneesSection";
 import ReviewersSection from "../components/collaboration/ReviewersSection";
 import LabelsSection from "../components/collaboration/LabelsSection";
@@ -214,6 +215,9 @@ export default function OrderDetail() {
     
     // Get current user profile for avatar, name and permissions
     const { profile: currentUserProfile, hasPermission } = useUserProfile();
+    // CEL-131-08 — sample actions reachable from the order screen follow the
+    // backend capability, not the screen's own read permission.
+    const canCreateSample = hasPermission(PERMS.CREATE_SAMPLE);
     
     // Scroll to bottom of conversation
     const scrollToBottom = useCallback(() => {
@@ -621,14 +625,19 @@ export default function OrderDetail() {
                 <span style={{ fontWeight: 700, color: tokens.textPrimary, fontSize: 15 }}>
                     {data?.samples.length || 0} muestra{(data?.samples.length || 0) !== 1 ? "s" : ""} registrada{(data?.samples.length || 0) !== 1 ? "s" : ""}
                 </span>
-                <CelumaButton
-                    type="primary"
-                    size="small"
-                    icon={<PlusOutlined />}
-                    onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
-                >
-                    Agregar Muestra
-                </CelumaButton>
+                {/* CEL-131-08: the same capability the destination route and the
+                    backend require (`lab:create_sample`). A pathologist no longer
+                    sees an action that can only end at the access-denied screen. */}
+                {canCreateSample && (
+                    <CelumaButton
+                        type="primary"
+                        size="small"
+                        icon={<PlusOutlined />}
+                        onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
+                    >
+                        Agregar Muestra
+                    </CelumaButton>
+                )}
             </div>
 
             {data && data.samples.length > 0 ? (

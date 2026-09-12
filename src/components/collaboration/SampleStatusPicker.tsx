@@ -17,6 +17,15 @@ type SampleStatusPickerProps = {
     onChange: (newState: string) => void | Promise<void>;
     /** True while a change is in flight — disables the trigger and shows a spinner. */
     updating?: boolean;
+    /**
+     * Céluma 1.3.1 Block E (CEL-131-08) — the caller lacks `lab:update_sample`,
+     * so the state cannot be changed. Mirrors the `disabled` prop
+     * `AssigneesSection` / `LabelsSection` already expose, and behaves the same
+     * way: the current state stays READABLE (it is part of the sample's
+     * identity), and only the trigger that opens the picker becomes an inert,
+     * visibly-disabled button.
+     */
+    disabled?: boolean;
 };
 
 /**
@@ -33,8 +42,9 @@ type SampleStatusPickerProps = {
  * component gives each of the two mounts its own independent `useState`,
  * exactly like `AssigneesSection`/`LabelsSection` already do.
  */
-export default function SampleStatusPicker({ state, onChange, updating = false }: SampleStatusPickerProps) {
+export default function SampleStatusPicker({ state, onChange, updating = false, disabled = false }: SampleStatusPickerProps) {
     const [open, setOpen] = useState(false);
+    const locked = disabled || updating;
 
     const stateConfig = SAMPLE_STATE_CONFIG[state] || { color: "#6b7280", bg: "#f3f4f6", label: state || "—", icon: <CheckCircleOutlined /> };
 
@@ -113,12 +123,12 @@ export default function SampleStatusPicker({ state, onChange, updating = false }
                     <Dropdown
                         popupRender={() => popupContent}
                         trigger={["click"]}
-                        disabled={updating}
-                        open={open}
+                        disabled={locked}
+                        open={locked ? false : open}
                         onOpenChange={setOpen}
                         placement="bottomRight"
                     >
-                        <RailConfigButton disabled={updating} />
+                        <RailConfigButton disabled={locked} />
                     </Dropdown>
                 }
             />

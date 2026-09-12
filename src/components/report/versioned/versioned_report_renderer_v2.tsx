@@ -2,6 +2,11 @@ import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties 
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
 import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
+import {
+    RICH_TEXT_CONTENT_CLASS,
+    RICH_TEXT_CONTENT_CSS,
+    normalizeRichTextForRender,
+} from "../rich_text_render";
 import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
@@ -628,6 +633,14 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     page.appendChild(footer);
                 }
 
+                // CEL-131-09: the rich-text content rule travels INSIDE the
+                // page, not in the document stylesheet, because
+                // `use_local_print.ts` clones page elements into a bare iframe
+                // and a document-level rule would not survive that copy.
+                const richTextStyle = document.createElement("style");
+                richTextStyle.textContent = RICH_TEXT_CONTENT_CSS;
+                page.appendChild(richTextStyle);
+
                 host.appendChild(page);
                 return { page, body };
             };
@@ -884,9 +897,17 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             return (
                                 <div key={key} style={{ marginBottom: 14 }}>
                                     {sectionHeader}
+                                    {/* CEL-131-09: Quill 2 stores bullet AND numbered
+                                        lists as one <ol> with `data-list` items, which
+                                        only the editor's own stylesheet renders
+                                        correctly. `normalizeRichTextForRender` turns
+                                        that into semantic <ul>/<ol> so this surface,
+                                        the official PDF and the local print copy all
+                                        agree with the editor. */}
                                     <div
+                                        className={RICH_TEXT_CONTENT_CLASS}
                                         style={{ fontSize: "10pt", lineHeight: 1.5 }}
-                                        dangerouslySetInnerHTML={{ __html: rawContent }}
+                                        dangerouslySetInnerHTML={{ __html: normalizeRichTextForRender(rawContent) }}
                                     />
                                 </div>
                             );

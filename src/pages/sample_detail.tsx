@@ -36,6 +36,8 @@ import {
 } from "../services/collaboration_service";
 import { getSampleTypeConfig } from "../components/ui/table_helpers";
 import { getInitials, getAvatarColor, formatLocalDateTime, renderUserMention } from "../components/comments/comment_utils";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -119,6 +121,18 @@ export default function SampleDetailPage() {
     const { sampleId } = useParams();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    // CEL-131-08 — every mutating action on this screen is offered only to a
+    // user whose effective capabilities allow it, using the same permission
+    // codes `app/api/v1/laboratory.py` enforces on the route each action
+    // calls. Before 1.3.1 this page rendered all of them unconditionally, so
+    // a reviewer or a viewer was shown controls the API always refused.
+    // The backend remains authoritative; this is the UX half only.
+    const { hasPermission } = useUserProfile();
+    const canUpdateSample = hasPermission(PERMS.UPDATE_SAMPLE);
+    const canManageAssignees = hasPermission(PERMS.MANAGE_ASSIGNEES);
+    const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
+    const canUploadImages = hasPermission(PERMS.UPLOAD_IMAGES);
+    const canDeleteImages = hasPermission(PERMS.DELETE_IMAGES);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [detail, setDetail] = useState<SampleDetail | null>(null);
@@ -697,6 +711,7 @@ export default function SampleDetailPage() {
                     state={detail?.state || "RECEIVED"}
                     onChange={updateState}
                     updating={updatingState}
+                    disabled={!canUpdateSample}
                 />
             </Card>
 
@@ -710,6 +725,7 @@ export default function SampleDetailPage() {
                     assignees={detail?.assignees || []}
                     allUsers={allUsers}
                     onUpdate={handleUpdateAssignees}
+                    disabled={!canManageAssignees}
                 />
             </Card>
 
@@ -725,6 +741,7 @@ export default function SampleDetailPage() {
                     onUpdate={handleUpdateLabels}
                     onLabelsRefresh={loadCollaborationData}
                     showInheritance={true}
+                    disabled={!canManageLabels}
                 />
             </Card>
         </div>
@@ -747,12 +764,17 @@ export default function SampleDetailPage() {
                     gap: 12,
                 }}
             >
-                <UploadDropzone
-                    customRequest={uploadProps.customRequest}
-                    accept="image/*"
-                    uploading={uploading}
-                    uploadingFiles={uploadingFiles}
-                />
+                {/* CEL-131-08: `POST /samples/{id}/images` requires
+                    `lab:upload_images`; without it the tile is not offered at
+                    all rather than failing on drop. */}
+                {canUploadImages && (
+                    <UploadDropzone
+                        customRequest={uploadProps.customRequest}
+                        accept="image/*"
+                        uploading={uploading}
+                        uploadingFiles={uploadingFiles}
+                    />
+                )}
 
                 {images && images.images.length > 0 && (
                     <Image.PreviewGroup>
@@ -766,7 +788,11 @@ export default function SampleDetailPage() {
                                 isPrimary={img.is_primary}
                                 deleting={deletingImageId === img.id}
                                 deleteDisabled={deletingImageId !== null}
-                                onDelete={() => setConfirmDeleteId(img.id)}
+                                // CEL-131-08: `DELETE /samples/{id}/images/{imageId}`
+                                // requires `lab:delete_images`. `ImageGalleryCard`
+                                // renders the delete action only when `onDelete` is
+                                // provided, so withholding it hides the control.
+                                onDelete={canDeleteImages ? () => setConfirmDeleteId(img.id) : undefined}
                             />
                         ))}
                     </Image.PreviewGroup>
@@ -776,7 +802,9 @@ export default function SampleDetailPage() {
             {/* Empty state if no images */}
             {(!images || images.images.length === 0) && (
                 <div style={{ marginTop: 12, padding: 24, textAlign: "center", color: tokens.textSecondary, fontSize: 13 }}>
-                    No hay imágenes adicionales. Usa el área de arriba para subir.
+                    {canUploadImages
+                        ? "No hay imágenes adicionales. Usa el área de arriba para subir."
+                        : "No hay imágenes adicionales."}
                 </div>
             )}
 
@@ -952,7 +980,9 @@ export default function SampleDetailPage() {
                                                 alignItems: "center",
                                             }}>
                                                 <span>Descripción</span>
-                                                {!editingNotes && (
+                                                {/* CEL-131-08: `PATCH /samples/{id}/notes`
+                                                    requires `lab:update_sample`. */}
+                                                {!editingNotes && canUpdateSample && (
                                                     <EditOutlined
                                                         style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
                                                         onClick={() => {
@@ -962,7 +992,7 @@ export default function SampleDetailPage() {
                                                     />
                                                 )}
                                             </div>
-                                            {editingNotes ? (
+                                            {editingNotes && canUpdateSample ? (
                                                 <div style={{ display: "grid", gap: 8 }}>
                                                     <CelumaTextArea
                                                         value={notesValue}

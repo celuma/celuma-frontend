@@ -12,8 +12,8 @@ import RequestingPhysicianForm from "./pages/requesting_physician_form";
 import RequestingPhysicianDetailPage from "./pages/requesting_physician_detail";
 import RequestingPhysiciansList from "./pages/requesting_physicians_list";
 import Profile from "./pages/profile";
-import OrderRegister from "./pages/order_register";
-import SampleRegister from "./pages/sample_register";
+import OrderForm from "./pages/order_form";
+import SampleForm from "./pages/sample_form";
 import PatientsList from "./pages/patients_list";
 import PatientDetailPage from "./pages/patient_detail";
 import OrderDetail from "./pages/order_detail";
@@ -111,8 +111,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/patients/:patientId/edit" element={<RequirePermission permission="lab:create_patient"><PatientForm /></RequirePermission>} />
             <Route path="/requesting-physicians/register" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
             <Route path="/requesting-physicians/:physicianId/edit" element={<RequirePermission permission="lab:create_order"><RequestingPhysicianForm /></RequirePermission>} />
-            <Route path="/orders/register" element={<RequirePermission permission="lab:create_order"><OrderRegister /></RequirePermission>} />
-            <Route path="/samples/register" element={<RequirePermission permission="lab:create_sample"><SampleRegister /></RequirePermission>} />
+            <Route path="/orders/register" element={<RequirePermission permission="lab:create_order"><OrderForm /></RequirePermission>} />
+            <Route path="/samples/register" element={<RequirePermission permission="lab:create_sample"><SampleForm /></RequirePermission>} />
 
             {/* Reports */}
             <Route path="/reports" element={<RequirePermission permission="reports:read"><ReportsList /></RequirePermission>} />

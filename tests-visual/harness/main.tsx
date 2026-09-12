@@ -16,6 +16,7 @@ import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legac
 import { NotificationHarness } from "./notification_scenarios";
 import { NotificationPreferenceHarness } from "./notification_preference_scenarios";
 import { UsageHarness } from "./usage_scenarios";
+import { RecordCardHarness } from "./record_card_scenarios";
 
 /**
  * Isolated visual-regression harness (Céluma 1.3 Phase 2, Block A / Story
@@ -225,6 +226,14 @@ function Root() {
     const usageScenario = params.get("usage");
     if (usageScenario) {
         return <UsageHarness scenarioKey={usageScenario} />;
+    }
+    // Céluma 1.3.1 Block E (CEL-131-10): the shared entity-detail header, via
+    // /?record_card=<scenario>. Its own mode for the same reason as the others
+    // — the defect is a collision between an absolutely-positioned chip row and
+    // the patient name beneath it, which only a layout engine can resolve.
+    const recordCardScenario = params.get("record_card");
+    if (recordCardScenario) {
+        return <RecordCardHarness scenarioKey={recordCardScenario} />;
     }
     return <Harness />;
 }

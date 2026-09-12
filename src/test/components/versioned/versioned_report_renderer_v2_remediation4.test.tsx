@@ -482,7 +482,13 @@ describe("VersionedReportRendererV2 — imported Legacy letterhead", () => {
         // That order is that of Legacy, and it is what determines the flow of
         // PDF content (copy/paste, search, screen readers).
         const { pages } = renderReport(parityShortV2);
-        const children = Array.from((pages[0] as HTMLElement).children) as HTMLElement[];
+        // Céluma 1.3.1 Block E (CEL-131-09) appends a <style> carrying the
+        // rich-text content rule as the page's LAST child, so it survives the
+        // DOM clone `use_local_print.ts` makes. It is `display: none`, has no
+        // text, and sits after every band — it is not one of the three bands
+        // this test is about, so it is filtered out rather than classified.
+        const children = (Array.from((pages[0] as HTMLElement).children) as HTMLElement[])
+            .filter((el) => el.tagName !== "STYLE");
         const roles = children.map((el) => {
             if (el.style.top && el.style.bottom) return "body";
             if (el.style.bottom) return "footer";
