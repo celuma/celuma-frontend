@@ -12,11 +12,10 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import {
     getReportFull, getStudyType, getReportTemplateById,
-    saveReport, saveReportVersion,
+    saveReport, saveReportVersion, StaleReportTemplateError,
     submitReport, approveReport, requestChanges, signAndPublishReport,
     reopenReport,
     updateReportPresentation,
-    getReportTemplateVersion,
     getOfficialPdfDownloadUrl,
     OfficialPdfDownloadError,
     triggerBrowserDownload,
@@ -143,11 +142,6 @@ const V2_BLOCKED_COPY: Record<V2BlockedState, { title: string; admin: string; us
         title: "Este tipo de estudio no tiene plantilla de reporte",
         admin: "Asigna una plantilla de reporte al tipo de estudio antes de crear reportes.",
         user: "Contacta a un administrador para asignar una plantilla de reporte a este tipo de estudio.",
-    },
-    NO_ACTIVE_TEMPLATE_VERSION: {
-        title: "La plantilla de este estudio no está publicada",
-        admin: "Abre la plantilla en Plantillas de Reporte y guarda su configuración para activarla.",
-        user: "Contacta a un administrador para publicar la plantilla de este estudio.",
     },
     NO_LETTERHEAD: {
         title: "Falta el membrete predeterminado del laboratorio",
@@ -300,15 +294,31 @@ const ReportEditor: React.FC = () => {
     const [studyTypeName, setStudyTypeName] = useState<string>("");
 
     // Céluma 1.3 Phase 2, Block D, Story D10 / post-Phase 2 remediation:
-    // resolved (never user-selected) clinical template + its single ACTIVE
-    // version, for new V2 reports only. Only ever populated when creating a
-    // new report (prefilledOrderId branch) — never touched when editing an
-    // existing report, whose template_version_id (if any) is frozen on
-    // `envelope`. The clinical template is determined exclusively by
-    // StudyType.default_report_template_id — there is no user-facing
-    // control to change it here (see report-editor-letterhead-selection-contract.md).
+    // the resolved (never user-selected) clinical template, for new V2 reports
+    // only. Only ever populated when creating a new report (prefilledOrderId
+    // branch) — never touched when editing an existing report, whose
+    // template_version_id (if any) is frozen on `envelope`. The clinical
+    // template is determined exclusively by
+    // StudyType.default_report_template_id — there is no user-facing control
+    // to change it here (see report-editor-letterhead-selection-contract.md).
     const [resolvedTemplateId, setResolvedTemplateId] = useState<string | null>(null);
-    const [resolvedTemplateVersionId, setResolvedTemplateVersionId] = useState<string | null>(null);
+    // Céluma 1.3.1 Block C (CEL-131-05): replaces `resolvedTemplateVersionId`.
+    //
+    // That state held the template's single ACTIVE `ReportTemplateVersion` and
+    // was both the "this is a V2 report" flag and the id sent on create — so a
+    // laboratory with no ACTIVE version could not author a V2 report at all,
+    // even with a perfectly configured template and letterhead. This holds the
+    // clinical TEMPLATE id instead, set only once the V2 bootstrap has fully
+    // succeeded (template resolved AND letterhead presentation resolved). The
+    // backend freezes that template's `template_json` into the new report's own
+    // `rendering_snapshot`, which is what every later read and render uses.
+    const [v2CreationTemplateId, setV2CreationTemplateId] = useState<string | null>(null);
+    // Céluma 1.3.1 Block C (C-8): the opaque token that came back WITH the
+    // `template_json` above. Set in the same place and from the same response,
+    // so the pair can never drift; echoed back on create so the backend can
+    // refuse (409) if an administrator changed the template while this editor
+    // was open. Never computed here — see `ReportTemplateDetail.template_hash`.
+    const [v2CreationTemplateHash, setV2CreationTemplateHash] = useState<string | null>(null);
     // Post-Phase-2 remediation: the "Membrete" selector — this is the only
     // thing the user may change before first save. Switching it never
     // touches `template`/`baseValues`/`sectionContent` (see
@@ -652,15 +662,36 @@ const ReportEditor: React.FC = () => {
                                 setResolvedTemplateId(templateId);
                                 const tpl = await getReportTemplateById(templateId);
                                 tmplRaw = tpl.template_json;
+                                // C-8: captured from the SAME response as the
+                                // structure it describes. Held even on the
+                                // Legacy path below, where it is simply never
+                                // sent, so there is one assignment rather than
+                                // two that could diverge.
+                                const bootstrapTemplateHash = tpl.template_hash;
 
-                                // Céluma 1.3 Phase 2, Block D, Story D10: with
-                                // reports_v2_enabled on, prefer the template's
-                                // ACTIVE version — its frozen `configuration.template`
-                                // is what VersionedReportRendererV2 actually renders
-                                // (see versioned_report_renderer_v2.tsx), so the editor
-                                // should reflect that structure, not the live/mutable
-                                // ReportTemplate.template_json. No ACTIVE version means
-                                // V2 creation is blocked below, never silently Legacy.
+                                // Céluma 1.3.1 Block C (CEL-131-05): `tmplRaw` stays
+                                // the LIVE `ReportTemplate.template_json` fetched just
+                                // above.
+                                //
+                                // Block D's Story D10 used to overwrite it here with the
+                                // template's ACTIVE `ReportTemplateVersion`'s frozen
+                                // `configuration.template`, on the reasoning that the
+                                // frozen structure is what VersionedReportRendererV2
+                                // renders. That is true of an EXISTING report — and an
+                                // existing report is handled in the branch above, from
+                                // its own embedded snapshot. It was never true of a
+                                // report that does not exist yet: there is no frozen
+                                // structure to reflect, and the thing the author should
+                                // be offered is the template as it stands now. The
+                                // backend freezes exactly that into the new report at
+                                // creation, so the editor and the renderer still agree.
+                                //
+                                // The practical cost of the old reasoning was the
+                                // CEL-131-05 production regression: a laboratory that
+                                // saved its template before configuring its letterhead
+                                // had no ACTIVE version, could not get one without
+                                // re-saving the template, and was blocked out of
+                                // Reports V2 entirely.
                                 //
                                 // Post-Phase 2 remediation: also resolves the letterhead
                                 // (letterhead) to use for the live preview — this is
@@ -702,22 +733,30 @@ const ReportEditor: React.FC = () => {
                                         const defaults = await getStudyTypeReportDefaults(
                                             orderFull.order.study_type_id
                                         );
+                                        // Block C: `active_template_version_id` is
+                                        // deliberately NOT part of this condition any
+                                        // more. The two things a V2 report genuinely
+                                        // needs are a clinical template (already
+                                        // fetched) and a resolved letterhead
+                                        // presentation; an administrative version row
+                                        // is not one of them.
                                         if (
                                             defaults.v2_blocked_reason ||
-                                            !defaults.active_template_version_id ||
                                             !defaults.letterhead_presentation
                                         ) {
                                             setV2BlockedReason(defaults.v2_blocked_reason ?? "NO_LETTERHEAD");
                                             setV2BlockedDetail(defaults.v2_blocked_detail ?? null);
                                             setV2ConfigBlocked(true);
                                         } else {
-                                            const detail = await getReportTemplateVersion(
-                                                templateId,
-                                                defaults.active_template_version_id
-                                            );
-                                            const cfg = detail.configuration as { template?: TemplateOrderInput };
-                                            if (cfg.template) tmplRaw = cfg.template;
-                                            setResolvedTemplateVersionId(defaults.active_template_version_id);
+                                            // Block C: the obsolete third bootstrap
+                                            // request — GET .../versions/{id} — is gone.
+                                            // It is not swallowed or made conditional:
+                                            // the editor has no reason to make it, since
+                                            // `tmplRaw` already holds the live template
+                                            // and the backend resolves the structure
+                                            // itself at creation.
+                                            setV2CreationTemplateId(templateId);
+                                            setV2CreationTemplateHash(bootstrapTemplateHash);
 
                                             // The resolved presentation arrives in the same
                                             // response—without chaining calls that can
@@ -962,7 +1001,7 @@ const ReportEditor: React.FC = () => {
         const existingRenderingSnapshot = envelope?.report?.rendering_snapshot;
         if (existingSchemaVersion !== undefined) {
             report.schema_version = existingSchemaVersion;
-        } else if (resolvedTemplateVersionId && selectedLetterheadPresentation) {
+        } else if (v2CreationTemplateId && selectedLetterheadPresentation) {
             report.schema_version = 2;
         }
         if (existingRenderingSnapshot !== undefined) {
@@ -980,7 +1019,7 @@ const ReportEditor: React.FC = () => {
                         presentation: selectedLetterheadPresentation,
                     }
                     : existingRenderingSnapshot;
-        } else if (resolvedTemplateVersionId && selectedLetterheadPresentation) {
+        } else if (v2CreationTemplateId && selectedLetterheadPresentation) {
             report.rendering_snapshot = {
                 schema_version: 2,
                 template: tmplWithSavedOrder as unknown as Record<string, unknown>,
@@ -1005,13 +1044,26 @@ const ReportEditor: React.FC = () => {
             // V2 metadata is server-authoritative (see B6/C9) — carried
             // through only for the live preview's benefit, never trusted by
             // the backend as an instruction to change these. For a brand-new
-            // report, `envelope` is still null, so `resolvedTemplateVersionId`/
-            // `selectedLetterheadVersionId` (Block D Story D10 / post-Phase-2
-            // remediation) are what actually reach the backend; once a report
-            // exists, its own template_version_id/letterhead_version_id always
-            // win and are never reconsidered (D10: "do not re-query the active version").
-            schema_version: envelope?.schema_version ?? (resolvedTemplateVersionId ? 2 : undefined),
-            template_version_id: envelope?.template_version_id ?? resolvedTemplateVersionId ?? undefined,
+            // report, `envelope` is still null, so `v2CreationTemplateId`/
+            // `selectedLetterheadVersionId` (Céluma 1.3.1 Block C /
+            // post-Phase-2 remediation) are what actually reach the backend;
+            // once a report exists, its own template_version_id /
+            // letterhead_version_id always win and are never reconsidered
+            // (D10: "do not re-query the active version").
+            schema_version: envelope?.schema_version ?? (v2CreationTemplateId ? 2 : undefined),
+            // Céluma 1.3.1 Block C (CEL-131-05): the V2 selector on create.
+            // Only ever sent for a report that does not exist yet — an
+            // existing report is identified by its own frozen snapshot, and
+            // `create_report` is the only route that reads this.
+            template_id: envelope ? undefined : (v2CreationTemplateId ?? undefined),
+            // C-8: travels with `template_id` and only with it. The backend
+            // requires it for that selector and compares it against the
+            // template as it stands at save time.
+            template_hash: envelope ? undefined : (v2CreationTemplateHash ?? undefined),
+            // Provenance only, and only ever the report's own. The editor
+            // never proposes one: a report created through `template_id`
+            // honestly has none.
+            template_version_id: envelope?.template_version_id ?? undefined,
             // Fifth post-Phase 2 remediation (Observation A): the user's
             // selection wins over the saved value. The order was reversed, so
             // a persisted report's envelope always reinstated its own
@@ -1037,7 +1089,8 @@ const ReportEditor: React.FC = () => {
     }, [
         template, fullData, customBaseFields, baseValues, sectionContent, envelope, session,
         reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
-        resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
+        v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
+        selectedLetterheadPresentation,
         selectedLetterheadResources, letterheadDirty,
     ]);
 
@@ -1054,7 +1107,8 @@ const ReportEditor: React.FC = () => {
         // never recomputed, so the preview kept showing the old branding
         // (a real bug caught during live verification, not just a fix on
         // paper — see remediation-local-validation-report.md).
-        resolvedTemplateVersionId, selectedLetterheadVersionId, selectedLetterheadPresentation,
+        v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
+        selectedLetterheadPresentation,
         selectedLetterheadResources, letterheadDirty,
     ]);
 
@@ -1141,6 +1195,26 @@ const ReportEditor: React.FC = () => {
             message.success("Reporte guardado");
             if (saved.order_id) navigate(`/orders/${saved.order_id}`);
         } catch (err) {
+            // Céluma 1.3.1 Block C (C-8): the stale-template conflict gets its
+            // own message, because the generic one ("no se pudo guardar") would
+            // leave the author with no idea why, or that reloading fixes it.
+            //
+            // Deliberately NOT done here: retrying against the new template
+            // (that is the silent substitution this guard exists to prevent),
+            // merging the two structures, or clearing the editor. The author's
+            // content stays exactly where it is — the existing failure path
+            // already neither navigates away nor resets state, so an author who
+            // hits this can copy their work out before reloading. That is the
+            // most a hotfix should do; a real draft-recovery flow is not in
+            // 1.3.1's scope.
+            if (err instanceof StaleReportTemplateError) {
+                showCelumaApiError(
+                    err,
+                    "La plantilla de este reporte cambió mientras lo editabas. " +
+                        "Vuelve a cargar el reporte para continuar con la plantilla actualizada.",
+                );
+                return;
+            }
             message.error(err instanceof Error ? err.message : "No se pudo guardar el reporte");
         }
     };
@@ -1455,7 +1529,16 @@ const ReportEditor: React.FC = () => {
         const canManageTemplates = userHasPermission(PERMS.MANAGE_TEMPLATES);
         // H-0c: the fallback is the state that claims the LEAST. An unknown
         // blocked state must not assert that the letterhead is missing.
-        const copy = V2_BLOCKED_COPY[v2BlockedReason ?? "CONFIG_UNAVAILABLE"];
+        //
+        // Céluma 1.3.1 Block C: the lookup is now guarded. Block C removed
+        // `NO_ACTIVE_TEMPLATE_VERSION`, and a reason string with no copy entry
+        // — a stale backend mid-rolling-deploy, or a reason added server-side
+        // before the client knows it — used to read `undefined.title` and blank
+        // the page. Degrading to CONFIG_UNAVAILABLE keeps the rule above: it
+        // claims the least, and says nothing false about the tenant's data.
+        const copy =
+            V2_BLOCKED_COPY[v2BlockedReason ?? "CONFIG_UNAVAILABLE"] ??
+            V2_BLOCKED_COPY.CONFIG_UNAVAILABLE;
         const isLetterheadProblem =
             v2BlockedReason === "NO_LETTERHEAD" || v2BlockedReason === "LETTERHEAD_MISCONFIGURED";
         return (

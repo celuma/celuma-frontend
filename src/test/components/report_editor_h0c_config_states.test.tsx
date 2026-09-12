@@ -189,7 +189,28 @@ describe("ReportEditor — a pathologist initializes a new report (H-0c)", () =>
         expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
     });
 
-    it("reads the ACTIVE template version — the request that used to 403", async () => {
+    /**
+     * Céluma 1.3.1 Block C (CEL-131-05) INVERTED this test.
+     *
+     * H-0c's defect was that step 3 of the V2 bootstrap chain —
+     * `GET /reports/templates/{tid}/versions/{vid}` — was gated behind
+     * `reports:manage_templates`, so a pathologist got a 403 that the editor
+     * surfaced as "Falta el membrete predeterminado". H-0c fixed it by
+     * widening the endpoint's READ permission to `reports:read`, and this
+     * test pinned that the request is made and succeeds.
+     *
+     * Block C removes the request instead. The editor needs the template's
+     * clinical structure, and for a report that does not exist yet that is the
+     * live `ReportTemplate.template_json` it already fetched — not the frozen
+     * `configuration.template` of an ACTIVE version which, as CEL-131-05
+     * showed, may not exist at all.
+     *
+     * H-0c's guarantee is therefore not weakened but made structural: a
+     * request that is never issued can never 403. The endpoint and its
+     * widened permission are untouched — the template-administration screens
+     * still use the version API.
+     */
+    it("makes NO template-version request during V2 bootstrap", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         const versionSpy = mockTemplateVersionOk();
@@ -199,8 +220,9 @@ describe("ReportEditor — a pathologist initializes a new report (H-0c)", () =>
         renderEditor();
 
         await waitFor(() => {
-            expect(versionSpy).toHaveBeenCalledWith(TEMPLATE_ID, "tv1");
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
+        expect(versionSpy).not.toHaveBeenCalled();
         expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
     });
 });
@@ -266,9 +288,19 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
     });
 
-    it("does NOT claim a missing letterhead on 403 from the template-version read", async () => {
-        // The exact reported failure: `report-defaults` succeeds and the NEXT
-        // call in the same `try` is the one that 403s.
+    /**
+     * Céluma 1.3.1 Block C (CEL-131-05) INVERTED this test too, for the same
+     * reason as "makes NO template-version request during V2 bootstrap" above:
+     * the call it simulated failing is no longer made.
+     *
+     * The assertion it protected — "a 403 on the version read must not be
+     * reported as a missing letterhead" — now holds by construction rather
+     * than by classification. The remaining H-0c states
+     * (`CONFIG_UNAUTHORIZED` / `CONFIG_UNAVAILABLE`) are still exercised by
+     * the sibling tests that fail `report-defaults` itself, which IS still a
+     * request the editor makes.
+     */
+    it("bootstraps normally even if the template-version read would 403", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults();
@@ -279,10 +311,11 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         renderEditor();
 
         await waitFor(() => {
-            expect(
-                screen.getByText(/No tienes acceso a la configuración de reportes/i)
-            ).toBeTruthy();
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
+        expect(
+            screen.queryByText(/No tienes acceso a la configuración de reportes/i)
+        ).toBeNull();
         expect(screen.queryByText(MISSING_LETTERHEAD)).toBeNull();
     });
 

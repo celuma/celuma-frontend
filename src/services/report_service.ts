@@ -56,6 +56,26 @@ function parseFastApiErrorDetail(bodyText: string): string | undefined {
 // Report CRUD
 // ---------------------------------------------------------------------------
 
+/**
+ * Céluma 1.3.1 Block C (C-8): raised when the backend refuses to create a
+ * report because the clinical template changed while it was being authored.
+ *
+ * Typed rather than a bare `Error` so the editor can say what actually happened
+ * — the author needs to know their work is intact and that reloading is the
+ * remedy, not that "something returned 409".
+ */
+export class StaleReportTemplateError extends Error {
+    readonly detail: string | undefined;
+    constructor(detail?: string) {
+        super(
+            detail ||
+                "La plantilla de este reporte cambió mientras lo editabas. Vuelve a cargar el reporte antes de guardar.",
+        );
+        this.name = "StaleReportTemplateError";
+        this.detail = detail;
+    }
+}
+
 export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
     const res = await fetch(`${base}/v1/reports/`, {
         method: "POST",
@@ -64,6 +84,13 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
     });
     if (!res.ok) {
         const errText = await res.text();
+        // C-8: a 409 on a create that carried `template_hash` is the
+        // stale-template conflict. Surfaced as its own type so the editor does
+        // not have to parse a message, and so it can never be confused with a
+        // generic save failure and silently retried.
+        if (res.status === 409 && report.template_hash) {
+            throw new StaleReportTemplateError(parseFastApiErrorDetail(errText));
+        }
         throw new Error(`Error al guardar reporte: ${res.status} - ${errText}`);
     }
     return await res.json();

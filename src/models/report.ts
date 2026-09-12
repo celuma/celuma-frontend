@@ -119,6 +119,18 @@ export interface ReportTemplateListItem {
 /** Template returned from GET /api/v1/reports/templates/{id} (detail) */
 export interface ReportTemplateDetail extends ReportTemplateListItem {
     template_json: ReportTemplateJSON;
+    /**
+     * Céluma 1.3.1 Block C (C-8): opaque optimistic-concurrency token for the
+     * `template_json` in THIS response. Echo it back verbatim on create, with
+     * `template_id`.
+     *
+     * Never recompute it here. It is a canonical server-side hash of the stored
+     * column, and the editor's own template is deliberately not byte-equivalent
+     * to that column (`normalizeReportTemplateJSON` rewrites the order arrays
+     * and content is merged into the section objects), so any client-side
+     * derivation would produce false conflicts.
+     */
+    template_hash: string;
     created_by: string;
 }
 
@@ -246,6 +258,29 @@ export interface ReportEnvelope {
      * reads `report.schema_version` (inside the JSON body), not this one.
      */
     schema_version?: number | null;
+    /**
+     * Céluma 1.3.1 Block C (CEL-131-05): on CREATE, the clinical
+     * `ReportTemplate` this V2 report is built from — the current V2 selector.
+     * The backend freezes that template's `template_json` into the report's
+     * own `rendering_snapshot`, so no `ReportTemplateVersion` has to exist.
+     * Write-only and create-only: it is never returned by a read and is
+     * ignored on `new_version`.
+     */
+    template_id?: string | null;
+    /**
+     * Céluma 1.3.1 Block C (C-8): the `template_hash` that arrived with the
+     * `template_json` this report was authored against, echoed back unchanged.
+     * Required by the backend whenever `template_id` is the selector; it
+     * answers 409 if the template has changed since. Create-only, like
+     * `template_id`.
+     */
+    template_hash?: string | null;
+    /**
+     * Provenance: which published `ReportTemplateVersion` this report was
+     * built from, when one was explicitly selected. Céluma 1.3.1 Block C: null
+     * for reports created through `template_id`, which read no version — an
+     * honest absence, not missing data.
+     */
     template_version_id?: string | null;
     /** Post-Phase-2 remediation: administrative twin of `template_version_id`
      *  — which ReportLetterheadVersion produced this version's `presentation`
