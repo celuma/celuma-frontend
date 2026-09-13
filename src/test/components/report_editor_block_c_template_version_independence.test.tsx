@@ -384,7 +384,8 @@ describe("ReportEditor — what the editor sends on create (Block C)", () => {
         await waitFor(() => {
             expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
-        screen.getByRole("button", { name: /Guardar/i }).click();
+        // R7: two Save affordances share one handler; target the top one.
+        screen.getByTestId("report-save-top").click();
 
         await waitFor(() => {
             const post = fetchSpy.mock.calls.find(

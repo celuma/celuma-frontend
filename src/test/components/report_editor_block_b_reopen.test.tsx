@@ -216,8 +216,13 @@ async function renderLoaded(persona: Persona, status: ReportStatus) {
     mockReport(status);
     mockRestOfTheEditor();
     renderEditor();
+    // Céluma 1.3.1 manual-validation remediation (R5): the "Firma" panel —
+    // and therefore any `.ant-switch` — is no longer rendered for a user
+    // without reviewer authority, so waiting for one would hang for the
+    // admin/superuser/pathologist personas this module is largely about. The
+    // report title renders for every persona.
     await waitFor(() => {
-        expect(document.querySelectorAll(".ant-switch").length).toBeGreaterThan(0);
+        expect(screen.getAllByDisplayValue("Reporte de prueba").length).toBeGreaterThan(0);
     });
 }
 
@@ -321,9 +326,13 @@ describe("Block B — reopening confers no reviewer authority", () => {
 
     it("an admin does not gain the presentation controls", async () => {
         await renderLoaded("admin", "APPROVED");
-        const switches = document.querySelectorAll<HTMLElement>(".ant-switch");
-        expect(switches.length).toBeGreaterThan(0);
-        expect(switches[0].hasAttribute("disabled")).toBe(true);
+        // Manual-validation remediation (R5): the controls are ABSENT for an
+        // actor with no reviewer authority, where they used to render as
+        // permanently greyed-out switches. Strictly stronger than the
+        // previous `disabled` assertion, and the same conclusion: reopening
+        // confers no presentation authority.
+        expect(document.querySelectorAll(".ant-switch")).toHaveLength(0);
+        expect(screen.queryByText("Firma")).toBeNull();
     });
 });
 
@@ -337,22 +346,35 @@ describe("Block B — content editing stays hidden after approval (B-3)", () => 
      */
     it("the author's save action is absent once the report is APPROVED", async () => {
         await renderLoaded("pathologist", "APPROVED");
-        expect(screen.queryByText("Guardar reporte")).toBeNull();
-        expect(screen.queryByText("Guardar configuración")).toBeNull();
+        expect(screen.queryAllByText("Guardar reporte")).toHaveLength(0);
+        expect(screen.queryAllByText("Guardar configuración")).toHaveLength(0);
     });
 
     it("it is absent for the assigned reviewer in APPROVED too", async () => {
         await renderLoaded("assignedReviewer", "APPROVED");
-        expect(screen.queryByText("Guardar reporte")).toBeNull();
-        expect(screen.queryByText("Guardar configuración")).toBeNull();
+        expect(screen.queryAllByText("Guardar reporte")).toHaveLength(0);
+        expect(screen.queryAllByText("Guardar configuración")).toHaveLength(0);
     });
 
     it("it is present in DRAFT, where authoring is valid", async () => {
         await renderLoaded("pathologist", "DRAFT");
-        expect(screen.getByText("Guardar reporte")).toBeTruthy();
+        // R7: one save operation, two affordances — both present.
+        expect(screen.getAllByText("Guardar reporte")).toHaveLength(2);
     });
 
-    it("reopening brings the author's save back", async () => {
+    it("reopening brings the save action back", async () => {
+        // The persona here is the assigned REVIEWER, who performs the reopen.
+        // Their save is the narrow presentation route, not the content path —
+        // the `reviewer` role has no `reports:edit` and must never be given
+        // it — so the label that returns is "Guardar configuración". Since
+        // the manual-validation remediation R1 opened DRAFT to the reviewer,
+        // that is now true in DRAFT as well as IN_REVIEW.
+        //
+        // The AUTHOR's own content save returning in DRAFT is asserted by
+        // "it is present in DRAFT, where authoring is valid" above, with the
+        // pathologist persona. What matters here is Block B's point: an
+        // APPROVED report offers no save at all, and the reopen is what
+        // brings one back.
         vi.spyOn(reportService, "reopenReport").mockResolvedValue({
             id: REPORT_ID,
             status: "DRAFT",
@@ -363,12 +385,15 @@ describe("Block B — content editing stays hidden after approval (B-3)", () => 
             reportPayload("DRAFT") as never
         );
 
-        expect(screen.queryByText("Guardar reporte")).toBeNull();
+        expect(screen.queryAllByText("Guardar reporte")).toHaveLength(0);
+        expect(screen.queryAllByText("Guardar configuración")).toHaveLength(0);
+
         await userEvent.click(screen.getByText(REOPEN_LABEL));
         await confirmReopen();
 
         await waitFor(() => {
-            expect(screen.getByText("Guardar reporte")).toBeTruthy();
+            // R7: one save operation, two affordances — both present.
+            expect(screen.getAllByText("Guardar configuración")).toHaveLength(2);
         });
     });
 });

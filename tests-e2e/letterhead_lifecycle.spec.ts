@@ -279,25 +279,45 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         await page.getByLabel("Nombre del reporte").fill(clinicalText);
         await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
 
-        // This Select's search input renders readonly (no free-text filter),
-        // and Ant Design's virtual list keeps a hidden measurement copy of
-        // each option row, so Playwright's visibility check on the option
-        // element itself is unreliable — drive it by keyboard instead,
-        // gated only on the dropdown panel (not the individual row) being
-        // open.
-        await page.locator(".ant-select-selector").first().click();
-        await page.locator(".ant-select-dropdown").first().waitFor({ state: "visible" });
-        await page.keyboard.press("ArrowDown");
-        await page.keyboard.press("Enter");
+        // Céluma 1.3.1 manual-validation remediation (R5, CEL-131-08): this
+        // step used to drive the letterhead Select from THIS session, which
+        // is the laboratory's admin/superuser. That user has never had
+        // clinical reviewer authority (Block A: administrative privilege
+        // never confers it), and the editor now HIDES the selector from
+        // someone who cannot use it rather than rendering it greyed out — so
+        // there is no Select here to drive any more.
+        //
+        // What the admin correctly still sees is the letterhead's NAME,
+        // read-only, plus the provenance note (Block A's A6: non-reviewers
+        // keep the read-only rendering and lose only the editable control).
+        await expect(page.getByTestId("letterhead-readonly")).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId("letterhead-select")).toHaveCount(0);
+        // The read-only block names the letterhead (its logical NAME, §4.3 —
+        // never a version number) and says whose decision it is.
+        await expect(page.getByTestId("letterhead-readonly")).toContainText("Membrete");
+        await expect(page.getByTestId("letterhead-frozen-note")).toContainText(
+            "El membrete lo selecciona el revisor asignado.",
+        );
+        // The rendered preview still carries the resolved branding, so the
+        // admin is not being shown less INFORMATION — only fewer controls.
+        await expect(page.getByText(`E2E Lab ${suffix}`, { exact: false })).toBeVisible({ timeout: 10_000 });
 
-        // Branding changed, clinical content did not — this is the
-        // literal regression check for bug 3.
-        await expect(page.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible({ timeout: 10_000 });
+        // Bug 3 — "switching the letterhead must not wipe clinical content" —
+        // is a REVIEWER action and is covered at the unit level with the
+        // reviewer persona, by "changing the letterhead preserves clinical
+        // content and updates the preview" in
+        // src/test/components/report_editor_remediation5.test.tsx. What this
+        // live flow keeps asserting is that the content the admin typed
+        // survives to the save below.
         await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
 
         // Save the report — this both exercises the real save path and
         // gives us a persisted report to generate/download a PDF for.
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
+        // R7: the editor renders two "Guardar reporte" affordances (header and end
+        // of content) that share one handler, so the role query is ambiguous.
+        // `report_editor_r4_r7_remediation.test.tsx` owns the assertions about
+        // the two being one control; here, drive the header one.
+        await page.getByTestId("report-save-top").click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 15_000 });
 
         // ---- Fetch the persisted report id and move it to APPROVED via

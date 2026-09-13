@@ -50,6 +50,8 @@ import { CelumaTable } from "../components/ui/table";
 import { matchesQuery } from "../lib/search";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -121,6 +123,12 @@ type OrdersListResponse = {
 
 export default function RequestingPhysicianDetailPage() {
     usePageTitle();
+    // R5 (CEL-131-08): editing and activating/deactivating a requesting
+    // physician are `lab:create_order` writes on the backend; reading the
+    // record is `lab:read`. Registering an order from here is the same
+    // boundary as the Órdenes list CTA.
+    const { hasPermission } = useUserProfile();
+    const canManagePhysicians = hasPermission(PERMS.CREATE_ORDER);
     const navigate = useNavigate();
     const { physicianId } = useParams();
     const [loading, setLoading] = useState(true);
@@ -387,23 +395,25 @@ export default function RequestingPhysicianDetailPage() {
                                             <div className="rp-stat-divider" />
                                             <Stat value={totalSamples} label="Muestras" color="#f59e0b" />
                                         </div>
-                                        <ActionButtonPanel
-                                            actions={[
-                                                {
-                                                    icon: <EditOutlined />,
-                                                    tooltip: "Editar médico",
-                                                    ariaLabel: "Editar",
-                                                    onClick: () => navigate(`/requesting-physicians/${physician.id}/edit`),
-                                                },
-                                                {
-                                                    icon: <PoweroffOutlined />,
-                                                    tooltip: isActive ? "Desactivar médico" : "Activar médico",
-                                                    ariaLabel: isActive ? "Desactivar" : "Activar",
-                                                    danger: isActive,
-                                                    onClick: () => setConfirmOpen(true),
-                                                },
-                                            ]}
-                                        />
+                                        {canManagePhysicians && (
+                                            <ActionButtonPanel
+                                                actions={[
+                                                    {
+                                                        icon: <EditOutlined />,
+                                                        tooltip: "Editar médico",
+                                                        ariaLabel: "Editar",
+                                                        onClick: () => navigate(`/requesting-physicians/${physician.id}/edit`),
+                                                    },
+                                                    {
+                                                        icon: <PoweroffOutlined />,
+                                                        tooltip: isActive ? "Desactivar médico" : "Activar médico",
+                                                        ariaLabel: isActive ? "Desactivar" : "Activar",
+                                                        danger: isActive,
+                                                        onClick: () => setConfirmOpen(true),
+                                                    },
+                                                ]}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -425,9 +435,11 @@ export default function RequestingPhysicianDetailPage() {
                                     placeholder="Buscar en órdenes"
                                     style={{ width: 240 }}
                                 />
-                                <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?requestingPhysicianId=${physician.id}`)}>
-                                    Registrar Orden
-                                </CelumaButton>
+                                {canManagePhysicians && (
+                                    <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?requestingPhysicianId=${physician.id}`)}>
+                                        Registrar Orden
+                                    </CelumaButton>
+                                )}
                             </Space>
                         ) : null}
                     >

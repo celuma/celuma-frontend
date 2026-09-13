@@ -269,8 +269,11 @@ describe("CEL-131-08 — sample detail actions follow their own capabilities", (
         const { container } = renderSampleDetail();
         await waitFor(() => expect(container.textContent).toContain("M-001"));
 
-        // Every rail trigger present is inert.
-        expect(railTriggers(container).every((b) => b.disabled)).toBe(true);
+        // Manual-validation remediation (R5): no rail trigger is RENDERED.
+        // This used to assert `.every((b) => b.disabled)`, which an empty list
+        // satisfies vacuously — so it is stated as absence, which cannot pass
+        // for the wrong reason.
+        expect(railTriggers(container)).toHaveLength(0);
         // The notes editor cannot be opened.
         expect(container.querySelector(".anticon-edit")).toBeNull();
         // …but the content itself is still readable.
@@ -323,7 +326,8 @@ describe("CEL-131-08 — sample detail actions follow their own capabilities", (
         const { container } = renderSampleDetail();
         await waitFor(() => expect(container.textContent).toContain("M-001"));
 
-        expect(railTriggers(container).every((b) => b.disabled)).toBe(true);
+        // R5: absent, not merely disabled — see the viewer case above.
+        expect(railTriggers(container)).toHaveLength(0);
         expect(container.querySelector(".anticon-edit")).toBeNull();
         await openGallery(container);
         expect(container.textContent).not.toContain("Clic o arrastra");

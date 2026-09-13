@@ -214,11 +214,13 @@ async function renderLoaded(persona: Persona, status: ReportStatus) {
     mockReport(status);
     mockRestOfTheEditor();
     renderEditor();
-    // The "Firma" panel renders once the report has loaded, so this is the
-    // signal that an absence assertion below is about authorization rather
-    // than about a render that has not happened yet.
+    // Céluma 1.3.1 manual-validation remediation (R5): the readiness signal
+    // used to be "a `.ant-switch` exists", i.e. the "Firma" panel. That panel
+    // is now ABSENT for a user without reviewer authority, so waiting for it
+    // would hang for exactly the personas these tests care about. The report
+    // title renders for every persona and is the neutral signal.
     await waitFor(() => {
-        expect(document.querySelectorAll(".ant-switch").length).toBeGreaterThan(0);
+        expect(screen.getAllByDisplayValue("Reporte de prueba").length).toBeGreaterThan(0);
     });
 }
 
@@ -286,11 +288,24 @@ describe("Block A — sign and publish", () => {
     });
 });
 
-describe("Block A — signature settings are reviewer-only", () => {
+describe("Block A + R1/R5 — signature settings are reviewer-only", () => {
     /** The two switches live in the "Firma" panel, in DOM order. */
     function signatureSwitches() {
         return document.querySelectorAll<HTMLElement>(".ant-switch");
     }
+
+    // Two remediations reshaped this block:
+    //
+    //   R1 (CEL-131-02) — the assigned reviewer's window is DRAFT **and**
+    //   IN_REVIEW. Waiting for submission to configure presentation was
+    //   inconvenient and protected nothing; approval and signing keep their
+    //   own lifecycle guards and neither admits DRAFT (asserted above and in
+    //   `tests/http/test_r1_draft_presentation_window.py`).
+    //
+    //   R5 (CEL-131-08) — a user WITHOUT reviewer authority no longer sees
+    //   the panel as permanently greyed-out switches. The controls are
+    //   absent. "Visible and disabled" is reserved for someone who HAS the
+    //   authority and is blocked only by the report's current state.
 
     it("the assigned reviewer can edit them while IN_REVIEW", async () => {
         await renderLoaded("assignedReviewer", "IN_REVIEW");
@@ -298,44 +313,38 @@ describe("Block A — signature settings are reviewer-only", () => {
         expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(false);
     });
 
-    it("a pathologist cannot, once the report is under review", async () => {
-        await renderLoaded("pathologist", "IN_REVIEW");
-        await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
-        expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
-    });
-
-    it("an admin cannot", async () => {
-        await renderLoaded("admin", "IN_REVIEW");
-        await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
-        expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
-    });
-
-    it("a superuser cannot", async () => {
-        await renderLoaded("superuser", "IN_REVIEW");
-        await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
-        expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
-    });
-
-    it("the author cannot edit them in DRAFT either", async () => {
-        // The corrected A5/A6 contract. DRAFT belongs to the author for
-        // clinical CONTENT only: these three fields decide what the final
-        // document asserts about who signed it, which is the reviewer's
-        // responsibility at every point in the lifecycle. A new report's
-        // settings come from the template's defaults, resolved server-side.
-        await renderLoaded("pathologist", "DRAFT");
-        await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
-        expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
-    });
-
-    it("the assigned reviewer cannot edit them in DRAFT either", async () => {
-        // The window is IN_REVIEW, not "whenever a reviewer is looking".
+    it("the assigned reviewer can edit them while DRAFT too (R1)", async () => {
         await renderLoaded("assignedReviewer", "DRAFT");
         await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
+        expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(false);
+    });
+
+    it.each<[Persona, ReportStatus]>([
+        ["pathologist", "IN_REVIEW"],
+        ["pathologist", "DRAFT"],
+        ["admin", "IN_REVIEW"],
+        ["superuser", "IN_REVIEW"],
+    ])(
+        "a %s sees no signature panel at all in %s (R5)",
+        async (persona, status) => {
+            await renderLoaded(persona, status);
+            expect(signatureSwitches().length).toBe(0);
+            expect(screen.queryByText("Firma")).toBeNull();
+        }
+    );
+
+    it("an authorized reviewer still sees them, inert, once APPROVED", async () => {
+        // The lifecycle half of the R5 rule. The authority is real and
+        // permanent; the STATE is the temporary blocker, so the control stays
+        // visible — and disabled — rather than vanishing when a report is
+        // approved.
+        await renderLoaded("assignedReviewer", "APPROVED");
+        await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
         expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
     });
 
-    it("nobody can edit them once the report is APPROVED", async () => {
-        await renderLoaded("assignedReviewer", "APPROVED");
+    it("an authorized reviewer sees them inert once PUBLISHED", async () => {
+        await renderLoaded("assignedReviewer", "PUBLISHED");
         await waitFor(() => expect(signatureSwitches().length).toBeGreaterThan(0));
         expect(signatureSwitches()[0].hasAttribute("disabled")).toBe(true);
     });

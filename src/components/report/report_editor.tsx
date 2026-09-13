@@ -60,6 +60,7 @@ import {
     resolveSectionOrder,
     resolveDisplayOrder,
     resolveSignatureMetadata,
+    SYSTEM_METADATA_BASE_FIELDS,
 } from "../../models/report";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import FloatingCaptionSelect from "../ui/floating_caption_select";
@@ -121,6 +122,20 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 function isCustomField(f: ReportBaseFieldConfig): f is ReportBaseFieldCustom {
     return (f as ReportBaseFieldCustom).is_custom === true;
 }
+
+/**
+ * The base-field keys whose values the SERVER owns end to end (Céluma 1.3.1
+ * Block D, CEL-131-04) and which the editor therefore cannot compute.
+ *
+ * `requesting_physician` is deliberately NOT here even though the backend
+ * also owns it: the editor has always computed it from the live order and
+ * that behaviour is unchanged by this remediation. These two have no
+ * client-side source at all, so without carrying the persisted value forward
+ * the preview can only show them blank — which is the R3 defect.
+ */
+const SERVER_OWNED_PREVIEW_KEYS = SYSTEM_METADATA_BASE_FIELDS.filter(
+    (k) => k !== "requesting_physician"
+);
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
 
@@ -366,6 +381,10 @@ const ReportEditor: React.FC = () => {
     // than a new pattern.
     const [isReopenConfirmVisible, setIsReopenConfirmVisible] = useState(false);
     const [isReopening, setIsReopening] = useState(false);
+    // Manual-validation remediation (R7): the single in-flight flag both
+    // "Guardar" buttons read. The editor previously had no save loading state
+    // at all, so a second click simply fired a second request.
+    const [isSaving, setIsSaving] = useState(false);
 
     // Modal for table section editing
     const [tableModal, setTableModal] = useState<{ key: string; label: string } | null>(null);
@@ -461,15 +480,67 @@ const ReportEditor: React.FC = () => {
     // persisted presentation forward regardless of the request body, and a
     // letterhead change through the content path is refused outright — so
     // hiding the control here is the UX half, not the security half.
+    /**
+     * The reviewer CONTRACT for presentation, with no lifecycle state in it:
+     * reviewer role + `reports:approve` + assigned to THIS order + same
+     * tenant. Mirrors `_require_reviewer_contract` in
+     * `report_authorization.py`.
+     *
+     * Céluma 1.3.1 manual-validation remediation (R5, CEL-131-08): separating
+     * this from the window below is what lets the editor tell the two reasons
+     * a control is unusable apart. Lacking AUTHORITY is permanent for this
+     * user on this report, so the control is not rendered; being outside the
+     * lifecycle WINDOW is a property of the report, so an authorized reviewer
+     * still sees the control and sees why it is inert.
+     */
+    const hasReviewerPresentationAuthority = useMemo(
+        () => userCanActAsReviewer(PERMS.REPORTS_APPROVE, orderReviewers),
+        [userCanActAsReviewer, orderReviewers]
+    );
+
+    /**
+     * The lifecycle window in which that authority can actually be exercised.
+     *
+     * Céluma 1.3.1 manual-validation remediation (R1, CEL-131-02): DRAFT was
+     * added. Mirrors `PRESENTATION_EDITABLE_STATUSES` in
+     * `report_authorization.py`, which is authoritative — this is the UX half.
+     * APPROVED/PUBLISHED/RETRACTED stay frozen; the route back is Block B's
+     * reopen.
+     */
     const isReviewerPresentationWindow = useMemo(
         () =>
-            envelope?.status === "IN_REVIEW" &&
-            userCanActAsReviewer(PERMS.REPORTS_APPROVE, orderReviewers),
-        [envelope?.status, userCanActAsReviewer, orderReviewers]
+            (envelope?.status === "DRAFT" || envelope?.status === "IN_REVIEW") &&
+            hasReviewerPresentationAuthority,
+        [envelope?.status, hasReviewerPresentationAuthority]
     );
 
     /** Whether the presentation controls render as editable at all. */
     const canEditPresentation = isReviewerPresentationWindow;
+
+    /**
+     * Whether THIS user's save should also write clinical content.
+     *
+     * Céluma 1.3.1 manual-validation remediation (R1, CEL-131-02). Before R1
+     * the two audiences could never overlap: presentation was IN_REVIEW-only
+     * and the editor treats every non-DRAFT report as read-only, so a save in
+     * DRAFT was always the author's and a save in IN_REVIEW was always the
+     * reviewer's. Opening DRAFT to the reviewer removes that coincidence — a
+     * user holding BOTH `pathologist` and `reviewer` (a real configuration in
+     * a small laboratory, and the one `test_h0c_author_reviewer_bootstrap`
+     * exists for) is now inside the reviewer's presentation window while
+     * still being the author of a DRAFT.
+     *
+     * So the save path is chosen by CAPABILITY, not by the window: the
+     * content route needs `reports:edit`, which the `reviewer` role
+     * deliberately does not hold and must never be given (Block A §7). A user
+     * who has it saves content; a user who does not has their presentation
+     * changes written through the narrow reviewer route; a user who is both
+     * gets both, in that order — see `runSave`.
+     */
+    const canSaveContent = useMemo(
+        () => !isReadOnly && userHasPermission(PERMS.REPORTS_EDIT),
+        [isReadOnly, userHasPermission]
+    );
 
     // Custom base fields (from template), ordered by template.base_order
     const customBaseFields = useMemo(() => {
@@ -953,6 +1024,37 @@ const ReportEditor: React.FC = () => {
             }
         }
 
+        // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04).
+        //
+        // `reception_date` and `delivery_date` are SERVER-owned: the backend
+        // resolves them (`report_metadata.py`) and overwrites whatever the
+        // client sends, so there is deliberately no client-side computation
+        // for them here — unlike the five fields above. But
+        // `buildEmptyReportContent` rebuilds every base field with `value:
+        // ""`, so the preview showed both of them permanently blank ("Sin
+        // especificar") even when the stored document had a real reception
+        // date and, after signing, a real delivery date. The editor was
+        // showing the author a document that did not match the one the PDF
+        // renders from the same body.
+        //
+        // Carrying the PERSISTED value forward fixes the display without
+        // inventing a second source of truth: the value shown is the one the
+        // server wrote, and the server discards this field on every authoring
+        // save regardless (`apply_authoritative_report_metadata`), so nothing
+        // here can forge or preserve a value the backend would not accept.
+        // `delivery_date` is the reason this matters after publication too —
+        // it is written once, at signing, and the editor is the only place a
+        // signed report is read back before the PDF.
+        const persistedBase = envelope?.report?.base;
+        if (persistedBase) {
+            for (const key of SERVER_OWNED_PREVIEW_KEYS) {
+                const persisted = persistedBase[key]?.value;
+                if (report.base[key] && typeof persisted === "string") {
+                    report.base[key].value = persisted;
+                }
+            }
+        }
+
         // Fill custom base values
         customBaseFields.forEach(({ key }) => {
             if (report.base[key]) report.base[key].value = baseValues[key] || "";
@@ -1153,7 +1255,7 @@ const ReportEditor: React.FC = () => {
      * their edits are limited to the three presentation settings, which the
      * narrow PATCH route accepts and nothing else does.
      */
-    const handleSavePresentation = async () => {
+    const handleSavePresentation = async ({ silent = false } = {}) => {
         if (!envelope?.id) return;
         try {
             await updateReportPresentation(envelope.id, {
@@ -1165,18 +1267,55 @@ const ReportEditor: React.FC = () => {
                     : {}),
             });
             setLetterheadDirty(false);
-            message.success("Configuración del reporte guardada");
+            // Suppressed when a content save follows in the same click: one
+            // user action deserves one confirmation, and the content save's
+            // own toast is the one that reports the whole outcome.
+            if (!silent) message.success("Configuración del reporte guardada");
         } catch (err) {
             showCelumaApiError(err, "No se pudo guardar la configuración del reporte.");
+            throw err;
         }
     };
 
+    /**
+     * THE save. Both "Guardar" affordances call exactly this — the top one in
+     * the workflow header and the bottom one at the end of the editable
+     * content (manual-validation remediation, R7). There is one save
+     * operation and two ways to invoke it; nothing about the request, the
+     * validation, the authorization, the error handling or the success
+     * handling is duplicated per button.
+     *
+     * `isSaving` is what makes the two buttons agree and what makes a
+     * double-submit impossible: it disables BOTH (they read the same state)
+     * and the guard below drops a second call that arrives anyway — a
+     * double-click, or one click on each button in quick succession.
+     */
     const handleSave = async () => {
-        // A reviewer editing an IN_REVIEW report goes through the narrow
-        // presentation route; only the author's DRAFT save writes content.
+        if (isSaving) return;
+        setIsSaving(true);
+        try {
+            await runSave();
+        } catch {
+            // Every failure path inside `runSave` has already reported itself
+            // to the user (`showCelumaApiError` / `message.error`). This only
+            // stops a rejected presentation save from escaping the click
+            // handler as an unhandled rejection; it must not add a second
+            // message or swallow anything silently.
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const runSave = async () => {
+        // R1: a user may now be inside the reviewer's presentation window AND
+        // be the author of the DRAFT. Both halves are saved, presentation
+        // FIRST — the content route carries the PERSISTED presentation
+        // forward (`enforce_author_presentation_boundary`), so writing
+        // presentation after content would be immediately overwritten, while
+        // writing it before means the content save carries the new values.
         if (isReviewerPresentationWindow) {
-            await handleSavePresentation();
-            return;
+            await handleSavePresentation({ silent: canSaveContent });
+            if (!canSaveContent) return;
         }
         try {
             const env = buildEnvelope();
@@ -1219,12 +1358,43 @@ const ReportEditor: React.FC = () => {
         }
     };
 
+    /**
+     * Submit for review — DRAFT -> IN_REVIEW.
+     *
+     * Céluma 1.3.1 manual-validation remediation (R4, CEL-131-06): the `/full`
+     * refresh. Submission is the moment the tenant's DEFAULT REVIEWER is
+     * materialized into a real `ReportReview` row, server-side, when and only
+     * when the order had no reviewer at all (see
+     * `report_default_reviewer.py` and block-d/default-reviewer-contract.md).
+     * That row is exactly what `fullData.order.reviewers` carries and what
+     * every reviewer-contract flag in this editor is derived from — so before
+     * this refresh, the submitter's own session still believed the order had
+     * no reviewer, and the configured default looked as if it had never been
+     * applied until the page was reloaded by hand. The backend was right the
+     * whole time; the editor was reading a snapshot taken before the row
+     * existed.
+     *
+     * Same ordering rule as `handleReopen` and the publication flow: the
+     * status from the transition's own response is applied FIRST, and the
+     * refresh may only enrich what the transition already confirmed. A
+     * refresh failure therefore leaves a correctly IN_REVIEW report with a
+     * stale reviewer list, never a report that looks unsubmitted.
+     */
     const handleSubmit = async () => {
         if (!envelope?.id) { message.warning("Guarda el reporte primero"); return; }
         try {
             const result = await submitReport(envelope.id);
-            setEnvelope((e) => e ? { ...e, status: result.status as ReportStatus } : e);
+            const newStatus = (result.status as ReportStatus) ?? "IN_REVIEW";
+            setEnvelope((e) => e ? { ...e, status: newStatus } : e);
             message.success(result.message);
+            try {
+                const full = await getReportFull(envelope.id);
+                setFullData(full);
+                setEnvelope({ ...full.report, status: newStatus });
+            } catch {
+                // The report IS submitted. A refresh failure must not look
+                // like a failed submission.
+            }
         } catch (err) { showCelumaApiError(err, "Error al enviar el reporte."); }
     };
 
@@ -1285,6 +1455,43 @@ const ReportEditor: React.FC = () => {
             setIsReopening(false);
         }
     };
+
+    /**
+     * Manual-validation remediation (R7): the one "Guardar" control, rendered
+     * twice.
+     *
+     * A long report made the header's Save button a scroll away, so a second
+     * one now sits at the end of the editable content. It is deliberately NOT
+     * a second implementation: this function is the only place the button
+     * exists, so the two affordances share their visibility condition, their
+     * label, their handler, their loading state and their disabled state by
+     * construction rather than by two places being kept in agreement.
+     *
+     * Visibility is the authorization/lifecycle condition the top button
+     * already used: an author may save while the report is editable, and an
+     * assigned reviewer may save presentation inside their window. Someone
+     * with neither gets no Save at all — at the top or the bottom.
+     */
+    const renderSaveButton = (testId: string) =>
+        (!isReadOnly || isReviewerPresentationWindow) ? (
+            <CelumaButton
+                type="primary"
+                size="small"
+                icon={<SaveOutlined />}
+                loading={isSaving}
+                disabled={isSaving}
+                onClick={handleSave}
+                data-testid={testId}
+            >
+                {isReviewerPresentationWindow && !canSaveContent
+                    ? "Guardar configuración"
+                    : "Guardar reporte"}
+            </CelumaButton>
+        ) : null;
+
+    /** Built once so the surrounding divider is rendered only when the button
+     *  itself is — and so the element is not constructed twice per render. */
+    const bottomSaveButton = renderSaveButton("report-save-bottom");
 
     const promptUploadSignature = () => {
         showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
@@ -1690,13 +1897,7 @@ const ReportEditor: React.FC = () => {
                     <Divider style={{ margin: "18px 0 16px" }} />
                     <CelumaSteps steps={REPORT_STEPS} current={getReportStep(envelope?.status)} />
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-                        {(!isReadOnly || isReviewerPresentationWindow) && (
-                            <CelumaButton type="primary" size="small" icon={<SaveOutlined />} onClick={handleSave}>
-                                {isReviewerPresentationWindow
-                                    ? "Guardar configuración"
-                                    : "Guardar reporte"}
-                            </CelumaButton>
-                        )}
+                        {renderSaveButton("report-save-top")}
                         {envelope?.status === "DRAFT" && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
                                 Enviar a Revisión
@@ -1943,6 +2144,18 @@ const ReportEditor: React.FC = () => {
                                         the field (disabled); never hide it. §4.3: list
                                         logical names; the version number does not appear
                                         in the normal flow. */}
+                                    {/* R5 (CEL-131-08): the SELECTOR is a reviewer
+                                        control, so a user without reviewer authority on
+                                        this report no longer gets it as a greyed-out
+                                        dropdown — they get the read-only value below.
+                                        An AUTHORIZED reviewer keeps the selector in every
+                                        state, disabled when the lifecycle (or a single
+                                        option, or a change in flight) blocks it, which is
+                                        the "visible + disabled" half of the rule.
+                                        Block A's A6 is preserved either way: the
+                                        letterhead's name and its provenance note stay
+                                        readable for everyone. */}
+                                    {hasReviewerPresentationAuthority ? (
                                     <FloatingCaptionSelect
                                         label="Membrete"
                                         value={selectedLetterheadVersionId ?? undefined}
@@ -1967,6 +2180,16 @@ const ReportEditor: React.FC = () => {
                                         allowClear={false}
                                         data-testid="letterhead-select"
                                     />
+                                    ) : (
+                                        <div data-testid="letterhead-readonly">
+                                            <div style={{ fontSize: 12, color: tokens.textSecondary }}>
+                                                Membrete
+                                            </div>
+                                            <div style={{ fontWeight: 600, color: tokens.textPrimary }}>
+                                                {selectedLetterheadName}
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* Céluma 1.3.1 Block A: the note explains WHY the
                                         selector is read-only, and that now depends on who
                                         is looking as much as on the report's state — the
@@ -1981,7 +2204,11 @@ const ReportEditor: React.FC = () => {
                                             envelope?.status === "PUBLISHED" ||
                                             envelope?.status === "RETRACTED"
                                                 ? "El membrete quedó fijado al aprobar el reporte."
-                                                : "El membrete lo selecciona el revisor asignado durante la revisión."}
+                                                // R1 (CEL-131-02): the reviewer's window
+                                                // is no longer "durante la revisión" only —
+                                                // it is DRAFT and IN_REVIEW alike — so the
+                                                // note names WHO decides, not WHEN.
+                                                : "El membrete lo selecciona el revisor asignado."}
                                         </div>
                                     )}
                                     {canEditPresentation && letterheadDirty && (
@@ -2199,7 +2426,16 @@ const ReportEditor: React.FC = () => {
 
                                 <Divider />
 
-                                {/* Signature configuration (T7) */}
+                                {/* Signature configuration (T7).
+                                    R5 (CEL-131-08): the two switches are reviewer-owned
+                                    presentation settings with no read value an author
+                                    needs — unlike the letterhead, whose name is part of
+                                    reading the report — so the whole card is absent for a
+                                    user without reviewer authority on this report,
+                                    instead of appearing permanently greyed out. An
+                                    authorized reviewer keeps it in every state, disabled
+                                    when the lifecycle blocks it. */}
+                                {hasReviewerPresentationAuthority && (
                                 <div style={{ marginBottom: 16 }}>
                                     <SectionTitle icon={<SafetyCertificateOutlined />}>Firma</SectionTitle>
                                     <Panel style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2238,6 +2474,25 @@ const ReportEditor: React.FC = () => {
                                         </div>
                                     </Panel>
                                 </div>
+                                )}
+
+                                {/* Manual-validation remediation (R7): the second
+                                    "Guardar" affordance.
+                                    Long reports made the header's Save a full scroll
+                                    away. This is the SAME control — `renderSaveButton`
+                                    is the only definition — so its visibility, label,
+                                    handler, loading and disabled state cannot diverge
+                                    from the top one, and `handleSave`'s single-flight
+                                    guard means clicking both produces one request.
+                                    Renders nothing when the top one renders nothing. */}
+                                {bottomSaveButton && (
+                                    <>
+                                        <Divider />
+                                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                            {bottomSaveButton}
+                                        </div>
+                                    </>
+                                )}
                             </Form>
                         </Card>
                     </div>

@@ -218,6 +218,18 @@ export default function OrderDetail() {
     // CEL-131-08 — sample actions reachable from the order screen follow the
     // backend capability, not the screen's own read permission.
     const canCreateSample = hasPermission(PERMS.CREATE_SAMPLE);
+    // R5 (CEL-131-08): the order rail's three collaboration sections and the
+    // description editor are writes. `sample_detail.tsx` already passed these
+    // flags to the same components; this page passed nothing, so every viewer
+    // of an order saw the gear on Revisores / Asignados / Etiquetas and the
+    // edit pencil on the description, regardless of permission. Backend
+    // requirements: PUT /orders/{id}/reviewers -> lab:manage_reviewers,
+    // /assignees -> lab:manage_assignees, /labels -> lab:manage_labels,
+    // PATCH /orders/{id}/notes -> lab:update_order.
+    const canManageReviewers = hasPermission(PERMS.MANAGE_REVIEWERS);
+    const canManageAssignees = hasPermission(PERMS.MANAGE_ASSIGNEES);
+    const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
+    const canUpdateOrder = hasPermission(PERMS.UPDATE_ORDER);
     
     // Scroll to bottom of conversation
     const scrollToBottom = useCallback(() => {
@@ -935,6 +947,7 @@ export default function OrderDetail() {
                     allUsers={allReviewerUsers}
                     onUpdate={handleUpdateReviewers}
                     orderStatus={data?.order.status}
+                    disabled={!canManageReviewers}
                 />
             </Card>
             
@@ -948,6 +961,7 @@ export default function OrderDetail() {
                     assignees={data?.order.assignees || []}
                     allUsers={allUsers}
                     onUpdate={handleUpdateAssignees}
+                    disabled={!canManageAssignees}
                 />
             </Card>
 
@@ -962,6 +976,7 @@ export default function OrderDetail() {
                     allLabels={allLabels}
                     onUpdate={handleUpdateLabels}
                     onLabelsRefresh={loadCollaborationData}
+                    disabled={!canManageLabels}
                 />
             </Card>
         </div>
@@ -1167,7 +1182,7 @@ export default function OrderDetail() {
                                                 alignItems: "center",
                                             }}>
                                                 <span>Descripción</span>
-                                                {!editingNotes && (
+                                                {!editingNotes && canUpdateOrder && (
                                                     <EditOutlined
                                                         style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
                                                         onClick={() => {
@@ -1581,6 +1596,46 @@ export default function OrderDetail() {
                                                                 : "{comment}"
                                                             </span>
                                                         )}
+                                                    </span>
+                                                );
+                                            }
+                                            // Céluma 1.3.1 manual-validation remediation (R2,
+                                            // CEL-131-03): the reopen event. Its stored
+                                            // `event_type` is the enum's generic
+                                            // STATUS_CHANGED — the native Postgres enum has no
+                                            // REPORT_REOPENED member and is deliberately not
+                                            // being altered — so the ACTION, not the type, is
+                                            // what identifies it. Any other STATUS_CHANGED row
+                                            // falls through to `default`, which renders the
+                                            // stored description.
+                                            case "STATUS_CHANGED": {
+                                                if (meta.action !== "REPORT_REOPENED") {
+                                                    return event.description || event.event_type;
+                                                }
+                                                const reportId = meta.report_id as string;
+                                                return (
+                                                    <span>
+                                                        Reabrió el{" "}
+                                                        {reportId ? (
+                                                            <a
+                                                                href={`/reports/${reportId}`}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    navigate(`/reports/${reportId}`);
+                                                                }}
+                                                                style={{
+                                                                    color: "#49b6ad",
+                                                                    fontWeight: 600,
+                                                                    textDecoration: "none",
+                                                                    borderBottom: "1px dashed #49b6ad",
+                                                                }}
+                                                            >
+                                                                reporte
+                                                            </a>
+                                                        ) : "reporte"}
+                                                        <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                            — vuelve a borrador
+                                                        </span>
                                                     </span>
                                                 );
                                             }

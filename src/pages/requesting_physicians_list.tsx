@@ -13,6 +13,8 @@ import { CelumaTable } from "../components/ui/table";
 import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -51,6 +53,13 @@ export default function RequestingPhysiciansList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    // R5 (CEL-131-08): the requesting-physician catalogue is written under
+    // `lab:create_order` — `POST/PUT/PATCH /requesting-physicians/` all
+    // `_require(user.id, "lab:create_order")`. Reading it needs only
+    // `lab:read`, so the list stays visible to everyone and only the write
+    // action is gated.
+    const { hasPermission } = useUserProfile();
+    const canManagePhysicians = hasPermission(PERMS.CREATE_ORDER);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<RequestingPhysicianRow[]>([]);
@@ -141,9 +150,11 @@ export default function RequestingPhysiciansList() {
                         title="Médicos Solicitantes"
                         subtitle="Consulta y gestiona los médicos solicitantes"
                         extra={
-                            <CelumaButton type="primary" onClick={() => navigate("/requesting-physicians/register")}>
-                                Registrar Médico
-                            </CelumaButton>
+                            canManagePhysicians ? (
+                                <CelumaButton type="primary" onClick={() => navigate("/requesting-physicians/register")}>
+                                    Registrar Médico
+                                </CelumaButton>
+                            ) : undefined
                         }
                     />
                     <Card style={cardStyle}>

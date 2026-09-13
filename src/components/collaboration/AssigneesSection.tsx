@@ -67,7 +67,21 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
                 color={tokens.primary}
                 title="Asignados"
                 count={assignees.length}
-                trigger={
+                // Céluma 1.3.1 manual-validation remediation (R5, CEL-131-08).
+                //
+                // The product rule: a user who LACKS THE AUTHORIZATION for an
+                // action does not see that action; a user who HAS it but is
+                // blocked by the object's current lifecycle sees it disabled.
+                // `disabled` here is the authorization case — the caller
+                // passes it from `hasPermission(...)` — so the trigger is not
+                // rendered at all. It used to render as a greyed-out gear,
+                // which offered a control that could never work and read as a
+                // temporary state rather than a permanent boundary.
+                //
+                // The read-only list below is deliberately NOT hidden: seeing
+                // who is assigned is part of reading the order, and the
+                // backend grants that with `lab:read`.
+                trigger={disabled ? undefined : (
                     <Dropdown
                         open={dropdownOpen}
                         onOpenChange={(open) => {
@@ -92,11 +106,12 @@ export default function AssigneesSection({ assignees, allUsers, onUpdate, disabl
                                 clearLabel="Limpiar asignados"
                             />
                         )}
-                        disabled={disabled}
                     >
-                        <RailConfigButton disabled={disabled} />
+                        {/* Reached only when `disabled` is false — the branch
+                            above is the authorization gate now. */}
+                        <RailConfigButton />
                     </Dropdown>
-                }
+                )}
             />
 
             {loading ? (

@@ -274,7 +274,8 @@ async function saveAndCaptureBody(
     await waitFor(() => {
         expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
     });
-    screen.getByRole("button", { name: /Guardar/i }).click();
+    // R7: two Save affordances share one handler; target the top one.
+    screen.getByTestId("report-save-top").click();
 
     const findPost = () =>
         fetchSpy.mock.calls.find(
@@ -436,7 +437,8 @@ describe("ReportEditor — the stale-template conflict (C-8)", () => {
 
         await waitFor(() => expect(apiErrorToast).toHaveBeenCalled());
         expect(screen.getByText("Macroscopía")).toBeTruthy();
-        expect(screen.getByRole("button", { name: /Guardar/i })).toBeTruthy();
+        // R7: both affordances render, and both are the same control.
+        expect(screen.getAllByRole("button", { name: /Guardar/i })).toHaveLength(2);
     });
 
     it("does not report a conflict as an ordinary save failure", async () => {
@@ -490,7 +492,8 @@ describe("ReportEditor — existing reports carry no creation token (C-8)", () =
             expect(screen.getByText("Macroscopía")).toBeTruthy();
         });
         expect(defaultsSpy).not.toHaveBeenCalled();
-        expect(screen.getByRole("button", { name: /Guardar/i })).toBeTruthy();
+        // R7: both affordances render, and both are the same control.
+        expect(screen.getAllByRole("button", { name: /Guardar/i })).toHaveLength(2);
     });
 
     it("Block A reviewer controls are unchanged", async () => {

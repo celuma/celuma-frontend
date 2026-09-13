@@ -77,6 +77,18 @@ function asAdmin() {
         profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
         error: null, canManageUsers: true, canManageBranches: true, canManageCatalog: true,
         canManageTenant: true, hasPermission: () => true, hasRole: (r: string) => r === "admin",
+        // The real hook always returns these three. This double omitted them,
+        // which stayed invisible only because the editor happened to call
+        // `canActAsReviewer` behind a status check that these fixtures never
+        // satisfied. The manual-validation remediation (R5) derives reviewer
+        // AUTHORITY independently of the report's state — that is the whole
+        // point of the change — so the double has to be complete.
+        //
+        // `false` is the truthful value for an administrator: administrative
+        // privilege never confers clinical reviewer authority (Block A).
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => true,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

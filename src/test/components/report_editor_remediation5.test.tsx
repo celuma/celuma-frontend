@@ -12,7 +12,7 @@
  * status codes (§9.2).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { message } from "antd";
 import ReportEditor from "../../components/report/report_editor";
@@ -216,24 +216,41 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
     // established "editable while DRAFT, frozen at submission", on the premise
     // that the letterhead belongs to whoever is writing the report. The
     // product contract is that it belongs to the assigned REVIEWER: the
-    // letterhead decides what the final clinical document looks like, so the
-    // window is IN_REVIEW and the actor is the reviewer.
+    // letterhead decides what the final clinical document looks like.
+    //
+    // The manual-validation remediation moved it once more, in two ways:
+    //
+    //   R1 (CEL-131-02) — the reviewer's window is DRAFT **and** IN_REVIEW,
+    //   not IN_REVIEW alone. Waiting for submission to configure presentation
+    //   was inconvenient and bought nothing: approval and signing have their
+    //   own lifecycle guards and neither admits DRAFT.
+    //
+    //   R5 (CEL-131-08) — a user with no reviewer authority on this report no
+    //   longer gets the selector as a permanently greyed-out dropdown. They
+    //   get the letterhead's NAME, read-only. "Lacks authorization" hides the
+    //   control; "authorized but the lifecycle blocks it" leaves it visible
+    //   and disabled.
     //
     // Remediation 5's other guarantees are untouched and still asserted below —
-    // the field is always shown, never hidden; logical names, never version
-    // numbers; a change replaces `presentation` only and never rebuilds the
-    // clinical content.
+    // the letterhead is always NAMED, never hidden; logical names, never
+    // version numbers; a change replaces `presentation` only and never
+    // rebuilds the clinical content.
 
-    it("a DRAFT shows the selector READ-ONLY, even to a reviewer", async () => {
+    it("a DRAFT shows a non-reviewer the letterhead read-only, with no selector", async () => {
         await openEditor("DRAFT");
-        await expectSelectDisabled(true);
-        expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
-            "El membrete lo selecciona el revisor asignado durante la revisión."
+        expect(screen.queryByTestId("letterhead-select")).toBeNull();
+        // A6: the name and the reason are still readable.
+        expect(screen.getByTestId("letterhead-readonly").textContent).toContain(
+            "Membrete General"
         );
+        expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
+            "El membrete lo selecciona el revisor asignado."
+        );
+    });
 
-        cleanup();
+    it("a DRAFT shows the selector ENABLED to the assigned reviewer (R1)", async () => {
         await openEditor("DRAFT", { asReviewer: true });
-        await expectSelectDisabled(true);
+        await expectSelectDisabled(false);
     });
 
     it("IN_REVIEW shows the selector ENABLED to the assigned reviewer", async () => {
@@ -250,11 +267,14 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
         expect(screen.getByTestId("letterhead-panel").textContent).not.toContain("lhv-general");
     });
 
-    it("IN_REVIEW shows it READ-ONLY to anyone who is not the reviewer", async () => {
+    it("IN_REVIEW shows no selector at all to anyone who is not the reviewer", async () => {
         await openEditor("IN_REVIEW");
-        await expectSelectDisabled(true);
+        expect(screen.queryByTestId("letterhead-select")).toBeNull();
+        expect(screen.getByTestId("letterhead-readonly").textContent).toContain(
+            "Membrete General"
+        );
         expect(screen.getByTestId("letterhead-frozen-note").textContent).toContain(
-            "El membrete lo selecciona el revisor asignado durante la revisión."
+            "El membrete lo selecciona el revisor asignado."
         );
     });
 
@@ -266,12 +286,23 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
         );
     });
 
-    it("PUBLISHED blocks the selector", async () => {
-        await openEditor("PUBLISHED");
+    it("PUBLISHED keeps the selector visible but inert for an authorized reviewer", async () => {
+        // The lifecycle half of the R5 rule: the authority is real, the state
+        // is what blocks it, so the control stays visible and disabled.
+        await openEditor("PUBLISHED", { asReviewer: true });
         await expectSelectDisabled(true);
     });
 
+    it("PUBLISHED shows a non-reviewer no selector at all", async () => {
+        await openEditor("PUBLISHED");
+        expect(screen.queryByTestId("letterhead-select")).toBeNull();
+    });
+
     it("the field still shows when only one letterhead exists (§4.2)", async () => {
+        // §4.2 is about never HIDING the letterhead from someone who may
+        // change it, so this is asserted as the reviewer — for whom the
+        // selector renders.
+        withPermission(true);
         vi.spyOn(reportService, "getReportFull").mockResolvedValue(buildFull("DRAFT"));
         vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({
             letterheads: [{ id: "lh-general", name: "Membrete General" }],
@@ -348,7 +379,8 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
         fireEvent.click(nefro!);
         await waitFor(() => expect(screen.getByTestId("letterhead-dirty-note")).toBeTruthy());
 
-        fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
+        // R7: two Save affordances share one handler; target the top one.
+        fireEvent.click(screen.getByTestId("report-save-top"));
 
         await waitFor(() => expect(updatePresentation).toHaveBeenCalled());
         expect(updatePresentation.mock.calls[0][1].letterhead_version_id).toBe("lhv-nefro");
@@ -364,7 +396,8 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
             new Error("El membrete quedó fijado al enviar el reporte a revisión")
         );
 
-        fireEvent.click(screen.getByRole("button", { name: /Guardar/i }));
+        // R7: two Save affordances share one handler; target the top one.
+        fireEvent.click(screen.getByTestId("report-save-top"));
 
         await waitFor(() => {
             expect(errorSpy).toHaveBeenCalledWith(

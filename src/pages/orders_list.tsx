@@ -15,6 +15,7 @@ import { matchesQuery } from "../lib/search";
 import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -63,6 +64,7 @@ export default function OrdersList() {
     const { pathname } = useLocation();
     const [searchParams] = useSearchParams();
     const { hasPermission } = useUserProfile();
+    const canCreateOrder = hasPermission(PERMS.CREATE_ORDER);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
@@ -358,10 +360,16 @@ export default function OrdersList() {
                     <PageHeader
                         title="Órdenes"
                         subtitle="Consulta y gestiona las órdenes de laboratorio"
+                        // R5 (CEL-131-08): `POST /laboratory/orders/` requires
+                        // `lab:create_order`, which a pathologist does not
+                        // hold. The CTA used to render for everyone and only
+                        // failed at the end of the registration form.
                         extra={
-                            <CelumaButton type="primary" onClick={() => navigate("/orders/register")}>
-                                Nueva Orden
-                            </CelumaButton>
+                            canCreateOrder ? (
+                                <CelumaButton type="primary" onClick={() => navigate("/orders/register")}>
+                                    Nueva Orden
+                                </CelumaButton>
+                            ) : undefined
                         }
                     />
                     <Card style={cardStyle}>

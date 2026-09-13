@@ -22,8 +22,12 @@ type SampleStatusPickerProps = {
      * so the state cannot be changed. Mirrors the `disabled` prop
      * `AssigneesSection` / `LabelsSection` already expose, and behaves the same
      * way: the current state stays READABLE (it is part of the sample's
-     * identity), and only the trigger that opens the picker becomes an inert,
-     * visibly-disabled button.
+     * identity), and the trigger that opens the picker is not rendered.
+     *
+     * Amended by the manual-validation remediation (R5): this used to render
+     * an inert, visibly-disabled button. The product rule is now that a
+     * missing AUTHORIZATION hides the action outright, and only a temporary
+     * lifecycle or in-flight block leaves it visible and disabled.
      */
     disabled?: boolean;
 };
@@ -119,7 +123,19 @@ export default function SampleStatusPicker({ state, onChange, updating = false, 
                 icon={<FlagOutlined />}
                 color={tokens.primary}
                 title="Estado"
-                trigger={
+                // Céluma 1.3.1 manual-validation remediation (R5, CEL-131-08):
+                // the two reasons the trigger is unusable are now told apart.
+                //
+                //   `disabled`  the caller lacks `lab:update_sample` — an
+                //               AUTHORIZATION fact that will not change by
+                //               waiting, so the control is not offered at all.
+                //   `updating`  a change is in flight — a TRANSIENT fact, so
+                //               the control stays visible and disabled, which
+                //               is what tells the user their click landed.
+                //
+                // The state chip below is untouched in both cases: it is the
+                // sample's identity, readable with `lab:read`.
+                trigger={disabled ? undefined : (
                     <Dropdown
                         popupRender={() => popupContent}
                         trigger={["click"]}
@@ -130,7 +146,7 @@ export default function SampleStatusPicker({ state, onChange, updating = false, 
                     >
                         <RailConfigButton disabled={locked} />
                     </Dropdown>
-                }
+                )}
             />
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{

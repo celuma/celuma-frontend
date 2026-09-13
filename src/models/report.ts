@@ -401,9 +401,47 @@ export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
     // (report_metadata.py) and the report editor never renders them as
     // editable inputs (they carry no `is_custom`, so they are excluded from
     // `customBaseFields` the same way `patient_age` already is).
-    reception_date:         { is_visible: true,  label: "Fecha de recepción",                value: "" },
-    delivery_date:          { is_visible: true,  label: "Fecha de entrega de resultados",     value: "" },
+    reception_date:         { is_visible: true,  label: "Fecha de recepción",   value: "" },
+    delivery_date:          { is_visible: true,  label: "Fecha de entrega",      value: "" },
 };
+
+/**
+ * The keys of every PREDEFINED (non-custom) base field, derived from
+ * `DEFAULT_BASE_FIELDS` so the two can never disagree.
+ *
+ * **This is the single source of truth.** Céluma 1.3.1's manual-validation
+ * remediation (R3, CEL-131-04) found three independent hardcoded copies of
+ * this list — one in each report renderer and a label dictionary in the
+ * template configuration page — none of which learned about `reception_date`
+ * and `delivery_date` when Block D added them. The renderers' copies made
+ * both fields vanish from the rendered report and the official PDF entirely
+ * (they are neither "known predefined" nor `is_custom`, so the row filter
+ * dropped them); the label dictionary made the template UI show the raw
+ * snake_case keys to administrators.
+ *
+ * Anything that needs to know "is this key a predefined base field" must
+ * read this set. Do not re-declare it.
+ */
+export const PREDEFINED_BASE_KEYS: ReadonlySet<string> = new Set(
+    Object.keys(DEFAULT_BASE_FIELDS)
+);
+
+/**
+ * The canonical human label for a base field.
+ *
+ * The field's OWN `label` wins, so an administrator's customization is always
+ * respected; `DEFAULT_BASE_FIELDS` is the fallback for a predefined key whose
+ * stored label is missing or blank. The raw key is returned only for a key
+ * this build knows nothing about — never for a predefined one.
+ */
+export function resolveBaseFieldLabel(
+    key: string,
+    field?: { label?: string } | null
+): string {
+    const own = field?.label?.trim();
+    if (own) return own;
+    return DEFAULT_BASE_FIELDS[key]?.label ?? key;
+}
 
 /** The three official system metadata fields (Céluma 1.3.1, CEL-131-04).
  *  Server-owned: the backend resolves their values authoritatively and

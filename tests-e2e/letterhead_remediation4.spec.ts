@@ -373,7 +373,11 @@ test.describe("Fourth Remediation — Legacy letterhead and local printing", () 
         }).toPass({ timeout: 20_000 });
 
         // --- save and carry the report until APPROVED by API ---
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
+        // R7: the editor renders two "Guardar reporte" affordances (header and end
+        // of content) that share one handler, so the role query is ambiguous.
+        // `report_editor_r4_r7_remediation.test.tsx` owns the assertions about
+        // the two being one control; here, drive the header one.
+        await page.getByTestId("report-save-top").click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 20_000 });
 
         const orderDetail = await api<{ report_id: string | null }>(

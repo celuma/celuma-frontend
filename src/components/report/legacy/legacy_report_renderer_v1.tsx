@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem } from "../../../models/report";
-import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
+import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
 import {
     RICH_TEXT_CONTENT_CLASS,
@@ -45,8 +45,11 @@ const MARGIN_R_MM = 18;
 const HEADER_H_MM = 28;
 const FOOTER_H_MM = 20;
 
-// Keys that are pre-populated from order/patient data (not custom)
-const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
+// Keys that are pre-populated from order/patient data (not custom).
+// Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): imported from
+// `models/report` instead of re-declared here. The local literal had gone
+// stale against `DEFAULT_BASE_FIELDS` and was silently dropping
+// `reception_date` / `delivery_date` from every Legacy report and PDF.
 
 export type { SignerLookupEntry } from "./legacy_report_types";
 
@@ -255,7 +258,11 @@ const LegacyReportRendererV1 = forwardRef<LegacyReportRendererV1Ref, LegacyRepor
             if (!PREDEFINED_BASE_KEYS.has(k) && !isCustom) return null;
             return {
                 key: k,
-                label: v.label,
+                // R3: never print a raw snake_case key. The field's own label
+                // wins (administrator customization is respected);
+                // `DEFAULT_BASE_FIELDS` covers a predefined key whose stored
+                // label is missing or blank.
+                label: resolveBaseFieldLabel(k, v),
                 value: (contentData.base[k]?.value as string) ?? "",
             };
         })
