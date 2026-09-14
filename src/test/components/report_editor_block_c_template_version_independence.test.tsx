@@ -37,6 +37,17 @@ import type { StudyTypeReportDefaults } from "../../models/report_letterhead";
 vi.mock("../../hooks/use_user_profile");
 const mockedUseUserProfile = vi.mocked(useUserProfile);
 
+// This file pins V2 bootstrap and create-payload shape, not the rich-text
+// widget. The live template fixture uses a `richtext` section so the editor
+// can be told apart from a frozen version; mounting real Quill for that
+// label makes the first test in a loaded CI worker miss the 1s waitFor
+// window looking for preview letterhead text.
+vi.mock("../../components/ui/celuma_rich_text", () => ({
+    default: function CelumaRichTextStub() {
+        return null;
+    },
+}));
+
 const ORDER_ID = "00000000-0000-0000-0000-0000000000aa";
 const STUDY_TYPE_ID = "00000000-0000-0000-0000-0000000000bb";
 const TEMPLATE_ID = "00000000-0000-0000-0000-0000000000cc";
@@ -314,9 +325,16 @@ describe("ReportEditor — V2 bootstrap with no active template version (Block C
 
         renderNewReport();
 
+        // Bootstrap signal: the letterhead selector is in the React tree as
+        // soon as `report-defaults` resolves. The institution name is painted
+        // later, in VersionedReportRendererV2's pagination effect — and
+        // `document.body.textContent` is the wrong place to look for it,
+        // because it also concatenates every <style> tag (letterhead CSS,
+        // Quill skin) and produces the opaque CI diff this test used to emit.
         await waitFor(() => {
-            expect(document.body.textContent).toContain("Laboratorio Del Membrete");
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
+        expect(await screen.findByText("Laboratorio Del Membrete")).toBeTruthy();
         // The obsolete blocked state is gone, and so is the one it used to be
         // misreported as.
         expect(
