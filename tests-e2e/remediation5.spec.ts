@@ -376,19 +376,39 @@ test.describe("Fifth remedy — download from official PDF", () => {
         );
         const reportId = orderDetail.report_id!;
 
+        // Céluma 1.3.1 Block F — test-contract repair. `approve` used to be
+        // called with `lab.token` (the laboratory admin/superuser), which
+        // Block A (CEL-131-01) now refuses with 403: approval requires the
+        // `reviewer` role AND `reports:approve` AND an assignment on the
+        // order, and administrative privilege confers none of them. The
+        // sibling test above already approves as the reviewer; this one is
+        // brought to the same contract.
+        //
+        // `submit` stays the admin's — an authoring capability, outside the
+        // reviewer double lock. This test's subject is the billed-order
+        // (`billed_lock`) signing path, not who may approve.
+        const signerEmail = `e2e-r5-signer-${lab.suffix}@example.com`;
+        const signerPassword = "E2eReviewer!2026";
         const reviewer = await api<{ id: string }>(request, "POST", "/api/v1/users/", {
             data: {
-                email: `e2e-r5-signer-${lab.suffix}@example.com`,
+                email: signerEmail,
                 first_name: "E2E", last_name: "Signer", role: "reviewer",
-                password: "E2eReviewer!2026", branch_ids: [lab.branchId],
+                password: signerPassword, branch_ids: [lab.branchId],
             },
             token: lab.token,
         });
         await api(request, "PUT", `/api/v1/laboratory/orders/${order.id}/reviewers`, {
             data: { reviewer_ids: [reviewer.id] }, token: lab.token,
         });
+        const signerToken = (await api<{ access_token: string }>(
+            request, "POST", "/api/v1/auth/login",
+            { data: { username_or_email: signerEmail, password: signerPassword } }
+        )).access_token;
+
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
-        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, { token: lab.token, data: {} });
+        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, {
+            token: signerToken, data: {},
+        });
 
         // --- The missing condition: invoice the order and leave it with
         // pending balance, which is what activates `billed_lock` and what
@@ -413,8 +433,8 @@ test.describe("Fifth remedy — download from official PDF", () => {
         const reviewerContext = await page.context().browser()!.newContext({ acceptDownloads: true });
         const reviewerPage = await reviewerContext.newPage();
         await login(reviewerPage, {
-            email: `e2e-r5-signer-${lab.suffix}@example.com`,
-            password: "E2eReviewer!2026",
+            email: signerEmail,
+            password: signerPassword,
         });
         await reviewerPage.goto(`/reports/${reportId}`);
         await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" }))

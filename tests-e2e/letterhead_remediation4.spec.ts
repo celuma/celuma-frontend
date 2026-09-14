@@ -386,26 +386,45 @@ test.describe("Fourth Remediation — Legacy letterhead and local printing", () 
         const reportId = orderDetail.report_id!;
         expect(reportId).toBeTruthy();
 
+        // Céluma 1.3.1 Block F — test-contract repair. `approve` used to be
+        // called with `lab.token` (the laboratory admin/superuser). Block A
+        // (CEL-131-01) made approval a conjunction — the `reviewer` role AND
+        // `reports:approve` AND an assignment on this order — so the admin is
+        // now correctly refused with 403. The spec approves as the reviewer it
+        // assigns, which is the persona the product contract names.
+        //
+        // `submit` stays the admin's: it is an authoring capability, outside
+        // the reviewer double lock, and this spec's subject is the PDF /
+        // print lifecycle, not who may submit.
+        const reviewerEmail = `e2e-r4-reviewer-${lab.suffix}@example.com`;
+        const reviewerPassword = "E2eReviewer!2026";
         const reviewer = await api<{ id: string }>(request, "POST", "/api/v1/users/", {
             data: {
-                email: `e2e-r4-reviewer-${lab.suffix}@example.com`,
+                email: reviewerEmail,
                 first_name: "E2E", last_name: "Reviewer", role: "reviewer",
-                password: "E2eReviewer!2026", branch_ids: [lab.branchId],
+                password: reviewerPassword, branch_ids: [lab.branchId],
             },
             token: lab.token,
         });
         await api(request, "PUT", `/api/v1/laboratory/orders/${order.id}/reviewers`, {
             data: { reviewer_ids: [reviewer.id] }, token: lab.token,
         });
+        const reviewerToken = (await api<{ access_token: string }>(
+            request, "POST", "/api/v1/auth/login",
+            { data: { username_or_email: reviewerEmail, password: reviewerPassword } }
+        )).access_token;
+
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
-        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, { token: lab.token, data: {} });
+        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, {
+            token: reviewerToken, data: {},
+        });
 
         // --- sign and publish as reviewer ---
         const reviewerContext = await page.context().browser()!.newContext();
         const reviewerPage = await reviewerContext.newPage();
         await login(reviewerPage, {
-            email: `e2e-r4-reviewer-${lab.suffix}@example.com`,
-            password: "E2eReviewer!2026",
+            email: reviewerEmail,
+            password: reviewerPassword,
         });
         await reviewerPage.goto(`/reports/${reportId}`);
         await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" }))
