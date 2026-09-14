@@ -221,6 +221,7 @@ export async function getReviewerUsers(): Promise<LabUser[]> {
             id: string;
             full_name: string;
             email: string;
+            username?: string | null;
             avatar_url?: string | null;
         }>;
     }>("/v1/users/reviewers");
@@ -229,6 +230,15 @@ export async function getReviewerUsers(): Promise<LabUser[]> {
         name: r.full_name,
         email: r.email,
         avatar_url: r.avatar_url ?? null,
-        username: null,
+        // Céluma 1.3.1 manual-validation remediation (R6): this was hardcoded
+        // `null`, because `/v1/users/reviewers` did not expose a username. The
+        // reviewer picker then fell back to the email's local part, which for
+        // an address built from the person's name reads as the NAME — the
+        // "@María López instead of @mlopez" the release owner reported.
+        // `UserPickerDropdown` keeps that fallback for a user who genuinely
+        // has no username, which is the app's existing convention (the same
+        // expression `getLabUsers`' consumers rely on) and is possible because
+        // `app_user.username` is nullable.
+        username: r.username ?? null,
     }));
 }

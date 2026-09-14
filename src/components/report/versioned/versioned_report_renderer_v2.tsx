@@ -1,7 +1,12 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
-import { normalizeReportTemplateJSON, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
+import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
+import {
+    RICH_TEXT_CONTENT_CLASS,
+    RICH_TEXT_CONTENT_CSS,
+    normalizeRichTextForRender,
+} from "../rich_text_render";
 import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
@@ -51,10 +56,14 @@ const HEADER_BAND_MM = 24;
 const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
 
-// Same concept as Legacy's PREDEFINED_BASE_KEYS — duplicated deliberately
-// (see module docstring) rather than imported from legacy/, to keep V2
-// fully independent of the legacy module.
-const PREDEFINED_BASE_KEYS = new Set(["order_code", "patient", "study_type", "patient_age", "requesting_physician"]);
+// Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this used to
+// be a hardcoded literal, "duplicated deliberately … to keep V2 fully
+// independent of the legacy module". Independence from legacy/ is preserved —
+// the set now comes from `models/report`, which both renderers already import
+// — but the duplication was the bug: the literal never learned about
+// `reception_date` and `delivery_date`, so both official metadata fields were
+// dropped from every rendered report and every official PDF, silently, while
+// the backend was resolving and storing their values correctly.
 
 // Second post-Phase 2 remediation (UX) — Legacy parity. All fields consumed
 // by these helpers are optional/additive in the snapshot; defaults reproduce
@@ -628,6 +637,14 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     page.appendChild(footer);
                 }
 
+                // CEL-131-09: the rich-text content rule travels INSIDE the
+                // page, not in the document stylesheet, because
+                // `use_local_print.ts` clones page elements into a bare iframe
+                // and a document-level rule would not survive that copy.
+                const richTextStyle = document.createElement("style");
+                richTextStyle.textContent = RICH_TEXT_CONTENT_CSS;
+                page.appendChild(richTextStyle);
+
                 host.appendChild(page);
                 return { page, body };
             };
@@ -773,7 +790,11 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 if (!PREDEFINED_BASE_KEYS.has(k) && !isCustom) return null;
                 return {
                     key: k,
-                    label: v.label,
+                    // R3: never print a raw snake_case key. The field's own
+                    // label wins (administrator customization is respected);
+                    // `DEFAULT_BASE_FIELDS` covers a predefined key whose
+                    // stored label is missing or blank.
+                    label: resolveBaseFieldLabel(k, v),
                     value: (contentData.base[k]?.value as string) ?? "",
                 };
             })
@@ -884,9 +905,17 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             return (
                                 <div key={key} style={{ marginBottom: 14 }}>
                                     {sectionHeader}
+                                    {/* CEL-131-09: Quill 2 stores bullet AND numbered
+                                        lists as one <ol> with `data-list` items, which
+                                        only the editor's own stylesheet renders
+                                        correctly. `normalizeRichTextForRender` turns
+                                        that into semantic <ul>/<ol> so this surface,
+                                        the official PDF and the local print copy all
+                                        agree with the editor. */}
                                     <div
+                                        className={RICH_TEXT_CONTENT_CLASS}
                                         style={{ fontSize: "10pt", lineHeight: 1.5 }}
-                                        dangerouslySetInnerHTML={{ __html: rawContent }}
+                                        dangerouslySetInnerHTML={{ __html: normalizeRichTextForRender(rawContent) }}
                                     />
                                 </div>
                             );

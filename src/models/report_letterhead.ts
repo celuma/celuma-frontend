@@ -131,9 +131,16 @@ export interface ReportLetterheadLogoUploadResponse {
 
 export type LetterheadResolutionSource = "EXPLICIT" | "TEMPLATE_PREFERRED" | "TENANT_DEFAULT";
 
+/** Céluma 1.3.1 Block C (CEL-131-05) removed `"NO_ACTIVE_TEMPLATE_VERSION"`.
+ *  The backend was the only producer and no longer returns it: a V2 report
+ *  needs a clinical template and a resolvable letterhead, and the
+ *  administrative template-version lifecycle is not part of authoring one.
+ *  The editor defends against an unrecognised reason anyway (see
+ *  `V2_BLOCKED_COPY` / `v2BlockedCopy` in report_editor.tsx), so a stale
+ *  backend during a rolling deploy degrades to a generic message instead of
+ *  crashing on a missing copy entry. */
 export type V2BlockedReason =
     | "NO_TEMPLATE"
-    | "NO_ACTIVE_TEMPLATE_VERSION"
     | "NO_LETTERHEAD"
     | "LETTERHEAD_MISCONFIGURED";
 
@@ -146,6 +153,9 @@ export type V2BlockedReason =
  *  (issue F). */
 export interface StudyTypeReportDefaults {
     template_id: string | null;
+    /** Céluma 1.3.1 Block C: diagnostic/provenance only — which
+     *  `ReportTemplateVersion` is ACTIVE, if any. NOT a precondition for
+     *  authoring a V2 report. The report editor must not read it. */
     active_template_version_id: string | null;
     letterhead_version_id: string | null;
     letterhead_name: string | null;

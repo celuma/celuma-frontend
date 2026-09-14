@@ -21,6 +21,8 @@ import {
     SampleTypeBadge 
 } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -76,6 +78,8 @@ export default function SamplesList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const { hasPermission } = useUserProfile();
+    const canCreateSample = hasPermission(PERMS.CREATE_SAMPLE);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     type Row = SamplesListResponse["samples"][number] & { patient_name?: string; patient_id?: string; patient_code?: string; requested_by?: string | null };
@@ -336,9 +340,16 @@ export default function SamplesList() {
                         title="Muestras"
                         subtitle="Consulta y gestiona las muestras procesadas"
                         extra={
-                            <CelumaButton type="primary" onClick={() => navigate("/samples/register")}>
-                                Registrar Muestra
-                            </CelumaButton>
+                            // CEL-131-08: the action is offered only to a user whose
+                            // effective permissions actually allow it. `/samples/register`
+                            // is itself gated on `lab:create_sample`, so before this a
+                            // pathologist (who lost the permission) was shown a button
+                            // that only ever led to the access-denied screen.
+                            canCreateSample ? (
+                                <CelumaButton type="primary" onClick={() => navigate("/samples/register")}>
+                                    Registrar Muestra
+                                </CelumaButton>
+                            ) : undefined
                         }
                     />
                     <Card style={cardStyle}>

@@ -119,6 +119,18 @@ export interface ReportTemplateListItem {
 /** Template returned from GET /api/v1/reports/templates/{id} (detail) */
 export interface ReportTemplateDetail extends ReportTemplateListItem {
     template_json: ReportTemplateJSON;
+    /**
+     * Céluma 1.3.1 Block C (C-8): opaque optimistic-concurrency token for the
+     * `template_json` in THIS response. Echo it back verbatim on create, with
+     * `template_id`.
+     *
+     * Never recompute it here. It is a canonical server-side hash of the stored
+     * column, and the editor's own template is deliberately not byte-equivalent
+     * to that column (`normalizeReportTemplateJSON` rewrites the order arrays
+     * and content is merged into the section objects), so any client-side
+     * derivation would produce false conflicts.
+     */
+    template_hash: string;
     created_by: string;
 }
 
@@ -246,6 +258,29 @@ export interface ReportEnvelope {
      * reads `report.schema_version` (inside the JSON body), not this one.
      */
     schema_version?: number | null;
+    /**
+     * Céluma 1.3.1 Block C (CEL-131-05): on CREATE, the clinical
+     * `ReportTemplate` this V2 report is built from — the current V2 selector.
+     * The backend freezes that template's `template_json` into the report's
+     * own `rendering_snapshot`, so no `ReportTemplateVersion` has to exist.
+     * Write-only and create-only: it is never returned by a read and is
+     * ignored on `new_version`.
+     */
+    template_id?: string | null;
+    /**
+     * Céluma 1.3.1 Block C (C-8): the `template_hash` that arrived with the
+     * `template_json` this report was authored against, echoed back unchanged.
+     * Required by the backend whenever `template_id` is the selector; it
+     * answers 409 if the template has changed since. Create-only, like
+     * `template_id`.
+     */
+    template_hash?: string | null;
+    /**
+     * Provenance: which published `ReportTemplateVersion` this report was
+     * built from, when one was explicitly selected. Céluma 1.3.1 Block C: null
+     * for reports created through `template_id`, which read no version — an
+     * honest absence, not missing data.
+     */
     template_version_id?: string | null;
     /** Post-Phase-2 remediation: administrative twin of `template_version_id`
      *  — which ReportLetterheadVersion produced this version's `presentation`
@@ -361,15 +396,77 @@ export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
     study_type:             { is_visible: true,  label: "Tipo de estudio",      value: "" },
     patient_age:            { is_visible: true,  label: "Edad",                 value: "" },
     requesting_physician:   { is_visible: true,  label: "Médico solicitante",   value: "" },
+    // Céluma 1.3.1 Block D (CEL-131-04): server-resolved, like the fields
+    // above — the backend overwrites these on every save
+    // (report_metadata.py) and the report editor never renders them as
+    // editable inputs (they carry no `is_custom`, so they are excluded from
+    // `customBaseFields` the same way `patient_age` already is).
+    reception_date:         { is_visible: true,  label: "Fecha de recepción",   value: "" },
+    delivery_date:          { is_visible: true,  label: "Fecha de entrega",      value: "" },
 };
+
+/**
+ * The keys of every PREDEFINED (non-custom) base field, derived from
+ * `DEFAULT_BASE_FIELDS` so the two can never disagree.
+ *
+ * **This is the single source of truth.** Céluma 1.3.1's manual-validation
+ * remediation (R3, CEL-131-04) found three independent hardcoded copies of
+ * this list — one in each report renderer and a label dictionary in the
+ * template configuration page — none of which learned about `reception_date`
+ * and `delivery_date` when Block D added them. The renderers' copies made
+ * both fields vanish from the rendered report and the official PDF entirely
+ * (they are neither "known predefined" nor `is_custom`, so the row filter
+ * dropped them); the label dictionary made the template UI show the raw
+ * snake_case keys to administrators.
+ *
+ * Anything that needs to know "is this key a predefined base field" must
+ * read this set. Do not re-declare it.
+ */
+export const PREDEFINED_BASE_KEYS: ReadonlySet<string> = new Set(
+    Object.keys(DEFAULT_BASE_FIELDS)
+);
+
+/**
+ * The canonical human label for a base field.
+ *
+ * The field's OWN `label` wins, so an administrator's customization is always
+ * respected; `DEFAULT_BASE_FIELDS` is the fallback for a predefined key whose
+ * stored label is missing or blank. The raw key is returned only for a key
+ * this build knows nothing about — never for a predefined one.
+ */
+export function resolveBaseFieldLabel(
+    key: string,
+    field?: { label?: string } | null
+): string {
+    const own = field?.label?.trim();
+    if (own) return own;
+    return DEFAULT_BASE_FIELDS[key]?.label ?? key;
+}
+
+/** The three official system metadata fields (Céluma 1.3.1, CEL-131-04).
+ *  Server-owned: the backend resolves their values authoritatively and
+ *  guarantees their presence whenever the report's effective template
+ *  declares them. Mirrors `report_metadata.py`'s keys of the same names. */
+export const SYSTEM_METADATA_BASE_FIELDS = [
+    "requesting_physician",
+    "reception_date",
+    "delivery_date",
+] as const;
 
 /**
  * Predefined base fields that are new additions absent from older saved templates.
  * When merging defaults into an existing template, these keys are added with
  * `is_visible: false` so they don't silently appear in reports created before
  * the field existed.
+ *
+ * **Intentionally empty since Céluma 1.3.1 (CEL-131-04).** The three system
+ * metadata fields were the only members; the release owner decided they are
+ * visible by default everywhere — in new templates (above) and in existing
+ * ones, which `v1_3_1` §3b migrates to visible. The mechanism is kept for a
+ * future base field that genuinely should arrive hidden; nothing qualifies
+ * today.
  */
-export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set(["requesting_physician"]);
+export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set<string>([]);
 
 /** Predefined sections with empty content (template skeleton).
  *  images is the 3rd section by default. */

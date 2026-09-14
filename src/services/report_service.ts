@@ -56,6 +56,26 @@ function parseFastApiErrorDetail(bodyText: string): string | undefined {
 // Report CRUD
 // ---------------------------------------------------------------------------
 
+/**
+ * Céluma 1.3.1 Block C (C-8): raised when the backend refuses to create a
+ * report because the clinical template changed while it was being authored.
+ *
+ * Typed rather than a bare `Error` so the editor can say what actually happened
+ * — the author needs to know their work is intact and that reloading is the
+ * remedy, not that "something returned 409".
+ */
+export class StaleReportTemplateError extends Error {
+    readonly detail: string | undefined;
+    constructor(detail?: string) {
+        super(
+            detail ||
+                "La plantilla de este reporte cambió mientras lo editabas. Vuelve a cargar el reporte antes de guardar.",
+        );
+        this.name = "StaleReportTemplateError";
+        this.detail = detail;
+    }
+}
+
 export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope> {
     const res = await fetch(`${base}/v1/reports/`, {
         method: "POST",
@@ -64,6 +84,13 @@ export async function saveReport(report: ReportEnvelope): Promise<ReportEnvelope
     });
     if (!res.ok) {
         const errText = await res.text();
+        // C-8: a 409 on a create that carried `template_hash` is the
+        // stale-template conflict. Surfaced as its own type so the editor does
+        // not have to parse a message, and so it can never be confused with a
+        // generic save failure and silently retried.
+        if (res.status === 409 && report.template_hash) {
+            throw new StaleReportTemplateError(parseFastApiErrorDetail(errText));
+        }
         throw new Error(`Error al guardar reporte: ${res.status} - ${errText}`);
     }
     return await res.json();
@@ -312,6 +339,68 @@ export async function approveReport(reportId: string, changelog?: string): Promi
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al aprobar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+/**
+ * Céluma 1.3.1 Block A (A4) — the narrow reviewer presentation route.
+ *
+ * The reviewer role deliberately has no `reports:edit`, so a reviewer cannot
+ * save through the normal content path (`POST /{id}/new_version`). This
+ * endpoint is the only way they can change the three presentation settings
+ * that affect the final clinical document, and it accepts nothing else.
+ */
+export interface ReportPresentationUpdate {
+    show_signature_section?: boolean;
+    require_digital_signature?: boolean;
+    letterhead_version_id?: string;
+}
+
+export interface ReportPresentationResponse {
+    id: string;
+    status: string;
+    show_signature_section: boolean;
+    require_digital_signature: boolean;
+    letterhead_version_id: string | null;
+}
+
+export async function updateReportPresentation(
+    reportId: string,
+    update: ReportPresentationUpdate,
+): Promise<ReportPresentationResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/presentation`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(update),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(
+            `Error al actualizar la presentación del reporte: ${res.status} - ${errText}`,
+        );
+    }
+    return await res.json();
+}
+
+/**
+ * Céluma 1.3.1 Block B (CEL-131-03) — reopen an APPROVED report that has not
+ * been signed, returning it to DRAFT.
+ *
+ * Authorized for the assigned reviewer and for administrators
+ * (`reports:manage_templates`); the backend is authoritative and refuses a
+ * signed, published or retracted report outright. See
+ * `canReopenApprovedReport` in `lib/rbac.ts` for the UX mirror.
+ */
+export async function reopenReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/reopen`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ changelog }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error al reabrir reporte: ${res.status} - ${errText}`);
     }
     return await res.json();
 }

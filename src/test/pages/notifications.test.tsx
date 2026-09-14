@@ -28,6 +28,9 @@ vi.mocked(useUserProfile).mockReturnValue({
     canManageTenant: false,
     hasPermission: () => true,
     hasRole: () => false,
+    canActAsReviewer: () => false,
+    canReopenApprovedReport: () => false,
+    isAssignedReviewer: () => false,
 } as unknown as ReturnType<typeof useUserProfile>);
 
 vi.mock("../../providers/notification_context", async (importOriginal) => {

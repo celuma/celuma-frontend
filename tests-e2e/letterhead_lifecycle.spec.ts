@@ -12,11 +12,13 @@
  * setInputFiles() -> "save changes" (create+active atomically, without step
  * of "publish"/"activate" separate) -> check default (menu
  * secondary) -> associate to 2 templates -> new report -> confirm
- * V2-from-start with "letterhead" selector -> write clinical text
- * -> change letterhead -> confirm that the text was not altered, only the
- * branding -> save -> approve -> "sign and publish" (action single,
- * as the reviewer — the admin does not have the reviewer role) -> download PDF
- * official -> reopen and confirm that the persisted snapshot is immutable.
+ * V2-from-start -> write clinical text -> confirm the admin sees the
+ * letterhead READ-ONLY (R5: the selector is reviewer-owned) -> save ->
+ * submit as the admin -> approve AS THE ASSIGNED REVIEWER (Block A /
+ * CEL-131-01: approval is reviewer-only and administrative privilege does
+ * not confer it) -> "sign and publish" (single action, as the reviewer)
+ * -> download official PDF -> reopen and confirm the persisted snapshot is
+ * immutable.
  *
  * Secondary fixture setup (second template/study type, the order itself)
  * is done via direct API calls for speed — the same backend endpoints
@@ -279,25 +281,45 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         await page.getByLabel("Nombre del reporte").fill(clinicalText);
         await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
 
-        // This Select's search input renders readonly (no free-text filter),
-        // and Ant Design's virtual list keeps a hidden measurement copy of
-        // each option row, so Playwright's visibility check on the option
-        // element itself is unreliable — drive it by keyboard instead,
-        // gated only on the dropdown panel (not the individual row) being
-        // open.
-        await page.locator(".ant-select-selector").first().click();
-        await page.locator(".ant-select-dropdown").first().waitFor({ state: "visible" });
-        await page.keyboard.press("ArrowDown");
-        await page.keyboard.press("Enter");
+        // Céluma 1.3.1 manual-validation remediation (R5, CEL-131-08): this
+        // step used to drive the letterhead Select from THIS session, which
+        // is the laboratory's admin/superuser. That user has never had
+        // clinical reviewer authority (Block A: administrative privilege
+        // never confers it), and the editor now HIDES the selector from
+        // someone who cannot use it rather than rendering it greyed out — so
+        // there is no Select here to drive any more.
+        //
+        // What the admin correctly still sees is the letterhead's NAME,
+        // read-only, plus the provenance note (Block A's A6: non-reviewers
+        // keep the read-only rendering and lose only the editable control).
+        await expect(page.getByTestId("letterhead-readonly")).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId("letterhead-select")).toHaveCount(0);
+        // The read-only block names the letterhead (its logical NAME, §4.3 —
+        // never a version number) and says whose decision it is.
+        await expect(page.getByTestId("letterhead-readonly")).toContainText("Membrete");
+        await expect(page.getByTestId("letterhead-frozen-note")).toContainText(
+            "El membrete lo selecciona el revisor asignado.",
+        );
+        // The rendered preview still carries the resolved branding, so the
+        // admin is not being shown less INFORMATION — only fewer controls.
+        await expect(page.getByText(`E2E Lab ${suffix}`, { exact: false })).toBeVisible({ timeout: 10_000 });
 
-        // Branding changed, clinical content did not — this is the
-        // literal regression check for bug 3.
-        await expect(page.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible({ timeout: 10_000 });
+        // Bug 3 — "switching the letterhead must not wipe clinical content" —
+        // is a REVIEWER action and is covered at the unit level with the
+        // reviewer persona, by "changing the letterhead preserves clinical
+        // content and updates the preview" in
+        // src/test/components/report_editor_remediation5.test.tsx. What this
+        // live flow keeps asserting is that the content the admin typed
+        // survives to the save below.
         await expect(page.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
 
         // Save the report — this both exercises the real save path and
         // gives us a persisted report to generate/download a PDF for.
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
+        // R7: the editor renders two "Guardar reporte" affordances (header and end
+        // of content) that share one handler, so the role query is ambiguous.
+        // `report_editor_r4_r7_remediation.test.tsx` owns the assertions about
+        // the two being one control; here, drive the header one.
+        await page.getByTestId("report-save-top").click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 15_000 });
 
         // ---- Fetch the persisted report id and move it to APPROVED via
@@ -313,15 +335,31 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
 
         // Submitting for review requires at least one assigned reviewer
         // with the "reviewer" role — set that up via the admin API, then
-        // submit + approve (the admin's superuser role can approve
-        // without being the assigned reviewer).
+        // submit as the admin and approve AS THE REVIEWER.
+        //
+        // Céluma 1.3.1 Block F — test-contract repair. This block used to
+        // approve with the admin's token, on the pre-1.3.1 assumption that
+        // "the admin's superuser role can approve without being the assigned
+        // reviewer". Block A (CEL-131-01) removed that: approval is a
+        // conjunction — the `reviewer` role AND `reports:approve` AND an
+        // assignment on the order — and administrative privilege never
+        // confers clinical reviewer authority. The admin's token now gets a
+        // deliberate 403 here, so the spec authenticates as the reviewer it
+        // has just assigned. Nothing about the product changed; the test was
+        // asserting a contract the release no longer has.
+        //
+        // Submission stays the admin's: `reports:submit` is an authoring
+        // capability the admin legitimately holds, and it is not part of the
+        // reviewer double lock.
+        const reviewerEmail = `e2e-reviewer-${suffix}@example.com`;
+        const reviewerPassword = "E2eReviewer!2026";
         const reviewer = await apiJson<{ id: string }>(request, "POST", "/api/v1/users/", {
             data: {
-                email: `e2e-reviewer-${suffix}@example.com`,
+                email: reviewerEmail,
                 first_name: "E2E",
                 last_name: "Reviewer",
                 role: "reviewer",
-                password: "E2eReviewer!2026",
+                password: reviewerPassword,
                 branch_ids: [registration.branch_id],
             },
             token,
@@ -330,8 +368,17 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
             data: { reviewer_ids: [reviewer.id] },
             token,
         });
+        const reviewerLogin = await apiJson<{ access_token: string }>(
+            request, "POST", "/api/v1/auth/login",
+            { data: { username_or_email: reviewerEmail, password: reviewerPassword } }
+        );
+        const reviewerToken = reviewerLogin.access_token;
+
         await apiJson(request, "POST", `/api/v1/reports/${reportId}/submit`, { token, data: {} });
-        await apiJson(request, "POST", `/api/v1/reports/${reportId}/approve`, { token, data: {} });
+        await apiJson(request, "POST", `/api/v1/reports/${reportId}/approve`, {
+            token: reviewerToken,
+            data: {},
+        });
 
         // ---- real UI, as the reviewer (only role with reports:sign) —
         // Second post-Phase 2 remediation (UX): "Firmar y publicar" is the
@@ -342,8 +389,8 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         const reviewerContext = await page.context().browser()!.newContext();
         const reviewerPage = await reviewerContext.newPage();
         await reviewerPage.goto("/");
-        await reviewerPage.getByRole("textbox", { name: "Usuario o email" }).fill(`e2e-reviewer-${suffix}@example.com`);
-        await reviewerPage.getByRole("textbox", { name: "Contraseña" }).fill("E2eReviewer!2026");
+        await reviewerPage.getByRole("textbox", { name: "Usuario o email" }).fill(reviewerEmail);
+        await reviewerPage.getByRole("textbox", { name: "Contraseña" }).fill(reviewerPassword);
         await reviewerPage.getByRole("button", { name: "Iniciar Sesión" }).click();
         await expect(reviewerPage.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 
@@ -352,11 +399,44 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         // The persisted snapshot must still show the branding of the
         // letterhead that was active when the report was saved, and the
         // clinical text must still be intact.
-        await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible();
+        //
+        // Céluma 1.3.1 Block F — test-contract repair. This asserted
+        // `E2E Lab Dos`, the SECOND letterhead, which was correct only while
+        // this flow still had the admin switch the editor's selector before
+        // saving. The R5 remediation removed that step — the selector is
+        // reviewer-owned and is no longer rendered for the admin at all — so
+        // the report is saved with the letterhead the resolver picks on its
+        // own, which is the one marked **default** above: `E2E Lab`. The
+        // assertion's subject is unchanged (the snapshot persisted at save
+        // time survives signing and reload); only the letterhead it is
+        // expected to carry follows the current contract. The failure was
+        // masked until now because the admin's 403 on `approve` aborted the
+        // test before this line.
+        await expect(reviewerPage.getByText(`E2E Lab ${suffix}`, { exact: false })).toBeVisible();
+        // ...and specifically NOT the non-default second letterhead: nothing
+        // in this flow ever selected it.
+        await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toHaveCount(0);
         await expect(reviewerPage.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
-        // Once persisted, the report is locked to its saved letterhead —
-        // the "letterhead" selector must not reappear on an existing report.
-        await expect(reviewerPage.getByText("Membrete", { exact: true })).toHaveCount(0);
+        // Once persisted and APPROVED, the report is locked to its saved
+        // letterhead.
+        //
+        // Céluma 1.3.1 Block F — test-contract repair. This asserted that the
+        // word "Membrete" does not render at all, which stopped being the
+        // contract with Block A's A4/A5 and the R1/R5 remediation: the
+        // letterhead panel is REVIEWER-OWNED, and this page is being read by
+        // the assigned reviewer. They keep the panel — their authority is
+        // real — and it is the STATE that makes it inert: in APPROVED the
+        // select renders disabled with the frozen note. Asserting the
+        // panel's absence would now assert the opposite of the release's
+        // contract, so the check is expressed as what "locked" actually
+        // means. (Same contract asserted from the reviewer's side in
+        // remediation5.spec.ts.) Masked until now by the two earlier
+        // failures in this test.
+        await expect(reviewerPage.getByTestId("letterhead-panel")).toBeVisible();
+        await expect(reviewerPage.getByTestId("letterhead-select").locator(".ant-select"))
+            .toHaveClass(/ant-select-disabled/);
+        await expect(reviewerPage.getByTestId("letterhead-frozen-note"))
+            .toContainText("El membrete quedó fijado al aprobar el reporte.");
         // Fourth remedy (Observation 1): local printing exists another
         // once, but in APPROVED it is offered as "Print draft" — never
         // as "local copy" (this label is reserved for PUBLISHED/RETRACTED) y
@@ -392,7 +472,7 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         // snapshot (schema_version, template, presentation) must be
         // byte-identical, proving the saved version is immutable. ----
         await reviewerPage.reload();
-        await expect(reviewerPage.getByText(`E2E Lab Dos ${suffix}`, { exact: false })).toBeVisible({ timeout: 15_000 });
+        await expect(reviewerPage.getByText(`E2E Lab ${suffix}`, { exact: false })).toBeVisible({ timeout: 15_000 });
         await expect(reviewerPage.getByLabel("Nombre del reporte")).toHaveValue(clinicalText);
         await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" })).toBeVisible();
 

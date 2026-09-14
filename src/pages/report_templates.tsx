@@ -36,10 +36,18 @@ import type {
     TemplateFieldType,
     TemplateOrderInput,
 } from "../models/report";
-import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, LEGACY_PREDEFINED_BASE_HIDDEN, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
+import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, LEGACY_PREDEFINED_BASE_HIDDEN, resolveBaseFieldLabel, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
 
 const { Text } = Typography;
+// Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this list was
+// already derived from `DEFAULT_BASE_FIELDS`, but the LABELS next to it were a
+// separate hardcoded dictionary that never learned about `reception_date` and
+// `delivery_date`. With no entry for them, the row renderer fell back to
+// `?? item.key` and printed the raw snake_case keys to administrators — the
+// symptom the release owner reported. The dictionary is gone; labels now come
+// from `resolveBaseFieldLabel`, which reads the template's own label first (so
+// a customized one is respected) and `DEFAULT_BASE_FIELDS` second.
 const PREDEFINED_BASE_KEYS = Object.keys(DEFAULT_BASE_FIELDS);
 const PREDEFINED_SECTION_KEYS = Object.keys(DEFAULT_SECTIONS);
 
@@ -56,14 +64,6 @@ const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "richtext", label: "Texto enriquecido" },
     { value: "table",    label: "Tabla" },
 ];
-
-const BASE_FIELD_LABELS: Record<string, string> = {
-    order_code:           "Código de orden",
-    patient:              "Paciente",
-    study_type:           "Tipo de estudio",
-    patient_age:          "Edad",
-    requesting_physician: "Médico solicitante",
-};
 
 const SECTION_LABELS: Record<string, string> = {
     section_macroscopic: "Macroscópica",
@@ -331,7 +331,9 @@ function DraggableList({
                 const custom = cfg as ReportBaseFieldCustom & ReportSectionTextCustom;
                 const predefined = isPredefined(item.key);
                 const label = predefined
-                    ? (isSection ? SECTION_LABELS[item.key] : BASE_FIELD_LABELS[item.key]) ?? item.key
+                    ? (isSection
+                        ? (SECTION_LABELS[item.key] ?? item.key)
+                        : resolveBaseFieldLabel(item.key, cfg as { label?: string }))
                     : custom.label;
                 const cfgType = (cfg as { type?: TemplateFieldType }).type;
                 const type: TemplateFieldType | undefined = isSection ? cfgType : (!predefined ? custom.type : undefined);

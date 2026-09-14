@@ -183,27 +183,77 @@ async function chooseLetterhead(page: Page, nameFragment: string | RegExp) {
 }
 
 // ===========================================================================
-// Observation A — the letterhead can change while the report remains DRAFT
+// The letterhead in DRAFT — rewritten for the CURRENT contract
 // ===========================================================================
+//
+// This block began as remediation 5's Observation A: "the letterhead can
+// change while the report remains DRAFT", driven by the report's AUTHOR.
+// Two later decisions moved that boundary, and this spec had not caught up —
+// it was already failing on the committed branch before the manual-validation
+// remediation touched it.
+//
+//   Block A (A4/A5) — the letterhead and the signature toggles decide what
+//   the final clinical document asserts, so they belong to the ASSIGNED
+//   REVIEWER, not to whoever writes the report. The author's window closed.
+//
+//   The manual-validation remediation —
+//     R1 (CEL-131-02): the reviewer's window is DRAFT **and** IN_REVIEW.
+//                      Block A had admitted IN_REVIEW only, which made the
+//                      reviewer wait for a submission they had no part in.
+//     R5 (CEL-131-08): a user with no reviewer authority does not see the
+//                      selector at all, instead of seeing it greyed out.
+//
+// Everything remediation 5 actually guaranteed is still asserted below — the
+// letterhead is always NAMED and never hidden, logical names rather than
+// version numbers, a change replaces `presentation` only and never rebuilds
+// clinical content, and it freezes when the report is approved. What changed
+// is WHO does it and WHEN.
 
-test.describe("Fifth remedy — editable letterhead in DRAFT", () => {
-    test("save, exit, reopen, write, change letterhead, save and freeze on review", async ({ page, request }) => {
+test.describe("Letterhead in DRAFT — reviewer-owned (Block A + R1/R5)", () => {
+    test("the author sees it read-only; the assigned reviewer changes it in DRAFT, and approval freezes it", async ({ page, request }) => {
         const lab = await createLab(request, "draft");
         const { generalId, nephroId } = await createTwoLetterheads(request, lab);
         expect(generalId).toBeTruthy();
         expect(nephroId).toBeTruthy();
         const { studyTypeId } = await createClinicalSetup(request, lab);
         const order = await createOrder(request, lab, studyTypeId);
-        await login(page, lab);
 
-        // --- 3/4. create the report and save it as DRAFT ---
+        // The reviewer exists and is assigned to the ORDER before any report
+        // does — `report_review.report_id` is nullable precisely for this, and
+        // it is what gives them authority over the DRAFT that follows.
+        const reviewerEmail = `e2e-r5-reviewer-${lab.suffix}@example.com`;
+        const reviewerPassword = "E2eReviewer!2026";
+        const reviewer = await api<{ id: string }>(request, "POST", "/api/v1/users/", {
+            data: {
+                email: reviewerEmail,
+                first_name: "E2E", last_name: "Reviewer", role: "reviewer",
+                password: reviewerPassword, branch_ids: [lab.branchId],
+            },
+            token: lab.token,
+        });
+        await api(request, "PUT", `/api/v1/laboratory/orders/${order.id}/reviewers`, {
+            data: { reviewer_ids: [reviewer.id] }, token: lab.token,
+        });
+
+        // --- The author creates and saves the report as DRAFT ---
+        await login(page, lab);
         await page.goto(`/reports/editor?orderId=${order.id}`);
         await expect(page.getByLabel("Nombre del reporte")).toBeVisible({ timeout: 20_000 });
         await page.getByLabel("Nombre del reporte").fill(`Reporte R5 ${lab.suffix}`);
         await expect(page.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
 
-        // --- 5. Exit the editor ---
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
+        // R5: the author is not a reviewer on this order, so there is no
+        // selector — but the letterhead is still NAMED, which is remediation
+        // 5's §4.2 ("never hide the field") under the new ownership.
+        await expect(page.getByTestId("letterhead-select")).toHaveCount(0);
+        await expect(page.getByTestId("letterhead-readonly")).toBeVisible();
+        await expect(page.getByTestId("letterhead-readonly")).toContainText("Membrete general");
+        await expect(page.getByTestId("letterhead-frozen-note"))
+            .toContainText("El membrete lo selecciona el revisor asignado.");
+
+        const diagnosis = `Carcinoma ductal ${lab.suffix}`;
+        await page.getByLabel("Diagnóstico").fill(diagnosis);
+        await page.getByTestId("report-save-top").click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 20_000 });
 
         const orderDetail = await api<{ report_id: string | null }>(
@@ -212,64 +262,71 @@ test.describe("Fifth remedy — editable letterhead in DRAFT", () => {
         const reportId = orderDetail.report_id!;
         expect(reportId).toBeTruthy();
 
-        // --- 6/7. Reopen it and confirm that the selector remains editable ---
-        // (this is the heart of Observation A: before it disappeared)
-        await page.goto(`/reports/${reportId}`);
-        await expect(page.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
-        await expect(letterheadSelect(page)).not.toHaveClass(/ant-select-disabled/);
-        await expect(page.getByTestId("letterhead-panel")).toContainText("Membrete general");
+        // --- The assigned reviewer opens the same DRAFT ---
+        const reviewerContext = await page.context().browser()!.newContext();
+        const reviewerPage = await reviewerContext.newPage();
+        await login(reviewerPage, { email: reviewerEmail, password: reviewerPassword });
+        await reviewerPage.goto(`/reports/${reportId}`);
+        await expect(reviewerPage.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
 
-        // --- 8. Write clinical content ---
-        const diagnosis = `Carcinoma ductal ${lab.suffix}`;
-        await page.getByLabel("Diagnóstico").fill(diagnosis);
+        // R1, live: the selector is ENABLED while the report is a DRAFT.
+        await expect(letterheadSelect(reviewerPage)).not.toHaveClass(/ant-select-disabled/);
+        await expect(reviewerPage.getByTestId("letterhead-panel")).toContainText("Membrete general");
 
-        // --- 9. Change the letterhead ---
-        await chooseLetterhead(page, "nefropatologia");
-        await expect(page.getByTestId("letterhead-dirty-note")).toBeVisible({ timeout: 10_000 });
+        // R1's security invariant, live: a presentation window is not an
+        // approval window. Neither action is offered from DRAFT.
+        await expect(reviewerPage.getByRole("button", { name: "Aprobar" })).toHaveCount(0);
+        await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" })).toHaveCount(0);
 
-        // --- 10. The content remains intact and the preview has already changed ---
-        await expect(page.getByLabel("Diagnóstico")).toHaveValue(diagnosis);
-        await expect(page.locator(".report-page, [style*='8.5in']").first())
-            .toContainText("Membrete nefropatologia", { timeout: 15_000 });
+        // --- The reviewer changes the letterhead and saves ---
+        await chooseLetterhead(reviewerPage, "nefropatologia");
+        await expect(reviewerPage.getByTestId("letterhead-dirty-note")).toBeVisible({ timeout: 10_000 });
+        // The reviewer's save is the narrow presentation route — they hold no
+        // `reports:edit` — so the button says so.
+        await reviewerPage.getByTestId("report-save-top").click();
+        // The editor clears `letterheadDirty` only after the PATCH resolves,
+        // so the note disappearing IS the save having landed — a durable
+        // signal, unlike the success toast, which auto-dismisses.
+        await expect(reviewerPage.getByTestId("letterhead-dirty-note"))
+            .toHaveCount(0, { timeout: 15_000 });
 
-        // --- 11. save ---
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
-        await expect(page).toHaveURL(/\/orders\//, { timeout: 20_000 });
-
-        // --- 12. The persisted snapshot carries the new letterhead, and only that ---
+        // --- It persisted, and ONLY the presentation moved ---
         const saved = await api<{
-            letterhead_version_id: string | null;
-            template_version_id: string | null;
-            report: { base: Record<string, { value?: string }>; rendering_snapshot: { presentation: { header: { institution_name: string } }; template: unknown } };
+            report: {
+                base: Record<string, { value?: string }>;
+                rendering_snapshot: { presentation: { header: { institution_name: string } } };
+            };
         }>(request, "GET", `/api/v1/reports/${reportId}`, { token: lab.token });
-
         expect(saved.report.rendering_snapshot.presentation.header.institution_name)
             .toContain("Membrete nefropatologia");
+        // The author's clinical content is untouched by the reviewer's change.
         expect(saved.report.base.diagnosis.value).toBe(diagnosis);
-        expect(saved.template_version_id).toBeTruthy();
 
-        // --- 13. Send to review ---
-        const reviewer = await api<{ id: string }>(request, "POST", "/api/v1/users/", {
-            data: {
-                email: `e2e-r5-reviewer-${lab.suffix}@example.com`,
-                first_name: "E2E", last_name: "Reviewer", role: "reviewer",
-                password: "E2eReviewer!2026", branch_ids: [lab.branchId],
-            },
-            token: lab.token,
-        });
-        await api(request, "PUT", `/api/v1/laboratory/orders/${order.id}/reviewers`, {
-            data: { reviewer_ids: [reviewer.id] }, token: lab.token,
-        });
+        // --- Submit, then approve, and confirm the freeze ---
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
 
-        // --- 14/15. reopen and confirm the blocked selector ---
-        await page.goto(`/reports/${reportId}`);
-        await expect(page.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
-        await expect(letterheadSelect(page)).toHaveClass(/ant-select-disabled/);
-        await expect(page.getByTestId("letterhead-frozen-note"))
-            .toContainText("El membrete quedó fijado al enviar el reporte a revisión.");
+        // R1: still the reviewer's window in IN_REVIEW, unchanged by Block A.
+        await reviewerPage.goto(`/reports/${reportId}`);
+        await expect(reviewerPage.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
+        await expect(letterheadSelect(reviewerPage)).not.toHaveClass(/ant-select-disabled/);
 
-        // And for payload direct neither: the backend responds 409, not 500.
+        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, {
+            token: (await api<{ access_token: string }>(request, "POST", "/api/v1/auth/login", {
+                data: { username_or_email: reviewerEmail, password: reviewerPassword },
+            })).access_token,
+            data: {},
+        });
+
+        // R5's lifecycle half: the reviewer keeps the control — their
+        // authority is real — and it is the STATE that makes it inert.
+        await reviewerPage.goto(`/reports/${reportId}`);
+        await expect(reviewerPage.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
+        await expect(letterheadSelect(reviewerPage)).toHaveClass(/ant-select-disabled/);
+        await expect(reviewerPage.getByTestId("letterhead-frozen-note"))
+            .toContainText("El membrete quedó fijado al aprobar el reporte.");
+
+        // And the content path still refuses to move it — 409 because an
+        // APPROVED report is not content-editable at all (Block B, B-3).
         await api(request, "POST", `/api/v1/reports/${reportId}/new_version`, {
             data: {
                 tenant_id: lab.tenantId, branch_id: lab.branchId, order_id: order.id,
@@ -280,12 +337,13 @@ test.describe("Fifth remedy — editable letterhead in DRAFT", () => {
             expectStatus: 409,
         });
 
-        // The letterhead did not move.
         const afterFreeze = await api<{ report: { rendering_snapshot: { presentation: { header: { institution_name: string } } } } }>(
             request, "GET", `/api/v1/reports/${reportId}`, { token: lab.token }
         );
         expect(afterFreeze.report.rendering_snapshot.presentation.header.institution_name)
             .toContain("Membrete nefropatologia");
+
+        await reviewerContext.close();
     });
 });
 
@@ -306,7 +364,11 @@ test.describe("Fifth remedy — download from official PDF", () => {
         await expect(page.getByLabel("Nombre del reporte")).toBeVisible({ timeout: 20_000 });
         await page.getByLabel("Nombre del reporte").fill(`Reporte PDF ${lab.suffix}`);
         await expect(page.getByTestId("letterhead-panel")).toBeVisible({ timeout: 20_000 });
-        await page.getByRole("button", { name: "Guardar reporte" }).click();
+        // R7: the editor renders two "Guardar reporte" affordances (header and end
+        // of content) that share one handler, so the role query is ambiguous.
+        // `report_editor_r4_r7_remediation.test.tsx` owns the assertions about
+        // the two being one control; here, drive the header one.
+        await page.getByTestId("report-save-top").click();
         await expect(page).toHaveURL(/\/orders\//, { timeout: 20_000 });
 
         const orderDetail = await api<{ report_id: string | null }>(
@@ -314,19 +376,39 @@ test.describe("Fifth remedy — download from official PDF", () => {
         );
         const reportId = orderDetail.report_id!;
 
+        // Céluma 1.3.1 Block F — test-contract repair. `approve` used to be
+        // called with `lab.token` (the laboratory admin/superuser), which
+        // Block A (CEL-131-01) now refuses with 403: approval requires the
+        // `reviewer` role AND `reports:approve` AND an assignment on the
+        // order, and administrative privilege confers none of them. The
+        // sibling test above already approves as the reviewer; this one is
+        // brought to the same contract.
+        //
+        // `submit` stays the admin's — an authoring capability, outside the
+        // reviewer double lock. This test's subject is the billed-order
+        // (`billed_lock`) signing path, not who may approve.
+        const signerEmail = `e2e-r5-signer-${lab.suffix}@example.com`;
+        const signerPassword = "E2eReviewer!2026";
         const reviewer = await api<{ id: string }>(request, "POST", "/api/v1/users/", {
             data: {
-                email: `e2e-r5-signer-${lab.suffix}@example.com`,
+                email: signerEmail,
                 first_name: "E2E", last_name: "Signer", role: "reviewer",
-                password: "E2eReviewer!2026", branch_ids: [lab.branchId],
+                password: signerPassword, branch_ids: [lab.branchId],
             },
             token: lab.token,
         });
         await api(request, "PUT", `/api/v1/laboratory/orders/${order.id}/reviewers`, {
             data: { reviewer_ids: [reviewer.id] }, token: lab.token,
         });
+        const signerToken = (await api<{ access_token: string }>(
+            request, "POST", "/api/v1/auth/login",
+            { data: { username_or_email: signerEmail, password: signerPassword } }
+        )).access_token;
+
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
-        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, { token: lab.token, data: {} });
+        await api(request, "POST", `/api/v1/reports/${reportId}/approve`, {
+            token: signerToken, data: {},
+        });
 
         // --- The missing condition: invoice the order and leave it with
         // pending balance, which is what activates `billed_lock` and what
@@ -351,8 +433,8 @@ test.describe("Fifth remedy — download from official PDF", () => {
         const reviewerContext = await page.context().browser()!.newContext({ acceptDownloads: true });
         const reviewerPage = await reviewerContext.newPage();
         await login(reviewerPage, {
-            email: `e2e-r5-signer-${lab.suffix}@example.com`,
-            password: "E2eReviewer!2026",
+            email: signerEmail,
+            password: signerPassword,
         });
         await reviewerPage.goto(`/reports/${reportId}`);
         await expect(reviewerPage.getByRole("button", { name: "Firmar y publicar" }))

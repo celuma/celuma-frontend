@@ -49,6 +49,9 @@ function withPermissions(granted: string[]) {
         canManageTenant: false,
         hasPermission: (p: string) => granted.includes(p),
         hasRole: () => false,
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

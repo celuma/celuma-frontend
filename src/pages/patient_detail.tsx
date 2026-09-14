@@ -17,6 +17,7 @@ import { matchesQuery } from "../lib/search";
 import { renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 const codeChipStyle: CSSProperties = {
     background: tokens.secondary,
@@ -105,6 +106,7 @@ export default function PatientDetailPage() {
     const [search, setSearch] = useState("");
     const { hasPermission } = useUserProfile();
     const canEdit = hasPermission("lab:create_patient");
+    const canCreateOrder = hasPermission(PERMS.CREATE_ORDER);
 
     useEffect(() => {
         if (!patientId) return;
@@ -425,9 +427,13 @@ export default function PatientDetailPage() {
                                     placeholder="Buscar en órdenes"
                                     style={{ width: 240 }}
                                 />
-                                <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?patientId=${patient.id}`)}>
-                                    Registrar Orden
-                                </CelumaButton>
+                                {/* R5 (CEL-131-08): same `lab:create_order`
+                                    boundary as the Órdenes list CTA. */}
+                                {canCreateOrder && (
+                                    <CelumaButton size="small" type="primary" onClick={() => navigate(`/orders/register?patientId=${patient.id}`)}>
+                                        Registrar Orden
+                                    </CelumaButton>
+                                )}
                             </Space>
                         ) : null}
                     >

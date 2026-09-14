@@ -2,17 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout } from "antd";
+import { Layout, Card } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
+import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
-import SelectField from "../components/ui/select_field";
-import DateField from "../components/ui/date_field";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
+import FloatingCaptionDate from "../components/ui/floating_caption_date";
+import Panel from "../components/ui/panel";
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardTitleStyle } from "../components/design/tokens";
+import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { sortByLabel } from "../lib/sort";
 
@@ -96,25 +98,52 @@ const schema = z.object({
 
 type OrderFormData = z.infer<typeof schema>;
 
+/** The `SampleType` enum as the API accepts it, with its Spanish labels.
+ *  Unchanged from `order_register.tsx` — CEL-131-07 modernizes the control,
+ *  not the catalogue. */
+const SAMPLE_TYPE_OPTIONS = [
+    { value: "SANGRE", label: "Sangre" },
+    { value: "BIOPSIA", label: "Biopsia" },
+    { value: "LAMINILLA", label: "Laminilla" },
+    { value: "TEJIDO", label: "Tejido" },
+    { value: "OTRO", label: "Otro" },
+];
+
 type UnifiedResponse = {
     order: { id: string; order_code: string; status: string; patient_id?: string | null; tenant_id: string; branch_id: string };
     samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
-const FormCard: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({ title, description, children }) => (
-    <div style={{ background: tokens.cardBg, borderRadius: tokens.radius, boxShadow: tokens.shadow, padding: 0 }}>
-        <div style={{ padding: tokens.cardPadding }}>
-            <h2 style={{ ...cardTitleStyle, marginTop: 0, marginBottom: 0 }}>{title}</h2>
-        </div>
-        <div style={{ height: 1, background: "#e5e7eb" }} />
-        <div style={{ padding: tokens.cardPadding, display: "grid", gap: 12 }}>
-            {description && <div style={{ color: tokens.textSecondary, marginBottom: 16, fontSize: 14 }}>{description}</div>}
-            {children}
-        </div>
-    </div>
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h3 style={{
+        margin: 0,
+        fontFamily: tokens.titleFont,
+        fontSize: 18,
+        fontWeight: 700,
+        color: tokens.textPrimary,
+        letterSpacing: "-0.01em",
+    }}>
+        {children}
+    </h3>
 );
 
-export default function OrderRegister() {
+/**
+ * OrderForm — registers a laboratory order together with its samples in a
+ * single `POST /v1/laboratory/orders/unified` call.
+ *
+ * Céluma 1.3.1 Block E (CEL-131-07): this was `order_register.tsx` /
+ * `OrderRegister`, one of the last two screens still built from the older
+ * form generation (`SelectField` / `DateField` in a hand-rolled `FormCard`,
+ * with bare `<h3>` section headings and no cancel action). It now follows the
+ * same architecture as `patient_form.tsx` and `requesting_physician_form.tsx`:
+ * `PageHeader` + `Card`, `SectionTitle`, the FloatingCaption field family, and
+ * the shared submit/cancel footer.
+ *
+ * The `_form` name is architectural consistency with the newer screens, NOT a
+ * statement that orders became editable. This component only creates; there is
+ * no `orderId` route param and no update path.
+ */
+export default function OrderForm() {
     usePageTitle();
     const navigate = useNavigate();
     const { search } = useLocation();
@@ -128,6 +157,7 @@ export default function OrderRegister() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [studyTypes, setStudyTypes] = useState<Array<{ id: string; code: string; name: string; is_active: boolean }>>([]);
+    const [loadingStudyTypes, setLoadingStudyTypes] = useState(false);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
     const prefilledPatientId = useMemo(() => {
@@ -209,14 +239,17 @@ export default function OrderRegister() {
             }
         })();
     }, [session.tenantId]);
-    
+
     useEffect(() => {
         (async () => {
             try {
+                setLoadingStudyTypes(true);
                 const data = await getJSON<{ study_types: Array<{ id: string; code: string; name: string; is_active: boolean }> }>("/v1/study-types/");
                 setStudyTypes(data.study_types.filter(st => st.is_active));
             } catch (err) {
                 console.error("Error loading study types:", err);
+            } finally {
+                setLoadingStudyTypes(false);
             }
         })();
     }, []);
@@ -265,65 +298,74 @@ export default function OrderRegister() {
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
                 <style>{`
-                  .cr-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-                  .cr-grid-3 { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
-                  .cr-grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+                  .of-grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+                  .of-grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
                   @media (max-width: 768px) {
-                    .cr-grid-2, .cr-grid-3, .cr-grid-4 { grid-template-columns: 1fr; }
+                    .of-grid-2, .of-grid-3 { grid-template-columns: 1fr; }
                   }
-                  .sample-card { border: 1px dashed #c8e6e5; border-radius: 10px; padding: 12px; background: #fbffff; }
                 `}</style>
                 <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gap: tokens.gap }}>
-                    <FormCard title="Registrar Caso" description="Cree una orden y una o más muestras en una sola operación.">
-                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 14 }}>
+                    <PageHeader
+                        title="Registrar Caso"
+                        subtitle="Cree una orden y una o más muestras en una sola operación."
+                    />
+
+                    <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }}>
+                        <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: 28 }}>
                             {!session.tenantId ? (
-                                <section style={{ display: "grid", gap: 10 }}>
-                                    <h3 style={{ margin: 0 }}>Contexto</h3>
-                                    <div className="cr-grid-2" style={{ alignItems: "start" }}>
+                                <section style={{ display: "grid", gap: 16 }}>
+                                    <SectionTitle>Contexto</SectionTitle>
+                                    <div className="of-grid-2" style={{ alignItems: "start" }}>
                                         <FormField
                                             control={control}
                                             name="tenant_id"
                                             render={(p) => (
-                                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Tenant ID" />
+                                                <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Tenant ID" requiredMark />
                                             )}
                                         />
                                     </div>
                                 </section>
                             ) : null}
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Sucursal</h3>
-                                <div className="cr-grid-2">
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Sucursal</SectionTitle>
+                                <div className="of-grid-2">
                                     <FormField
                                         control={control}
                                         name="branch_id"
                                         render={(p) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Sucursal"
+                                                requiredMark
                                                 value={typeof p.value === "string" ? p.value : undefined}
-                                                onChange={(val) => p.onChange(val)}
-                                                placeholder={loadingBranches ? "Cargando sucursales..." : "Seleccione la sucursal"}
+                                                onChange={(val) => p.onChange(val ?? "")}
+                                                placeholder="Seleccione la sucursal"
                                                 options={branches.map(b => ({ value: b.id, label: `${b.code ?? ""} ${b.name ?? ""}`.trim() }))}
                                                 showSearch
+                                                loading={loadingBranches}
+                                                error={p.error}
                                             />
                                         )}
                                     />
                                 </div>
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Paciente</h3>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Paciente</SectionTitle>
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione un paciente, un médico solicitante o ambos.</p>
-                                <div className="cr-grid-2">
+                                <div className="of-grid-2">
                                     <FormField
                                         control={control}
                                         name="patient_id"
                                         render={(p) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Paciente"
                                                 value={typeof p.value === "string" ? p.value : undefined}
-                                                onChange={(val) => p.onChange(val)}
-                                                placeholder={loadingPatients ? "Cargando pacientes..." : "Seleccione un paciente"}
+                                                onChange={(val) => p.onChange(val ?? "")}
+                                                placeholder="Seleccione un paciente"
                                                 options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
                                                 showSearch
+                                                loading={loadingPatients}
                                                 disabled={Boolean(prefilledPatientId)}
                                                 error={p.error}
                                             />
@@ -332,17 +374,19 @@ export default function OrderRegister() {
                                 </div>
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Orden</h3>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Orden</SectionTitle>
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione el tipo de estudio que se realizará. El código de la orden se asignará automáticamente a partir de él.</p>
-                                <div className="cr-grid-2">
+                                <div className="of-grid-2">
                                     <FormField
                                         control={control}
                                         name="study_type_id"
                                         render={(p) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Tipo de estudio"
+                                                requiredMark
                                                 value={typeof p.value === "string" ? p.value : undefined}
-                                                onChange={(val) => p.onChange(val)}
+                                                onChange={(val) => p.onChange(val ?? "")}
                                                 placeholder="Seleccionar tipo de estudio"
                                                 // C-003: alphabetical by the label the user actually
                                                 // scans — here "{name} ({code})" — not by API order.
@@ -350,6 +394,8 @@ export default function OrderRegister() {
                                                     studyTypes.map((st) => ({ value: st.id, label: `${st.name} (${st.code})` })),
                                                     (option) => option.label,
                                                 )}
+                                                showSearch
+                                                loading={loadingStudyTypes}
                                                 error={p.error}
                                             />
                                         )}
@@ -358,19 +404,22 @@ export default function OrderRegister() {
                                         control={control}
                                         name="requesting_physician_id"
                                         render={(p) => (
-                                            <SelectField
+                                            <FloatingCaptionSelect
+                                                label="Médico solicitante (opcional)"
                                                 value={typeof p.value === "string" ? p.value : undefined}
-                                                onChange={(val) => p.onChange(val)}
-                                                placeholder={loadingRequestingPhysicians ? "Cargando médicos solicitantes..." : "Médico solicitante (opcional)"}
+                                                onChange={(val) => p.onChange(val ?? "")}
+                                                placeholder="Seleccione un médico solicitante"
                                                 options={requestingPhysicians.map((physician) => ({ value: physician.id, label: physician.label }))}
                                                 showSearch
+                                                loading={loadingRequestingPhysicians}
                                                 disabled={Boolean(prefilledRequestingPhysicianId)}
+                                                error={p.error}
                                             />
                                         )}
                                     />
                                 </div>
-                                
-                                <div className="cr-grid-2">
+
+                                <div className="of-grid-2">
                                     <FormField
                                         control={control}
                                         name="notes"
@@ -381,35 +430,32 @@ export default function OrderRegister() {
                                 </div>
                             </section>
 
-                            <section style={{ display: "grid", gap: 10 }}>
-                                <h3 style={{ margin: 0 }}>Muestras</h3>
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Muestras</SectionTitle>
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Complete el código, tipo y las fechas de recolección y recepción de cada una.</p>
-                                <div style={{ display: "grid", gap: 12 }}>
+                                <div style={{ display: "grid", gap: 16 }}>
                                     {fields.map((field, index) => (
-                                        <div key={field.id} className="sample-card">
-                                            <div className="cr-grid-3">
+                                        <Panel key={field.id} style={{ display: "grid", gap: 16 }}>
+                                            <div className="of-grid-3">
                                                 <FormField
                                                     control={control}
                                                     name={`samples.${index}.sample_code`}
                                                     render={(p) => (
-                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Muestra" />
+                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Muestra" requiredMark />
                                                     )}
                                                 />
                                                 <FormField
                                                     control={control}
                                                     name={`samples.${index}.type`}
                                                     render={(p) => (
-                                                        <SelectField
+                                                        <FloatingCaptionSelect
+                                                            label="Tipo de muestra"
+                                                            requiredMark
                                                             value={typeof p.value === "string" ? p.value : undefined}
                                                             onChange={(val) => p.onChange(val)}
-                                                            placeholder="Tipo de muestra"
-                                                            options={[
-                                                                { value: "SANGRE", label: "Sangre" },
-                                                                { value: "BIOPSIA", label: "Biopsia" },
-                                                                { value: "LAMINILLA", label: "Laminilla" },
-                                                                { value: "TEJIDO", label: "Tejido" },
-                                                                { value: "OTRO", label: "Otro" },
-                                                            ]}
+                                                            placeholder="Seleccione el tipo de muestra"
+                                                            options={SAMPLE_TYPE_OPTIONS}
+                                                            error={p.error}
                                                         />
                                                     )}
                                                 />
@@ -422,15 +468,16 @@ export default function OrderRegister() {
                                                 />
                                             </div>
 
-                                            <div className="cr-grid-2" style={{ marginTop: 8 }}>
+                                            <div className="of-grid-2">
                                                 <FormField
                                                     control={control}
                                                     name={`samples.${index}.collected_date`}
                                                     render={(p) => (
-                                                        <DateField
+                                                        <FloatingCaptionDate
+                                                            label="Fecha de recolección"
                                                             value={typeof p.value === "string" ? p.value : ""}
                                                             onChange={(v) => p.onChange(v)}
-                                                            placeholder="Fecha de recolección (AAAA-MM-DD)"
+                                                            error={p.error}
                                                         />
                                                     )}
                                                 />
@@ -438,25 +485,27 @@ export default function OrderRegister() {
                                                     control={control}
                                                     name={`samples.${index}.received_date`}
                                                     render={(p) => (
-                                                        <DateField
+                                                        <FloatingCaptionDate
+                                                            label="Fecha de recepción"
                                                             value={typeof p.value === "string" ? p.value : ""}
                                                             onChange={(v) => p.onChange(v)}
-                                                            placeholder="Fecha de recepción (AAAA-MM-DD)"
+                                                            error={p.error}
                                                         />
                                                     )}
                                                 />
                                             </div>
 
-                                            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                                                <Button type="default" onClick={() => remove(index)}>
+                                            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                                <Button htmlType="button" size="small" danger onClick={() => remove(index)} disabled={fields.length === 1}>
                                                     Eliminar muestra
                                                 </Button>
                                             </div>
-                                        </div>
+                                        </Panel>
                                     ))}
 
                                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
                                         <Button
+                                            htmlType="button"
                                             type="default"
                                             onClick={() =>
                                                 append({ sample_code: "", type: undefined as unknown as OrderFormData["samples"][0]["type"], notes: "", collected_date: "", received_date: "" })
@@ -468,13 +517,23 @@ export default function OrderRegister() {
                                 </div>
                             </section>
 
-                            <Button htmlType="submit" type="primary" fullWidth loading={loading}>
-                                Registrar Caso
-                            </Button>
-                        </form>
+                            {serverError && <ErrorText>{serverError}</ErrorText>}
 
-                        <ErrorText>{serverError}</ErrorText>
-                    </FormCard>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                                <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                                    Los campos marcados con <span style={{ color: "#e5484d", fontWeight: 700 }}>*</span> son obligatorios.
+                                </div>
+                                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                                    <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
+                                        Cancelar
+                                    </Button>
+                                    <Button htmlType="submit" type="primary" loading={loading}>
+                                        Registrar
+                                    </Button>
+                                </div>
+                            </div>
+                        </form>
+                    </Card>
                 </div>
             </Layout.Content>
         </Layout>

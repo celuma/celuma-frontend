@@ -35,6 +35,9 @@ function withPermission(canManage: boolean) {
         canManageTenant: false,
         hasPermission: () => canManage,
         hasRole: () => false,
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
@@ -49,6 +52,8 @@ describe("ReportTemplateVersions — empty state", () => {
         vi.spyOn(reportService, "getReportTemplateById").mockResolvedValue({
             id: "t1", tenant_id: "tenant-1", name: "Plantilla X", is_active: true, created_at: "2026-01-01",
             template_json: { base: {}, sections: {}, base_order: [], section_order: [] }, created_by: "u1",
+            // Céluma 1.3.1 Block C (C-8): always returned with `template_json`.
+            template_hash: "hash-t1",
         });
         vi.spyOn(reportService, "listReportTemplateVersions").mockResolvedValue({ versions: [] });
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 })));
@@ -67,6 +72,8 @@ describe("ReportTemplateVersions — loaded state", () => {
         vi.spyOn(reportService, "getReportTemplateById").mockResolvedValue({
             id: "t1", tenant_id: "tenant-1", name: "Plantilla X", is_active: true, created_at: "2026-01-01",
             template_json: { base: {}, sections: {}, base_order: [], section_order: [] }, created_by: "u1",
+            // Céluma 1.3.1 Block C (C-8): always returned with `template_json`.
+            template_hash: "hash-t1",
         });
         vi.spyOn(reportService, "listReportTemplateVersions").mockResolvedValue({
             versions: [
@@ -96,6 +103,8 @@ describe("ReportTemplateVersions — permission gating", () => {
         vi.spyOn(reportService, "getReportTemplateById").mockResolvedValue({
             id: "t1", tenant_id: "tenant-1", name: "Plantilla X", is_active: true, created_at: "2026-01-01",
             template_json: { base: {}, sections: {}, base_order: [], section_order: [] }, created_by: "u1",
+            // Céluma 1.3.1 Block C (C-8): always returned with `template_json`.
+            template_hash: "hash-t1",
         });
         vi.spyOn(reportService, "listReportTemplateVersions").mockResolvedValue({ versions: [] });
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 })));
@@ -114,6 +123,8 @@ describe("ReportTemplateVersions — error handling", () => {
         vi.spyOn(reportService, "getReportTemplateById").mockResolvedValue({
             id: "t1", tenant_id: "tenant-1", name: "Plantilla X", is_active: true, created_at: "2026-01-01",
             template_json: { base: {}, sections: {}, base_order: [], section_order: [] }, created_by: "u1",
+            // Céluma 1.3.1 Block C (C-8): always returned with `template_json`.
+            template_hash: "hash-t1",
         });
         vi.spyOn(reportService, "listReportTemplateVersions").mockRejectedValue(new Error("Error de red"));
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 })));

@@ -46,6 +46,8 @@ function withPermission(canManage: boolean) {
         profile: null, loading: false, authStatus: "authenticated", sessionExpired: false,
         error: null, canManageUsers: false, canManageBranches: false, canManageCatalog: false,
         canManageTenant: false, hasPermission: () => canManage, hasRole: () => false,
+        canActAsReviewer: () => false, isAssignedReviewer: () => false,
+        canReopenApprovedReport: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
@@ -221,20 +223,42 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         expect(document.body.textContent).not.toMatch(/villanueva/i);
     });
 
-    it("blocks with the correct reason when the template does not have an active version", async () => {
+    /**
+     * Céluma 1.3.1 Block C (CEL-131-05) REPLACED this test, and the
+     * replacement asserts the opposite.
+     *
+     * It previously read "blocks with the correct reason when the template
+     * does not have an active version" and pinned
+     * `NO_ACTIVE_TEMPLATE_VERSION` -> "La plantilla de este estudio no está
+     * publicada" in place. That was a faithful test of a defective contract:
+     * a laboratory whose template was saved before its letterhead was
+     * configured had no ACTIVE `ReportTemplateVersion`, could not obtain one
+     * without re-saving the template, and was blocked out of Reports V2 with
+     * a message about a template that was in fact perfectly configured.
+     *
+     * The reason is gone from the backend and from `V2BlockedReason`, so
+     * there is nothing left to assert about it except that it can no longer
+     * happen — which is what this now does. Nothing was weakened: the other
+     * two genuine blocked reasons (`NO_LETTERHEAD`,
+     * `LETTERHEAD_MISCONFIGURED`) keep their own tests above and below, and
+     * "never fall back to Legacy" is still asserted in every one of them.
+     */
+    it("bootstraps V2 with no active template version at all", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
-        mockDefaults({
-            active_template_version_id: null,
-            letterhead_presentation: null,
-            v2_blocked_reason: "NO_ACTIVE_TEMPLATE_VERSION",
-        });
+        mockDefaults({ active_template_version_id: null });
 
         renderEditor();
 
         await waitFor(() => {
-            expect(screen.getByText(/La plantilla de este estudio no está publicada/i)).toBeTruthy();
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
+        expect(
+            screen.queryByText(/La plantilla de este estudio no está publicada/i)
+        ).toBeNull();
+        expect(
+            screen.queryByText(/Falta el membrete predeterminado del laboratorio/i)
+        ).toBeNull();
     });
 
     it("blocks when the Letterheads configuration is inconsistent, with the backend detail", async () => {

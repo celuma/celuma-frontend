@@ -14,6 +14,8 @@ import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { SEX_CONFIG } from "../components/ui/status_configs";
 import { usePageTitle } from "../hooks/use_page_title";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -56,6 +58,8 @@ export default function PatientsList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const { hasPermission } = useUserProfile();
+    const canCreatePatient = hasPermission(PERMS.CREATE_PATIENT);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<PatientRow[]>([]);
@@ -185,10 +189,15 @@ export default function PatientsList() {
                     <PageHeader
                         title="Pacientes"
                         subtitle="Consulta y gestiona el registro de pacientes"
+                        // R5 (CEL-131-08): `POST /patients/` requires
+                        // `lab:create_patient`. A pathologist or reviewer does
+                        // not hold it.
                         extra={
-                            <CelumaButton type="primary" onClick={() => navigate("/patients/register")}>
-                                Registrar Paciente
-                            </CelumaButton>
+                            canCreatePatient ? (
+                                <CelumaButton type="primary" onClick={() => navigate("/patients/register")}>
+                                    Registrar Paciente
+                                </CelumaButton>
+                            ) : undefined
                         }
                     />
                     <Card style={cardStyle}>

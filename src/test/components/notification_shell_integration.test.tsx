@@ -48,6 +48,9 @@ function withAuth(authStatus: AuthStatus, permissions: string[] = []) {
         canManageTenant: false,
         hasPermission: (code: string) => permissions.includes(code),
         hasRole: () => false,
+        canActAsReviewer: () => false,
+        canReopenApprovedReport: () => false,
+        isAssignedReviewer: () => false,
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 

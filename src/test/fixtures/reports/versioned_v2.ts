@@ -489,6 +489,81 @@ export const v2MidPublicationUnsigned: ReportEnvelope = {
     signed_at: null,
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.3.1 Block E (CEL-131-09) — rich text exactly as the Quill 2 editor
+// stores it. Every string below is `quill.root.innerHTML` from the real
+// editor, not a hand-written approximation: both list kinds share ONE <ol>,
+// each item carries `data-list`, indentation is a `ql-indent-N` class, and the
+// marker is an empty `<span class="ql-ui">` the editor's own stylesheet fills
+// in. Rendered bare, every item was numbered — the defect.
+// ---------------------------------------------------------------------------
+
+const QUILL_MIXED_LIST =
+    '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Fragmento A: sin alteraciones.</li>'
+    + '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Fragmento B: sin alteraciones.</li>'
+    + '<li data-list="ordered"><span class="ql-ui" contenteditable="false"></span>Primer paso del protocolo.</li>'
+    + '<li data-list="ordered"><span class="ql-ui" contenteditable="false"></span>Segundo paso del protocolo.</li></ol>';
+
+const QUILL_NESTED_LIST =
+    '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Nivel superior.</li>'
+    + '<li data-list="bullet" class="ql-indent-1"><span class="ql-ui" contenteditable="false"></span>Nivel anidado.</li>'
+    + '<li data-list="ordered" class="ql-indent-2"><span class="ql-ui" contenteditable="false"></span>Nivel numerado profundo.</li>'
+    + '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>De vuelta al nivel superior.</li></ol>'
+    + '<p>margen    con espacios</p><p><br></p><p>Cierre tras una línea en blanco.</p>';
+
+const v2QuillRichTextContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0009" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Nueve" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: QUILL_MIXED_LIST },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: QUILL_NESTED_LIST },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+const v2QuillRichTextSnapshot: ReportRenderingSnapshotV2 = {
+    schema_version: 2,
+    template: templateFrom(v2QuillRichTextContent),
+    presentation: {
+        paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: 1.0, right: 1.0, bottom: 1.0, left: 1.0 } },
+        header: {
+            enabled: true,
+            logo_storage_id: null,
+            institution_name: null,
+            subtitle: null,
+            address: null,
+            phone: null,
+            email: null,
+        },
+        footer: { enabled: true, custom_text: null, show_page_number: true },
+        style: { primary_color: "#4A4A4A" },
+        signer: null,
+    },
+};
+
+/** Covers: Quill-authored bullet + numbered + nested lists, and whitespace. */
+export const v2QuillRichText: ReportEnvelope = {
+    ...baseEnvelope,
+    id: "fixture-v2-9",
+    version_no: 1,
+    status: "DRAFT",
+    title: "Reporte V2 — listas y espacios del editor Quill",
+    published_at: null,
+    signed_by: null,
+    signed_at: null,
+    template: templateFrom(v2QuillRichTextContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2QuillRichTextContent,
+        schema_version: 2,
+        rendering_snapshot: v2QuillRichTextSnapshot,
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -502,4 +577,5 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2SignedNoDigitalRequirement,
     v2MidPublicationSigned,
     v2MidPublicationUnsigned,
+    v2QuillRichText,
 };
