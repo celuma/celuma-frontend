@@ -1,0 +1,8 @@
+# Product UI is shared by engineering and product/UX.
+* @Raismaav @laisha1308
+
+# Release automation and dependency boundaries
+/.github/workflows/ @Raismaav
+/package.json @Raismaav
+/package-lock.json @Raismaav
+/playwright*.config.* @Raismaav @laisha1308
