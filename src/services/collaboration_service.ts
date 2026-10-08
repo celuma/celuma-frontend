@@ -209,8 +209,21 @@ export async function updateSampleLabels(sampleId: string, ownLabelIds: string[]
 // --- Lab Users API ---
 
 export async function getLabUsers(): Promise<LabUser[]> {
-    const response = await getJSON<{ users: LabUser[] }>("/v1/laboratory/users/search");
-    return response.users;
+    const users = new Map<string, LabUser>();
+    let after: string | null = null;
+    do {
+        const params = new URLSearchParams({ limit: "100" });
+        if (after) params.set("after", after);
+        const response: { users: LabUser[]; next_after: string | null } = await getJSON(
+            `/v1/laboratory/users/assignable?${params}`
+        );
+        for (const user of response.users) users.set(user.id, user);
+        if (response.next_after && (response.next_after === after || response.users.length === 0)) {
+            throw new Error("No se pudo completar la lista de usuarios. Intenta de nuevo.");
+        }
+        after = response.next_after;
+    } while (after);
+    return Array.from(users.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
 // Users in the tenant that hold the 'reviewer' role. Used by selectors that
