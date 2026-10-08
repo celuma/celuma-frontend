@@ -19,7 +19,7 @@ function Harness() {
             onUpdate={async ids => { setSelected(ids); }}
             disabled={!users.length}
         />
-        <output data-testid="selected">{selected.join(",")}</output>
+        <output data-testid="selected">{[...selected].sort().join(",")}</output>
     </div>;
 }
 
