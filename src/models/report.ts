@@ -1,3 +1,4 @@
+import type { SampleTypeRef } from "./sample_type";
 // ---------------------------------------------------------------------------
 // Template JSON types
 // ---------------------------------------------------------------------------
@@ -358,7 +359,8 @@ export interface ReportFullResponse {
     samples: Array<{
         id: string;
         sample_code: string;
-        type: string;
+        /** Catalog type; null for a legacy sample ("Sin tipo"). */
+        sample_type: SampleTypeRef | null;
         state: string;
         order_id: string;
         tenant_id: string;

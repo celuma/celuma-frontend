@@ -25,6 +25,7 @@ const catalogMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/report-templates", icon: <FileTextOutlined />, label: "Plantillas de Reporte" },
     { key: "/config/report-letterheads", icon: <BgColorsOutlined />, label: "Membretes" },
     { key: "/config/study-types", icon: <ExperimentOutlined />, label: "Tipos de Estudio" },
+    { key: "/config/sample-types", icon: <ExperimentOutlined />, label: "Tipos de Muestra" },
     { key: "/config/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios" },
 ];
 

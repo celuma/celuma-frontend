@@ -11,6 +11,7 @@ import {
     FileTextOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { UNTYPED_LABEL, type SampleTypeRef } from "../../models/sample_type";
 import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, INVOICE_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
 
 // Re-export utility functions from comment_utils for consistency
@@ -28,10 +29,14 @@ export const SAMPLE_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: 
 };
 
 /**
- * Gets the sample type configuration based on the type string
+ * Icon/colour for a sample type, chosen by keyword from the catalog entry's
+ * NAME (the catalog is tenant-defined, so any name may appear; unknown names
+ * get the default look). The visible text is `sampleTypeLabel`, never this
+ * config's `label`.
  */
 export const getSampleTypeConfig = (type: string) => {
-    const upperType = type?.toUpperCase() || "";
+    // Accent-insensitive: catalog names are free text ("Citología").
+    const upperType = (type ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
     for (const [key, config] of Object.entries(SAMPLE_TYPE_CONFIG)) {
         if (key !== "DEFAULT" && upperType.includes(key)) {
             return config;
@@ -41,10 +46,20 @@ export const getSampleTypeConfig = (type: string) => {
 };
 
 /**
+ * Text for a sample's type: the catalog name, "Sin tipo" for a legacy sample
+ * without one (Céluma 1.4, #17), with "(inactivo)" for a deactivated type that
+ * the sample still references.
+ */
+export const sampleTypeLabel = (sampleType: SampleTypeRef | null | undefined): string => {
+    if (!sampleType) return UNTYPED_LABEL;
+    return sampleType.is_active ? sampleType.name : `${sampleType.name} (inactivo)`;
+};
+
+/**
  * Component for rendering sample type badge with icon and label
  */
-export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
-    const config = getSampleTypeConfig(type);
+export const SampleTypeBadge: React.FC<{ sampleType: SampleTypeRef | null | undefined }> = ({ sampleType }) => {
+    const config = getSampleTypeConfig(sampleType?.name ?? "");
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Avatar
@@ -56,7 +71,7 @@ export const SampleTypeBadge: React.FC<{ type: string }> = ({ type }) => {
                     flexShrink: 0
                 }}
             />
-            <span style={{ fontWeight: 500 }}>{config.label}</span>
+            <span style={{ fontWeight: 500, color: sampleType ? undefined : "#9ca3af" }}>{sampleTypeLabel(sampleType)}</span>
         </div>
     );
 };

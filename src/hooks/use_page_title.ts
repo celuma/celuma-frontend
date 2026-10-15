@@ -33,6 +33,7 @@ const routeTitleMap: Record<string, string> = {
     "/config/catalog": "Catálogo de Precios - Céluma",
     "/config/report-templates": "Plantillas de Reporte - Céluma",
     "/config/study-types": "Tipos de Estudio - Céluma",
+    "/config/sample-types": "Tipos de Muestra - Céluma",
     "/config/users": "Gestión de Usuarios - Céluma",
     "/config/reviewers": "Revisores - Céluma",
     "/config/branches": "Sucursales - Céluma",

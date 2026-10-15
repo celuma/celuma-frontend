@@ -30,6 +30,15 @@ const PHYSICIAN_ID = "ph-1";
 const STUDY_TYPE_ID = "st-1";
 const ORDER_ID = "ord-1";
 
+/** Céluma 1.4 (#17): the laboratory's own sample-type catalog (synthetic). */
+const CATALOG = [
+    { id: "stp-bio", code: "BIO", name: "Biopsia" },
+    { id: "stp-lam", code: "LAM", name: "Laminilla" },
+    { id: "stp-otr", code: "OTR", name: "Otro" },
+    { id: "stp-tej", code: "TEJ", name: "Tejido" },
+    { id: "stp-san", code: "SAN", name: "Sangre" },
+].map((t) => ({ ...t, tenant_id: TENANT_ID, is_active: true, created_at: "2026-01-01T00:00:00" }));
+
 const navigateMock = vi.fn();
 vi.mock("react-router-dom", async () => {
     const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
@@ -56,6 +65,9 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }) {
         if (init?.method === "POST") {
             posts.push({ url, body: JSON.parse(String(init.body)) });
             return jsonResponse(post.body, { ok: post.ok, status: post.ok ? 200 : 400 });
+        }
+        if (url.includes("/v1/sample-types/")) {
+            return jsonResponse({ sample_types: CATALOG });
         }
         if (url.includes("/v1/study-types/")) {
             return jsonResponse({ study_types: [{ id: STUDY_TYPE_ID, code: "HIS", name: "Histopatología", is_active: true }] });
@@ -284,7 +296,7 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
             patient_id: PATIENT_ID,
             study_type_id: STUDY_TYPE_ID,
             created_by: "usr-1",
-            samples: [{ sample_code: "M-1", type: "BIOPSIA" }],
+            samples: [{ sample_code: "M-1", sample_type_id: "stp-bio" }],
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/new-order", { replace: true }));
     });
@@ -339,7 +351,7 @@ describe("CEL-131-07 — sample_form still creates a sample with the same payloa
             branch_id: BRANCH_ID,
             order_id: ORDER_ID,
             sample_code: "M-9",
-            type: "LAMINILLA",
+            sample_type_id: "stp-lam",
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/samples/new-sample", { replace: true }));
     });
@@ -457,6 +469,23 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
 
         await waitFor(() => {
             expect(container.textContent).toContain("El código de muestra ya existe en la orden.");
+        });
+        expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it("a refusal in FastAPI's `detail` form (e.g. a type deactivated meanwhile) is shown, not a bare status", async () => {
+        stubApi({ ok: false, body: { detail: "Sample type 'BIO' is inactive and cannot be used for new samples" } });
+        const { container } = renderSampleForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
+
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Orden"), "ORD-001");
+        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
+        fireEvent.submit(container.querySelector("form")!);
+
+        await waitFor(() => {
+            expect(container.textContent).toContain("inactive and cannot be used for new samples");
         });
         expect(navigateMock).not.toHaveBeenCalled();
     });

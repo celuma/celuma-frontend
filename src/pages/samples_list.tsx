@@ -30,11 +30,13 @@ import {
     type FilterOption,
     type ListQuery,
 } from "../services/list_service";
+import { UNTYPED_FILTER_VALUE, UNTYPED_LABEL, type SampleTypeRef } from "../models/sample_type";
 
 type SampleRow = {
     id: string;
     sample_code: string;
-    type: string;
+    /** Catalog type; null for a legacy sample ("Sin tipo"). */
+    sample_type: SampleTypeRef | null;
     state: string;
     tenant_id: string;
     branch: { id: string; name?: string; code?: string | null };
@@ -53,7 +55,10 @@ type SampleRow = {
 /** `GET /v1/laboratory/samples/filter-options`: catalogs over every sample, not one page. */
 type SampleFilterOptions = {
     states: string[];
-    types: string[];
+    /** Types referenced by the tenant's samples (deactivated ones marked in the text). */
+    sample_types: FilterOption[];
+    /** Whether any sample has no type: then "Sin tipo" is offered as a filter choice. */
+    has_untyped_samples: boolean;
     orders: FilterOption[];
     patients: FilterOption[];
     labels: FilterOption[];
@@ -63,7 +68,7 @@ type SampleFilterOptions = {
 // Céluma 1.4 (#6): column key → API sort field / filter parameter.
 const QUERY_MAP: ColumnQueryMap = {
     sort: { sample_code: "sample_code", order: "order_code", patient: "patient" },
-    filters: { order: "order_id", patient: "patient_id", type: "type", state: "state", labels: "label_id", assignees: "assignee_id" },
+    filters: { order: "order_id", patient: "patient_id", type: "sample_type_id", state: "state", labels: "label_id", assignees: "assignee_id" },
 };
 
 const fetchSamples = (query: ListQuery, signal: AbortSignal) =>
@@ -108,7 +113,10 @@ export default function SamplesList() {
         text: renderStatusChip(state, "sample").props.children,
         value: state,
     })), [options]);
-    const typeFilters = useMemo(() => (options?.types ?? []).map((type) => ({ text: type, value: type })), [options]);
+    const typeFilters = useMemo(() => [
+        ...(options?.sample_types ?? []).map((t) => ({ text: t.text, value: t.value })),
+        ...(options?.has_untyped_samples ? [{ text: UNTYPED_LABEL, value: UNTYPED_FILTER_VALUE }] : []),
+    ], [options]);
     const orderFilters = useMemo(() => (options?.orders ?? []).map((o) => ({ text: o.text, value: o.value })), [options]);
     const patientFilters = useMemo(() => (options?.patients ?? []).map((p) => ({ text: p.text, value: p.value })), [options]);
     const labelFilters = useMemo(() => (options?.labels ?? []).map((l) => ({ text: l.text, value: l.value })), [options]);
@@ -168,11 +176,11 @@ export default function SamplesList() {
         },
         { 
             title: "Tipo", 
-            dataIndex: "type", 
+            dataIndex: "sample_type", 
             key: "type", 
             width: 160,
             filters: typeFilters,
-            render: (type: string) => <SampleTypeBadge type={type} />,
+            render: (sampleType: SampleTypeRef | null) => <SampleTypeBadge sampleType={sampleType} />,
         },
         { 
             title: "Estado", 

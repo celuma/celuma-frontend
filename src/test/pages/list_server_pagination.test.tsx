@@ -25,7 +25,7 @@ const jsonResponse = (body: unknown) =>
 const SAMPLE = {
     id: "s1",
     sample_code: "CU276262",
-    type: "BIOPSIA",
+    sample_type: { id: "stp-bio", code: "BIO", name: "Biopsia", is_active: true },
     state: "RECEIVED",
     tenant_id: "t1",
     branch: { id: "b1", name: "Matriz" },
@@ -57,7 +57,7 @@ describe("Samples list — server pagination", () => {
     it("requests one sorted page and never downloads the orders list", async () => {
         const fetchMock = stubFetch((url) =>
             url.includes("filter-options")
-                ? { states: ["RECEIVED"], types: ["BIOPSIA"], orders: [], patients: [], labels: [], assignees: [] }
+                ? { states: ["RECEIVED"], sample_types: [{ value: "stp-bio", text: "Biopsia" }], has_untyped_samples: false, orders: [], patients: [], labels: [], assignees: [] }
                 : { samples: [SAMPLE], total: 1, page: 1, page_size: 10 },
         );
         render(<MemoryRouter><SamplesList /></MemoryRouter>);
@@ -76,7 +76,7 @@ describe("Samples list — server pagination", () => {
         stubFetch((url) =>
             url.includes("filter-options")
                 ? {
-                    states: ["RECEIVED"], types: ["BIOPSIA"], orders: [], patients: [],
+                    states: ["RECEIVED"], sample_types: [{ value: "stp-bio", text: "Biopsia" }], has_untyped_samples: false, orders: [], patients: [],
                     labels: [{ value: "l1", text: "Urgente", color: "#F98D84" }], assignees: [],
                 }
                 : { samples: [SAMPLE], total: 40, page: 1, page_size: 10 },

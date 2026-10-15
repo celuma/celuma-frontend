@@ -34,7 +34,8 @@ import {
     updateSampleAssignees,
     updateSampleLabels
 } from "../services/collaboration_service";
-import { getSampleTypeConfig } from "../components/ui/table_helpers";
+import { getSampleTypeConfig, sampleTypeLabel } from "../components/ui/table_helpers";
+import type { SampleTypeRef } from "../models/sample_type";
 import { getInitials, getAvatarColor, formatLocalDateTime, renderUserMention } from "../components/comments/comment_utils";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
@@ -78,7 +79,8 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 type SampleDetail = {
     id: string;
     sample_code: string;
-    type: string;
+    /** null = legacy sample ("Sin tipo") */
+    sample_type: SampleTypeRef | null;
     state: string;
     collected_at?: string | null;
     received_at?: string | null;
@@ -383,7 +385,7 @@ export default function SampleDetailPage() {
     } as const;
 
     const stateConfig = SAMPLE_STATE_CONFIG[detail?.state || "RECEIVED"] || { color: "#6b7280", bg: "#f3f4f6", label: detail?.state || "—", icon: <CheckCircleOutlined /> };
-    const typeConfig = getSampleTypeConfig(detail?.type || "");
+    const typeConfig = getSampleTypeConfig(detail?.sample_type?.name ?? "");
 
     // Event type configuration for timeline display
     const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -922,7 +924,7 @@ export default function SampleDetailPage() {
                                     <>
                                         <MetaItem icon={typeConfig.icon}>
                                             <span style={{ marginRight: 4 }}>Tipo:</span>
-                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeConfig.label}</span>
+                                            <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{sampleTypeLabel(detail?.sample_type)}</span>
                                         </MetaItem>
                                         <MetaItem icon={<ContainerOutlined />}>
                                             <span style={{ marginRight: 4 }}>Orden:</span>
