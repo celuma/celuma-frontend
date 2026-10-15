@@ -20,6 +20,11 @@
  * Multi-word queries are AND-matched: "juan bio" requires both "juan" and "bio",
  * each in some field. A term is always matched inside one field value — never
  * across the boundary between two fields.
+ *
+ * Limits (identical on the API): at most MAX_QUERY_LENGTH characters and
+ * MAX_TERMS terms. A longer query is never shortened — dropping a term would
+ * widen an AND query — so lists check `validateSearchQuery` first and say the
+ * search was not applied; the API answers 422.
  */
 
 /** Lowercase + strip diacritics (NFD). "Muñóz" → "munoz". */
@@ -78,6 +83,52 @@ export function fuzzyThreshold(len: number): number {
     if (len < 4) return 0;
     if (len <= 6) return 1;
     return 2;
+}
+
+/**
+ * Query limits, identical in celuma-backend `app/services/list_search.py`.
+ * Length counts Unicode code points of the NFC-normalized, trimmed query;
+ * terms count what remains once punctuation-only terms are dropped. The length
+ * limit also bounds typo tolerance (a term never exceeds 200 characters), so
+ * there is no separate cap on fuzzy terms.
+ */
+export const MAX_QUERY_LENGTH = 200;
+export const MAX_TERMS = 8;
+
+export interface SearchQueryProblem {
+    reason: "too_long" | "too_many_terms";
+    limit: number;
+    actual: number;
+    /** User-facing explanation (Spanish), stating that the search was not applied. */
+    message: string;
+}
+
+/** Characters counted against MAX_QUERY_LENGTH. */
+export function searchQueryLength(query: string): number {
+    return [...query.normalize("NFC").trim()].length;
+}
+
+/** Why `query` cannot be applied as a whole, or null when it can. */
+export function validateSearchQuery(query: string): SearchQueryProblem | null {
+    const length = searchQueryLength(query);
+    if (length > MAX_QUERY_LENGTH) {
+        return {
+            reason: "too_long",
+            limit: MAX_QUERY_LENGTH,
+            actual: length,
+            message: `Búsqueda no aplicada: admite hasta ${MAX_QUERY_LENGTH} caracteres y tiene ${length}.`,
+        };
+    }
+    const terms = parseSearchQuery(query).length;
+    if (terms > MAX_TERMS) {
+        return {
+            reason: "too_many_terms",
+            limit: MAX_TERMS,
+            actual: terms,
+            message: `Búsqueda no aplicada: admite hasta ${MAX_TERMS} palabras y tiene ${terms}.`,
+        };
+    }
+    return null;
 }
 
 /** How a query term is matched. See the module comment. */
@@ -160,6 +211,8 @@ export interface MatchOptions {
  * primitives or nested objects/arrays — every string/number leaf is a field.
  *
  * `query` may arrive raw or pre-trimmed/lowercased; it is re-normalized here.
+ * Every term is applied, whatever the query's size: limits are the caller's
+ * to check with `validateSearchQuery` before matching.
  */
 export function matchesQuery(values: unknown[], query: string, opts: MatchOptions = {}): boolean {
     const terms = parseSearchQuery(query);

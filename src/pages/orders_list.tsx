@@ -247,7 +247,7 @@ export default function OrdersList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            render: (_: unknown, r: OrderRow) => 
+            render: (_: unknown, r: OrderRow) =>
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
         ...(assigneeFilters.length > 0 ? [{

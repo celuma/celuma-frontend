@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { levenshtein, matchesQuery, normalizeText, parseSearchQuery, stripSeparators } from "../../lib/search";
+import {
+    MAX_QUERY_LENGTH,
+    MAX_TERMS,
+    levenshtein,
+    matchesQuery,
+    normalizeText,
+    parseSearchQuery,
+    stripSeparators,
+    validateSearchQuery,
+} from "../../lib/search";
+import { compareLabels } from "../../lib/sort";
 
 // Regression coverage for Céluma 1.3 Phase 1 (Workstream 2 — UX validation of
 // search/filter/sort). This is the shared engine behind every list screen's
@@ -160,5 +170,68 @@ describe("parseSearchQuery", () => {
             { kind: "identifier", value: "cu011026" },
             { kind: "text", value: "munoz" },
         ]);
+    });
+});
+
+// Query limits (R1). These boundary cases mirror celuma-backend
+// tests/test_list_search.py: the same query is accepted or rejected on both
+// sides (the API with a 422), and an accepted query keeps every term.
+describe("query limits — one contract with the API", () => {
+    const EIGHT_WORDS = "uno dos tres cuatro cinco seis siete ocho";
+
+    it.each([
+        [EIGHT_WORDS, 8],
+        [`${EIGHT_WORDS} -- ..`, 8], // punctuation-only terms do not count
+        ["a".repeat(MAX_QUERY_LENGTH), 1],
+        [`  ${"a".repeat(MAX_QUERY_LENGTH)}  `, 1], // surrounding whitespace does not count
+        ["e\u0301".repeat(MAX_QUERY_LENGTH), 1], // counted after NFC: 200 "é", not 400 code units
+    ])("accepts %j whole", (query, terms) => {
+        expect(validateSearchQuery(query)).toBeNull();
+        expect(parseSearchQuery(query)).toHaveLength(terms);
+    });
+
+    it.each([
+        [`${EIGHT_WORDS} CU276262`, "too_many_terms", MAX_TERMS, 9],
+        ["a".repeat(MAX_QUERY_LENGTH + 1), "too_long", MAX_QUERY_LENGTH, MAX_QUERY_LENGTH + 1],
+        ["e\u0301".repeat(MAX_QUERY_LENGTH + 1), "too_long", MAX_QUERY_LENGTH, MAX_QUERY_LENGTH + 1],
+    ])("rejects %j instead of shortening it", (query, reason, limit, actual) => {
+        expect(validateSearchQuery(query)).toMatchObject({ reason, limit, actual });
+        expect(validateSearchQuery(query)?.message).toMatch(/^Búsqueda no aplicada/);
+    });
+
+    it("never drops a term: the reported reproduction does not match", () => {
+        // The API used to drop the ninth term and match; it now answers 422,
+        // and the matcher applies every term.
+        expect(matchesQuery([EIGHT_WORDS], `${EIGHT_WORDS} CU276262`)).toBe(false);
+        expect(matchesQuery([EIGHT_WORDS], EIGHT_WORDS)).toBe(true);
+    });
+
+    it("keeps typo tolerance for long text terms", () => {
+        const word = "abcdefghij".repeat(15); // 150 letters, budget 2
+        const typo = `${word.slice(0, 70)}x${word.slice(71)}`;
+        expect(matchesQuery([`Dr. ${word}`], typo)).toBe(true);
+        // A much longer word is outside the term's budget, never an error.
+        expect(matchesQuery(["z".repeat(300)], `y${"z".repeat(199)}`)).toBe(false);
+    });
+});
+
+// R2: an accent may arrive precomposed (NFC, U+00E9) or decomposed (NFD,
+// "e" + U+0301); both must behave as "perez" (backend: TestDecomposedAccents).
+describe("precomposed and decomposed accents", () => {
+    const NFC = "P\u00e9rez";
+    const NFD = "Pe\u0301rez";
+
+    it("normalize, match literally and match with a typo alike", () => {
+        expect(normalizeText(NFC)).toBe(normalizeText(NFD));
+        for (const value of [NFC, NFD]) {
+            for (const query of ["perez", "peres", NFC, NFD]) {
+                expect(matchesQuery([`Ana ${value}`], `ana ${query}`)).toBe(true);
+            }
+        }
+    });
+
+    it("sort alike in the client's label ordering", () => {
+        expect(compareLabels(NFC, NFD)).toBe(0);
+        expect([NFD, "Perfecto", NFC].sort(compareLabels).slice(0, 2).sort()).toEqual([NFC, NFD].sort());
     });
 });

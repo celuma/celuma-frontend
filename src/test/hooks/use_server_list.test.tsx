@@ -105,6 +105,19 @@ describe("useServerList", () => {
         expect(result.current.total).toBe(25);
     });
 
+    it("never sends a search over the limits; the list shows no search instead", async () => {
+        const fetchPage = vi.fn<FetchPage>(async () => page(["a"], 100));
+        const { result } = renderHook(() => useServerList<Row>({ fetchPage, pageSize: 10, debounceMs: 10 }));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        act(() => result.current.setSearch("munoz"));
+        await waitFor(() => expect(fetchPage).toHaveBeenLastCalledWith(expect.objectContaining({ q: "munoz" }), expect.anything()));
+
+        act(() => result.current.setSearch("uno dos tres cuatro cinco seis siete ocho CU276262"));
+        await waitFor(() => expect(fetchPage).toHaveBeenLastCalledWith(expect.objectContaining({ q: "", page: 1 }), expect.anything()));
+        expect(fetchPage.mock.calls.some(([q]) => q.q.includes("CU276262"))).toBe(false);
+        expect(result.current.search).toBe("uno dos tres cuatro cinco seis siete ocho CU276262");
+    });
+
     it("surfaces an error without keeping the spinner", async () => {
         const fetchPage = vi.fn(async () => { throw new Error("500 Internal Server Error"); });
         const { result } = renderHook(() => useServerList<Row>({ fetchPage }));

@@ -6,7 +6,8 @@ import type { SorterResult } from "antd/es/table/interface";
 import { tokens } from "../design/tokens";
 import CelumaPagination from "./celuma_pagination";
 import SearchField from "./search_field";
-import { matchesQuery } from "../../lib/search";
+import AlertText from "./error_text";
+import { matchesQuery, validateSearchQuery } from "../../lib/search";
 
 // Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
 const SORTER_TOOLTIP = {
@@ -155,14 +156,21 @@ export function CelumaTable<T>({
 
     // Built-in search — filters the data before it reaches antd.
     const [search, setSearch] = useState("");
+    // A query over the shared limits is not applied at all — never shortened —
+    // in either mode; the field says so (Céluma 1.4, lib/search.ts).
+    const searchText = server ? server.search : search;
+    const searchProblem = useMemo(
+        () => (searchable ? validateSearchQuery(searchText) : null),
+        [searchable, searchText],
+    );
     const searchedData = useMemo(() => {
-        if (serverMode || !searchable) return sortedData;
+        if (serverMode || !searchable || searchProblem) return sortedData;
         const q = search.trim().toLowerCase();
         if (!q) return sortedData;
         return sortedData.filter((record) =>
             searchFilter ? searchFilter(record, q) : defaultSearchMatch(record, q)
         );
-    }, [sortedData, searchable, search, searchFilter, serverMode]);
+    }, [sortedData, searchable, search, searchFilter, serverMode, searchProblem]);
 
     const isPaginated = pagination !== false;
     const pageSize = (typeof pagination === 'object' && pagination?.pageSize) || 10;
@@ -214,12 +222,17 @@ export function CelumaTable<T>({
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                     <SearchField
                         small
-                        value={server ? server.search : search}
+                        value={searchText}
                         onChange={server ? server.onSearchChange : setSearch}
                         placeholder={searchPlaceholder}
                         style={{ flex: 1, minWidth: 220, maxWidth: searchWidth }}
                     />
                     {searchExtra}
+                </div>
+            )}
+            {searchable && searchProblem && (
+                <div style={{ marginTop: -8, marginBottom: 12 }}>
+                    <AlertText variant="warning" mt={0}>{searchProblem.message}</AlertText>
                 </div>
             )}
             <Table<T>

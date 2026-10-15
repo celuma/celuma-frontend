@@ -98,6 +98,18 @@ describe("CelumaTable — search behavior (Studies / price list pattern)", () =>
         expect(screen.getByText("Sin datos")).toBeInTheDocument();
     });
 
+    it("does not apply a search over the limits and says so (Céluma 1.4)", async () => {
+        const user = userEvent.setup();
+        renderTable();
+        await user.type(screen.getByPlaceholderText("Buscar tipos de estudio"), "histo a b c d e f g h");
+        // Nine terms: nothing is filtered — the first page is the unfiltered one —
+        // and the warning states the search was not applied.
+        expect(screen.getByRole("alert")).toHaveTextContent("Búsqueda no aplicada: admite hasta 8 palabras y tiene 9.");
+        expect(screen.getByText("Citología Exfoliativa")).toBeInTheDocument();
+        await user.keyboard("{Backspace}{Backspace}");
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
     it("resets pagination to page 1 when the search query changes", async () => {
         const user = userEvent.setup();
         renderTable();
@@ -195,6 +207,11 @@ describe("CelumaTable — server mode", () => {
         await user.type(screen.getByPlaceholderText("Buscar tipos de estudio"), "x");
         expect(server.onSearchChange).toHaveBeenLastCalledWith("x");
         expect(screen.getByText("Zoonosis")).toBeInTheDocument();
+    });
+
+    it("warns when the server search is over the limits", () => {
+        renderServerTable({ search: "x".repeat(201) });
+        expect(screen.getByRole("alert")).toHaveTextContent("admite hasta 200 caracteres y tiene 201");
     });
 
     it("reports page changes and header sorting", async () => {

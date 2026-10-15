@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { validateSearchQuery } from "../lib/search";
 import type { ListPage, ListQuery, ListSort } from "../services/list_service";
 
 /**
@@ -11,6 +12,9 @@ import type { ListPage, ListQuery, ListSort } from "../services/list_service";
  *    arrives late is discarded (and its request is aborted when possible).
  *  - A page past the end (e.g. rows were removed meanwhile) is clamped to the
  *    last page and fetched again rather than shown empty.
+ *  - A search over the shared limits (`validateSearchQuery`) is not sent and
+ *    not applied — the list shows no search, and `CelumaTable` says why —
+ *    instead of being shortened or rejected by the API with a 422.
  */
 export interface UseServerListOptions<T> {
     fetchPage: (query: ListQuery, signal: AbortSignal) => Promise<ListPage<T>>;
@@ -76,15 +80,17 @@ export function useServerList<T>({
     current.current = { sort, filters };
     const latestRequest = useRef(0);
 
-    // Debounced search: a new query starts again at page 1.
+    // Debounced search: a new query starts again at page 1. A query over the
+    // limits applies no search at all rather than a shortened one.
+    const effectiveSearch = validateSearchQuery(search) ? "" : search;
     useEffect(() => {
-        if (search === appliedSearch) return;
+        if (effectiveSearch === appliedSearch) return;
         const timer = setTimeout(() => {
-            setAppliedSearch(search);
+            setAppliedSearch(effectiveSearch);
             setPageState(1);
         }, debounceMs);
         return () => clearTimeout(timer);
-    }, [search, appliedSearch, debounceMs]);
+    }, [effectiveSearch, appliedSearch, debounceMs]);
 
     useEffect(() => {
         const requestId = ++latestRequest.current;

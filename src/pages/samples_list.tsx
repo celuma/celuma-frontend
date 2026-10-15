@@ -188,7 +188,7 @@ export default function SamplesList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
-            render: (_: unknown, r: SampleRow) => 
+            render: (_: unknown, r: SampleRow) =>
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
         ...(assigneeFilters.length > 0 ? [{
