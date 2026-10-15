@@ -98,6 +98,38 @@ describe("sample-type administration page", () => {
         expect(post.body).toMatchObject({ code: "sangre", name: "Sangre", is_active: true });
     });
 
+    it("clearing the description sends null, saves, and the reloaded list no longer shows the text", async () => {
+        // A stateful fake API with the contract: omitted = unchanged, null/blank = cleared.
+        const row: Omit<ReturnType<typeof ST>, "description"> & { description: string | null } = {
+            ...ST("a", "BIO", "Biopsia"), description: "Texto previo",
+        };
+        const puts: Array<Record<string, unknown>> = [];
+        vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method === "PUT") {
+                const body = JSON.parse(String(init.body));
+                puts.push(body);
+                if ("description" in body) row.description = (body.description ?? "").trim() || null;
+                return json(row);
+            }
+            return json({ sample_types: [{ ...row }] });
+        }));
+        render(<MemoryRouter><SampleTypes embedded /></MemoryRouter>);
+        expect(await screen.findByText("Texto previo")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTitle("Editar"));
+        const dialog = await screen.findByRole("dialog");
+        const textarea = within(dialog).getByPlaceholderText(/Descripción opcional/);
+        expect((textarea as HTMLTextAreaElement).value).toBe("Texto previo");
+        fireEvent.change(textarea, { target: { value: "" } });
+        fireEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+
+        await waitFor(() => expect(puts).toHaveLength(1));
+        expect(puts[0]).toHaveProperty("description", null); // present and null: never omitted
+        const table = () => document.querySelector(".ant-table-tbody") as HTMLElement;
+        await waitFor(() => expect(within(table()).queryByText("Texto previo")).toBeNull());
+        expect(row.description).toBeNull();
+    });
+
     it("requires code and name before calling the API", async () => {
         const calls = stub();
         render(<MemoryRouter><SampleTypes embedded /></MemoryRouter>);

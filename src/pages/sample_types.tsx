@@ -119,7 +119,9 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
             const payload = {
                 code: data.code,
                 name: data.name,
-                description: data.description || undefined,
+                // null, not undefined: JSON drops undefined, and an omitted description means
+                // "unchanged" to the API, so a cleared field would silently keep the old text.
+                description: data.description?.trim() ? data.description : null,
                 is_active: data.is_active ?? true,
             };
             if (editingId) {

@@ -69,7 +69,8 @@ export async function listSampleTypes(activeOnly = true): Promise<SampleType[]> 
 export interface SampleTypeInput {
     code: string;
     name: string;
-    description?: string;
+    /** Omitted = unchanged; `null` (or blank) clears the stored description. */
+    description?: string | null;
     is_active?: boolean;
 }
 
