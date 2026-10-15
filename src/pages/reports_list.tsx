@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Layout, Card, Avatar, Tooltip } from "antd";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -9,28 +9,17 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
-import { matchesQuery } from "../lib/search";
-import { PatientCell, renderStatusChip, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { PatientCell, renderStatusChip, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
-
-function getApiBase(): string {
-    return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
-}
-
-async function getJSON<TRes>(path: string): Promise<TRes> {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = { accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-    if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-        throw new Error(message);
-    }
-    return parsed as TRes;
-}
+import { useServerList } from "../hooks/use_server_list";
+import {
+    columnQueryToList,
+    fetchListPage,
+    getJSON,
+    type ColumnQueryMap,
+    type FilterOption,
+    type ListQuery,
+} from "../services/list_service";
 
 type ReportsListResponse = {
     reports: Array<{
@@ -58,90 +47,69 @@ type ReportsListResponse = {
     }>;
 };
 
+type ReportRow = ReportsListResponse["reports"][number];
+
+/** `GET /v1/reports/filter-options`: catalogs over every report, not one page. */
+type ReportFilterOptions = {
+    statuses: string[];
+    patients: FilterOption[];
+    reviewers: FilterOption[];
+};
+
+// Céluma 1.4 (#6): column key → API sort field / filter parameter.
+const QUERY_MAP: ColumnQueryMap = {
+    sort: { order: "order_code", patient: "patient", title: "title", status: "status" },
+    filters: { patient: "patient_id", status: "status", reviewers: "reviewer_id" },
+};
+
+const fetchReports = (query: ListQuery, signal: AbortSignal) =>
+    fetchListPage<ReportRow>("/v1/reports/", "reports", query, signal);
+
 export default function ReportsList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [searchParams] = useSearchParams();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [rows, setRows] = useState<ReportsListResponse["reports"]>([]);
     // Status filter, optionally seeded from the URL (?status=DRAFT) e.g. when arriving from the dashboard cards
-    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+    const [initialStatus] = useState<string[] | null>(() => {
         const s = searchParams.get("status");
         return s ? s.split(",") : null;
     });
-
+    // Céluma 1.4 (#5/#6): one server page at a time; search, filters, sorting
+    // and the total run over the tenant's whole collection on the API.
+    const list = useServerList<ReportRow>({
+        fetchPage: fetchReports,
+        pageSize: 10,
+        initialSort: { field: "order_code", order: "asc" },
+        initialFilters: initialStatus ? { status: initialStatus } : {},
+    });
+    const statusFilter = list.filters.status ?? null;
+    const [options, setOptions] = useState<ReportFilterOptions | null>(null);
+    const [optionsError, setOptionsError] = useState<string | null>(null);
     useEffect(() => {
-        (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const data = await getJSON<ReportsListResponse>("/v1/reports/");
-                setRows(data.reports || []);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
-            } finally {
-                setLoading(false);
-            }
-        })();
-    }, []);
-
-    const searchFilter = (r: ReportsListResponse["reports"][number], q: string) =>
-        matchesQuery([
-            r.title,
-            r.diagnosis_text,
-            r.order.order_code,
-            r.order.patient?.full_name,
-            r.order.patient?.patient_code,
-            r.order.requested_by,
-            r.reviewers?.map((reviewer) => [reviewer.name, reviewer.email]),
-        ], q);
-
-    // Get unique statuses for filter
-    const statusFilters = useMemo(() => {
-        const statuses = new Set(rows.map(r => r.status));
-        return Array.from(statuses).map(status => ({
-            text: renderStatusChip(status, "report").props.children,
-            value: status,
-        }));
-    }, [rows]);
-
-    // Get unique reviewers for filters
-    const reviewerFilters = useMemo(() => {
-        const reviewersMap = new Map<string, string>();
-        rows.forEach(r => {
-            r.reviewers?.forEach(reviewer => {
-                if (!reviewersMap.has(reviewer.id)) {
-                    reviewersMap.set(reviewer.id, reviewer.name);
-                }
+        const controller = new AbortController();
+        getJSON<ReportFilterOptions>("/v1/reports/filter-options", controller.signal)
+            .then(setOptions)
+            .catch((err) => {
+                if (!controller.signal.aborted) setOptionsError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             });
-        });
-        return Array.from(reviewersMap.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-        }));
-    }, [rows]);
+        return () => controller.abort();
+    }, []);
+    const error = list.error ?? optionsError;
+    const { setQuery } = list;
+    const onQueryChange = useCallback(
+        (next: Parameters<typeof columnQueryToList>[0]) => setQuery(columnQueryToList(next, QUERY_MAP)),
+        [setQuery],
+    );
 
-    // Get unique patients for filters
-    const patientFilters = useMemo(() => {
-        const patients = new Map<string, string>();
-        rows.forEach(r => {
-            if (r.order.patient?.id && r.order.patient?.full_name) {
-                patients.set(r.order.patient.id, r.order.patient.full_name);
-            }
-        });
-        return Array.from(patients.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
-    }, [rows]);
+    const statusFilters = useMemo(() => (options?.statuses ?? []).map((status) => ({
+        text: renderStatusChip(status, "report").props.children,
+        value: status,
+    })), [options]);
+    const reviewerFilters = useMemo(() => (options?.reviewers ?? []).map((r) => ({ text: r.text, value: r.value })), [options]);
+    const patientFilters = useMemo(() => (options?.patients ?? []).map((p) => ({ text: p.text, value: p.value })), [options]);
 
-    const columns: ColumnsType<ReportsListResponse["reports"][number]> = [
+    const columns: ColumnsType<ReportRow> = [
         { 
             title: "Código", 
             key: "order", 
@@ -163,19 +131,14 @@ export default function ReportsList() {
                     {r.order.order_code}
                 </span>
             ),
-            sorter: (a, b) => a.order.order_code.localeCompare(b.order.order_code),
+            sorter: true,
             defaultSortOrder: "ascend",
         },
         { 
             title: "Paciente", 
             key: "patient",
-            sorter: (a, b) => {
-                const nameA = a.order.patient?.full_name || a.order.patient?.patient_code || "";
-                const nameB = b.order.patient?.full_name || b.order.patient?.patient_code || "";
-                return nameA.localeCompare(nameB);
-            },
+            sorter: true,
             filters: patientFilters,
-            onFilter: (value, record) => record.order.patient?.id === value,
             render: (_, r) => {
                 const patientName = r.order.patient?.full_name || r.order.patient?.patient_code;
                 if (!patientName || !r.order.patient) return "—";
@@ -193,7 +156,7 @@ export default function ReportsList() {
             dataIndex: "title", 
             key: "title",
             render: (title: string | null) => title || <span style={{ color: "#888" }}>Sin título</span>,
-            sorter: (a, b) => (a.title || "").localeCompare(b.title || ""),
+            sorter: true,
         },
         { 
             title: "Estado", 
@@ -203,18 +166,15 @@ export default function ReportsList() {
             render: (status: string) => renderStatusChip(status, "report"),
             filters: statusFilters,
             filteredValue: statusFilter,
-            onFilter: (value, record) => record.status === value,
-            sorter: stringSorter("status"),
+            sorter: true,
         },
-        ...(rows.some(r => r.reviewers && r.reviewers.length > 0) ? [{
+        // Shown when any report of the tenant has reviewers — not just this page.
+        ...(reviewerFilters.length > 0 ? [{
             title: "Revisores",
             key: "reviewers",
             width: 80,
             filters: reviewerFilters,
-            onFilter: (value: boolean | React.Key, record: ReportsListResponse["reports"][number]) => {
-                return record.reviewers?.some(reviewer => reviewer.id === value) || false;
-            },
-            render: (_: unknown, r: ReportsListResponse["reports"][number]) => {
+            render: (_: unknown, r: ReportRow) => {
                 if (!r.reviewers || r.reviewers.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">
@@ -250,17 +210,24 @@ export default function ReportsList() {
                     <PageHeader title="Reportes" subtitle="Consulta y gestiona los reportes generados" />
                     <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={rows}
+                            dataSource={list.rows}
                             columns={columns}
                             rowKey={(r) => r.id}
-                            loading={loading}
+                            loading={list.loading}
                             onRowClick={(record) => navigate(`/reports/${record.id}`)}
-                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin reportes"
                             searchable
                             searchPlaceholder="Buscar en reportes"
-                            searchFilter={searchFilter}
-                            pagination={{ pageSize: 10 }}
+                            pagination={{ pageSize: list.pageSize }}
+                            server={{
+                                total: list.total,
+                                page: list.page,
+                                pageSize: list.pageSize,
+                                onPageChange: list.setPage,
+                                search: list.search,
+                                onSearchChange: list.setSearch,
+                                onQueryChange,
+                            }}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',

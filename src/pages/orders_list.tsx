@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
@@ -11,30 +11,19 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
-import { matchesQuery } from "../lib/search";
-import { PatientCell, renderStatusChip, renderLabels, stringSorter, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { PatientCell, renderStatusChip, renderLabels, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
-
-function getApiBase(): string {
-    return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
-}
-
-async function getJSON<TRes>(path: string): Promise<TRes> {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = { accept: "application/json" };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, { method: "GET", headers, credentials: "include" });
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-    if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-        throw new Error(message);
-    }
-    return parsed as TRes;
-}
+import { useServerList } from "../hooks/use_server_list";
+import {
+    columnQueryToList,
+    fetchListPage,
+    getJSON,
+    type ColumnQueryMap,
+    type FilterOption,
+    type ListQuery,
+} from "../services/list_service";
 
 type OrdersListResponse = {
     orders: Array<{
@@ -58,6 +47,36 @@ type OrdersListResponse = {
     }>;
 };
 
+type OrderRow = OrdersListResponse["orders"][number];
+
+/** `GET /v1/laboratory/orders/filter-options`: catalogs over every order, not one page. */
+type OrderFilterOptions = {
+    statuses: string[];
+    patients: FilterOption[];
+    requesting_physicians: FilterOption[];
+    labels: FilterOption[];
+    assignees: FilterOption[];
+    has_requester: boolean;
+};
+
+// Céluma 1.4 (#6): column key → API sort field / filter parameter.
+const QUERY_MAP: ColumnQueryMap = {
+    sort: { order_code: "order_code", patient: "patient", requesting_physician: "requester", status: "status" },
+    filters: {
+        patient: "patient_id",
+        requesting_physician: "requesting_physician_id",
+        has_report: "has_report",
+        has_invoice: "has_invoice",
+        status: "status",
+        labels: "label_id",
+        assignees: "assignee_id",
+    },
+    booleanFilters: ["has_report", "has_invoice"],
+};
+
+const fetchOrders = (query: ListQuery, signal: AbortSignal) =>
+    fetchListPage<OrderRow>("/v1/laboratory/orders/", "orders", query, signal);
+
 export default function OrdersList() {
     usePageTitle();
     const navigate = useNavigate();
@@ -65,139 +84,64 @@ export default function OrdersList() {
     const [searchParams] = useSearchParams();
     const { hasPermission } = useUserProfile();
     const canCreateOrder = hasPermission(PERMS.CREATE_ORDER);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [rows, setRows] = useState<OrdersListResponse["orders"]>([]);
     // Status filter, optionally seeded from the URL (?status=RECEIVED,PROCESSING) e.g. when arriving from the dashboard cards
-    const [statusFilter, setStatusFilter] = useState<string[] | null>(() => {
+    const [initialStatus] = useState<string[] | null>(() => {
         const s = searchParams.get("status");
         return s ? s.split(",") : null;
     });
-
+    // Céluma 1.4 (#5/#6): one server page at a time; search, filters, sorting
+    // and the total run over the tenant's whole collection on the API.
+    const list = useServerList<OrderRow>({
+        fetchPage: fetchOrders,
+        pageSize: 10,
+        initialSort: { field: "order_code", order: "asc" },
+        initialFilters: initialStatus ? { status: initialStatus } : {},
+    });
+    const statusFilter = list.filters.status ?? null;
+    const [options, setOptions] = useState<OrderFilterOptions | null>(null);
+    const [optionsError, setOptionsError] = useState<string | null>(null);
     useEffect(() => {
-        (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const data = await getJSON<OrdersListResponse>("/v1/laboratory/orders/");
-                setRows(data.orders || []);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
-            } finally {
-                setLoading(false);
-            }
-        })();
+        const controller = new AbortController();
+        getJSON<OrderFilterOptions>("/v1/laboratory/orders/filter-options", controller.signal)
+            .then(setOptions)
+            .catch((err) => {
+                if (!controller.signal.aborted) setOptionsError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            });
+        return () => controller.abort();
     }, []);
+    const error = list.error ?? optionsError;
+    const { setQuery } = list;
+    const onQueryChange = useCallback(
+        (next: Parameters<typeof columnQueryToList>[0]) => setQuery(columnQueryToList(next, QUERY_MAP)),
+        [setQuery],
+    );
 
-    // Search predicate — normalized, separator-insensitive and typo-tolerant via matchesQuery.
-    const searchFilter = (r: OrdersListResponse["orders"][number], q: string) =>
-        matchesQuery([
-            r.order_code,
-            r.patient?.full_name,
-            r.patient?.patient_code,
-            r.requesting_physician?.full_name,
-            r.requesting_physician?.physician_code,
-            r.requested_by,
-            r.notes,
-            r.labels?.map((label) => label.name),
-            r.assignees?.map((user) => [user.name, user.email]),
-        ], q);
+    const statusFilters = useMemo(() => (options?.statuses ?? []).map((status) => ({
+        text: renderStatusChip(status, "order").props.children,
+        value: status,
+    })), [options]);
+    const labelFilters = useMemo(() => (options?.labels ?? []).map((l) => ({ text: l.text, value: l.value })), [options]);
+    const assigneeFilters = useMemo(() => (options?.assignees ?? []).map((u) => ({ text: u.text, value: u.value })), [options]);
+    const patientFilters = useMemo(() => (options?.patients ?? []).map((p) => ({ text: p.text, value: p.value })), [options]);
+    const requestingPhysicianFilters = useMemo(
+        () => (options?.requesting_physicians ?? []).map((p) => ({ text: p.text, value: p.value })),
+        [options],
+    );
 
-    // Get unique statuses for filter
-    const statusFilters = useMemo(() => {
-        const statuses = new Set(rows.map(r => r.status));
-        return Array.from(statuses).map(status => ({
-            text: renderStatusChip(status, "order").props.children,
-            value: status,
-        }));
-    }, [rows]);
-
-    // Get unique labels for filters
-    const labelFilters = useMemo(() => {
-        const labelsMap = new Map<string, { name: string; color: string }>();
-        rows.forEach(r => {
-            r.labels?.forEach(label => {
-                if (!labelsMap.has(label.id)) {
-                    labelsMap.set(label.id, { name: label.name, color: label.color });
-                }
-            });
-        });
-        return Array.from(labelsMap.entries())
-            .sort((a, b) => a[1].name.localeCompare(b[1].name))
-            .map(([id, label]) => ({
-                text: label.name,
-                value: id,
-            }));
-    }, [rows]);
-
-    // Get unique assignees for filters
-    const assigneeFilters = useMemo(() => {
-        const assigneesMap = new Map<string, string>();
-        rows.forEach(r => {
-            r.assignees?.forEach(user => {
-                if (!assigneesMap.has(user.id)) {
-                    assigneesMap.set(user.id, user.name);
-                }
-            });
-        });
-        return Array.from(assigneesMap.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
-    }, [rows]);
-
-    // Get unique patients for filters
-    const patientFilters = useMemo(() => {
-        const patients = new Map<string, string>();
-        rows.forEach(r => {
-            if (r.patient?.id && r.patient?.full_name) {
-                patients.set(r.patient.id, r.patient.full_name);
-            }
-        });
-        return Array.from(patients.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
-    }, [rows]);
-
-    const requestingPhysicianFilters = useMemo(() => {
-        const physicians = new Map<string, string>();
-        rows.forEach(r => {
-            if (r.requesting_physician?.id && r.requesting_physician?.full_name) {
-                physicians.set(r.requesting_physician.id, r.requesting_physician.full_name);
-            }
-        });
-        return Array.from(physicians.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({
-                text: name,
-                value: id,
-            }));
-    }, [rows]);
-
-    const columns: ColumnsType<OrdersListResponse["orders"][number]> = [
+    const columns: ColumnsType<OrderRow> = [
         { 
             title: "Código", 
             dataIndex: "order_code", 
             key: "order_code", 
             width: 120,
-            sorter: stringSorter("order_code"),
+            sorter: true,
             defaultSortOrder: "ascend",
         },
         { 
             title: "Paciente", 
             key: "patient",
-            sorter: (a, b) => {
-                const nameA = a.patient?.full_name || a.patient?.patient_code || "";
-                const nameB = b.patient?.full_name || b.patient?.patient_code || "";
-                return nameA.localeCompare(nameB);
-            },
+            sorter: true,
             filters: patientFilters,
-            onFilter: (value, record) => record.patient?.id === value,
             render: (_, r) => {
                 if (!r.patient?.full_name || !r.patient?.id) return <span style={{ color: "#888" }}>—</span>;
                 return (
@@ -209,18 +153,14 @@ export default function OrdersList() {
                 );
             },
         },
-        ...(rows.some(r => r.requesting_physician || r.requested_by) ? [{
+        // Shown when any order of the tenant names a requester — not just this page.
+        ...(options?.has_requester ? [{
             title: "Solicitante",
             key: "requesting_physician",
             width: 220,
             filters: requestingPhysicianFilters.length > 0 ? requestingPhysicianFilters : undefined,
-            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => record.requesting_physician?.id === value,
-            sorter: (a: OrdersListResponse["orders"][number], b: OrdersListResponse["orders"][number]) => {
-                const nameA = a.requesting_physician?.full_name || a.requested_by || "";
-                const nameB = b.requesting_physician?.full_name || b.requested_by || "";
-                return nameA.localeCompare(nameB);
-            },
-            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
+            sorter: true,
+            render: (_: unknown, r: OrderRow) => {
                 if (r.requesting_physician) {
                     return (
                         <div>
@@ -254,10 +194,9 @@ export default function OrdersList() {
                 <ClockCircleOutlined style={{ color: "#f59e0b", fontSize: 16 }} />
             ),
             filters: [
-                { text: "Con Reporte", value: true },
-                { text: "Sin Reporte", value: false },
+                { text: "Con Reporte", value: "true" },
+                { text: "Sin Reporte", value: "false" },
             ],
-            onFilter: (value, record) => record.has_report === value,
         },
         { 
             title: "Factura", 
@@ -289,10 +228,9 @@ export default function OrdersList() {
                 return icon;
             },
             filters: [
-                { text: "Con Factura", value: true },
-                { text: "Sin Factura", value: false },
+                { text: "Con Factura", value: "true" },
+                { text: "Sin Factura", value: "false" },
             ],
-            onFilter: (value, record) => record.has_invoice === value,
         },
         { 
             title: "Estado", 
@@ -302,29 +240,22 @@ export default function OrdersList() {
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
             filteredValue: statusFilter,
-            onFilter: (value, record) => record.status === value,
-            sorter: stringSorter("status"),
+            sorter: true,
         },
-        ...(rows.some(r => r.labels && r.labels.length > 0) ? [{
+        ...(labelFilters.length > 0 ? [{
             title: "Etiquetas",
             key: "labels",
             width: 200,
             filters: labelFilters,
-            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
-                return record.labels?.some(label => label.id === value) || false;
-            },
-            render: (_: unknown, r: OrdersListResponse["orders"][number]) => 
+            render: (_: unknown, r: OrderRow) => 
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
-        ...(rows.some(r => r.assignees && r.assignees.length > 0) ? [{
+        ...(assigneeFilters.length > 0 ? [{
             title: "Asignados",
             key: "assignees",
             width: 80,
             filters: assigneeFilters,
-            onFilter: (value: boolean | React.Key, record: OrdersListResponse["orders"][number]) => {
-                return record.assignees?.some(user => user.id === value) || false;
-            },
-            render: (_: unknown, r: OrdersListResponse["orders"][number]) => {
+            render: (_: unknown, r: OrderRow) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
                     <Avatar.Group maxCount={3} size="small">
@@ -374,17 +305,24 @@ export default function OrdersList() {
                     />
                     <Card style={cardStyle}>
                         <CelumaTable
-                            dataSource={rows}
+                            dataSource={list.rows}
                             columns={columns}
                             rowKey={(r) => r.id}
-                            loading={loading}
+                            loading={list.loading}
                             onRowClick={(record) => navigate(`/orders/${record.id}`)}
-                            onChange={(_, filters) => setStatusFilter((filters.status as string[]) ?? null)}
                             emptyText="Sin casos"
                             searchable
                             searchPlaceholder="Buscar en órdenes"
-                            searchFilter={searchFilter}
-                            pagination={{ pageSize: 10 }}
+                            pagination={{ pageSize: list.pageSize }}
+                            server={{
+                                total: list.total,
+                                page: list.page,
+                                pageSize: list.pageSize,
+                                onPageChange: list.setPage,
+                                search: list.search,
+                                onSearchChange: list.setSearch,
+                                onQueryChange,
+                            }}
                             locale={{
                                 filterTitle: 'Filtrar',
                                 filterConfirm: 'Aceptar',

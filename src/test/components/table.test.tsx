@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CelumaTable } from "../../components/ui/table";
@@ -141,5 +141,71 @@ describe("CelumaTable — sorting (localeCompare-based, accented Spanish names)"
         const bodyRows = within(table).getAllByRole("row").slice(1);
         const codes = bodyRows.map((r) => within(r).getAllByRole("cell")[0].textContent);
         expect(new Set(codes).size).toBe(codes.length);
+    });
+});
+
+// Céluma 1.4 (#6): server-driven mode. The API already searched, filtered,
+// sorted and paged; the table must render the rows it is given, untouched,
+// and report every interaction instead of acting on it locally.
+describe("CelumaTable — server mode", () => {
+    const pageRows: StudyRow[] = [
+        { id: "9", code: "ZZZZ", name: "Zoonosis" },
+        { id: "1", code: "AAAA", name: "Anatomía" },
+    ];
+
+    function renderServerTable(overrides: Partial<Parameters<typeof CelumaTable<StudyRow>>[0]["server"] & object> = {}) {
+        const server = {
+            total: 45,
+            page: 2,
+            pageSize: 10,
+            onPageChange: vi.fn(),
+            search: "",
+            onSearchChange: vi.fn(),
+            onQueryChange: vi.fn(),
+            ...overrides,
+        };
+        render(
+            <CelumaTable<StudyRow>
+                dataSource={pageRows}
+                rowKey="id"
+                searchable
+                searchPlaceholder="Buscar tipos de estudio"
+                pagination={{ pageSize: 10 }}
+                server={server}
+                columns={[
+                    { title: "Código", dataIndex: "code", key: "code", sorter: true },
+                    { title: "Nombre", dataIndex: "name", key: "name", filters: [{ text: "Z", value: "z" }] },
+                ]}
+            />,
+        );
+        return server;
+    }
+
+    it("renders the given page in the given order, with the server's total", () => {
+        renderServerTable();
+        const bodyRows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+        expect(bodyRows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["ZZZZ", "AAAA"]);
+        // 45 rows / 10 per page → page 5 exists although only two rows were given.
+        expect(screen.getByRole("button", { name: "Página 5" })).toBeInTheDocument();
+    });
+
+    it("reports search typing instead of filtering locally", async () => {
+        const user = userEvent.setup();
+        const server = renderServerTable();
+        await user.type(screen.getByPlaceholderText("Buscar tipos de estudio"), "x");
+        expect(server.onSearchChange).toHaveBeenLastCalledWith("x");
+        expect(screen.getByText("Zoonosis")).toBeInTheDocument();
+    });
+
+    it("reports page changes and header sorting", async () => {
+        const user = userEvent.setup();
+        const server = renderServerTable();
+        await user.click(screen.getByRole("button", { name: "Página 3" }));
+        expect(server.onPageChange).toHaveBeenCalledWith(3);
+
+        await user.click(screen.getByText("Código"));
+        expect(server.onQueryChange).toHaveBeenLastCalledWith({ sort: { field: "code", order: "asc" }, filters: {} });
+        const bodyRows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+        expect(bodyRows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["ZZZZ", "AAAA"]);
     });
 });

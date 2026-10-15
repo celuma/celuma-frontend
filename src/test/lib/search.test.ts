@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { levenshtein, matchesQuery, normalizeText, stripSeparators } from "../../lib/search";
+import { levenshtein, matchesQuery, normalizeText, parseSearchQuery, stripSeparators } from "../../lib/search";
 
 // Regression coverage for Céluma 1.3 Phase 1 (Workstream 2 — UX validation of
 // search/filter/sort). This is the shared engine behind every list screen's
@@ -94,5 +94,71 @@ describe("matchesQuery — free text over patient/study/price-list-like records"
 
     it("searches nested objects/arrays, not just top-level strings", () => {
         expect(matchesQuery([{ label: "Dr. Roberto Salas", tags: ["cardiología"] }], "cardiologia")).toBe(true);
+    });
+});
+
+// Céluma 1.4 (#7): identifier vs human-text matching. The same examples are
+// asserted against the API's SQL half in celuma-backend
+// tests/http/test_list_search_and_pagination.py, so both halves of the
+// contract (celuma-engineering/specs/lists/search-and-pagination.md) agree.
+describe("matchesQuery — identifiers are literal (Céluma 1.4, #7)", () => {
+    it("a full code does not match its neighbours or another prefix", () => {
+        for (const neighbour of ["CU276263", "CU276261", "CU276252", "CU276362", "CU276226", "BX276262", "CU999999"]) {
+            expect(matchesQuery([neighbour], "CU276262")).toBe(false);
+        }
+        expect(matchesQuery(["CU276262"], "CU276262")).toBe(true);
+    });
+
+    it("a digit run matches the same digits under any prefix", () => {
+        for (const code of ["CU276262", "BX276262", "IHQ276262"]) {
+            expect(matchesQuery([code], "276262")).toBe(true);
+        }
+        expect(matchesQuery(["CU276263"], "276262")).toBe(false);
+    });
+
+    it("ignores case and separators inside an identifier", () => {
+        expect(matchesQuery(["CU-011026"], "cu011026")).toBe(true);
+        expect(matchesQuery(["cu011026"], "CU-011026")).toBe(true);
+        expect(matchesQuery(["CU-011026"], "Cu.011026")).toBe(true);
+        expect(matchesQuery(["CU-1001026"], "CU-011026")).toBe(false);
+    });
+
+    it("matches a partial identifier as a literal substring", () => {
+        expect(matchesQuery(["CU276262"], "CU2762")).toBe(true);
+        expect(matchesQuery(["CU276352"], "CU2762")).toBe(false);
+    });
+
+    it("never lets a term span two fields", () => {
+        expect(matchesQuery(["CU2762", "62 Calle"], "CU276262")).toBe(false);
+        expect(matchesQuery(["CU27626", "2"], "276262")).toBe(false);
+    });
+
+    it("never typo-corrects through a word that contains digits", () => {
+        expect(matchesQuery(["lote5"], "lotes")).toBe(false);
+    });
+});
+
+describe("matchesQuery — human text keeps accent and typo tolerance (Céluma 1.4, #7)", () => {
+    it("matches names without accents, case or the exact spelling", () => {
+        expect(matchesQuery(["Lorena Muñóz"], "munoz")).toBe(true);
+        expect(matchesQuery(["Lorena Muñóz"], "MUÑOZ")).toBe(true);
+        expect(matchesQuery(["Lorena Muñóz"], "munos")).toBe(true);
+        expect(matchesQuery(["Biopsia"], "biosia")).toBe(true);
+    });
+
+    it("AND-matches text and identifier terms in different fields", () => {
+        expect(matchesQuery(["BX276262", "Juan Pérez"], "perez 276262")).toBe(true);
+        expect(matchesQuery(["CU276262", "Lorena Muñóz"], "perez 276262")).toBe(false);
+    });
+});
+
+describe("parseSearchQuery", () => {
+    it("classifies a term by the presence of a digit", () => {
+        expect(parseSearchQuery("juan  P-12 cu-011026 Muñóz --")).toEqual([
+            { kind: "text", value: "juan" },
+            { kind: "identifier", value: "p12" },
+            { kind: "identifier", value: "cu011026" },
+            { kind: "text", value: "munoz" },
+        ]);
     });
 });
