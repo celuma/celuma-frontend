@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Table, Empty } from "antd";
 import type { TableProps, TablePaginationConfig } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { SorterResult } from "antd/es/table/interface";
 import { tokens } from "../design/tokens";
 import CelumaPagination from "./celuma_pagination";
 import SearchField from "./search_field";
-import { matchesQuery } from "../../lib/search";
+import AlertText from "./error_text";
+import { matchesQuery, validateSearchQuery } from "../../lib/search";
 
 // Céluma-styled sort hint tooltip (navy, rounded) — matches the shared Tooltip component.
 const SORTER_TOOLTIP = {
@@ -53,6 +55,35 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
     searchExtra?: ReactNode;
     /** Max width of the search field. Defaults to 420 (it grows to fill, capped here). */
     searchWidth?: number | string;
+    /**
+     * Server-driven mode (Céluma 1.4). `dataSource` is then one page that the
+     * API already searched, filtered and sorted over the whole collection, so
+     * the table neither sorts, filters, searches nor slices it locally. Pair it
+     * with `useServerList`; columns use `sorter: true` and `filters` without
+     * `onFilter`.
+     */
+    server?: CelumaTableServerMode;
+}
+
+export interface CelumaTableServerMode {
+    total: number;
+    page: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    search: string;
+    onSearchChange: (q: string) => void;
+    /** Sort (by column key) and filters (column key → values) after a header interaction. */
+    onQueryChange: (next: {
+        sort: { field: string; order: "asc" | "desc" } | null;
+        filters: Record<string, string[]>;
+    }) => void;
+}
+
+function serverSort<T>(sorter: SorterResult<T> | SorterResult<T>[]): { field: string; order: "asc" | "desc" } | null {
+    const active = (Array.isArray(sorter) ? sorter : [sorter]).find((s) => s.order);
+    if (!active?.order) return null;
+    const field = String(active.columnKey ?? active.field ?? "");
+    return field ? { field, order: active.order === "descend" ? "desc" : "asc" } : null;
 }
 
 /**
@@ -84,12 +115,14 @@ export function CelumaTable<T>({
     searchFilter,
     searchExtra,
     searchWidth = 420,
+    server,
     ...rest
 }: CelumaTableProps<T>) {
+    const serverMode = server !== undefined;
 
     // Apply default sorting to data if specified
     const sortedData = useMemo(() => {
-        if (!defaultSort || !dataSource) return dataSource;
+        if (serverMode || !defaultSort || !dataSource) return dataSource;
 
         const sorted = [...dataSource].sort((a, b) => {
             const aValue = (a as Record<string, unknown>)[defaultSort.field];
@@ -119,18 +152,25 @@ export function CelumaTable<T>({
         });
 
         return sorted;
-    }, [dataSource, defaultSort]);
+    }, [dataSource, defaultSort, serverMode]);
 
     // Built-in search — filters the data before it reaches antd.
     const [search, setSearch] = useState("");
+    // A query over the shared limits is not applied at all — never shortened —
+    // in either mode; the field says so (Céluma 1.4, lib/search.ts).
+    const searchText = server ? server.search : search;
+    const searchProblem = useMemo(
+        () => (searchable ? validateSearchQuery(searchText) : null),
+        [searchable, searchText],
+    );
     const searchedData = useMemo(() => {
-        if (!searchable) return sortedData;
+        if (serverMode || !searchable || searchProblem) return sortedData;
         const q = search.trim().toLowerCase();
         if (!q) return sortedData;
         return sortedData.filter((record) =>
             searchFilter ? searchFilter(record, q) : defaultSearchMatch(record, q)
         );
-    }, [sortedData, searchable, search, searchFilter]);
+    }, [sortedData, searchable, search, searchFilter, serverMode, searchProblem]);
 
     const isPaginated = pagination !== false;
     const pageSize = (typeof pagination === 'object' && pagination?.pageSize) || 10;
@@ -147,7 +187,8 @@ export function CelumaTable<T>({
     }, [searchedData]);
 
     // Hidden antd pagination (keeps the paging engine: slices to the current page).
-    const mergedPagination: TablePaginationConfig | false = isPaginated ? {
+    // In server mode the rows already are one page: antd must not slice them.
+    const mergedPagination: TablePaginationConfig | false = isPaginated && !server ? {
         pageSize,
         showSizeChanger: false,
         ...(typeof pagination === 'object' ? pagination : {}),
@@ -157,11 +198,23 @@ export function CelumaTable<T>({
 
     // Wrap antd onChange so column filters/sorters keep our total + page in range.
     const handleChange: TableProps<T>['onChange'] = (pag, filters, sorter, extra) => {
-        const nextTotal = extra.currentDataSource.length;
-        setTotal(nextTotal);
-        setCurrent((c) => Math.min(c, Math.max(1, Math.ceil(nextTotal / pageSize))));
+        if (server) {
+            const selected: Record<string, string[]> = {};
+            for (const [key, values] of Object.entries(filters)) {
+                if (values?.length) selected[key] = values.map(String);
+            }
+            server.onQueryChange({ sort: serverSort(sorter), filters: selected });
+        } else {
+            const nextTotal = extra.currentDataSource.length;
+            setTotal(nextTotal);
+            setCurrent((c) => Math.min(c, Math.max(1, Math.ceil(nextTotal / pageSize))));
+        }
         onChange?.(pag, filters, sorter, extra);
     };
+
+    const pager = server
+        ? { current: server.page, pageSize: server.pageSize, total: server.total, onChange: server.onPageChange }
+        : { current, pageSize, total, onChange: setCurrent };
 
     return (
         <div>
@@ -169,12 +222,17 @@ export function CelumaTable<T>({
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                     <SearchField
                         small
-                        value={search}
-                        onChange={setSearch}
+                        value={searchText}
+                        onChange={server ? server.onSearchChange : setSearch}
                         placeholder={searchPlaceholder}
                         style={{ flex: 1, minWidth: 220, maxWidth: searchWidth }}
                     />
                     {searchExtra}
+                </div>
+            )}
+            {searchable && searchProblem && (
+                <div style={{ marginTop: -8, marginBottom: 12 }}>
+                    <AlertText variant="warning" mt={0}>{searchProblem.message}</AlertText>
                 </div>
             )}
             <Table<T>
@@ -199,13 +257,13 @@ export function CelumaTable<T>({
                 })}
                 {...rest}
             />
-            {isPaginated && total > 0 && (
+            {isPaginated && pager.total > 0 && (
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
                     <CelumaPagination
-                        current={current}
-                        pageSize={pageSize}
-                        total={total}
-                        onChange={setCurrent}
+                        current={pager.current}
+                        pageSize={pager.pageSize}
+                        total={pager.total}
+                        onChange={pager.onChange}
                     />
                 </div>
             )}

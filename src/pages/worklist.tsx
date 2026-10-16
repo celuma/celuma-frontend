@@ -23,6 +23,9 @@ import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
 
+/** The API's maximum page size, to fetch the whole worklist in few requests. */
+const WORKLIST_PAGE_SIZE = 100;
+
 function Worklist() {
     usePageTitle();
     const navigate = useNavigate();
@@ -33,8 +36,17 @@ function Worklist() {
     const loadWorklist = useCallback(async () => {
         setLoading(true);
         try {
-            const data: WorklistResponse = await getMyWorklist();
-            setItems(data.items);
+            // Céluma 1.4 (#6/#7): the API pages the worklist (20 items unless
+            // asked otherwise), while this table searches, filters and pages in
+            // the browser. Loading only the first page hid every item after the
+            // 20th from the table, its search and its total.
+            const all: WorklistItem[] = [];
+            for (let page = 1; ; page++) {
+                const data: WorklistResponse = await getMyWorklist({ page, page_size: WORKLIST_PAGE_SIZE });
+                all.push(...data.items);
+                if (!data.has_more || data.items.length === 0) break;
+            }
+            setItems(all);
         } catch (error) {
             console.error("Error cargando lista de trabajo:", error);
         } finally {
