@@ -50,7 +50,8 @@ import {
     renderUserMention 
 } from "../components/comments/comment_utils";
 import { renderLabels, renderStatusChip } from "../components/ui/table_helpers";
-import { getSampleTypeConfig } from "../components/ui/table_helpers";
+import { getSampleTypeConfig, sampleTypeLabel } from "../components/ui/table_helpers";
+import type { SampleTypeRef } from "../models/sample_type";
 import { showCelumaApiError } from "../lib/celuma_feedback";
 
 // Predefined label colors (same as in LabelsSection)
@@ -122,7 +123,7 @@ type OrderFullResponse = {
     samples: Array<{
         id: string;
         sample_code: string;
-        type: string;
+        sample_type: SampleTypeRef | null;
         state: string;
         order_id: string;
         tenant_id: string;
@@ -655,7 +656,7 @@ export default function OrderDetail() {
             {data && data.samples.length > 0 ? (
                 <div style={{ display: "grid", gap: 10 }}>
                     {data.samples.map((sample) => {
-                        const typeConfig = getSampleTypeConfig(sample.type);
+                        const typeConfig = getSampleTypeConfig(sample.sample_type?.name ?? "");
                         return (
                             <div
                                 key={sample.id}
@@ -689,7 +690,7 @@ export default function OrderDetail() {
                                             {sample.sample_code}
                                         </div>
                                         <div style={{ fontSize: 13, color: tokens.textSecondary }}>
-                                            {typeConfig.label}
+                                            {sampleTypeLabel(sample.sample_type)}
                                         </div>
                                     </div>
                                     {renderStatusChip(sample.state, "sample")}

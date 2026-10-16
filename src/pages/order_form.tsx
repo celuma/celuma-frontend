@@ -17,6 +17,9 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { sortByLabel } from "../lib/sort";
+import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
+import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
+import { formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -46,7 +49,7 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = (parsed as { message?: string } | undefined)?.message ?? formatHttpError(res.status, text);
         throw new Error(message);
     }
     return parsed as TRes;
@@ -75,7 +78,8 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 
 const sampleSchema = z.object({
     sample_code: z.string().trim().nonempty("El código de muestra es requerido."),
-    type: z.enum(["SANGRE", "BIOPSIA", "LAMINILLA", "TEJIDO", "OTRO"]),
+    // Céluma 1.4 (#17): every sample of the order needs an active type of the laboratory catalog.
+    sample_type_id: z.string().trim().nonempty("El tipo de muestra es requerido."),
     notes: z.string().trim().optional(),
     collected_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
     received_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
@@ -98,20 +102,9 @@ const schema = z.object({
 
 type OrderFormData = z.infer<typeof schema>;
 
-/** The `SampleType` enum as the API accepts it, with its Spanish labels.
- *  Unchanged from `order_register.tsx` — CEL-131-07 modernizes the control,
- *  not the catalogue. */
-const SAMPLE_TYPE_OPTIONS = [
-    { value: "SANGRE", label: "Sangre" },
-    { value: "BIOPSIA", label: "Biopsia" },
-    { value: "LAMINILLA", label: "Laminilla" },
-    { value: "TEJIDO", label: "Tejido" },
-    { value: "OTRO", label: "Otro" },
-];
-
 type UnifiedResponse = {
     order: { id: string; order_code: string; status: string; patient_id?: string | null; tenant_id: string; branch_id: string };
-    samples: Array<{ id: string; sample_code: string; type: string; state: string; order_id: string; tenant_id: string; branch_id: string }>;
+    samples: Array<{ id: string; sample_code: string; sample_type: { id: string; code: string; name: string; is_active: boolean } | null; state: string; order_id: string; tenant_id: string; branch_id: string }>;
 };
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -158,6 +151,7 @@ export default function OrderForm() {
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [studyTypes, setStudyTypes] = useState<Array<{ id: string; code: string; name: string; is_active: boolean }>>([]);
     const [loadingStudyTypes, setLoadingStudyTypes] = useState(false);
+    const sampleTypes = useActiveSampleTypes();
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
     const prefilledPatientId = useMemo(() => {
@@ -181,7 +175,7 @@ export default function OrderForm() {
             requested_by: "",
             notes: "",
             samples: [
-                { sample_code: "", type: undefined as unknown as OrderFormData["samples"][0]["type"], notes: "", collected_date: "", received_date: "" },
+                { sample_code: "", sample_type_id: "", notes: "", collected_date: "", received_date: "" },
             ],
         },
         mode: "onTouched",
@@ -273,7 +267,7 @@ export default function OrderForm() {
                 created_by: (currentUserId || undefined),
                 samples: data.samples.map((s) => ({
                     sample_code: s.sample_code,
-                    type: s.type,
+                    sample_type_id: s.sample_type_id,
                     notes: s.notes || undefined,
                     collected_at: s.collected_date ? `${s.collected_date}T00:00:00Z` : undefined,
                     received_at: s.received_date ? `${s.received_date}T00:00:00Z` : undefined,
@@ -446,15 +440,18 @@ export default function OrderForm() {
                                                 />
                                                 <FormField
                                                     control={control}
-                                                    name={`samples.${index}.type`}
+                                                    name={`samples.${index}.sample_type_id`}
                                                     render={(p) => (
                                                         <FloatingCaptionSelect
                                                             label="Tipo de muestra"
                                                             requiredMark
-                                                            value={typeof p.value === "string" ? p.value : undefined}
-                                                            onChange={(val) => p.onChange(val)}
+                                                            value={typeof p.value === "string" && p.value ? p.value : undefined}
+                                                            onChange={(val) => p.onChange(val ?? "")}
                                                             placeholder="Seleccione el tipo de muestra"
-                                                            options={SAMPLE_TYPE_OPTIONS}
+                                                            options={sampleTypes.types.map((t) => ({ value: t.id, label: t.name }))}
+                                                            showSearch
+                                                            loading={sampleTypes.loading}
+                                                            disabled={sampleTypes.empty}
                                                             error={p.error}
                                                         />
                                                     )}
@@ -508,7 +505,7 @@ export default function OrderForm() {
                                             htmlType="button"
                                             type="default"
                                             onClick={() =>
-                                                append({ sample_code: "", type: undefined as unknown as OrderFormData["samples"][0]["type"], notes: "", collected_date: "", received_date: "" })
+                                                append({ sample_code: "", sample_type_id: "", notes: "", collected_date: "", received_date: "" })
                                             }
                                         >
                                             Agregar otra muestra
@@ -517,6 +514,8 @@ export default function OrderForm() {
                                 </div>
                             </section>
 
+                            {sampleTypes.empty && <SampleTypeSetupNotice />}
+                            {sampleTypes.error && <ErrorText>{sampleTypes.error}</ErrorText>}
                             {serverError && <ErrorText>{serverError}</ErrorText>}
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -527,7 +526,7 @@ export default function OrderForm() {
                                     <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
                                         Cancelar
                                     </Button>
-                                    <Button htmlType="submit" type="primary" loading={loading}>
+                                    <Button htmlType="submit" type="primary" loading={loading} disabled={sampleTypes.empty}>
                                         Registrar
                                     </Button>
                                 </div>

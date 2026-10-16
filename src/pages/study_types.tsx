@@ -21,6 +21,10 @@ import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
 import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
+import { getErrorMessage } from "../lib/api_error";
+import { useUserProfile } from "../hooks/use_user_profile";
+import CatalogTransferModal from "../components/catalog/catalog_transfer_modal";
+import { exportCatalog, saveDownload } from "../services/sample_type_service";
 import type { ColumnsType } from "antd/es/table";
 
 const captionLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: tokens.primary, marginBottom: 6 };
@@ -148,6 +152,25 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    // Catalog JSON export and "copy to sample types" (issue #17) need the same
+    // permission the API enforces for them; the API remains the authority.
+    const { hasPermission } = useUserProfile();
+    const canManageCatalog = hasPermission("admin:manage_catalog");
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [copyOpen, setCopyOpen] = useState(false);
+    const [copyDone, setCopyDone] = useState(false);
+    const [exporting, setExporting] = useState(false);
+
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            saveDownload(await exportCatalog("study_types"));
+        } catch (err) {
+            message.error(getErrorMessage(err));
+        } finally {
+            setExporting(false);
+        }
+    };
 
     const { control, handleSubmit, reset } = useForm<StudyTypeFormData>({
         resolver: zodResolver(studyTypeSchema),
@@ -343,9 +366,19 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                     title="Tipos de Estudio"
                     subtitle="Configura los tipos de estudio disponibles en el laboratorio"
                     extra={
-                        <CelumaButton type="primary" onClick={handleCreate}>
-                            Nuevo Tipo de Estudio
-                        </CelumaButton>
+                        <Space wrap>
+                            {canManageCatalog && (
+                                <>
+                                    <CelumaButton onClick={handleExport} loading={exporting}>Exportar JSON</CelumaButton>
+                                    <CelumaButton onClick={() => setCopyOpen(true)} disabled={selectedIds.length === 0}>
+                                        {`Copiar a tipos de muestra${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+                                    </CelumaButton>
+                                </>
+                            )}
+                            <CelumaButton type="primary" onClick={handleCreate}>
+                                Nuevo Tipo de Estudio
+                            </CelumaButton>
+                        </Space>
                     }
                 />
                 <Card style={cardStyle}>
@@ -359,6 +392,10 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                         searchable
                         searchPlaceholder="Buscar tipos de estudio"
                         searchFilter={(r, q) => matchesQuery([r.code, r.name, r.description, r.default_template?.name], q)}
+                        rowSelection={canManageCatalog ? {
+                            selectedRowKeys: selectedIds,
+                            onChange: (keys) => setSelectedIds(keys as string[]),
+                        } : undefined}
                     />
                 </Card>
             </div>
@@ -422,6 +459,20 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                     <ModalFormFooter onCancel={closeModal} submitLabel={editingId ? "Guardar cambios" : "Crear"} loading={submitting} />
                 </form>
             </CelumaModal>
+            {canManageCatalog && (
+                <CatalogTransferModal
+                    open={copyOpen}
+                    source={{ mode: "copy", studyTypeIds: selectedIds }}
+                    onClose={() => {
+                        setCopyOpen(false);
+                        // The selection is cleared only once the copy happened, and only
+                        // after the result was shown (the modal is keyed on it).
+                        if (copyDone) setSelectedIds([]);
+                        setCopyDone(false);
+                    }}
+                    onDone={() => setCopyDone(true)}
+                />
+            )}
         </>
     );
 

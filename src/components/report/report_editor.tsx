@@ -80,7 +80,7 @@ import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
 import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
-import { renderStatusChip, getSampleTypeConfig } from "../ui/table_helpers";
+import { renderStatusChip, getSampleTypeConfig, sampleTypeLabel } from "../ui/table_helpers";
 import { getInitials, getAvatarColor } from "../comments/comment_utils";
 import CommentInput from "../comments/comment_input";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -2043,7 +2043,7 @@ const ReportEditor: React.FC = () => {
                             <CelumaTabs
                                 destroyInactiveTabPane
                                 items={samples.map((s, idx) => {
-                                    const typeCfg = getSampleTypeConfig(s.type);
+                                    const typeCfg = getSampleTypeConfig(s.sample_type?.name ?? "");
                                     return {
                                     key: s.id,
                                     label: (
@@ -2056,7 +2056,7 @@ const ReportEditor: React.FC = () => {
                                         <div style={{ display: "grid", gap: 12 }}>
                                             <Panel style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
                                                 <MetaItem icon={typeCfg.icon}>
-                                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{typeCfg.label}</span>
+                                                    <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{sampleTypeLabel(s.sample_type)}</span>
                                                 </MetaItem>
                                                 <MetaItem icon={<CalendarOutlined />}>
                                                     {s.received_at
