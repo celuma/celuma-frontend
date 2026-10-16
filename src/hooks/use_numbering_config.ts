@@ -1,25 +1,22 @@
 import { useEffect, useState } from "react";
 import { getNumberingConfigs } from "../services/numbering_service";
-import type { NumberingMode } from "../models/numbering";
+import type { ManualEntry } from "../models/numbering";
 
 /**
- * The laboratory's numbering mode per entity kind (Céluma 1.4, issue #8).
+ * How each registration form should offer the code input to THIS user (Céluma 1.4, issue #8).
  *
- * It only shapes the registration forms (is the code optional, required or
- * hidden). The API enforces the mode regardless, so a failed or slow load
- * falls back to `automatic`: an optional field that the server can still refuse.
+ * The API computes it from the laboratory's policy AND the user's capability and enforces both
+ * on every request; this only shapes the form. A failed or slow load falls back to `optional`
+ * (an input the server can still refuse).
  */
-export function useNumberingModes() {
-    const [modes, setModes] = useState<{ order: NumberingMode; sample: NumberingMode }>({
-        order: "automatic",
-        sample: "automatic",
-    });
+export function useManualEntryModes() {
+    const [modes, setModes] = useState<{ order: ManualEntry; sample: ManualEntry }>({ order: "optional", sample: "optional" });
     const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
         let alive = true;
         getNumberingConfigs()
-            .then((c) => alive && setModes({ order: c.order.mode, sample: c.sample.mode }))
+            .then((c) => alive && setModes({ order: c.order.manual_entry, sample: c.sample.manual_entry }))
             .catch(() => undefined)
             .finally(() => alive && setLoaded(true));
         return () => {

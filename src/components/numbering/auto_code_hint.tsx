@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { tokens } from "../design/tokens";
 import { previewNumbering } from "../../services/numbering_service";
-import type { NumberingKind, NumberingMode } from "../../models/numbering";
+import type { ManualEntry, NumberingKind } from "../../models/numbering";
 
 interface Props {
     kind: NumberingKind;
-    mode: NumberingMode;
+    /** How this user is offered the code input (policy AND capability, computed by the API). */
+    entry: ManualEntry;
     /** Study type (orders) or sample type (samples) chosen in the form. */
     scopeId?: string;
     branchId?: string;
@@ -20,12 +21,12 @@ interface Props {
  * reserves nothing and consumes no number (Céluma 1.4, issue #8). The real
  * code is the one the registration returns, and may differ.
  */
-export default function AutoCodeHint({ kind, mode, scopeId, branchId, manualTyped }: Props) {
+export default function AutoCodeHint({ kind, entry, scopeId, branchId, manualTyped }: Props) {
     const [estimate, setEstimate] = useState<string | null>(null);
 
     useEffect(() => {
         setEstimate(null);
-        if (!scopeId || mode === "manual_only") return;
+        if (!scopeId || entry === "required" || entry === "blocked") return;
         let alive = true;
         previewNumbering({ entity_kind: kind, scope_id: scopeId, branch_id: branchId || undefined })
             .then((p) => alive && setEstimate(p.valid ? (p.estimate?.code ?? null) : null))
@@ -33,19 +34,21 @@ export default function AutoCodeHint({ kind, mode, scopeId, branchId, manualType
         return () => {
             alive = false;
         };
-    }, [kind, mode, scopeId, branchId]);
+    }, [kind, entry, scopeId, branchId]);
 
     const noun = kind === "order" ? "orden" : "muestra";
     let text: string;
-    if (mode === "manual_only") text = `El código de la ${noun} es obligatorio.`;
+    if (entry === "blocked") text = `Este laboratorio exige escribir el código de la ${noun} y tu rol no tiene permiso para hacerlo: pide a un administrador.`;
+    else if (entry === "required") text = `El código de la ${noun} es obligatorio.`;
     else if (manualTyped) text = `Se usará el código escrito, sin consumir la numeración automática.`;
-    else if (mode === "automatic_only") text = `El código de la ${noun} se asigna automáticamente al registrar.`;
+    else if (entry === "hidden") text = `El código de la ${noun} se asigna automáticamente al registrar.`;
     else text = `Déjalo vacío para asignarlo automáticamente al registrar.`;
+    const showEstimate = estimate && !manualTyped && entry !== "required" && entry !== "blocked";
 
     return (
         <span style={{ fontSize: 12, color: tokens.textSecondary }} data-testid={`auto-code-hint-${kind}`}>
             {text}
-            {estimate && !manualTyped && mode !== "manual_only" ? ` Ejemplo: ${estimate} (no reservado).` : ""}
+            {showEstimate ? ` Ejemplo: ${estimate} (no reservado).` : ""}
         </span>
     );
 }

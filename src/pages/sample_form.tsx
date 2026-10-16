@@ -16,7 +16,8 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
-import { useNumberingModes } from "../hooks/use_numbering_config";
+import { useManualEntryModes } from "../hooks/use_numbering_config";
+import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
 import AutoCodeHint from "../components/numbering/auto_code_hint";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
@@ -32,11 +33,12 @@ function getSessionContext() {
     return { token, tenantId, branchId };
 }
 
-async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
+async function postJSON<TReq extends object, TRes>(path: string, body: TReq, extraHeaders: Record<string, string> = {}): Promise<TRes> {
     const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
         accept: "application/json",
+        ...extraHeaders,
     };
     if (token) headers["Authorization"] = token;
     const res = await fetch(`${getApiBase()}${path}`, {
@@ -147,7 +149,8 @@ export default function SampleForm() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const sampleTypes = useActiveSampleTypes();
-    const numberingModes = useNumberingModes();
+    const numberingModes = useManualEntryModes();
+    const idempotency = useMemo(() => createIdempotencySession(), []);
 
     const prefilledOrderId = useMemo(() => {
         const qs = new URLSearchParams(search);
@@ -209,8 +212,11 @@ export default function SampleForm() {
                 throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
             }
             const sampleCode = (data.sample_code ?? "").trim();
-            if (numberingModes.sample === "manual_only" && !sampleCode) {
-                throw new Error("El código de la muestra es obligatorio: la numeración automática está desactivada.");
+            if (numberingModes.sample === "blocked") {
+                throw new Error("Este laboratorio exige escribir el código de la muestra y tu rol no tiene permiso para hacerlo.");
+            }
+            if (numberingModes.sample === "required" && !sampleCode) {
+                throw new Error("El código de la muestra es obligatorio en este laboratorio.");
             }
             const payload = {
                 tenant_id: finalTenant,
@@ -222,7 +228,10 @@ export default function SampleForm() {
                 collected_at: data.collected_date ? `${data.collected_date}T00:00:00Z` : undefined,
                 received_at: data.received_date ? `${data.received_date}T00:00:00Z` : undefined,
             };
-            const created = await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload as SampleFormData);
+            const created = await postJSON<SampleFormData, CreateSampleResponse>(
+                "/v1/laboratory/samples/", payload as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
+            );
+            idempotency.succeeded();
             reset();
             navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
@@ -323,7 +332,7 @@ export default function SampleForm() {
                                 <SectionTitle>Muestra</SectionTitle>
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código se asigna automáticamente salvo que escriba uno; un código escrito debe ser único dentro de la orden.</p>
                                 <div className="sf-grid-3">
-                                    {numberingModes.sample !== "automatic_only" ? (
+                                    {numberingModes.sample !== "hidden" && numberingModes.sample !== "blocked" ? (
                                         <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
                                             <FormField
                                                 control={control}
@@ -332,16 +341,16 @@ export default function SampleForm() {
                                                     <FloatingCaptionInput
                                                         {...p}
                                                         value={String(p.value ?? "")}
-                                                        label={numberingModes.sample === "manual_only" ? "Código de Muestra" : "Código de Muestra (opcional)"}
-                                                        requiredMark={numberingModes.sample === "manual_only"}
+                                                        label={numberingModes.sample === "required" ? "Código de Muestra" : "Código de Muestra (opcional)"}
+                                                        requiredMark={numberingModes.sample === "required"}
                                                     />
                                                 )}
                                             />
-                                            <AutoCodeHint kind="sample" mode={numberingModes.sample} scopeId={watchedType || undefined} branchId={watchedBranch || undefined} manualTyped={Boolean((watchedCode ?? "").trim())} />
+                                            <AutoCodeHint kind="sample" entry={numberingModes.sample} scopeId={watchedType || undefined} branchId={watchedBranch || undefined} manualTyped={Boolean((watchedCode ?? "").trim())} />
                                         </div>
                                     ) : (
                                         <div style={{ alignContent: "center", display: "grid" }}>
-                                            <AutoCodeHint kind="sample" mode="automatic_only" scopeId={watchedType || undefined} branchId={watchedBranch || undefined} />
+                                            <AutoCodeHint kind="sample" entry={numberingModes.sample} scopeId={watchedType || undefined} branchId={watchedBranch || undefined} />
                                         </div>
                                     )}
                                     <FormField

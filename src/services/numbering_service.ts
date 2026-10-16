@@ -3,7 +3,7 @@
  * preview (Céluma 1.4, issue #8).
  *
  *   GET  /v1/numbering/config               (lab:read)
- *   PUT  /v1/numbering/config/{order|sample} (admin:manage_catalog)
+ *   PUT  /v1/numbering/config/{order|sample} (admin:manage_catalog; activation and every setting)
  *   POST /v1/numbering/preview              (lab:read; reads only, reserves nothing)
  */
 import { apiFetch } from "../lib/api_fetch";

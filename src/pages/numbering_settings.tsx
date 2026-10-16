@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Card, Input, InputNumber, Radio, Select, Table, message } from "antd";
+import { Alert, Card, Input, InputNumber, Radio, Select, Switch, Table, message } from "antd";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import CelumaButton from "../components/ui/button";
@@ -9,12 +9,15 @@ import { getNumberingConfigs, previewNumbering, saveNumberingConfig } from "../s
 import { listSampleTypes } from "../services/sample_type_service";
 import {
     DEFAULT_NUMBERING_FORMAT,
-    MODE_LABEL,
-    NUMBERING_MODES,
+    MANUAL_POLICIES,
+    composeFormat,
+    timezoneOptions,
+    POLICY_LABEL,
+    type ManualPolicy,
     type NumberingConfig,
     type NumberingKind,
-    type NumberingMode,
     type NumberingPreview,
+    type NumberingScope,
 } from "../models/numbering";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -39,8 +42,8 @@ const KIND_TEXT: Record<NumberingKind, { title: string; subtitle: string; scopeL
 };
 
 const TOKEN_HELP =
-    "Variables: {BASE} código del tipo, {SEQ} consecutivo, {MM} mes, {YY} o {YYYY} año. Cada una debe aparecer una vez " +
-    "(año: {YY} o {YYYY}). Entre variables solo se permiten letras, números, '.', '_' y '-'.";
+    "Variables: {BASE} código del tipo, {BRANCH} código de la sucursal (solo con alcance por sucursal), {SEQ} consecutivo, {MM} mes, " +
+    "{YY} o {YYYY} año. Cada una debe aparecer una vez (año: {YY} o {YYYY}). Entre variables solo se permiten letras, números, '.', '_' y '-'.";
 
 interface CardProps {
     kind: NumberingKind;
@@ -49,31 +52,64 @@ interface CardProps {
     onSaved: (config: NumberingConfig) => void;
 }
 
+type Separator = "none" | "hyphen" | "custom";
+
+function detectSeparator(format: string, scope: NumberingScope): Separator {
+    if (format === composeFormat("none", scope)) return "none";
+    if (format === composeFormat("hyphen", scope)) return "hyphen";
+    return "custom";
+}
+
 function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     const text = KIND_TEXT[kind];
+    const zoneOptions = useMemo(() => timezoneOptions().map((z) => ({ value: z, label: z })), []);
+    const [active, setActive] = useState(config.active);
+    const [policy, setPolicy] = useState<ManualPolicy>(config.manual_policy);
+    const [scope, setScope] = useState<NumberingScope>(config.scope);
+    const [startValue, setStartValue] = useState<number>(config.start_value);
     const [format, setFormat] = useState(config.format);
+    const [separator, setSeparator] = useState<Separator>(detectSeparator(config.format, config.scope));
     const [width, setWidth] = useState<number>(config.sequence_min_width);
-    const [mode, setMode] = useState<NumberingMode>(config.mode);
+    const [timezone, setTimezone] = useState(config.timezone);
     const [scopeId, setScopeId] = useState<string | undefined>(options[0]?.id);
     const [preview, setPreview] = useState<NumberingPreview | null>(null);
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
+        setActive(config.active);
+        setPolicy(config.manual_policy);
+        setScope(config.scope);
+        setStartValue(config.start_value);
         setFormat(config.format);
+        setSeparator(detectSeparator(config.format, config.scope));
         setWidth(config.sequence_min_width);
-        setMode(config.mode);
+        setTimezone(config.timezone);
     }, [config]);
 
     useEffect(() => {
         if (!scopeId && options[0]) setScopeId(options[0].id);
     }, [options, scopeId]);
 
+    const chooseSeparator = (next: Separator, nextScope: NumberingScope = scope) => {
+        setSeparator(next);
+        if (next !== "custom") setFormat(composeFormat(next, nextScope));
+    };
+
+    const chooseScope = (next: NumberingScope) => {
+        setScope(next);
+        // Keep the format consistent with the scope: a branch scope needs {BRANCH}, a tenant scope must not have it.
+        if (separator !== "custom") setFormat(composeFormat(separator, next));
+        else if (next === "tenant") setFormat((f) => f.replace(/\{BRANCH\}-?/g, ""));
+    };
+
     // Live preview: debounced, and strictly read-only on the server (it reserves nothing).
     useEffect(() => {
         let alive = true;
         const timer = setTimeout(() => {
-            previewNumbering({ entity_kind: kind, format, sequence_min_width: width, scope_id: scopeId })
+            previewNumbering({
+                entity_kind: kind, active, format, sequence_min_width: width, start_value: startValue, scope, timezone, scope_id: scopeId,
+            })
                 .then((p) => {
                     if (!alive) return;
                     setPreview(p);
@@ -85,15 +121,22 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
             alive = false;
             clearTimeout(timer);
         };
-    }, [kind, format, width, scopeId]);
+    }, [kind, active, format, width, startValue, scope, timezone, scopeId]);
 
-    const dirty = format !== config.format || width !== config.sequence_min_width || mode !== config.mode;
-    const valid = preview?.valid !== false && Number.isInteger(width) && width >= 1 && width <= 6;
+    const dirty =
+        active !== config.active || policy !== config.manual_policy || scope !== config.scope ||
+        startValue !== config.start_value || format !== config.format || width !== config.sequence_min_width ||
+        timezone !== config.timezone;
+    const valid =
+        preview?.valid !== false && Number.isInteger(width) && width >= 1 && width <= 6 &&
+        Number.isInteger(startValue) && startValue >= 1;
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            const saved = await saveNumberingConfig(kind, { format, sequence_min_width: width, mode });
+            const saved = await saveNumberingConfig(kind, {
+                active, manual_policy: policy, format, sequence_min_width: width, start_value: startValue, scope, timezone,
+            });
             onSaved(saved);
             message.success("Numeración guardada. Aplica a los registros nuevos; los códigos existentes no cambian.");
         } catch (err) {
@@ -107,9 +150,37 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
         <Card style={cardStyle} title={text.title} data-testid={`numbering-card-${kind}`}>
             <div style={{ display: "grid", gap: 16 }}>
                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>{text.subtitle}</p>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <Switch checked={active} onChange={setActive} aria-label={`Activar numeración mensual de ${text.title.toLowerCase()}`} data-testid={`active-${kind}`} />
+                    <strong>{active ? "Numeración mensual activa" : "Numeración mensual sin activar"}</strong>
+                </div>
+                {!active && (
+                    <Alert
+                        type="info" showIcon data-testid={`inactive-note-${kind}`}
+                        message={kind === "order"
+                            ? "Sin activar, las órdenes nuevas siguen usando el formato anterior (CÓDIGO-n)."
+                            : "Sin activar, el código de cada muestra se escribe a mano, como antes."}
+                    />
+                )}
+                {active && (
+                    <Alert type="warning" showIcon message="Al guardar, los registros nuevos usarán esta numeración. Los códigos ya emitidos no cambian ni se reutilizan." />
+                )}
+
+                <div style={{ display: "grid", gap: 6 }}>
+                    <strong>Separador</strong>
+                    <Radio.Group value={separator} onChange={(e) => chooseSeparator(e.target.value)} data-testid={`separator-${kind}`}>
+                        <Radio value="none">Sin separador (<code>{composeFormat("none", "tenant").replace("{BASE}", "CU").replace("{SEQ}", "01").replace("{MM}", "10").replace("{YY}", "26")}</code>)</Radio>
+                        <Radio value="hyphen">Con guion (<code>{composeFormat("hyphen", "tenant").replace("{BASE}", "CU").replace("{SEQ}", "01").replace("{MM}", "10").replace("{YY}", "26")}</code>)</Radio>
+                        <Radio value="custom">Personalizado</Radio>
+                    </Radio.Group>
+                </div>
                 <div style={{ display: "grid", gap: 6 }}>
                     <label style={{ fontWeight: 600 }} htmlFor={`fmt-${kind}`}>Formato</label>
-                    <Input id={`fmt-${kind}`} value={format} onChange={(e) => setFormat(e.target.value)} maxLength={60} />
+                    <Input
+                        id={`fmt-${kind}`} value={format} maxLength={60}
+                        onChange={(e) => { setFormat(e.target.value); setSeparator(detectSeparator(e.target.value, scope)); }}
+                    />
                     <span style={{ fontSize: 12, color: tokens.textSecondary }}>
                         Predeterminado: <code>{DEFAULT_NUMBERING_FORMAT}</code>. {TOKEN_HELP}
                     </span>
@@ -122,12 +193,48 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                     </span>
                 </div>
                 <div style={{ display: "grid", gap: 6 }}>
+                    <label style={{ fontWeight: 600 }} htmlFor={`start-${kind}`}>Valor inicial</label>
+                    <InputNumber id={`start-${kind}`} min={1} max={99999999} value={startValue} onChange={(v) => setStartValue(Number(v))} />
+                    <span style={{ fontSize: 12, color: tokens.textSecondary }}>
+                        Primer consecutivo de cada contador nuevo (predeterminado 1). Subirlo adelanta los contadores existentes; bajarlo nunca
+                        los retrocede ni reutiliza códigos ya emitidos.
+                    </span>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                    <strong>Alcance del contador</strong>
+                    <Radio.Group value={scope} onChange={(e) => chooseScope(e.target.value)} data-testid={`scope-${kind}`}>
+                        <Radio value="tenant">Todo el laboratorio</Radio>
+                        <Radio value="branch">Por sucursal (el código incluye la sucursal: {"{BRANCH}"})</Radio>
+                    </Radio.Group>
+                    {scope === "branch" && (
+                        <span style={{ fontSize: 12, color: tokens.textSecondary }}>
+                            Cada sucursal lleva su propio consecutivo; el código de la sucursal forma parte del código para que dos sucursales nunca produzcan el mismo.
+                        </span>
+                    )}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                    <label style={{ fontWeight: 600 }} htmlFor={`tz-${kind}`}>Zona horaria de la numeración</label>
+                    <Select
+                        id={`tz-${kind}`} showSearch value={timezone} onChange={setTimezone} data-testid={`timezone-${kind}`}
+                        options={zoneOptions} style={{ maxWidth: 360 }} aria-label="Zona horaria de la numeración"
+                    />
+                    <span style={{ fontSize: 12, color: tokens.textSecondary }}>
+                        Define el mes (MM/AA) de los contadores de todo el laboratorio, sin importar qué sucursal registre. Con alcance por sucursal
+                        se usa la zona de cada sucursal. Cambiarla nunca reinicia contadores ni reutiliza códigos.
+                    </span>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
                     <strong>Códigos manuales</strong>
-                    <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)} data-testid={`mode-${kind}`}>
-                        {NUMBERING_MODES.map((m) => (
-                            <Radio key={m} value={m}>{MODE_LABEL[m]}</Radio>
+                    <Radio.Group value={policy} onChange={(e) => setPolicy(e.target.value)} data-testid={`policy-${kind}`}>
+                        {MANUAL_POLICIES.map((m) => (
+                            <Radio key={m} value={m}>{POLICY_LABEL[m]}</Radio>
                         ))}
                     </Radio.Group>
+                    <span style={{ fontSize: 12, color: tokens.textSecondary }}>
+                        Además de esta política, cada usuario necesita el permiso «Escribir códigos manualmente»
+                        (<code>lab:enter_manual_code</code>); habilitarlo aquí no autoriza a nadie por sí solo. Un código escrito no consume la numeración
+                        automática, pasa las mismas verificaciones de colisión y queda auditado.
+                    </span>
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -152,7 +259,10 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                                 dataSource={preview.examples}
                                 columns={[
                                     { title: "Consecutivo", dataIndex: "sequence", key: "sequence", width: 120 },
-                                    { title: `Código (${String(preview.period_month).padStart(2, "0")}/${preview.period_year})`, dataIndex: "code", key: "code" },
+                                    {
+                                        title: preview.scheme === "legacy" ? "Código (formato anterior)" : `Código (${String(preview.period_month).padStart(2, "0")}/${preview.period_year}, ${preview.timezone})`,
+                                        dataIndex: "code", key: "code",
+                                    },
                                 ]}
                             />
                             {preview.estimate && (
