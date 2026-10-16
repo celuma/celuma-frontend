@@ -39,7 +39,8 @@ test("assigns a pathologist in a laboratory with more than ten active users", as
     });
     expect(patientResponse.ok(), await patientResponse.text()).toBeTruthy();
     const orderResponse = await request.post(`${API_BASE}/api/v1/laboratory/orders/`, {
-        headers, data: { tenant_id: lab.tenant_id, branch_id: lab.branch_id,
+        // Céluma 1.4 (#8): creation routes require an Idempotency-Key.
+        headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, data: { tenant_id: lab.tenant_id, branch_id: lab.branch_id,
             patient_id: (await patientResponse.json()).id,
             study_type_id: (await study.json()).id, order_code: `HF-${suffix}` },
     });

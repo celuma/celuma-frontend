@@ -46,6 +46,10 @@ async function apiJson<T>(
 ): Promise<T> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+    // Céluma 1.4 (#8): the creation routes require an Idempotency-Key (one per logical request).
+    if (method === "POST" && /\/laboratory\/(orders\/(unified)?|samples\/)$/.test(urlPath)) {
+        headers["Idempotency-Key"] = crypto.randomUUID();
+    }
     const res = await request.fetch(`${API_BASE}${urlPath}`, {
         method,
         headers,

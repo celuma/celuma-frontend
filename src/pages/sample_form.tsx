@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, Card } from "antd";
@@ -16,6 +16,9 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
+import { useManualEntryModes } from "../hooks/use_numbering_config";
+import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
+import AutoCodeHint from "../components/numbering/auto_code_hint";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
 
@@ -30,11 +33,12 @@ function getSessionContext() {
     return { token, tenantId, branchId };
 }
 
-async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
+async function postJSON<TReq extends object, TRes>(path: string, body: TReq, extraHeaders: Record<string, string> = {}): Promise<TRes> {
     const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
         accept: "application/json",
+        ...extraHeaders,
     };
     if (token) headers["Authorization"] = token;
     const res = await fetch(`${getApiBase()}${path}`, {
@@ -78,7 +82,8 @@ const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
     branch_id: z.string().trim().nonempty("La sucursal es requerida."),
     order_id: z.string().trim().nonempty("La orden es requerida."),
-    sample_code: z.string().trim().nonempty("El código de muestra es requerido."),
+    // Céluma 1.4 (#8): empty = generated monthly code; typed = manual override (the API enforces the laboratory's mode).
+    sample_code: z.string().trim().optional(),
     // Céluma 1.4 (#17): an active type of the laboratory catalog, always required.
     sample_type_id: z.string().trim().nonempty("El tipo de muestra es requerido."),
     notes: z.string().trim().optional(),
@@ -144,6 +149,8 @@ export default function SampleForm() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const sampleTypes = useActiveSampleTypes();
+    const numberingModes = useManualEntryModes();
+    const idempotency = useMemo(() => createIdempotencySession(), []);
 
     const prefilledOrderId = useMemo(() => {
         const qs = new URLSearchParams(search);
@@ -164,6 +171,10 @@ export default function SampleForm() {
         },
         mode: "onTouched",
     });
+
+    const watchedType = useWatch({ control, name: "sample_type_id" });
+    const watchedBranch = useWatch({ control, name: "branch_id" });
+    const watchedCode = useWatch({ control, name: "sample_code" });
 
     useEffect(() => {
         (async () => {
@@ -200,17 +211,27 @@ export default function SampleForm() {
             if (!finalTenant || !finalBranch) {
                 throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
             }
+            const sampleCode = (data.sample_code ?? "").trim();
+            if (numberingModes.sample === "blocked") {
+                throw new Error("Este laboratorio exige escribir el código de la muestra y tu rol no tiene permiso para hacerlo.");
+            }
+            if (numberingModes.sample === "required" && !sampleCode) {
+                throw new Error("El código de la muestra es obligatorio en este laboratorio.");
+            }
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
                 order_id: data.order_id,
-                sample_code: data.sample_code,
+                sample_code: sampleCode || undefined,
                 sample_type_id: data.sample_type_id,
                 notes: data.notes || undefined,
                 collected_at: data.collected_date ? `${data.collected_date}T00:00:00Z` : undefined,
                 received_at: data.received_date ? `${data.received_date}T00:00:00Z` : undefined,
             };
-            const created = await postJSON<SampleFormData, CreateSampleResponse>("/v1/laboratory/samples/", payload);
+            const created = await postJSON<SampleFormData, CreateSampleResponse>(
+                "/v1/laboratory/samples/", payload as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
+            );
+            idempotency.succeeded();
             reset();
             navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
@@ -309,15 +330,29 @@ export default function SampleForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Muestra</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código debe ser único dentro de la orden.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código se asigna automáticamente salvo que escriba uno; un código escrito debe ser único dentro de la orden.</p>
                                 <div className="sf-grid-3">
-                                    <FormField
-                                        control={control}
-                                        name="sample_code"
-                                        render={(p) => (
-                                            <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Muestra" requiredMark />
-                                        )}
-                                    />
+                                    {numberingModes.sample !== "hidden" && numberingModes.sample !== "blocked" ? (
+                                        <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
+                                            <FormField
+                                                control={control}
+                                                name="sample_code"
+                                                render={(p) => (
+                                                    <FloatingCaptionInput
+                                                        {...p}
+                                                        value={String(p.value ?? "")}
+                                                        label={numberingModes.sample === "required" ? "Código de Muestra" : "Código de Muestra (opcional)"}
+                                                        requiredMark={numberingModes.sample === "required"}
+                                                    />
+                                                )}
+                                            />
+                                            <AutoCodeHint kind="sample" entry={numberingModes.sample} scopeId={watchedType || undefined} branchId={watchedBranch || undefined} manualTyped={Boolean((watchedCode ?? "").trim())} />
+                                        </div>
+                                    ) : (
+                                        <div style={{ alignContent: "center", display: "grid" }}>
+                                            <AutoCodeHint kind="sample" entry={numberingModes.sample} scopeId={watchedType || undefined} branchId={watchedBranch || undefined} />
+                                        </div>
+                                    )}
                                     <FormField
                                         control={control}
                                         name="sample_type_id"
