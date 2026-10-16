@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, Card } from "antd";
@@ -20,6 +20,8 @@ import { sortByLabel } from "../lib/sort";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
+import { useNumberingModes } from "../hooks/use_numbering_config";
+import AutoCodeHint from "../components/numbering/auto_code_hint";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -77,7 +79,8 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
 }
 
 const sampleSchema = z.object({
-    sample_code: z.string().trim().nonempty("El código de muestra es requerido."),
+    // Céluma 1.4 (#8): empty = generated monthly code; typed = manual override (the API enforces the laboratory's mode).
+    sample_code: z.string().trim().optional(),
     // Céluma 1.4 (#17): every sample of the order needs an active type of the laboratory catalog.
     sample_type_id: z.string().trim().nonempty("El tipo de muestra es requerido."),
     notes: z.string().trim().optional(),
@@ -91,6 +94,7 @@ const schema = z.object({
     patient_id: z.string().trim().optional(),
     requesting_physician_id: z.string().trim().optional(),
     study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
+    order_code: z.string().trim().max(100, "Máximo 100 caracteres").optional(),
     requested_by: z.string().trim().optional(),
     notes: z.string().trim().optional(),
     created_by: z.string().trim().optional(),
@@ -172,6 +176,7 @@ export default function OrderForm() {
             patient_id: prefilledPatientId,
             requesting_physician_id: prefilledRequestingPhysicianId,
             study_type_id: "",
+            order_code: "",
             requested_by: "",
             notes: "",
             samples: [
@@ -182,6 +187,11 @@ export default function OrderForm() {
     });
 
     const { fields, append, remove } = useFieldArray({ control, name: "samples" });
+    const numberingModes = useNumberingModes();
+    const watchedStudyType = useWatch({ control, name: "study_type_id" });
+    const watchedBranch = useWatch({ control, name: "branch_id" });
+    const watchedOrderCode = useWatch({ control, name: "order_code" });
+    const watchedSamples = useWatch({ control, name: "samples" });
 
     useEffect(() => {
         (async () => {
@@ -257,16 +267,24 @@ export default function OrderForm() {
             if (!finalTenant || !finalBranch) {
                 throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
             }
+            const orderCode = (data.order_code ?? "").trim();
+            if (numberingModes.order === "manual_only" && !orderCode) {
+                throw new Error("El código de la orden es obligatorio: la numeración automática está desactivada.");
+            }
+            if (numberingModes.sample === "manual_only" && data.samples.some((s) => !(s.sample_code ?? "").trim())) {
+                throw new Error("El código de cada muestra es obligatorio: la numeración automática está desactivada.");
+            }
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
                 patient_id: data.patient_id || undefined,
                 requesting_physician_id: data.requesting_physician_id || undefined,
                 study_type_id: data.study_type_id,
+                order_code: orderCode || undefined,
                 notes: data.notes || undefined,
                 created_by: (currentUserId || undefined),
                 samples: data.samples.map((s) => ({
-                    sample_code: s.sample_code,
+                    sample_code: (s.sample_code ?? "").trim() || undefined,
                     sample_type_id: s.sample_type_id,
                     notes: s.notes || undefined,
                     collected_at: s.collected_date ? `${s.collected_date}T00:00:00Z` : undefined,
@@ -370,7 +388,7 @@ export default function OrderForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Orden</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione el tipo de estudio que se realizará. El código de la orden se asignará automáticamente a partir de él.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Seleccione el tipo de estudio que se realizará. El código de la orden se asigna al registrar según la numeración mensual de este tipo de estudio.</p>
                                 <div className="of-grid-2">
                                     <FormField
                                         control={control}
@@ -413,6 +431,29 @@ export default function OrderForm() {
                                     />
                                 </div>
 
+                                {numberingModes.order !== "automatic_only" && (
+                                    <div className="of-grid-2">
+                                        <div style={{ display: "grid", gap: 6 }}>
+                                            <FormField
+                                                control={control}
+                                                name="order_code"
+                                                render={(p) => (
+                                                    <FloatingCaptionInput
+                                                        {...p}
+                                                        value={String(p.value ?? "")}
+                                                        label={numberingModes.order === "manual_only" ? "Código de la orden" : "Código de la orden (opcional)"}
+                                                        requiredMark={numberingModes.order === "manual_only"}
+                                                    />
+                                                )}
+                                            />
+                                            <AutoCodeHint kind="order" mode={numberingModes.order} scopeId={watchedStudyType || undefined} branchId={watchedBranch || undefined} manualTyped={Boolean((watchedOrderCode ?? "").trim())} />
+                                        </div>
+                                    </div>
+                                )}
+                                {numberingModes.order === "automatic_only" && (
+                                    <AutoCodeHint kind="order" mode="automatic_only" scopeId={watchedStudyType || undefined} branchId={watchedBranch || undefined} />
+                                )}
+
                                 <div className="of-grid-2">
                                     <FormField
                                         control={control}
@@ -426,18 +467,32 @@ export default function OrderForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Muestras</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Complete el código, tipo y las fechas de recolección y recepción de cada una.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una; el código se asigna automáticamente salvo que escriba uno.</p>
                                 <div style={{ display: "grid", gap: 16 }}>
                                     {fields.map((field, index) => (
                                         <Panel key={field.id} style={{ display: "grid", gap: 16 }}>
                                             <div className="of-grid-3">
-                                                <FormField
-                                                    control={control}
-                                                    name={`samples.${index}.sample_code`}
-                                                    render={(p) => (
-                                                        <FloatingCaptionInput {...p} value={String(p.value ?? "")} label="Código de Muestra" requiredMark />
-                                                    )}
-                                                />
+                                                {numberingModes.sample !== "automatic_only" ? (
+                                                    <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
+                                                        <FormField
+                                                            control={control}
+                                                            name={`samples.${index}.sample_code`}
+                                                            render={(p) => (
+                                                                <FloatingCaptionInput
+                                                                    {...p}
+                                                                    value={String(p.value ?? "")}
+                                                                    label={numberingModes.sample === "manual_only" ? "Código de Muestra" : "Código de Muestra (opcional)"}
+                                                                    requiredMark={numberingModes.sample === "manual_only"}
+                                                                />
+                                                            )}
+                                                        />
+                                                        <AutoCodeHint kind="sample" mode={numberingModes.sample} scopeId={watchedSamples?.[index]?.sample_type_id || undefined} branchId={watchedBranch || undefined} manualTyped={Boolean((watchedSamples?.[index]?.sample_code ?? "").trim())} />
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ alignContent: "center", display: "grid" }}>
+                                                        <AutoCodeHint kind="sample" mode="automatic_only" scopeId={watchedSamples?.[index]?.sample_type_id || undefined} branchId={watchedBranch || undefined} />
+                                                    </div>
+                                                )}
                                                 <FormField
                                                     control={control}
                                                     name={`samples.${index}.sample_type_id`}

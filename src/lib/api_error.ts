@@ -22,7 +22,8 @@ export function localizeBackendMessage(msg: string): string {
 }
 
 interface FastApiDetail {
-    detail?: string | Array<{ msg: string; loc?: unknown[] }>;
+    /** Plain message, validation-error array, or a structured `{code, message}` (catalog transfer, numbering). */
+    detail?: string | Array<{ msg: string; loc?: unknown[] }> | { code?: string; message?: string };
     message?: string;
 }
 
@@ -39,6 +40,7 @@ export function parseFastApiDetail(bodyText: string): string | null {
         if (Array.isArray(detail)) {
             return detail.map((e) => e.msg).join(". ");
         }
+        if (typeof detail === "object" && typeof detail.message === "string") return detail.message;
     } catch {
         // body is not JSON — return as-is if it looks like plain text
         const trimmed = bodyText.trim();

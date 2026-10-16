@@ -5,6 +5,7 @@ import {
     UserOutlined,
     FileTextOutlined,
     ExperimentOutlined,
+    NumberOutlined,
     DollarOutlined,
     TeamOutlined,
     SafetyCertificateOutlined,
@@ -26,6 +27,7 @@ const catalogMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/report-letterheads", icon: <BgColorsOutlined />, label: "Membretes" },
     { key: "/config/study-types", icon: <ExperimentOutlined />, label: "Tipos de Estudio" },
     { key: "/config/sample-types", icon: <ExperimentOutlined />, label: "Tipos de Muestra" },
+    { key: "/config/numbering", icon: <NumberOutlined />, label: "Numeración" },
     { key: "/config/catalog", icon: <DollarOutlined />, label: "Catálogo de Precios" },
 ];
 

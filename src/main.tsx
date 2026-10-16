@@ -37,6 +37,7 @@ import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import SampleTypes from "./pages/sample_types";
+import NumberingSettings from "./pages/numbering_settings";
 import ReportTemplates from "./pages/report_templates";
 import ReportTemplateVersions from "./pages/report_template_versions";
 import ReportTemplateEditor from "./pages/report_template_editor";
@@ -164,6 +165,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="report-letterheads/:letterheadId/versions/new" element={<RequirePermission permission="reports:manage_templates"><ReportLetterheadEditor embedded /></RequirePermission>} />
                 <Route path="study-types" element={<RequirePermission permission="admin:manage_catalog"><StudyTypes embedded /></RequirePermission>} />
                 <Route path="sample-types" element={<RequirePermission permission="admin:manage_catalog"><SampleTypes embedded /></RequirePermission>} />
+                <Route path="numbering" element={<RequirePermission permission="admin:manage_catalog"><NumberingSettings embedded /></RequirePermission>} />
                 <Route path="users" element={<RequirePermission permission="admin:manage_users"><UsersManagement embedded /></RequirePermission>} />
                 <Route path="reviewers" element={<RequirePermission permission="admin:manage_users"><ReviewersManagement embedded /></RequirePermission>} />
                 <Route path="branches" element={<RequirePermission permission="admin:manage_branches"><BranchesList embedded /></RequirePermission>} />
