@@ -9,11 +9,8 @@ import { getNumberingConfigs, previewNumbering, saveNumberingConfig } from "../s
 import { listSampleTypes } from "../services/sample_type_service";
 import {
     DEFAULT_NUMBERING_FORMAT,
-    MANUAL_POLICIES,
     composeFormat,
     timezoneOptions,
-    POLICY_LABEL,
-    type ManualPolicy,
     type NumberingConfig,
     type NumberingKind,
     type NumberingPreview,
@@ -64,7 +61,6 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     const text = KIND_TEXT[kind];
     const zoneOptions = useMemo(() => timezoneOptions().map((z) => ({ value: z, label: z })), []);
     const [active, setActive] = useState(config.active);
-    const [policy, setPolicy] = useState<ManualPolicy>(config.manual_policy);
     const [scope, setScope] = useState<NumberingScope>(config.scope);
     const [startValue, setStartValue] = useState<number>(config.start_value);
     const [format, setFormat] = useState(config.format);
@@ -78,7 +74,6 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
 
     useEffect(() => {
         setActive(config.active);
-        setPolicy(config.manual_policy);
         setScope(config.scope);
         setStartValue(config.start_value);
         setFormat(config.format);
@@ -124,7 +119,7 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     }, [kind, active, format, width, startValue, scope, timezone, scopeId]);
 
     const dirty =
-        active !== config.active || policy !== config.manual_policy || scope !== config.scope ||
+        active !== config.active || scope !== config.scope ||
         startValue !== config.start_value || format !== config.format || width !== config.sequence_min_width ||
         timezone !== config.timezone;
     const valid =
@@ -134,8 +129,9 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     const handleSave = async () => {
         setSaving(true);
         try {
+            // The retired manual-code policy is never sent: the server keeps whatever is stored.
             const saved = await saveNumberingConfig(kind, {
-                active, manual_policy: policy, format, sequence_min_width: width, start_value: startValue, scope, timezone,
+                active, format, sequence_min_width: width, start_value: startValue, scope, timezone,
             });
             onSaved(saved);
             message.success("Numeración guardada. Aplica a los registros nuevos; los códigos existentes no cambian.");
@@ -158,9 +154,7 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                 {!active && (
                     <Alert
                         type="info" showIcon data-testid={`inactive-note-${kind}`}
-                        message={kind === "order"
-                            ? "Sin activar, las órdenes nuevas siguen usando el formato anterior (CÓDIGO-n)."
-                            : "Sin activar, el código de cada muestra se escribe a mano, como antes."}
+                        message={`Sin activar, las ${kind === "order" ? "órdenes" : "muestras"} nuevas se numeran con el formato anterior (CÓDIGO-n), también de forma automática. Activa la numeración mensual cuando quieras cambiar de formato.`}
                     />
                 )}
                 {active && (
@@ -223,18 +217,19 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                         se usa la zona de cada sucursal. Cambiarla nunca reinicia contadores ni reutiliza códigos.
                     </span>
                 </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                    <strong>Códigos manuales</strong>
-                    <Radio.Group value={policy} onChange={(e) => setPolicy(e.target.value)} data-testid={`policy-${kind}`}>
-                        {MANUAL_POLICIES.map((m) => (
-                            <Radio key={m} value={m}>{POLICY_LABEL[m]}</Radio>
-                        ))}
-                    </Radio.Group>
-                    <span style={{ fontSize: 12, color: tokens.textSecondary }}>
-                        Además de esta política, cada usuario necesita el permiso «Escribir códigos manualmente»
-                        (<code>lab:enter_manual_code</code>); habilitarlo aquí no autoriza a nadie por sí solo. Un código escrito no consume la numeración
-                        automática, pasa las mismas verificaciones de colisión y queda auditado.
+                <div style={{ display: "grid", gap: 6 }} data-testid={`registration-${kind}`}>
+                    <strong>Registro</strong>
+                    <span style={{ fontSize: 13, color: tokens.textSecondary }}>
+                        Los códigos de {kind === "order" ? "las órdenes" : "las muestras"} se generan siempre de forma automática: ningún formulario
+                        permite escribirlos. Corregir el código de una muestra después de registrarla es una acción aparte, auditada y limitada a
+                        las fases de Recepción a Diagnóstico.
                     </span>
+                    {config.legacy_manual_policy && (
+                        <Alert
+                            type="info" showIcon data-testid={`legacy-policy-${kind}`}
+                            message="Este laboratorio tenía la política antigua «código manual obligatorio». Ya no tiene efecto: el registro siempre es automático. El valor guardado no se modificó."
+                        />
+                    )}
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -288,8 +283,8 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
 }
 
 /**
- * Configuración → Numeración (Céluma 1.4, issue #8): format, minimum width and
- * manual-code policy of the monthly codes of orders and samples.
+ * Configuración → Numeración (Céluma 1.4, issue #8): activation, format, minimum width,
+ * start value, scope and timezone of the codes of orders and samples (always generated).
  *
  * Gated on `admin:manage_catalog` (the permission the API enforces on the
  * PUT). Changes affect only registrations made after saving.

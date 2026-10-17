@@ -57,17 +57,18 @@ function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number }) {
 
 type PostOutcome = { ok: boolean; body: unknown };
 
-/** Céluma 1.4 (#8): numbering configuration of the synthetic laboratory; `manual_entry` is how THIS user is offered the code input. */
-function numberingConfigs(order = "optional", sample = "optional") {
-    const cfg = (kind: string, manual_entry: string) => ({
+/** Céluma 1.4 (#8): numbering configuration of the synthetic laboratory. Registration is always automatic. */
+function numberingConfigs() {
+    const cfg = (kind: string) => ({
         entity_kind: kind, active: true, manual_policy: "allowed", format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2,
-        start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: false, manual_entry,
+        start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: false,
+        registration: "automatic", legacy_manual_policy: false,
     });
-    return { order: cfg("order", order), sample: cfg("sample", sample) };
+    return { order: cfg("order"), sample: cfg("sample") };
 }
 
 /** Routes every catalogue GET both forms make, and captures the POST. */
-function stubApi(post: PostOutcome = { ok: true, body: {} }, modes: { order?: string; sample?: string } = {}) {
+function stubApi(post: PostOutcome = { ok: true, body: {} }) {
     const posts: Array<{ url: string; body: unknown }> = [];
     const previews: unknown[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -82,7 +83,7 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, modes: { order?: st
             });
         }
         if (url.includes("/v1/numbering/config")) {
-            return jsonResponse(numberingConfigs(modes.order, modes.sample));
+            return jsonResponse(numberingConfigs());
         }
         if (init?.method === "POST") {
             posts.push({ url, body: JSON.parse(String(init.body)) });
@@ -251,7 +252,7 @@ describe("CEL-131-07 — catalogue selectors are captioned and searchable", () =
         const { container } = renderOrderForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
 
-        for (const caption of ["Sucursal", "Paciente", "Tipo de estudio", "Médico solicitante (opcional)"]) {
+        for (const caption of ["Sucursal", "Paciente", "Tipo de estudio", "Médicos solicitantes (opcional)"]) {
             const select = selectByCaption(container, caption);
             expect(select.classList.contains("ant-select-show-search"), `${caption} is not searchable`).toBe(true);
         }
@@ -285,7 +286,6 @@ describe("CEL-131-07 — catalogue selectors are captioned and searchable", () =
 
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -306,7 +306,6 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -318,7 +317,7 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
             patient_id: PATIENT_ID,
             study_type_id: STUDY_TYPE_ID,
             created_by: "usr-1",
-            samples: [{ sample_code: "M-1", sample_type_id: "stp-bio" }],
+            samples: [{ sample_type_id: "stp-bio" }],
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/new-order", { replace: true }));
     });
@@ -332,7 +331,6 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
         // `FloatingCaptionDate` wraps the same masked antd DatePicker the old
         // `DateField` did, so the value is committed from the calendar rather
         // than by typing. Pick a day, then assert the payload carries exactly
@@ -362,7 +360,6 @@ describe("CEL-131-07 — sample_form still creates a sample with the same payloa
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Laminilla");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-9" } });
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -372,7 +369,6 @@ describe("CEL-131-07 — sample_form still creates a sample with the same payloa
             tenant_id: TENANT_ID,
             branch_id: BRANCH_ID,
             order_id: ORDER_ID,
-            sample_code: "M-9",
             sample_type_id: "stp-lam",
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/samples/new-sample", { replace: true }));
@@ -405,19 +401,18 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => {
-            expect(container.textContent).toContain("Seleccione un paciente, un médico solicitante o ambos.");
+            expect(container.textContent).toContain("Seleccione un paciente, al menos un médico solicitante o ambos.");
         });
         expect(posts).toHaveLength(0);
 
         // Choosing only the physician satisfies it — the OR, not an AND.
-        await pickOption(selectByCaption(container, "Médico solicitante (opcional)"), "MED-001");
+        await pickOption(selectByCaption(container, "Médicos solicitantes (opcional)"), "MED-001");
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
-        expect((posts[0].body as { requesting_physician_id: string }).requesting_physician_id).toBe(PHYSICIAN_ID);
+        expect((posts[0].body as { requesting_physician_ids: string[] }).requesting_physician_ids).toEqual([PHYSICIAN_ID]);
         expect((posts[0].body as { patient_id?: string }).patient_id).toBeUndefined();
     });
 
@@ -443,7 +438,6 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Otro");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-2" } });
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -466,7 +460,6 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
 
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Tejido");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-3" } });
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -488,7 +481,6 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Sangre");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-dup" } });
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => {
@@ -505,7 +497,6 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-1" } });
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => {
@@ -534,7 +525,7 @@ describe("CEL-131-07 — the order form's sample repeater still works", () => {
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
 
         const codes = () => Array.from(container.querySelectorAll("label"))
-            .filter((l) => l.textContent?.trim().startsWith("Código de Muestra"));
+            .filter((l) => l.textContent?.trim().startsWith("Tipo de muestra"));
         expect(codes()).toHaveLength(1);
         // The single remaining row cannot be deleted — there is no valid order
         // with zero samples, and the schema's `.min(1)` said so before too.
@@ -575,38 +566,69 @@ describe("CEL-131-07 — narrow layout does not regress", () => {
 
 // ── Céluma 1.4 (#8): monthly numbering in the registration flows ────────────
 
-describe("#8 — automatic monthly codes in the registration forms", () => {
+describe("#8 — registration forms have no code inputs (codes are always generated)", () => {
     async function fillOrder(container: HTMLElement) {
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
     }
+    const codeLabels = (container: HTMLElement) =>
+        Array.from(container.querySelectorAll("label")).filter((l) => /^Código de (la orden|Muestra)/.test(l.textContent?.trim() ?? ""));
 
-    it("a blank code is omitted from the unified payload: the API generates it", async () => {
+    it("neither form renders an editable order or sample code field", async () => {
+        stubApi();
+        const order = renderOrderForm();
+        await waitFor(() => expect(order.container.querySelector("[data-testid=auto-code-hint-order]")?.textContent).toContain("automáticamente"));
+        expect(codeLabels(order.container)).toHaveLength(0);
+        fireEvent.click(buttonByText(order.container, "Agregar otra muestra"));
+        await waitFor(() => expect(order.container.querySelectorAll("[data-testid=auto-code-hint-sample]")).toHaveLength(2));
+        expect(codeLabels(order.container)).toHaveLength(0);
+        order.unmount();
+        const sample = renderSampleForm();
+        await waitFor(() => expect(sample.container.querySelector("[data-testid=auto-code-hint-sample]")).toBeTruthy());
+        expect(codeLabels(sample.container)).toHaveLength(0);
+        expect(sample.container.querySelectorAll("input[name*=code]")).toHaveLength(0);
+    });
+
+    it("no code is ever in the unified or standalone payload", async () => {
         const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
         const { container } = renderOrderForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
         await fillOrder(container);
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
-        const body = posts[0].body as { order_code?: string; samples: Array<Record<string, unknown>> };
+        const body = posts[0].body as Record<string, unknown> & { samples: Array<Record<string, unknown>> };
         expect(body).not.toHaveProperty("order_code");
         expect(body.samples[0]).not.toHaveProperty("sample_code");
     });
 
-    it("a typed code is still sent as a manual override", async () => {
+    it("several requesting physicians and the expediente are sent as a set and verbatim (leading zeroes kept)", async () => {
         const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
         const { container } = renderOrderForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
         await fillOrder(container);
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: " M-1 " } });
-        fireEvent.change(inputByCaption(container, "Código de la orden"), { target: { value: "O-1" } });
+        await pickOption(selectByCaption(container, "Médicos solicitantes (opcional)"), "MED-001");
+        fireEvent.change(inputByCaption(container, "Expediente (opcional)"), { target: { value: " 000731 " } });
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
-        const body = posts[0].body as { order_code?: string; samples: Array<{ sample_code?: string }> };
-        expect(body.order_code).toBe("O-1");
-        expect(body.samples[0].sample_code).toBe("M-1");
+        const body = posts[0].body as { requesting_physician_ids: string[]; expediente: string };
+        expect(body.requesting_physician_ids).toEqual([PHYSICIAN_ID]);
+        expect(body.expediente).toBe("000731");
+        expect(body).not.toHaveProperty("requesting_physician_id");
+    });
+
+    it("an expediente alone is enough next to a patient: no physician is invented", async () => {
+        const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
+        const { container } = renderOrderForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        await fillOrder(container);
+        fireEvent.change(inputByCaption(container, "Expediente (opcional)"), { target: { value: "0042" } });
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        const body = posts[0].body as Record<string, unknown>;
+        expect(body.expediente).toBe("0042");
+        expect(body).not.toHaveProperty("requesting_physician_ids");
     });
 
     it("the hint shows an estimate asked from the READ-ONLY preview, labelled as not reserved", async () => {
@@ -619,56 +641,15 @@ describe("#8 — automatic monthly codes in the registration forms", () => {
         expect(previews).toEqual([{ entity_kind: "sample", scope_id: "stp-bio" }]);
     });
 
-    it("hidden hides the code inputs of both forms", async () => {
-        stubApi({ ok: true, body: {} }, { order: "hidden", sample: "hidden" });
-        const order = renderOrderForm();
-        await waitFor(() => expect(order.container.querySelector("[data-testid=auto-code-hint-order]")?.textContent).toContain("automáticamente"));
-        expect(Array.from(order.container.querySelectorAll("label")).some((l) => l.textContent?.startsWith("Código de Muestra"))).toBe(false);
-        expect(Array.from(order.container.querySelectorAll("label")).some((l) => l.textContent?.startsWith("Código de la orden"))).toBe(false);
-        order.unmount();
-        const sample = renderSampleForm();
-        await waitFor(() => expect(sample.container.querySelector("[data-testid=auto-code-hint-sample]")).toBeTruthy());
-        expect(Array.from(sample.container.querySelectorAll("label")).some((l) => l.textContent?.startsWith("Código de Muestra"))).toBe(false);
-    });
-
-    it("required makes the codes required and blocks an empty submit client-side", async () => {
-        const { posts } = stubApi({ ok: true, body: { order: { id: "x" }, samples: [] } }, { order: "required", sample: "required" });
-        const { container } = renderOrderForm();
-        await waitFor(() => expect(Array.from(container.querySelectorAll("label")).some((l) => l.textContent?.startsWith("Código de la orden"))).toBe(true));
-        await waitFor(() => expect(container.textContent).toContain("Código de Muestra"));
-        await fillOrder(container);
-        fireEvent.submit(container.querySelector("form")!);
-        await waitFor(() => expect(container.textContent).toContain("es obligatorio en este laboratorio"));
-        expect(posts).toHaveLength(0);
-    });
-
     it("a structured API refusal {code, message} is shown as its message", async () => {
-        stubApi({ ok: false, body: { detail: { code: "numbering_manual_code_not_allowed", message: "This laboratory generates codes automatically; leave the code empty" } } });
+        stubApi({ ok: false, body: { detail: { code: "numbering_exhausted", message: "Could not find a free code after 10000 attempts" } } });
         const { container } = renderSampleForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "X-1" } });
         fireEvent.submit(container.querySelector("form")!);
-        await waitFor(() => expect(container.textContent).toContain("generates codes automatically"));
-    });
-});
-
-
-describe("#8 — manual entry depends on the user's capability too", () => {
-    it("blocked (policy requires typing but the role may not) refuses the submit and says why", async () => {
-        const { posts } = stubApi({ ok: true, body: { order: { id: "x" }, samples: [] } }, { order: "blocked", sample: "blocked" });
-        const { container } = renderOrderForm();
-        await waitFor(() => expect(container.querySelector("[data-testid=auto-code-hint-order]")?.textContent).toContain("no tiene permiso"));
-        expect(Array.from(container.querySelectorAll("label")).some((l) => l.textContent?.startsWith("Código de la orden"))).toBe(false);
-        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
-        await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
-        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
-        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.submit(container.querySelector("form")!);
-        await waitFor(() => expect(container.textContent).toContain("tu rol no tiene permiso"));
-        expect(posts).toHaveLength(0);
+        await waitFor(() => expect(container.textContent).toContain("Could not find a free code"));
     });
 });
 
@@ -687,7 +668,7 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: code } });
+        void code; // sample codes are generated; nothing to type
     }
 
     it("sends a key, and a retry of the SAME payload after a failure reuses it", async () => {
@@ -712,7 +693,7 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         await fillSample(container, "M-1");
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(creations(fetchMock)).toHaveLength(1));
-        fireEvent.change(inputByCaption(container, "Código de Muestra"), { target: { value: "M-2" } });
+        fireEvent.change(inputByCaption(container, "Descripción (opcional)"), { target: { value: "otra" } });
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(creations(fetchMock)).toHaveLength(2));
         const [first, second] = creations(fetchMock).map(keyOf);

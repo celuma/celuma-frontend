@@ -20,6 +20,9 @@ export const PERMS = {
     CREATE_SAMPLE: "lab:create_sample",
     UPDATE_ORDER: "lab:update_order",
     UPDATE_SAMPLE: "lab:update_sample",
+    // Céluma 1.4 (#10/#11): identifier correction and erroneous-capture removal.
+    ENTER_MANUAL_CODE: "lab:enter_manual_code",
+    REMOVE_CAPTURE: "lab:remove_capture",
     UPLOAD_IMAGES: "lab:upload_images",
     DELETE_IMAGES: "lab:delete_images",
     MANAGE_ASSIGNEES: "lab:manage_assignees",

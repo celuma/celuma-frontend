@@ -1018,9 +1018,13 @@ const ReportEditor: React.FC = () => {
                 report.base["patient_age"].value = age !== null ? `${age} años` : "";
             }
             if (report.base["requesting_physician"]) {
-                const physician = order.requesting_physician;
+                // Céluma 1.4 (#16): all external requesting physicians (no primary), joined as the server does.
+                const names = (order.requesting_physicians ?? []).map((p) => p.full_name).filter(Boolean);
                 report.base["requesting_physician"].value =
-                    physician?.full_name || order.requested_by || "";
+                    names.length > 0 ? names.join("; ") : (order.requesting_physician?.full_name || order.requested_by || "");
+            }
+            if (report.base["expediente"]) {
+                report.base["expediente"].value = order.expediente ?? "";
             }
         }
 

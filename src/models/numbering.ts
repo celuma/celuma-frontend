@@ -1,24 +1,25 @@
 /**
- * Monthly numbering of orders and samples (Céluma 1.4, issue #8).
+ * Numbering of orders and samples (Céluma 1.4, issue #8; automatic registration).
  *
+ * Registration is AUTOMATIC: no form types an order or sample code and the API accepts none.
  * Contract: `celuma-engineering/specs/laboratory/monthly-numbering.md`.
  */
 
 export type NumberingKind = "order" | "sample";
 
-/** `allowed`: a typed code is an override; `forbidden`: always generated; `required`: always typed. */
+/**
+ * Legacy manual-code policy. Since registration is automatic it no longer affects anything; the stored
+ * value is kept readable (and a stored `required` is preserved untouched) but cannot be newly chosen.
+ */
 export type ManualPolicy = "allowed" | "forbidden" | "required";
-export const MANUAL_POLICIES: ManualPolicy[] = ["allowed", "forbidden", "required"];
 
 export type NumberingScope = "tenant" | "branch";
 
-/** How the caller is offered the code input (computed by the API from policy AND capability). */
-export type ManualEntry = "optional" | "required" | "hidden" | "blocked";
-
 export interface NumberingConfig {
     entity_kind: NumberingKind;
-    /** Deliberate activation. false = compatibility behaviour (orders `<code>-<n>`, samples typed by hand). */
+    /** Deliberate activation. false = compatibility numbering: `<code>-<n>` for orders AND samples. */
     active: boolean;
+    /** Legacy; no effect on registration. */
     manual_policy: ManualPolicy;
     format: string;
     sequence_min_width: number;
@@ -28,7 +29,10 @@ export interface NumberingConfig {
     timezone: string;
     /** true = the laboratory has no stored configuration (never activated). */
     is_default: boolean;
-    manual_entry: ManualEntry;
+    /** Always "automatic". */
+    registration: "automatic";
+    /** True when the stored (retired) policy is `required`; shown so an administrator can see it. */
+    legacy_manual_policy: boolean;
     activated_at?: string | null;
 }
 
@@ -39,7 +43,8 @@ export interface NumberingConfigs {
 
 export interface NumberingConfigInput {
     active: boolean;
-    manual_policy: ManualPolicy;
+    /** Omit to keep the stored value. */
+    manual_policy?: ManualPolicy;
     format: string;
     sequence_min_width: number;
     start_value: number;
@@ -82,12 +87,6 @@ export interface NumberingPreview {
 export const DEFAULT_NUMBERING_FORMAT = "{BASE}{SEQ}{MM}{YY}";
 /** The optional hyphen after the base code: `CU-011026`. */
 export const HYPHEN_NUMBERING_FORMAT = "{BASE}-{SEQ}{MM}{YY}";
-
-export const POLICY_LABEL: Record<ManualPolicy, string> = {
-    allowed: "Permitido a quien tenga el permiso",
-    forbidden: "No permitido (siempre automático)",
-    required: "Obligatorio (siempre manual)",
-};
 
 /** `{BASE}[-]{BRANCH}[-]{SEQ}{MM}{YY}`: the format of a separator preset (branch token only for branch scope). */
 export function composeFormat(separator: "none" | "hyphen", scope: NumberingScope): string {

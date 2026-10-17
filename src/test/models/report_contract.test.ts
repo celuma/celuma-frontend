@@ -5,6 +5,7 @@ import {
     LEGACY_PREDEFINED_BASE_HIDDEN,
     mergePersistedContentIntoTemplateSnapshot,
     normalizeReportTemplateJSON,
+    PREDEFINED_BASE_KEYS,
     resolveBaseOrder,
     resolveDisplayOrder,
     resolveSectionOrder,
@@ -190,5 +191,14 @@ describe("system metadata base fields — visible by default", () => {
         for (const key of SYSTEM_METADATA_BASE_FIELDS) {
             expect(DEFAULT_BASE_FIELDS[key]).not.toHaveProperty("is_custom");
         }
+    });
+});
+
+describe("expediente base field (Céluma 1.4, #16)", () => {
+    it("is a predefined base field, HIDDEN by default, and not mixed into the physician field", () => {
+        expect(PREDEFINED_BASE_KEYS.has("expediente")).toBe(true);
+        expect(DEFAULT_BASE_FIELDS.expediente.is_visible).toBe(false);
+        expect(DEFAULT_BASE_FIELDS.expediente.label).toBe("Expediente");
+        expect(DEFAULT_BASE_FIELDS.requesting_physician.value).toBe("");
     });
 });
