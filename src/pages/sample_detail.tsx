@@ -1,3 +1,4 @@
+import SampleManagementPanel from "../components/management/sample_management_panel";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Badge, Empty } from "antd";
 import type { UploadProps } from "antd";
@@ -131,6 +132,9 @@ export default function SampleDetailPage() {
     // The backend remains authoritative; this is the UX half only.
     const { hasPermission } = useUserProfile();
     const canUpdateSample = hasPermission(PERMS.UPDATE_SAMPLE);
+    // Céluma 1.4 (#10/#11): hints only; the API enforces both (and the lifecycle window).
+    const canCorrectSampleCode = canUpdateSample && hasPermission(PERMS.ENTER_MANUAL_CODE);
+    const canRemoveCapture = hasPermission(PERMS.REMOVE_CAPTURE);
     const canManageAssignees = hasPermission(PERMS.MANAGE_ASSIGNEES);
     const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
     const canUploadImages = hasPermission(PERMS.UPLOAD_IMAGES);
@@ -393,6 +397,7 @@ export default function SampleDetailPage() {
         SAMPLE_RECEIVED: { icon: <InboxOutlined />, color: "green" },
         SAMPLE_STATE_CHANGED: { icon: <SettingOutlined />, color: "orange" },
         SAMPLE_NOTES_UPDATED: { icon: <EditOutlined />, color: "cyan" },
+        SAMPLE_CODE_CORRECTED: { icon: <EditOutlined />, color: "orange" },
         SAMPLE_DAMAGED: { icon: <ExperimentOutlined />, color: "red" },
         SAMPLE_CANCELLED: { icon: <ExperimentOutlined />, color: "gray" },
         IMAGE_UPLOADED: { icon: <FileImageOutlined />, color: "purple" },
@@ -462,6 +467,8 @@ export default function SampleDetailPage() {
                 }
                 return "Eliminó la descripción de la muestra";
             }
+            case "SAMPLE_CODE_CORRECTED":
+                return `Corrigió el código: ${String(meta.old_code ?? "?")} → ${String(meta.new_code ?? "?")}`;
             case "SAMPLE_CREATED":
                 return "Registró la muestra";
             case "SAMPLE_RECEIVED":
@@ -1038,6 +1045,14 @@ export default function SampleDetailPage() {
                                                 </div>
                                             )}
                                         </Panel>
+                                        <SampleManagementPanel
+                                            sampleId={detail.id}
+                                            sampleCode={detail.sample_code}
+                                            orderId={detail.order?.id ?? ""}
+                                            canCorrect={canCorrectSampleCode}
+                                            canRemove={canRemoveCapture}
+                                            onChanged={refresh}
+                                        />
                                     </>
                                 )}
                                 <ErrorText>{error}</ErrorText>

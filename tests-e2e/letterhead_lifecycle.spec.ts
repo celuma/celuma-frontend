@@ -166,7 +166,7 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
                 branch_id: registration.branch_id,
                 patient_id: patient.id,
                 study_type_id: studyType.id,
-                samples: [{ sample_code: `E2E-S-${suffix}`, sample_type: "Block", collected_at: "2026-08-01", received_at: "2026-08-01" }],
+                samples: [{ sample_type: "Block", collected_at: "2026-08-01", received_at: "2026-08-01" }],
             },
             token,
         });

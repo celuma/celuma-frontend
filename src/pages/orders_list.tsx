@@ -34,6 +34,9 @@ type OrdersListResponse = {
         branch: { id: string; name?: string; code?: string | null };
         patient?: { id: string; full_name: string; patient_code: string } | null;
         requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
+        /** Every external requesting physician, no primary (Céluma 1.4, #16). */
+        requesting_physicians?: Array<{ id: string; full_name: string; physician_code: string }>;
+        expediente?: string | null;
         requested_by?: string | null;
         notes?: string | null;
         created_at?: string | null;
@@ -154,31 +157,38 @@ export default function OrdersList() {
             },
         },
         // Shown when any order of the tenant names a requester — not just this page.
-        ...(options?.has_requester ? [{
+        ...((options?.has_requester) ? [{
             title: "Solicitante",
             key: "requesting_physician",
             width: 220,
             filters: requestingPhysicianFilters.length > 0 ? requestingPhysicianFilters : undefined,
             sorter: true,
             render: (_: unknown, r: OrderRow) => {
-                if (r.requesting_physician) {
+                const physicians = r.requesting_physicians ?? [];
+                if (physicians.length > 0) {
                     return (
                         <div>
-                            <a
-                                href={`/requesting-physicians/${r.requesting_physician.id}`}
-                                onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    navigate(`/requesting-physicians/${r.requesting_physician?.id}`);
-                                }}
-                                style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block", textDecoration: "none", cursor: "pointer" }}
-                            >
-                                {r.requesting_physician.full_name}
-                            </a>
-                            <div style={{ fontSize: 11, color: "#888" }}>{r.requesting_physician.physician_code}</div>
+                            {physicians.map((physician) => (
+                                <div key={physician.id}>
+                                    <a
+                                        href={`/requesting-physicians/${physician.id}`}
+                                        onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            navigate(`/requesting-physicians/${physician.id}`);
+                                        }}
+                                        style={{ fontWeight: 600, color: "#49b6ad", borderBottom: "1px dashed #49b6ad", display: "inline-block", textDecoration: "none", cursor: "pointer" }}
+                                    >
+                                        {physician.full_name}
+                                    </a>
+                                    <div style={{ fontSize: 11, color: "#888" }}>{physician.physician_code}</div>
+                                </div>
+                            ))}
+                            {r.expediente && <div style={{ fontSize: 11, color: "#888" }}>Expediente {r.expediente}</div>}
                         </div>
                     );
                 }
+                if (r.expediente && !r.requested_by) return <span>Expediente {r.expediente}</span>;
                 return r.requested_by ? <span>{r.requested_by}</span> : <span style={{ color: "#888" }}>—</span>;
             },
         }] : []),

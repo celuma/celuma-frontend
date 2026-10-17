@@ -328,6 +328,10 @@ export interface ReportFullResponse {
         tenant_id: string;
         branch_id: string;
         requested_by?: string | null;
+        /** Optional request reference (Céluma 1.4, #16). */
+        expediente?: string | null;
+        /** Every external requesting physician, no primary. */
+        requesting_physicians?: Array<{ id: string; full_name: string; physician_code: string }>;
         notes?: string | null;
         billed_lock?: boolean;
         report_id?: string | null;
@@ -398,6 +402,9 @@ export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
     study_type:             { is_visible: true,  label: "Tipo de estudio",      value: "" },
     patient_age:            { is_visible: true,  label: "Edad",                 value: "" },
     requesting_physician:   { is_visible: true,  label: "Médico solicitante",   value: "" },
+    // Céluma 1.4 (#16): the order's optional request reference (server-owned like the system fields below).
+    // Hidden by default: most orders have none, and a template opts in by making it visible.
+    expediente:             { is_visible: false, label: "Expediente",           value: "" },
     // Céluma 1.3.1 Block D (CEL-131-04): server-resolved, like the fields
     // above — the backend overwrites these on every save
     // (report_metadata.py) and the report editor never renders them as
