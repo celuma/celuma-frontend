@@ -308,17 +308,52 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         expect(screen.queryByText(/Falta el membrete predeterminado/i)).toBeNull();
     });
 
-    it("does not block a Legacy tenant (reports_v2_enabled=false)", async () => {
-        mockFetch({ v2Enabled: false });
+    it("ignores the retired tenant flag: a stored reports_v2_enabled=false still boots V2 (#22)", async () => {
+        const fetchSpy = mockFetch({ v2Enabled: false });
         mockStudyTypeAndTemplate();
+        const defaultsSpy = mockDefaults();
+        vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
+        });
+        // The V2 configuration is always resolved, and the tenant record is
+        // no longer read to decide anything.
+        expect(defaultsSpy).toHaveBeenCalled();
+        expect(
+            fetchSpy.mock.calls.some(([input]) => String(input).includes("/tenants/"))
+        ).toBe(false);
+    });
+
+    it("blocks (never an empty legacy form) when the study type has no report template", async () => {
+        mockFetch({ v2Enabled: true });
+        vi.spyOn(reportService, "getStudyType").mockResolvedValue({
+            id: STUDY_TYPE_ID, code: "HP", name: "Histopatología",
+            default_report_template_id: null, is_active: true, tenant_id: "t1",
+        } as never);
         const defaultsSpy = mockDefaults();
 
         renderEditor();
 
         await waitFor(() => {
-            expect(screen.queryByText(/Falta el membrete predeterminado/i)).toBeNull();
+            expect(screen.getByText(/no tiene plantilla de reporte/i)).toBeTruthy();
         });
-        // A Legacy tenant does not query the V2 configuration.
         expect(defaultsSpy).not.toHaveBeenCalled();
+        expect(screen.queryByTestId("letterhead-resolution-source")).toBeNull();
+    });
+
+    it("blocks with an availability state when the study type cannot be read", async () => {
+        mockFetch({ v2Enabled: true });
+        vi.spyOn(reportService, "getStudyType").mockRejectedValue(new Error("network down"));
+        mockDefaults();
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(/No se pudo consultar la configuración de reportes/i)).toBeTruthy();
+        });
+        expect(screen.queryByTestId("letterhead-resolution-source")).toBeNull();
     });
 });

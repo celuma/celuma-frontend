@@ -342,9 +342,9 @@ const ReportEditor: React.FC = () => {
     const [selectedLetterheadPresentation, setSelectedLetterheadPresentation] =
         useState<ReportPresentationSnapshotV2 | null>(null);
     const [availableLetterheadVersions, setAvailableLetterheadVersions] = useState<LetterheadVersionOption[]>([]);
-    // True when reports_v2_enabled is on for this tenant but the resolved
-    // template has no ACTIVE version to select — creation must block rather
-    // than silently falling back to Legacy (Céluma1.3-Phase2.md §D10).
+    // True when the study type has no template or the letterhead
+    // configuration is unusable — creation must block rather than silently
+    // falling back to Legacy (Céluma 1.4, #22: there is no Legacy path).
     const [v2ConfigBlocked, setV2ConfigBlocked] = useState(false);
     // Third post-Phase 2 remediation: the EXACT blocking reason as returned
     // by `report-defaults`, so the UI can say what is missing and where to
@@ -418,10 +418,27 @@ const ReportEditor: React.FC = () => {
     // local-print-contract.md.
     const { printLocalCopy } = useLocalPrint();
 
-    // Read-only when not DRAFT
+    // Céluma 1.4 (#22): an unsigned report that was created in the retired
+    // legacy format (no V2 `schema_version`) can still be read, but not edited,
+    // submitted or signed. The backend refuses those actions with 409
+    // `legacy_report_authoring_retired`; this only stops the editor offering them.
+    const legacyAuthoringBlocked = useMemo(
+        () =>
+            Boolean(
+                reportId &&
+                envelope &&
+                envelope.schema_version !== 2 &&
+                (envelope.status === "DRAFT" ||
+                    envelope.status === "IN_REVIEW" ||
+                    envelope.status === "APPROVED")
+            ),
+        [reportId, envelope]
+    );
+
+    // Read-only when not DRAFT (or when the legacy format blocks authoring)
     const isReadOnly = useMemo(
-        () => Boolean(envelope?.status && envelope.status !== "DRAFT"),
-        [envelope?.status]
+        () => Boolean(envelope?.status && envelope.status !== "DRAFT") || legacyAuthoringBlocked,
+        [envelope?.status, legacyAuthoringBlocked]
     );
 
     // ── Céluma 1.3.1 Block A — reviewer-only controls ────────────────────
@@ -447,8 +464,9 @@ const ReportEditor: React.FC = () => {
     const canSign = useMemo(
         () =>
             envelope?.status === "APPROVED" &&
+            !legacyAuthoringBlocked &&
             userCanActAsReviewer(PERMS.REPORTS_SIGN, orderReviewers),
-        [envelope?.status, userCanActAsReviewer, orderReviewers]
+        [envelope?.status, legacyAuthoringBlocked, userCanActAsReviewer, orderReviewers]
     );
 
     // Céluma 1.3.1 Block B (CEL-131-03) — "Reabrir reporte".
@@ -510,8 +528,9 @@ const ReportEditor: React.FC = () => {
     const isReviewerPresentationWindow = useMemo(
         () =>
             (envelope?.status === "DRAFT" || envelope?.status === "IN_REVIEW") &&
+            !legacyAuthoringBlocked &&
             hasReviewerPresentationAuthority,
-        [envelope?.status, hasReviewerPresentationAuthority]
+        [envelope?.status, legacyAuthoringBlocked, hasReviewerPresentationAuthority]
     );
 
     /** Whether the presentation controls render as editable at all. */
@@ -783,108 +802,107 @@ const ReportEditor: React.FC = () => {
                                 //
                                 // `report-defaults` now returns the resolved
                                 // `presentation` in one call, and every failure leads to
-                                // an explicit BLOCKED state. With reports_v2_enabled=true,
+                                // an explicit BLOCKED state. Reports V2 is the only path (#22):
                                 // Legacy is never rendered.
-                                let tenantV2Enabled = false;
                                 try {
-                                    const tenantInfo = await getJSON<{ reports_v2_enabled?: boolean }>(
-                                        `/v1/tenants/${session.tenantId}`
+                                    const defaults = await getStudyTypeReportDefaults(
+                                        orderFull.order.study_type_id
                                     );
-                                    tenantV2Enabled = !!tenantInfo.reports_v2_enabled;
-                                } catch {
-                                    // The tenant flag could not be read: this is a network
-                                    // failure, not evidence that the tenant is Legacy.
-                                    // Keep `tenantV2Enabled=false` and follow the Legacy
-                                    // path—the same behavior as a tenant without V2,
-                                    // without inventing a partial V2 state.
-                                }
-
-                                if (tenantV2Enabled) {
-                                    try {
-                                        const defaults = await getStudyTypeReportDefaults(
-                                            orderFull.order.study_type_id
-                                        );
-                                        // Block C: `active_template_version_id` is
-                                        // deliberately NOT part of this condition any
-                                        // more. The two things a V2 report genuinely
-                                        // needs are a clinical template (already
-                                        // fetched) and a resolved letterhead
-                                        // presentation; an administrative version row
-                                        // is not one of them.
-                                        if (
-                                            defaults.v2_blocked_reason ||
-                                            !defaults.letterhead_presentation
-                                        ) {
-                                            setV2BlockedReason(defaults.v2_blocked_reason ?? "NO_LETTERHEAD");
-                                            setV2BlockedDetail(defaults.v2_blocked_detail ?? null);
-                                            setV2ConfigBlocked(true);
-                                        } else {
-                                            // Block C: the obsolete third bootstrap
-                                            // request — GET .../versions/{id} — is gone.
-                                            // It is not swallowed or made conditional:
-                                            // the editor has no reason to make it, since
-                                            // `tmplRaw` already holds the live template
-                                            // and the backend resolves the structure
-                                            // itself at creation.
-                                            setV2CreationTemplateId(templateId);
-                                            setV2CreationTemplateHash(bootstrapTemplateHash);
-
-                                            // The resolved presentation arrives in the same
-                                            // response—without chaining calls that can
-                                            // partially fail.
-                                            setSelectedLetterheadVersionId(defaults.letterhead_version_id);
-                                            setSelectedLetterheadPresentation(defaults.letterhead_presentation);
-                                            setSelectedLetterheadName(defaults.letterhead_name ?? null);
-                                            setLetterheadResolutionSource(
-                                                defaults.letterhead_resolution_source ?? null
-                                            );
-                                            setSelectedLetterheadResources(
-                                                defaults.letterhead_resolved_resources ?? null
-                                            );
-
-                                            // The letterhead selector is secondary: if it
-                                            // fails to load, the user simply cannot change
-                                            // letterheads—V2 creation with the resolved one
-                                            // still works.
-                                            try {
-                                                const { letterheads } = await listReportLetterheads();
-                                                const options: LetterheadVersionOption[] = [];
-                                                for (const lh of letterheads) {
-                                                    const { versions: lhVersions } =
-                                                        await listReportLetterheadVersions(lh.id);
-                                                    const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
-                                                    if (activeLh) {
-                                                        options.push({
-                                                            value: activeLh.id,
-                                                            label: lh.name,
-                                                            letterheadId: lh.id,
-                                                        });
-                                                    }
-                                                }
-                                                setAvailableLetterheadVersions(options);
-                                            } catch { /* selector opcional */ }
-                                        }
-                                    } catch (cfgErr) {
-                                        // With V2 enabled, a configuration-resolution
-                                        // failure is a blocked state, never an excuse to
-                                        // render Legacy.
-                                        //
-                                        // H-0c: but it is not a LETTERHEAD state either.
-                                        // This catch used to hard-code NO_LETTERHEAD, so
-                                        // a pathologist's 403 on the template-version read
-                                        // was reported as "Falta el membrete
-                                        // predeterminado del laboratorio" — pointing at
-                                        // configuration that was in fact correct. The
-                                        // failure is now classified by HTTP status.
-                                        setV2BlockedReason(classifyConfigFailure(cfgErr));
-                                        setV2BlockedDetail(
-                                            cfgErr instanceof Error ? cfgErr.message : null
-                                        );
+                                    // Block C: `active_template_version_id` is
+                                    // deliberately NOT part of this condition any
+                                    // more. The two things a V2 report genuinely
+                                    // needs are a clinical template (already
+                                    // fetched) and a resolved letterhead
+                                    // presentation; an administrative version row
+                                    // is not one of them.
+                                    if (
+                                        defaults.v2_blocked_reason ||
+                                        !defaults.letterhead_presentation
+                                    ) {
+                                        setV2BlockedReason(defaults.v2_blocked_reason ?? "NO_LETTERHEAD");
+                                        setV2BlockedDetail(defaults.v2_blocked_detail ?? null);
                                         setV2ConfigBlocked(true);
+                                    } else {
+                                        // Block C: the obsolete third bootstrap
+                                        // request — GET .../versions/{id} — is gone.
+                                        // It is not swallowed or made conditional:
+                                        // the editor has no reason to make it, since
+                                        // `tmplRaw` already holds the live template
+                                        // and the backend resolves the structure
+                                        // itself at creation.
+                                        setV2CreationTemplateId(templateId);
+                                        setV2CreationTemplateHash(bootstrapTemplateHash);
+
+                                        // The resolved presentation arrives in the same
+                                        // response—without chaining calls that can
+                                        // partially fail.
+                                        setSelectedLetterheadVersionId(defaults.letterhead_version_id);
+                                        setSelectedLetterheadPresentation(defaults.letterhead_presentation);
+                                        setSelectedLetterheadName(defaults.letterhead_name ?? null);
+                                        setLetterheadResolutionSource(
+                                            defaults.letterhead_resolution_source ?? null
+                                        );
+                                        setSelectedLetterheadResources(
+                                            defaults.letterhead_resolved_resources ?? null
+                                        );
+
+                                        // The letterhead selector is secondary: if it
+                                        // fails to load, the user simply cannot change
+                                        // letterheads—V2 creation with the resolved one
+                                        // still works.
+                                        try {
+                                            const { letterheads } = await listReportLetterheads();
+                                            const options: LetterheadVersionOption[] = [];
+                                            for (const lh of letterheads) {
+                                                const { versions: lhVersions } =
+                                                    await listReportLetterheadVersions(lh.id);
+                                                const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
+                                                if (activeLh) {
+                                                    options.push({
+                                                        value: activeLh.id,
+                                                        label: lh.name,
+                                                        letterheadId: lh.id,
+                                                    });
+                                                }
+                                            }
+                                            setAvailableLetterheadVersions(options);
+                                        } catch { /* selector opcional */ }
                                     }
+                                } catch (cfgErr) {
+                                    // With V2 enabled, a configuration-resolution
+                                    // failure is a blocked state, never an excuse to
+                                    // render Legacy.
+                                    //
+                                    // H-0c: but it is not a LETTERHEAD state either.
+                                    // This catch used to hard-code NO_LETTERHEAD, so
+                                    // a pathologist's 403 on the template-version read
+                                    // was reported as "Falta el membrete
+                                    // predeterminado del laboratorio" — pointing at
+                                    // configuration that was in fact correct. The
+                                    // failure is now classified by HTTP status.
+                                    setV2BlockedReason(classifyConfigFailure(cfgErr));
+                                    setV2BlockedDetail(
+                                        cfgErr instanceof Error ? cfgErr.message : null
+                                    );
+                                    setV2ConfigBlocked(true);
                                 }
+                            } else {
+                                // Céluma 1.4 (#22): a study type without a
+                                // default template cannot author a report. There
+                                // is no empty-template fallback any more.
+                                setV2BlockedReason("NO_TEMPLATE");
+                                setV2ConfigBlocked(true);
                             }
-                        } catch { /* ignore, use empty template */ }
+                        } catch (tplErr) {
+                            // The study type or its template could not be read:
+                            // a blocked state, never an empty legacy-shaped form.
+                            setV2BlockedReason(classifyConfigFailure(tplErr));
+                            setV2BlockedDetail(tplErr instanceof Error ? tplErr.message : null);
+                            setV2ConfigBlocked(true);
+                        }
+                    } else {
+                        setV2BlockedReason("NO_TEMPLATE");
+                        setV2ConfigBlocked(true);
                     }
                     const tmplNew = tmplRaw ? normalizeReportTemplateJSON(tmplRaw) : EMPTY_TEMPLATE_JSON;
                     setTemplate(tmplNew);
@@ -1902,7 +1920,7 @@ const ReportEditor: React.FC = () => {
                     <CelumaSteps steps={REPORT_STEPS} current={getReportStep(envelope?.status)} />
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
                         {renderSaveButton("report-save-top")}
-                        {envelope?.status === "DRAFT" && (
+                        {envelope?.status === "DRAFT" && !legacyAuthoringBlocked && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
                                 Enviar a Revisión
                             </CelumaButton>
@@ -2111,7 +2129,26 @@ const ReportEditor: React.FC = () => {
                             styles={{ body: { padding: "16px 24px 20px 24px", overflowY: "auto" } }}
                             style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
                         >
-                            {isReadOnly && (
+                            {legacyAuthoringBlocked && (
+                                <Panel style={{
+                                    marginBottom: 16,
+                                    background: "#fef2f2",
+                                    border: "2px solid #fecaca",
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: 10,
+                                    padding: 12,
+                                }}>
+                                    <ExclamationCircleOutlined style={{ color: "#dc2626", fontSize: 18, flexShrink: 0, marginTop: 2 }} />
+                                    <div style={{ fontSize: 13, color: "#991b1b", lineHeight: 1.45 }}>
+                                        Este reporte se creó con el <b>formato anterior</b>, que ya no admite
+                                        edición, envío a revisión ni firma. Su contenido y los PDF ya emitidos se
+                                        conservan y siguen disponibles para consulta. Contacta al administrador
+                                        de tu laboratorio o al soporte de Céluma para resolver este borrador.
+                                    </div>
+                                </Panel>
+                            )}
+                            {isReadOnly && !legacyAuthoringBlocked && (
                                 <Panel style={{
                                     marginBottom: 16,
                                     background: "#fffbeb",

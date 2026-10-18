@@ -278,3 +278,19 @@ describe("ReportLetterheads — the commit is mounted and runs for real", () => 
         await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("lh1", false));
     });
 });
+
+describe("ReportLetterheads — legacy export retired (#22)", () => {
+    it("offers no legacy export action, only V2 import and creation", async () => {
+        withPermission(true);
+        vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
+
+        renderPage();
+
+        await waitFor(() => {
+            expect(screen.getByText(/aún no hay membretes/i)).toBeTruthy();
+        });
+        expect(screen.queryByText(/exportar membrete legado/i)).toBeNull();
+        expect(screen.getByText(/importar \.cell/i)).toBeTruthy();
+        expect("exportLegacyLetterhead" in letterheadService).toBe(false);
+    });
+});

@@ -299,15 +299,6 @@ export async function exportReportLetterheadVersion(
     downloadJSONAsFile(envelope, filename);
 }
 
-export async function exportLegacyLetterhead(): Promise<void> {
-    const envelope = await requestLetterheadJSON<CelumaLetterheadEnvelope>(
-        `${base}/v1/report-letterheads/legacy/export`,
-        { method: "GET", headers: authHeaders({ Accept: "application/json" }) },
-        "Error al exportar el membrete legado"
-    );
-    downloadJSONAsFile(envelope, "legacy-ambassador-letterhead.cell");
-}
-
 export async function importReportLetterhead(
     file: File
 ): Promise<ReportLetterheadVersionDetail> {

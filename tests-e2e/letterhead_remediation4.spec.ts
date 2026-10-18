@@ -272,7 +272,14 @@ test.describe("Fourth remedy — optional letterhead description", () => {
 // ===========================================================================
 
 test.describe("Fourth Remediation — Legacy letterhead and local printing", () => {
-    test("import Legacy, create V2 report, print draft, publish and download the official PDF", async ({ page, request }) => {
+    // Céluma 1.4 (#22): this flow obtained its `.cell` from
+    // `GET /report-letterheads/legacy/export`, which is retired (410). The
+    // legacy-parity import/print/publish path is still covered at the API
+    // level by the backend suite (`TestLegacyExportImportRoundTrip`, which
+    // builds the envelope in-process). Restore this browser flow only with a
+    // reviewed, committed synthetic `.cell` fixture; the legacy institutional
+    // logo bitmap must not be copied into this repository.
+    test.skip("import Legacy, create V2 report, print draft, publish and download the official PDF", async ({ page, request }) => {
         test.slow();
         const lab = await createLab(request, "legacy");
         const { studyTypeId } = await createClinicalSetup(request, lab);

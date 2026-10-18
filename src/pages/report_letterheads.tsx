@@ -29,7 +29,6 @@ import {
     duplicateReportLetterhead,
     setDefaultReportLetterhead,
     importReportLetterhead,
-    exportLegacyLetterhead,
     exportReportLetterheadVersion,
     getActiveReportLetterheadVersion,
 } from "../services/report_letterhead_service";
@@ -78,7 +77,6 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
     const [confirmingDeactivate, setConfirmingDeactivate] = useState<ReportLetterheadSummary | null>(null);
 
     const [importing, setImporting] = useState(false);
-    const [exportingLegacy, setExportingLegacy] = useState(false);
     const [exportingId, setExportingId] = useState<string | null>(null);
 
     const load = async () => {
@@ -291,17 +289,6 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
         return false; // prevent antd Upload's default upload behavior
     };
 
-    const handleExportLegacy = async () => {
-        setExportingLegacy(true);
-        try {
-            await exportLegacyLetterhead();
-        } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al exportar el membrete legado");
-        } finally {
-            setExportingLegacy(false);
-        }
-    };
-
     const columns: ColumnsType<ReportLetterheadSummary> = [
         {
             title: "Nombre",
@@ -446,13 +433,6 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                 subtitle="Configuración visual de página (logo, encabezado, pie, márgenes, color, firmante institucional) compartida entre plantillas de reporte."
                 extra={
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <CelumaButton
-                            icon={<DownloadOutlined />}
-                            loading={exportingLegacy}
-                            onClick={handleExportLegacy}
-                        >
-                            Exportar membrete legado
-                        </CelumaButton>
                         <Upload
                             accept=".cell,.clm,.celuma,application/json"
                             showUploadList={false}

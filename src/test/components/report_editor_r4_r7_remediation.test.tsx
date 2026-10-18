@@ -111,6 +111,8 @@ function fullResponse(status: ReportStatus, reviewers: Reviewer[]) {
             branch_id: "b1",
             created_by: AUTHOR_ID,
             version_no: 1,
+            // Céluma 1.4 (#22): a report an author can still edit is a V2 one.
+            schema_version: 2,
             status,
             title: "Reporte de prueba",
             published_at: null,
