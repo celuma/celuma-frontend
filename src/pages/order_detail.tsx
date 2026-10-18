@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import OrderManagementPanel from "../components/management/order_management_panel";
 import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import {
     ReloadOutlined, FilePdfOutlined,
@@ -98,6 +99,10 @@ type OrderFullResponse = {
         tenant_id: string;
         branch_id: string;
         requesting_physician?: { id: string; full_name: string; physician_code: string; specialty?: string | null; institution?: string | null; email?: string | null } | null;
+        /** Every external requesting physician, no primary (Céluma 1.4, #16). */
+        requesting_physicians?: Array<{ id: string; full_name: string; physician_code: string }> | null;
+        /** Optional request reference; a string so leading zeroes survive. */
+        expediente?: string | null;
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
@@ -231,6 +236,7 @@ export default function OrderDetail() {
     const canManageAssignees = hasPermission(PERMS.MANAGE_ASSIGNEES);
     const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
     const canUpdateOrder = hasPermission(PERMS.UPDATE_ORDER);
+    const canRemoveCapture = hasPermission(PERMS.REMOVE_CAPTURE);
     
     // Scroll to bottom of conversation
     const scrollToBottom = useCallback(() => {
@@ -1089,23 +1095,36 @@ export default function OrderDetail() {
                         subtitle={data?.patient ? data.patient.patient_code : undefined}
                         meta={data && (
                             <>
-                                {(data.order.requesting_physician || data.order.requested_by) && (
+                                {((data.order.requesting_physicians?.length ?? 0) > 0 || data.order.requested_by) && (
                                     <MetaItem icon={<UserOutlined />}>
-                                        <span style={{ marginRight: 4 }}>Solicitante:</span>
-                                        {data.order.requesting_physician ? (
-                                            <a
-                                                href={`/requesting-physicians/${data.order.requesting_physician.id}`}
-                                                onClick={(event) => {
-                                                    event.preventDefault();
-                                                    navigate(`/requesting-physicians/${data.order.requesting_physician?.id}`);
-                                                }}
-                                                style={{ fontWeight: 600, color: tokens.primary }}
-                                            >
-                                                {data.order.requesting_physician.full_name}
-                                            </a>
+                                        <span style={{ marginRight: 4 }}>
+                                            {(data.order.requesting_physicians?.length ?? 0) > 1 ? "Solicitantes:" : "Solicitante:"}
+                                        </span>
+                                        {(data.order.requesting_physicians?.length ?? 0) > 0 ? (
+                                            data.order.requesting_physicians!.map((physician, index) => (
+                                                <span key={physician.id}>
+                                                    {index > 0 ? "; " : ""}
+                                                    <a
+                                                        href={`/requesting-physicians/${physician.id}`}
+                                                        onClick={(event) => {
+                                                            event.preventDefault();
+                                                            navigate(`/requesting-physicians/${physician.id}`);
+                                                        }}
+                                                        style={{ fontWeight: 600, color: tokens.primary }}
+                                                    >
+                                                        {physician.full_name}
+                                                    </a>
+                                                </span>
+                                            ))
                                         ) : (
                                             <span style={{ fontWeight: 600, color: tokens.textPrimary }}>{data.order.requested_by}</span>
                                         )}
+                                    </MetaItem>
+                                )}
+                                {data.order.expediente && (
+                                    <MetaItem icon={<FileTextOutlined />}>
+                                        <span style={{ marginRight: 4 }}>Expediente:</span>
+                                        <span style={{ fontWeight: 600, color: tokens.textPrimary }} data-testid="order-expediente">{data.order.expediente}</span>
                                     </MetaItem>
                                 )}
                                 {data.order.created_at && (
@@ -1234,6 +1253,15 @@ export default function OrderDetail() {
                                                 </div>
                                             )}
                                         </Panel>
+                                <OrderManagementPanel
+                                    orderId={data.order.id}
+                                    physicianIds={(data.order.requesting_physicians ?? []).map((p) => p.id)}
+                                    expediente={data.order.expediente ?? null}
+                                    notes={data.order.notes ?? null}
+                                    canEdit={canUpdateOrder}
+                                    canRemove={canRemoveCapture}
+                                    onChanged={refresh}
+                                />
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
@@ -1676,6 +1704,17 @@ export default function OrderDetail() {
                                                 const newStatus = meta.new_status as string;
                                                 return `Cambió el estado de la orden de ${oldStatus || "?"} a ${newStatus || "?"}`;
                                             }
+                                            case "ORDER_UPDATED": {
+                                                const changed = (meta.changed_fields as string[]) || [];
+                                                const labels: Record<string, string> = {
+                                                    requesting_physician_ids: "los médicos solicitantes",
+                                                    expediente: "el expediente",
+                                                    notes: "la descripción",
+                                                };
+                                                return `Actualizó ${changed.map((f) => labels[f] ?? f).join(", ") || "datos de la orden"}`;
+                                            }
+                                            case "SAMPLE_CODE_CORRECTED":
+                                                return `Corrigió el código de una muestra: ${String(meta.old_code ?? "?")} → ${String(meta.new_code ?? "?")}`;
                                             case "ORDER_NOTES_UPDATED": {
                                                 const newNotes = meta.new_notes as string || "";
                                                 const action = newNotes ? "Actualizó" : "Eliminó";

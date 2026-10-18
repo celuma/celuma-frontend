@@ -142,7 +142,7 @@ async function createOrder(request: APIRequestContext, lab: Lab, studyTypeId: st
         data: {
             tenant_id: lab.tenantId, branch_id: lab.branchId,
             patient_id: patient.id, study_type_id: studyTypeId,
-            samples: [{ sample_code: `R3-S-${suffix}`, sample_type: "Bloque", collected_at: "2026-08-01", received_at: "2026-08-01" }],
+            samples: [{ sample_type: "Bloque", collected_at: "2026-08-01", received_at: "2026-08-01" }],
         },
         token: lab.token,
     });

@@ -1,7 +1,7 @@
 /**
  * Céluma 1.4, issue #8 — Configuración → Numeración.
  *
- * The page edits the format / minimum width / manual-code mode of the monthly
+ * The page edits the format / minimum width / scope of the
  * order and sample codes and previews them. The API stays the authority
  * (validation, permission, audit); these tests pin what the screen asks for
  * and shows, in particular that a preview is a read-only request that is
@@ -17,7 +17,7 @@ const json = (body: unknown, status = 200) =>
 
 const cfg = (kind: string, over: Record<string, unknown> = {}) => ({
     entity_kind: kind, active: false, manual_policy: "allowed", format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2,
-    start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: true, manual_entry: "optional", ...over,
+    start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: true, registration: "automatic", legacy_manual_policy: false, ...over,
 });
 
 const preview = (over: Record<string, unknown> = {}) => ({
@@ -73,7 +73,8 @@ describe("numbering settings page", () => {
         expect(await screen.findByTestId("numbering-card-order")).toBeInTheDocument();
         expect(screen.getByTestId("numbering-card-sample")).toBeInTheDocument();
         expect(screen.getByTestId("inactive-note-order").textContent).toContain("formato anterior");
-        expect(screen.getByTestId("inactive-note-sample").textContent).toContain("a mano");
+        expect(screen.getByTestId("inactive-note-sample").textContent).toContain("también de forma automática");
+        expect(screen.queryByTestId("policy-sample")).toBeNull();  // no manual-code policy control any more
         expect((card("order").getByLabelText("Formato") as HTMLInputElement).value).toBe("{BASE}{SEQ}{MM}{YY}");
         await waitFor(() => expect(screen.getAllByText("CU991026").length).toBeGreaterThan(0), { timeout: 3000 });
         expect(screen.getAllByText("CU1001026").length).toBeGreaterThan(0);  // width grows past 99
@@ -134,20 +135,19 @@ describe("numbering settings page", () => {
         await waitFor(() => expect((card("order").getByLabelText("Formato") as HTMLInputElement).value).toBe("{BASE}{SEQ}{MM}{YY}"));
     });
 
-    it("saving sends activation, policy, format, width, start value and scope to the kind's endpoint", async () => {
+    it("saving sends activation (never the retired manual policy), format, width, start value and scope to the kind's endpoint", async () => {
         const calls = stub();
         renderPage();
         await screen.findByTestId("numbering-card-sample");
         fireEvent.click(card("sample").getByTestId("active-sample"));
         fireEvent.click(within(card("sample").getByTestId("separator-sample")).getByLabelText(/Con guion/));
-        fireEvent.click(within(card("sample").getByTestId("policy-sample")).getByLabelText(/No permitido/));
         fireEvent.change(card("sample").getByLabelText("Valor inicial"), { target: { value: "500" } });
         await waitFor(() => expect((card("sample").getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(false), { timeout: 3000 });
         fireEvent.click(card("sample").getByRole("button", { name: "Guardar" }));
         await waitFor(() => expect(calls.puts).toHaveLength(1));
         expect(calls.puts[0].url).toContain("/v1/numbering/config/sample");
         expect(calls.puts[0].body).toEqual({
-            active: true, manual_policy: "forbidden", format: "{BASE}-{SEQ}{MM}{YY}", sequence_min_width: 2, start_value: 500, scope: "tenant", timezone: "America/Mexico_City",
+            active: true, format: "{BASE}-{SEQ}{MM}{YY}", sequence_min_width: 2, start_value: 500, scope: "tenant", timezone: "America/Mexico_City",
         });
     });
 
@@ -167,10 +167,25 @@ describe("numbering settings page", () => {
         expect((card("order").getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it("says that the manual-code policy alone authorizes nobody (the permission is separate)", async () => {
+    it("says registration is automatic and that correcting a sample code is a separate action", async () => {
         stub();
         renderPage();
         await screen.findByTestId("numbering-card-order");
-        expect(card("order").getByText(/lab:enter_manual_code/)).toBeInTheDocument();
+        expect(card("order").getByTestId("registration-order").textContent).toContain("siempre de forma automática");
+        expect(card("order").queryByTestId("legacy-policy-order")).toBeNull();
+    });
+
+    it("shows (without changing it) a stored retired 'required' policy", async () => {
+        vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.includes("/numbering/config")) {
+                return json({ order: cfg("order", { manual_policy: "required", legacy_manual_policy: true }), sample: cfg("sample") });
+            }
+            if (url.includes("/numbering/preview")) return json(preview());
+            return json({ study_types: [], sample_types: [] });
+        }));
+        renderPage();
+        expect(await screen.findByTestId("legacy-policy-order")).toBeInTheDocument();
+        expect(card("order").getByTestId("legacy-policy-order").textContent).toContain("Ya no tiene efecto");
     });
 });
