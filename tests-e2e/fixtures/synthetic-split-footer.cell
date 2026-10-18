@@ -1,0 +1,106 @@
+{
+ "format": "celuma-letterhead",
+ "format_version": 2,
+ "exported_at": "2026-01-01T00:00:00+00:00",
+ "source": {
+  "product": "Céluma",
+  "schema_version": 2
+ },
+ "letterhead": {
+  "name": "Membrete sintético (paridad de geometría)",
+  "description": "Fixture sintético de pruebas E2E: geometría de bandas del formato histórico con identidad ficticia.",
+  "presentation": {
+   "paper": {
+    "size": "LETTER",
+    "orientation": "PORTRAIT",
+    "margins_cm": {
+     "top": 2.8,
+     "right": 1.8,
+     "bottom": 2.0,
+     "left": 1.8
+    },
+    "body_padding_top_mm": 4.0
+   },
+   "header": {
+    "enabled": true,
+    "logo_storage_id": null,
+    "institution_name": null,
+    "subtitle": null,
+    "address": null,
+    "phone": null,
+    "email": null,
+    "logo_position": "LEFT",
+    "content_alignment": "BOTTOM",
+    "height_mm": 28.0,
+    "divider": {
+     "enabled": false,
+     "style": "SINGLE",
+     "primary_width_px": 1.0,
+     "secondary_width_px": 1.0,
+     "gap_mm": 1.0,
+     "color": null
+    },
+    "logo_mode": "NONE",
+    "offset_mm": 0.0,
+    "content_gap_mm": 0.0,
+    "padding_mm": 4.0,
+    "signer_placement": "INLINE",
+    "logo_height_mm": null,
+    "logo_max_width_mm": null
+   },
+   "footer": {
+    "enabled": true,
+    "custom_text": "Calle Ficticia 123, Ciudad de Prueba\nTel. 00 0000 0000  contacto@ejemplo.test",
+    "show_page_number": false,
+    "logo_storage_id": null,
+    "logo_position": "LEFT",
+    "content_alignment": "RIGHT",
+    "height_mm": 20.0,
+    "divider": {
+     "enabled": false,
+     "style": "SINGLE",
+     "primary_width_px": 1.0,
+     "secondary_width_px": 1.0,
+     "gap_mm": 1.0,
+     "color": null
+    },
+    "logo_mode": "CUSTOM",
+    "layout": "SPLIT",
+    "offset_mm": 0.0,
+    "content_gap_mm": 0.0,
+    "padding_mm": 0.0,
+    "logo_height_mm": 16.0,
+    "logo_max_width_pct": 35.0,
+    "text_max_width_pct": 65.0
+   },
+   "style": {
+    "primary_color": "#002060",
+    "secondary_color": null,
+    "typography": {
+     "font_family": "ARIAL",
+     "base_font_size_pt": 10.0,
+     "header_font_size_pt": 8.0,
+     "footer_font_size_pt": 7.0,
+     "header_secondary_font_size_pt": 8.0,
+     "header_font_weight": 700,
+     "footer_font_weight": 700,
+     "body_font_weight": null,
+     "line_height": null
+    }
+   },
+   "signer": {
+    "display_name": "Dra. Sintética de Prueba",
+    "specialty": "Especialidad ficticia",
+    "license_number": "LIC-0000000",
+    "affiliation": "Institución ficticia de pruebas"
+   }
+  }
+ },
+ "assets": {
+  "footer_logo": {
+   "media_type": "image/png",
+   "sha256": "83dfa058c019570ded8001d45a7de9f27f77e10f58fccc1f567fc208f7fc7e3e",
+   "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAOQAAAAbCAIAAADj8bQWAAAAcElEQVR4nO3OQQkAMQAEsUo5afWv4izMbykEIiDnfBfesB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9AtB9A8wN0jAa1wLp9HAAAAABJRU5ErkJggg=="
+  }
+ }
+}

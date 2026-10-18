@@ -161,6 +161,8 @@ function reportPayload(status: ReportStatus) {
             branch_id: "b1",
             created_by: "u1",
             version_no: 1,
+            // Céluma 1.4 (#22): a report an author can still edit is a V2 one.
+            schema_version: 2,
             status,
             title: "Reporte de prueba",
             published_at: null,

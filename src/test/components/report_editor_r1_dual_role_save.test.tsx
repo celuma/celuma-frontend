@@ -117,7 +117,7 @@ function mockReport(status: ReportStatus) {
         samples: [],
         report: {
             id: REPORT_ID, order_id: ORDER_ID, tenant_id: "t1", branch_id: "b1",
-            created_by: USER_ID, version_no: 1, status,
+            created_by: USER_ID, version_no: 1, status, schema_version: 2,
             title: "Reporte de prueba", published_at: null,
             signed_by: null, signed_at: null,
             template: {

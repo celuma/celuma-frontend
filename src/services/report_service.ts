@@ -29,12 +29,20 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
     return headers;
 }
 
-/** Readable message from FastAPI JSON error `{ "detail": "..." | [...] }`. */
+/** Readable message from FastAPI JSON error `{ "detail": "..." | [...] | { message } }`. */
 function parseFastApiErrorDetail(bodyText: string): string | undefined {
     try {
         const j = JSON.parse(bodyText) as { detail?: unknown };
         const d = j.detail;
         if (typeof d === "string") return d;
+        // Céluma 1.4 (#22): structured `{ code, message }` details (e.g.
+        // `legacy_report_authoring_retired`, `reports_v2_template_required`).
+        if (
+            typeof d === "object" && d !== null && !Array.isArray(d) &&
+            typeof (d as { message?: unknown }).message === "string"
+        ) {
+            return (d as { message: string }).message;
+        }
         if (Array.isArray(d)) {
             return d
                 .map((item) =>

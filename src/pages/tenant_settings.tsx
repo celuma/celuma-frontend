@@ -13,11 +13,9 @@ import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
 import Panel from "../components/ui/panel";
 import Button from "../components/ui/button";
-import CelumaSwitch from "../components/ui/celuma_switch";
 import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import { tokens, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
-import { getReportTemplates, listReportTemplateVersions } from "../services/report_service";
 import { extractUploadedFile } from "../lib/upload_helpers";
 
 function getApiBase(): string {
@@ -52,7 +50,6 @@ interface TenantInfo {
     legal_name?: string;
     tax_id?: string;
     logo_url?: string;
-    reports_v2_enabled?: boolean;
     // Céluma 1.3.1 Block D (CEL-131-06).
     default_reviewer_id?: string | null;
     default_reviewer?: { id: string; full_name?: string | null; email?: string | null } | null;
@@ -99,8 +96,6 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
     const [tenant, setTenant] = useState<TenantInfo | null>(null);
     const [logoFile, setLogoFile] = useState<UploadFile | null>(null);
     const [uploading, setUploading] = useState(false);
-    const [savingReportsV2, setSavingReportsV2] = useState(false);
-    const [activeVersionCheck, setActiveVersionCheck] = useState<"checking" | "has_active" | "no_active">("checking");
     const [eligibleReviewers, setEligibleReviewers] = useState<EligibleReviewer[]>([]);
     const [loadingEligibleReviewers, setLoadingEligibleReviewers] = useState(false);
     const [savingDefaultReviewer, setSavingDefaultReviewer] = useState(false);
@@ -131,32 +126,6 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
             .finally(() => { if (!cancelled) setLoadingEligibleReviewers(false); });
         return () => { cancelled = true; };
     }, [canManageTenant]);
-
-    // Céluma 1.3 Phase 2, Block D, Story D9: advisory check — before letting
-    // an admin turn reports_v2_enabled ON, confirm the tenant has at least one
-    // ReportTemplateVersion with status ACTIVE, otherwise turning the flag on
-    // would let staff create V2 reports with nothing valid to select (see D10).
-    // This is a UI-side courtesy check, not a backend invariant — the flag
-    // itself never gates reading/rendering, only new V2 creation.
-    useEffect(() => {
-        let cancelled = false;
-        const checkActiveVersions = async () => {
-            try {
-                const { templates } = await getReportTemplates(false);
-                const results = await Promise.all(
-                    templates.map((t) =>
-                        listReportTemplateVersions(t.id).catch(() => ({ versions: [] }))
-                    )
-                );
-                const hasActive = results.some((r) => r.versions.some((v) => v.status === "ACTIVE"));
-                if (!cancelled) setActiveVersionCheck(hasActive ? "has_active" : "no_active");
-            } catch {
-                if (!cancelled) setActiveVersionCheck("no_active");
-            }
-        };
-        checkActiveVersions();
-        return () => { cancelled = true; };
-    }, []);
 
     const loadTenant = async () => {
         setLoading(true);
@@ -227,28 +196,8 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
         }
     };
 
-    const handleToggleReportsV2 = async (checked: boolean) => {
-        if (!tenant) return;
-        if (checked && activeVersionCheck !== "has_active") {
-            message.warning(
-                "No puedes habilitar reportes V2 todavía: ninguna plantilla tiene una versión activa. Publica y activa una versión primero."
-            );
-            return;
-        }
-        setSavingReportsV2(true);
-        try {
-            await patchJSON(`/v1/tenants/${tenant.id}`, { reports_v2_enabled: checked });
-            setTenant((prev) => (prev ? { ...prev, reports_v2_enabled: checked } : prev));
-            message.success(checked ? "Reportes V2 habilitados" : "Reportes V2 deshabilitados");
-        } catch {
-            message.error("Error al actualizar la configuración de reportes V2");
-        } finally {
-            setSavingReportsV2(false);
-        }
-    };
-
     // Céluma 1.3.1 Block D (CEL-131-06): saves immediately on change, same
-    // pattern as `handleToggleReportsV2` above. `undefined` means "clear" —
+    // pattern as the tenant fields above. `undefined` means "clear" —
     // the backend distinguishes that from "not submitted" via
     // `clear_default_reviewer`, since a PATCH omitting the field must leave
     // it untouched.
@@ -360,39 +309,6 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
                                     )}
                                 </div>
                             </div>
-                        </Panel>
-                    </section>
-
-                    <section style={{ display: "grid", gap: 16 }}>
-                        <SectionTitle>Reportes V2</SectionTitle>
-                        <Panel style={{ display: "grid", gap: 12 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                                <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontWeight: 500 }}>Habilitar creación de reportes V2</div>
-                                    <div style={{ fontSize: 13, color: tokens.textSecondary, maxWidth: 480 }}>
-                                        Permite seleccionar una versión de plantilla configurable (papel, membrete,
-                                        branding) al crear reportes nuevos. No afecta la lectura de reportes
-                                        existentes, sean legado o V2 — solo controla si el personal puede crear
-                                        reportes V2 nuevos a partir de ahora.
-                                    </div>
-                                </div>
-                                <CelumaSwitch
-                                    checked={!!tenant?.reports_v2_enabled}
-                                    loading={savingReportsV2}
-                                    disabled={!canManageTenant}
-                                    onChange={handleToggleReportsV2}
-                                />
-                            </div>
-                            {activeVersionCheck === "no_active" && !tenant?.reports_v2_enabled && (
-                                <div style={{ background: "#fffbeb", border: "2px solid #fde68a", borderRadius: tokens.radius, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
-                                    Ninguna plantilla tiene todavía una versión <strong>activa</strong>. Publica y
-                                    activa una versión en{" "}
-                                    <a href="/config/report-templates" style={{ color: "#92400e", textDecoration: "underline" }}>
-                                        Plantillas de Reporte
-                                    </a>{" "}
-                                    antes de habilitar este flag.
-                                </div>
-                            )}
                         </Panel>
                     </section>
 
