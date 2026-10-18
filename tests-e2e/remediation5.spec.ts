@@ -500,13 +500,19 @@ test.describe("Fifth remedy — download from official PDF", () => {
     test("a legitimate reader downloads; a user without permission gets 403; another tenant gets 404", async ({ request }) => {
         const lab = await createLab(request, "authz");
         await createTwoLetterheads(request, lab);
-        const { studyTypeId } = await createClinicalSetup(request, lab);
+        const { studyTypeId, templateId } = await createClinicalSetup(request, lab);
         const order = await createOrder(request, lab, studyTypeId);
 
+        // Céluma 1.4 (#22): reports are V2-only, so creation names its template
+        // (and the hash of the structure it was built against).
+        const template = await api<{ template_hash: string }>(
+            request, "GET", `/api/v1/reports/templates/${templateId}`, { token: lab.token }
+        );
         const report = await api<{ id: string }>(request, "POST", "/api/v1/reports/", {
             data: {
                 tenant_id: lab.tenantId, branch_id: lab.branchId, order_id: order.id,
                 title: "Autorización", report: { base: {}, sections: {}, base_order: [], section_order: [] },
+                template_id: templateId, template_hash: template.template_hash,
             },
             token: lab.token,
         });

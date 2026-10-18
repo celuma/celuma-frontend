@@ -15,7 +15,12 @@
  * Each block creates its own tenant via POST /auth/register/unified, so it
  * never touches real data and can be repeated.
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const API_BASE = process.env.CELUMA_E2E_API_BASE_URL || "http://localhost:8000";
 
@@ -272,23 +277,21 @@ test.describe("Fourth remedy — optional letterhead description", () => {
 // ===========================================================================
 
 test.describe("Fourth Remediation — Legacy letterhead and local printing", () => {
-    // Céluma 1.4 (#22): this flow obtained its `.cell` from
-    // `GET /report-letterheads/legacy/export`, which is retired (410). The
-    // legacy-parity import/print/publish path is still covered at the API
-    // level by the backend suite (`TestLegacyExportImportRoundTrip`, which
-    // builds the envelope in-process). Restore this browser flow only with a
-    // reviewed, committed synthetic `.cell` fixture; the legacy institutional
-    // logo bitmap must not be copied into this repository.
-    test.skip("import Legacy, create V2 report, print draft, publish and download the official PDF", async ({ page, request }) => {
+    // Céluma 1.4 (#22): the `.cell` used to come from the retired
+    // `GET /report-letterheads/legacy/export`. It now comes from a committed
+    // SYNTHETIC fixture (`fixtures/synthetic-split-footer.cell`) with the same
+    // band geometry and a fictitious identity and logo, imported through the
+    // supported V2 import route.
+    test("import split-footer letterhead, create V2 report, print draft, publish and download the official PDF", async ({ page, request }) => {
         test.slow();
         const lab = await createLab(request, "legacy");
         const { studyTypeId } = await createClinicalSetup(request, lab);
         const order = await createOrder(request, lab, studyTypeId);
 
-        // --- Export the Legacy letterhead and import it, for the actual API ---
-        const legacyEnvelope = await api<Record<string, unknown>>(
-            request, "GET", "/api/v1/report-letterheads/legacy/export", { token: lab.token }
-        );
+        // --- Import the synthetic split-footer letterhead through the V2 API ---
+        const legacyEnvelope = JSON.parse(
+            readFileSync(path.join(__dirname, "fixtures", "synthetic-split-footer.cell"), "utf-8"),
+        ) as Record<string, unknown>;
         const importRes = await request.fetch(`${API_BASE}/api/v1/report-letterheads/import`, {
             method: "POST",
             headers: { Authorization: `Bearer ${lab.token}` },
@@ -334,7 +337,7 @@ test.describe("Fourth Remediation — Legacy letterhead and local printing", () 
             // footer a ball.
             expect(layout!.footerWeight).toBe("700");
             // The institutional block of Legacy, and no page number.
-            expect(layout!.text).toContain("Villanueva");
+            expect(layout!.text).toContain("Sintética");
             expect(layout!.text).not.toMatch(/Página \d+ de \d+/);
         }).toPass({ timeout: 25_000 });
 
