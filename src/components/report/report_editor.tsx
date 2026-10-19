@@ -14,7 +14,8 @@ import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion, StaleReportTemplateError,
     submitReport, approveReport, requestChanges, signAndPublishReport,
-    reopenReport,
+    reopenReport, isPasswordConfirmationError,
+    openReportAmendment, cancelReportAmendment,
     updateReportPresentation,
     getOfficialPdfDownloadUrl,
     OfficialPdfDownloadError,
@@ -50,9 +51,10 @@ import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
     ReportTemplateJSON, ReportSectionText,
     ReportBaseFieldConfig, ReportBaseFieldCustom, TemplateImageItem,
-    TemplateOrderInput,
+    TemplateOrderInput, AmendmentCategory,
 } from "../../models/report";
 import {
+    AMENDMENT_CATEGORY_LABELS,
     buildEmptyReportContent,
     normalizeReportTemplateJSON,
     mergePersistedContentIntoTemplateSnapshot,
@@ -70,7 +72,8 @@ import CelumaButton from "../ui/button";
 import ActionButtonPanel from "../ui/action_button_panel";
 import CelumaSteps, { type CelumaStep } from "../ui/celuma_steps";
 import CelumaModal from "../ui/celuma_modal";
-import ConfirmDialog from "../ui/confirm_dialog";
+import PasswordConfirmationDialog from "./password_confirmation_dialog";
+import ReportAmendmentPanel from "./report_amendment_panel";
 import Panel from "../ui/panel";
 import EmptyState from "../ui/empty_state";
 import CelumaTextArea from "../ui/textarea_field";
@@ -377,10 +380,25 @@ const ReportEditor: React.FC = () => {
     const [isChangesModalVisible, setIsChangesModalVisible] = useState(false);
     const [changesComment, setChangesComment] = useState("");
     // Céluma 1.3.1 Block B: reopening reverses an approval, so it is confirmed
-    // before it runs, using the application's existing ConfirmDialog rather
-    // than a new pattern.
+    // before it runs. Céluma 1.4 (#13): the confirmation is the user's own
+    // current password (verified by the backend), so it uses the password
+    // dialog; a refused password is shown inline and is never a success.
     const [isReopenConfirmVisible, setIsReopenConfirmVisible] = useState(false);
     const [isReopening, setIsReopening] = useState(false);
+    const [reopenConfirmError, setReopenConfirmError] = useState<string | null>(null);
+    // Céluma 1.4 (#13): signing is password-confirmed too.
+    const [isSignConfirmVisible, setIsSignConfirmVisible] = useState(false);
+    const [signConfirmError, setSignConfirmError] = useState<string | null>(null);
+    // Céluma 1.4 (#13): amendments. Opening and cancelling one change which
+    // version is current, so the editor reloads (reloadToken) afterwards.
+    const [reloadToken, setReloadToken] = useState(0);
+    const [amendmentNote, setAmendmentNote] = useState("");
+    const [isAmendDialogVisible, setIsAmendDialogVisible] = useState(false);
+    const [amendError, setAmendError] = useState<string | null>(null);
+    const [isAmending, setIsAmending] = useState(false);
+    const [isCancelAmendVisible, setIsCancelAmendVisible] = useState(false);
+    const [cancelAmendError, setCancelAmendError] = useState<string | null>(null);
+    const [isCancellingAmend, setIsCancellingAmend] = useState(false);
     // Manual-validation remediation (R7): the single in-flight flag both
     // "Guardar" buttons read. The editor previously had no save loading state
     // at all, so a second click simply fired a second request.
@@ -484,6 +502,25 @@ const ReportEditor: React.FC = () => {
             envelope?.status === "APPROVED" &&
             userCanReopenApprovedReport(orderReviewers),
         [envelope?.status, userCanReopenApprovedReport, orderReviewers]
+    );
+
+    // Céluma 1.4 (#13): the same reopening actors may amend a published V2
+    // report ("reopening after signature") and cancel an open amendment. It
+    // grants nothing else; the backend re-checks everything.
+    const openAmendment = envelope?.open_amendment ?? null;
+    const canAmend = useMemo(
+        () =>
+            envelope?.status === "PUBLISHED" &&
+            !openAmendment &&
+            Boolean(envelope?.delivered_emission) &&
+            envelope?.report?.schema_version === 2 &&
+            userCanReopenApprovedReport(orderReviewers),
+        [envelope?.status, envelope?.delivered_emission, envelope?.report?.schema_version,
+            openAmendment, userCanReopenApprovedReport, orderReviewers]
+    );
+    const canCancelAmendment = useMemo(
+        () => Boolean(openAmendment) && userCanReopenApprovedReport(orderReviewers),
+        [openAmendment, userCanReopenApprovedReport, orderReviewers]
     );
 
     // A4/A5: the signature toggles and the letterhead selector are
@@ -723,6 +760,8 @@ const ReportEditor: React.FC = () => {
                         : tmplSig.require_digital_signature;
                     setShowSignatureSection(showInit);
                     setRequireDigitalSignature(showInit && requireInit);
+                    // Céluma 1.4 (#13): the author's change note of an amendment draft.
+                    setAmendmentNote(full.report?.report?.amendment?.change_note ?? "");
 
                 } else if (prefilledOrderId) {
                     // ---- Create new report from order ----
@@ -936,7 +975,7 @@ const ReportEditor: React.FC = () => {
                 setLoadingData(false);
             }
         })();
-    }, [reportId, prefilledOrderId, session.tenantId]);
+    }, [reportId, prefilledOrderId, session.tenantId, reloadToken]);
 
     // Fifth post-Phase 2 remediation (Observation A). The bootstrap above
     // loads letterheads only in the NEW-report (`prefilledOrderId`) branch.
@@ -1101,6 +1140,13 @@ const ReportEditor: React.FC = () => {
             ...(preservedSignatureUrl ? { signature_url: preservedSignatureUrl } : {}),
         };
 
+        // Céluma 1.4 (#13): an amendment draft keeps its identification; only
+        // the change note is the author's (the backend ignores the rest).
+        const persistedAmendment = envelope?.report?.amendment;
+        if (persistedAmendment) {
+            report.amendment = { ...persistedAmendment, change_note: amendmentNote };
+        }
+
         // Céluma 1.3 Phase 2, Block C, Story C9: this function rebuilds
         // `report` from scratch from the template definition, which has no
         // notion of `schema_version`/`rendering_snapshot` — those live only
@@ -1215,7 +1261,7 @@ const ReportEditor: React.FC = () => {
         reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
         v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
         selectedLetterheadPresentation,
-        selectedLetterheadResources, letterheadDirty,
+        selectedLetterheadResources, letterheadDirty, amendmentNote,
     ]);
 
     // Live preview envelope
@@ -1233,7 +1279,7 @@ const ReportEditor: React.FC = () => {
         // paper — see remediation-local-validation-report.md).
         v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
         selectedLetterheadPresentation,
-        selectedLetterheadResources, letterheadDirty,
+        selectedLetterheadResources, letterheadDirty, amendmentNote,
     ]);
 
     // Post-Phase 2 remediation (bug 3 fix): the "Letterhead" selector. Unlike
@@ -1404,6 +1450,14 @@ const ReportEditor: React.FC = () => {
      */
     const handleSubmit = async () => {
         if (!envelope?.id) { message.warning("Guarda el reporte primero"); return; }
+        // Céluma 1.4 (#13): the stored amendment draft needs its change note.
+        if (envelope.open_amendment && !(envelope.report?.amendment?.change_note ?? "").trim()) {
+            showCelumaWarning(
+                "Falta la nota de enmienda",
+                "Escribe y guarda la nota de enmienda antes de enviar a revisión.",
+            );
+            return;
+        }
         try {
             const result = await submitReport(envelope.id);
             const newStatus = (result.status as ReportStatus) ?? "IN_REVIEW";
@@ -1453,11 +1507,12 @@ const ReportEditor: React.FC = () => {
      * publication flow uses: the refresh may enrich what the transition
      * confirmed, never contradict it.
      */
-    const handleReopen = async () => {
+    const handleReopen = async (password: string, reason?: string) => {
         if (!envelope?.id || isReopening) return;
         setIsReopening(true);
+        setReopenConfirmError(null);
         try {
-            const result = await reopenReport(envelope.id);
+            const result = await reopenReport(envelope.id, { password, changelog: reason });
             const newStatus = (result.status as ReportStatus) ?? "DRAFT";
             setEnvelope((e) => (e ? { ...e, status: newStatus } : e));
             setIsReopenConfirmVisible(false);
@@ -1472,9 +1527,58 @@ const ReportEditor: React.FC = () => {
                 // APPROVED actions.
             }
         } catch (err) {
+            if (isPasswordConfirmationError(err)) {
+                // Nothing changed on the server: stay in the dialog.
+                setReopenConfirmError(err.message);
+                return;
+            }
             showCelumaApiError(err, "No se pudo reabrir el reporte.");
         } finally {
             setIsReopening(false);
+        }
+    };
+
+    /** Céluma 1.4 (#13): open an amendment of the published report. */
+    const handleOpenAmendment = async (password: string, reason?: string, category?: string) => {
+        if (!envelope?.id || isAmending || !reason || !category) return;
+        setIsAmending(true);
+        setAmendError(null);
+        try {
+            const result = await openReportAmendment(envelope.id, {
+                password, reason, category: category as AmendmentCategory,
+            });
+            setIsAmendDialogVisible(false);
+            message.success(result.message);
+            setReloadToken((n) => n + 1);
+        } catch (err) {
+            if (isPasswordConfirmationError(err)) {
+                setAmendError(err.message);
+                return;
+            }
+            showCelumaApiError(err, "No se pudo abrir la enmienda.");
+        } finally {
+            setIsAmending(false);
+        }
+    };
+
+    /** Céluma 1.4 (#13): cancel the open amendment; the signed emission stays current. */
+    const handleCancelAmendment = async (password: string, reason?: string) => {
+        if (!envelope?.id || !openAmendment || isCancellingAmend || !reason) return;
+        setIsCancellingAmend(true);
+        setCancelAmendError(null);
+        try {
+            const result = await cancelReportAmendment(envelope.id, openAmendment.id, { password, reason });
+            setIsCancelAmendVisible(false);
+            message.success(result.message);
+            setReloadToken((n) => n + 1);
+        } catch (err) {
+            if (isPasswordConfirmationError(err)) {
+                setCancelAmendError(err.message);
+                return;
+            }
+            showCelumaApiError(err, "No se pudo cancelar la enmienda.");
+        } finally {
+            setIsCancellingAmend(false);
         }
     };
 
@@ -1601,6 +1705,12 @@ const ReportEditor: React.FC = () => {
         });
     };
 
+    /**
+     * Céluma 1.4 (#13): "Firmar y publicar" first runs the local prerequisite
+     * (a stored signature image when the report requires one), so the user is
+     * not asked for a password only to be told to upload a signature, and
+     * then opens the password confirmation. Nothing is sent before that.
+     */
     const handleSignAndPublish = async () => {
         if (!envelope?.id || isSigningAndPublishing) return;
         // Use the live toggle state so an unsaved "Firma digital" change is honoured.
@@ -1628,9 +1738,17 @@ const ReportEditor: React.FC = () => {
                 return;
             }
         }
+        setSignConfirmError(null);
+        setIsSignConfirmVisible(true);
+    };
+
+    const handleConfirmSignAndPublish = async (password: string) => {
+        if (!envelope?.id || isSigningAndPublishing) return;
         setIsSigningAndPublishing(true);
+        setSignConfirmError(null);
         try {
-            const result = await signAndPublishReport(envelope.id);
+            const result = await signAndPublishReport(envelope.id, { password });
+            setIsSignConfirmVisible(false);
             // Fifth remediation (§9.1): status and official version come from
             // the publication response ITSELF, so "Download official PDF"
             // appears immediately and targets the correct version without
@@ -1666,6 +1784,12 @@ const ReportEditor: React.FC = () => {
                 // must not appear as a publication failure or hide the download.
             }
         } catch (err) {
+            if (isPasswordConfirmationError(err)) {
+                // Nothing was signed: stay in the dialog and say why.
+                setSignConfirmError(err.message);
+                return;
+            }
+            setIsSignConfirmVisible(false);
             if (isSignatureMissingError(err)) {
                 promptUploadSignature();
                 return;
@@ -1972,10 +2096,29 @@ const ReportEditor: React.FC = () => {
                                 icon={<EditOutlined />}
                                 loading={isReopening}
                                 disabled={isReopening}
-                                onClick={() => setIsReopenConfirmVisible(true)}
+                                onClick={() => {
+                                    setReopenConfirmError(null);
+                                    setIsReopenConfirmVisible(true);
+                                }}
                                 data-testid="reopen-report"
                             >
                                 Reabrir reporte
+                            </CelumaButton>
+                        )}
+                        {/* Céluma 1.4 (#13): "reopening after signature" starts an amendment. */}
+                        {canAmend && (
+                            <CelumaButton
+                                size="small"
+                                icon={<EditOutlined />}
+                                loading={isAmending}
+                                disabled={isAmending}
+                                onClick={() => {
+                                    setAmendError(null);
+                                    setIsAmendDialogVisible(true);
+                                }}
+                                data-testid="amend-report"
+                            >
+                                Enmendar reporte
                             </CelumaButton>
                         )}
                         {envelope?.status === "PUBLISHED" && userHasPermission(PERMS.REPORTS_READ) && (
@@ -2163,6 +2306,23 @@ const ReportEditor: React.FC = () => {
                                         Este reporte está en <b>modo solo lectura</b> porque se encuentra en revisión o ya ha sido publicado.
                                     </div>
                                 </Panel>
+                            )}
+                            {envelope?.id && (
+                                <ReportAmendmentPanel
+                                    reportId={envelope.id}
+                                    refreshKey={`${envelope.status}-${envelope.version_no}-${reloadToken}`}
+                                    openAmendment={openAmendment}
+                                    hasSignedEmission={Boolean(envelope.delivered_emission)}
+                                    changeNote={amendmentNote}
+                                    changeNoteEditable={!isReadOnly}
+                                    onChangeNote={setAmendmentNote}
+                                    canCancelAmendment={canCancelAmendment}
+                                    onCancelAmendment={() => {
+                                        setCancelAmendError(null);
+                                        setIsCancelAmendVisible(true);
+                                    }}
+                                    downloadFilename={officialPdfFilename(fullData?.order?.order_code, studyTypeName)}
+                                />
                             )}
 
                             {/*
@@ -2618,8 +2778,8 @@ const ReportEditor: React.FC = () => {
                     placeholder="Describe los cambios necesarios..." rows={4} hideSubmitButton />
             </CelumaModal>
 
-            {/* Reopen confirmation (Block B) */}
-            <ConfirmDialog
+            {/* Reopen confirmation (Block B; password since 1.4 #13) */}
+            <PasswordConfirmationDialog
                 open={isReopenConfirmVisible}
                 title="¿Reabrir este reporte?"
                 description={
@@ -2627,12 +2787,82 @@ const ReportEditor: React.FC = () => {
                     + "Para firmarlo tendrá que enviarse a revisión y aprobarse de nuevo. "
                     + "Esta acción queda registrada en la auditoría."
                 }
+                reasonLabel="Motivo (opcional)"
                 confirmText="Reabrir reporte"
-                cancelText="Cancelar"
                 danger
                 loading={isReopening}
-                onConfirm={handleReopen}
-                onCancel={() => setIsReopenConfirmVisible(false)}
+                error={reopenConfirmError}
+                onConfirm={(password, reason) => { void handleReopen(password, reason); }}
+                onCancel={() => {
+                    setIsReopenConfirmVisible(false);
+                    setReopenConfirmError(null);
+                }}
+            />
+
+            {/* Amendment opening (1.4 #13) */}
+            <PasswordConfirmationDialog
+                open={isAmendDialogVisible}
+                title="¿Enmendar este reporte?"
+                description={
+                    "Se abrirá una enmienda: una nueva emisión completa que parte de la firmada. "
+                    + "La emisión firmada no se modifica y sigue siendo la entregada hasta que la "
+                    + "enmienda se revise, apruebe y firme. Queda registrado en la auditoría y la historia."
+                }
+                choice={{
+                    label: "Tipo de enmienda",
+                    options: (Object.keys(AMENDMENT_CATEGORY_LABELS) as AmendmentCategory[]).map((value) => ({
+                        value, label: AMENDMENT_CATEGORY_LABELS[value],
+                    })),
+                }}
+                reasonLabel="Motivo (obligatorio)"
+                reasonRequired
+                confirmText="Abrir enmienda"
+                loading={isAmending}
+                error={amendError}
+                onConfirm={(password, reason, category) => { void handleOpenAmendment(password, reason, category); }}
+                onCancel={() => {
+                    setIsAmendDialogVisible(false);
+                    setAmendError(null);
+                }}
+            />
+
+            {/* Amendment cancellation (1.4 #13) */}
+            <PasswordConfirmationDialog
+                open={isCancelAmendVisible}
+                title="¿Cancelar la enmienda?"
+                description={
+                    "La enmienda se cerrará sin firmarse y el reporte volverá a la emisión firmada vigente. "
+                    + "Los borradores de la enmienda se conservan en el historial."
+                }
+                reasonLabel="Motivo (obligatorio)"
+                reasonRequired
+                confirmText="Cancelar enmienda"
+                danger
+                loading={isCancellingAmend}
+                error={cancelAmendError}
+                onConfirm={(password, reason) => { void handleCancelAmendment(password, reason); }}
+                onCancel={() => {
+                    setIsCancelAmendVisible(false);
+                    setCancelAmendError(null);
+                }}
+            />
+
+            {/* Sign-and-publish confirmation (1.4 #13) */}
+            <PasswordConfirmationDialog
+                open={isSignConfirmVisible}
+                title="Firmar y publicar"
+                description={
+                    "Se generará el PDF oficial con tu firma y el reporte quedará publicado. "
+                    + "Un reporte firmado no puede editarse."
+                }
+                confirmText="Firmar y publicar"
+                loading={isSigningAndPublishing}
+                error={signConfirmError}
+                onConfirm={(password) => { void handleConfirmSignAndPublish(password); }}
+                onCancel={() => {
+                    setIsSignConfirmVisible(false);
+                    setSignConfirmError(null);
+                }}
             />
         </>
     );

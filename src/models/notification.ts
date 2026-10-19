@@ -43,6 +43,9 @@ export const NOTIFICATION_TYPES = [
     "REPORT_SUBMITTED",
     "REPORT_PDF_READY",
     "REPORT_PUBLISHED",
+    // Céluma 1.4 (#13): an amendment was signed and republished (in-app only).
+    // Same position as in the backend enum.
+    "REPORT_REPUBLISHED",
     "REPORT_RETRACTED",
     "ASSIGNMENT_ADDED",
     "SAMPLE_STATUS_CHANGED",
@@ -184,6 +187,7 @@ export const NOTIFICATION_TYPE_LABELS_BY_LOCALE: Record<
         REPORT_PDF_READY: "PDF oficial listo",
         REPORT_PUBLISHED: "Reporte publicado",
         REPORT_RETRACTED: "Reporte retractado",
+        REPORT_REPUBLISHED: "Reporte enmendado y republicado",
         ASSIGNMENT_ADDED: "Nueva asignación",
         SAMPLE_STATUS_CHANGED: "Estado de muestra actualizado",
         // Céluma 1.3, Phase 4, Block G. Chip labels only — the notification's
@@ -227,6 +231,7 @@ export const NOTIFICATION_TYPE_CHIP: Record<NotificationType, { color: string; b
     REPORT_PDF_READY: { color: "#8b5cf6", bg: "#f5f3ff" },
     REPORT_PUBLISHED: { color: "#10b981", bg: "#ecfdf5" },
     REPORT_RETRACTED: { color: "#ef4444", bg: "#fef2f2" },
+    REPORT_REPUBLISHED: { color: "#c2410c", bg: "#fff7ed" },
     ASSIGNMENT_ADDED: { color: "#f59e0b", bg: "#fffbeb" },
     SAMPLE_STATUS_CHANGED: { color: "#06b6d4", bg: "#ecfeff" },
     // Céluma 1.3, Phase 4, Block G. The two APPROACHING types reuse the same

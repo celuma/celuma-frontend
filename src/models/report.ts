@@ -220,7 +220,74 @@ export type ReportContent = ReportTemplateJSON & {
     schema_version?: number;
     /** Only present for V2 reports; absent for legacy. Validate before use. */
     rendering_snapshot?: unknown;
+    /**
+     * Céluma 1.4 (#13): identification of an amended emission, frozen with it
+     * and printed by the renderer (owner decision D2). Every field except
+     * `change_note` is server-owned; a content save can only change the note.
+     */
+    amendment?: ReportAmendmentBlock;
 };
+
+/** Céluma 1.4 (#13): why an amendment was opened (D1). Both kinds produce a
+ *  complete new emission that supersedes the delivered one. */
+export type AmendmentCategory = "CORRECTION" | "SUPPLEMENT";
+
+export const AMENDMENT_CATEGORY_LABELS: Record<AmendmentCategory, string> = {
+    CORRECTION: "Corrección",
+    SUPPLEMENT: "Complemento (p. ej., IHC)",
+};
+
+export interface ReportAmendmentBlock {
+    amendment_no: number;
+    category: AmendmentCategory;
+    reason: string;
+    amends_version_no: number;
+    amends_signed_at: string | null;
+    /** Required, author-written statement of what changed (D2). */
+    change_note: string;
+}
+
+export type ReportAmendmentState = "OPEN" | "PUBLISHED" | "CANCELLED";
+
+/** Céluma 1.4 (#13): an amendment record (`/reports/{id}/emissions`, detail). */
+export interface ReportAmendmentInfo {
+    id: string;
+    amendment_no: number;
+    state: ReportAmendmentState;
+    category: AmendmentCategory;
+    reason: string;
+    source_version_id: string;
+    source_version_no: number | null;
+    source_signed_at: string | null;
+    requested_by: string;
+    requested_by_name: string | null;
+    requested_at: string;
+    published_version_id: string | null;
+    published_version_no: number | null;
+    published_at: string | null;
+    cancelled_by: string | null;
+    cancelled_by_name: string | null;
+    cancelled_at: string | null;
+    cancel_reason: string | null;
+}
+
+/** Céluma 1.4 (#13): one signed emission (original or amendment). */
+export interface ReportEmissionInfo {
+    report_version_id: string;
+    version_no: number;
+    signed_at: string | null;
+    signed_by: string | null;
+    signed_by_name: string | null;
+    amendment_no: number | null;
+    is_delivered: boolean;
+    pdf_available: boolean;
+    pdf_sha256: string | null;
+}
+
+export interface ReportEmissionsResponse {
+    emissions: ReportEmissionInfo[];
+    amendments: ReportAmendmentInfo[];
+}
 
 /**
  * Ephemeral resources resolved server-side from a V2 report's
@@ -304,6 +371,12 @@ export interface ReportEnvelope {
     pdf_page_count?: number | null;
     pdf_error_code?: string | null;
     pdf_error_message?: string | null;
+    /** Céluma 1.4 (#13): the amendment in progress — the internal indicator
+     *  (D3). Absent from older APIs. */
+    open_amendment?: ReportAmendmentInfo | null;
+    /** Céluma 1.4 (#13): the signed emission readers receive (the latest
+     *  signed version), which stays delivered while an amendment is open. */
+    delivered_emission?: ReportEmissionInfo | null;
 }
 
 /**

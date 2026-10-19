@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { message } from "antd";
 import ReportEditor from "../../components/report/report_editor";
 import * as reportService from "../../services/report_service";
 import * as letterheadService from "../../services/report_letterhead_service";
@@ -37,6 +38,8 @@ const REPORT_ID = "00000000-0000-0000-0000-0000000000d1";
 const ORDER_ID = "00000000-0000-0000-0000-0000000000aa";
 const USER_ID = "00000000-0000-0000-0000-0000000000r1";
 const REOPEN_LABEL = "Reabrir reporte";
+/** Synthetic; never a real credential. */
+const CONFIRMATION_PASSWORD = "synthetic-confirmation";
 
 const CONTENT = {
     base: {
@@ -236,6 +239,9 @@ async function renderLoaded(persona: Persona, status: ReportStatus) {
  * fail on an icon choice. */
 async function confirmReopen() {
     const dialog = await screen.findByRole("dialog");
+    // Céluma 1.4 (#13): reopening is confirmed with the user's own password
+    // (synthetic here; the backend verifies it).
+    await userEvent.type(within(dialog).getByTestId("password-confirmation-input"), CONFIRMATION_PASSWORD);
     await userEvent.click(within(dialog).getByRole("button", { name: REOPEN_LABEL }));
 }
 
@@ -436,7 +442,12 @@ describe("Block B — running the action", () => {
         await userEvent.click(screen.getByText(REOPEN_LABEL));
         await confirmReopen();
 
-        await waitFor(() => expect(reopen).toHaveBeenCalledWith(REPORT_ID));
+        await waitFor(() =>
+            expect(reopen).toHaveBeenCalledWith(REPORT_ID, {
+                password: CONFIRMATION_PASSWORD,
+                changelog: undefined,
+            })
+        );
         // The APPROVED-only actions are gone…
         await waitFor(() => {
             expect(screen.queryByText("Firmar y publicar")).toBeNull();
@@ -462,6 +473,53 @@ describe("Block B — running the action", () => {
             expect(screen.getByText("Firmar y publicar")).toBeTruthy();
         });
         expect(screen.queryByText("Enviar a Revisión")).toBeNull();
+    });
+
+    it("a refused password keeps the dialog open and the report APPROVED (1.4 #13)", async () => {
+        const reopen = vi
+            .spyOn(reportService, "reopenReport")
+            .mockRejectedValue(
+                new reportService.PasswordConfirmationError(
+                    "password_confirmation_invalid",
+                    "La contraseña no es correcta. No se realizó ningún cambio.",
+                )
+            );
+        const success = vi.spyOn(message, "success");
+        await renderLoaded("assignedReviewer", "APPROVED");
+
+        await userEvent.click(screen.getByText(REOPEN_LABEL));
+        await confirmReopen();
+
+        await waitFor(() => expect(reopen).toHaveBeenCalled());
+        const dialog = await screen.findByRole("dialog");
+        expect(within(dialog).getByTestId("password-confirmation-error").textContent).toMatch(
+            /no es correcta/i
+        );
+        // The field was cleared for a retype, nothing claims success, and the
+        // APPROVED actions are still the ones offered.
+        expect((within(dialog).getByTestId("password-confirmation-input") as HTMLInputElement).value).toBe("");
+        expect(success).not.toHaveBeenCalled();
+        expect(screen.getByText("Firmar y publicar")).toBeTruthy();
+        expect(screen.queryByText("Enviar a Revisión")).toBeNull();
+    });
+
+    it("sends the optional reason with the reopen (1.4 #13)", async () => {
+        const reopen = vi
+            .spyOn(reportService, "reopenReport")
+            .mockResolvedValue({ id: REPORT_ID, status: "DRAFT", message: "Reporte reabierto." });
+        await renderLoaded("assignedReviewer", "APPROVED");
+
+        await userEvent.click(screen.getByText(REOPEN_LABEL));
+        const dialog = await screen.findByRole("dialog");
+        await userEvent.type(within(dialog).getByTestId("password-confirmation-reason"), "Membrete incorrecto");
+        await confirmReopen();
+
+        await waitFor(() =>
+            expect(reopen).toHaveBeenCalledWith(REPORT_ID, {
+                password: CONFIRMATION_PASSWORD,
+                changelog: "Membrete incorrecto",
+            })
+        );
     });
 
     it("still shows DRAFT behaviour when the post-reopen refresh fails", async () => {

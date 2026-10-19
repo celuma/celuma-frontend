@@ -141,6 +141,7 @@ export const NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE: Record<
         REPORT_PDF_READY: "Cuando el PDF oficial de un reporte queda listo para firma.",
         REPORT_PUBLISHED: "Cuando un reporte se publica y firma.",
         REPORT_RETRACTED: "Cuando un reporte publicado se retracta.",
+        REPORT_REPUBLISHED: "Cuando se firma y republica la enmienda de un reporte.",
         ASSIGNMENT_ADDED: "Cuando se te asigna una orden o una muestra.",
         SAMPLE_STATUS_CHANGED: "Cuando cambia el estado de una muestra de tus órdenes.",
         // Céluma 1.3, Phase 4, Block G. These four reach only users who can

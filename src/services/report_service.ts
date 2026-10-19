@@ -12,6 +12,9 @@ import type {
     CreateReportTemplateVersionPayload,
     ReportTemplateLogoUploadResponse,
     InternalRenderData,
+    AmendmentCategory,
+    ReportAmendmentInfo,
+    ReportEmissionsResponse,
 } from "../models/report";
 import { buildReportPdfFilename } from "../lib/report_filename";
 import type { StudyTypeReportDefaults } from "../models/report_letterhead";
@@ -58,6 +61,85 @@ function parseFastApiErrorDetail(bodyText: string): string | undefined {
     } catch {
         return undefined;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Céluma 1.4 (#13): password-confirmed signing and reopening
+// ---------------------------------------------------------------------------
+
+/** The stable `detail.code` values of a refused confirmation (403/429). */
+export type PasswordConfirmationCode =
+    | "password_confirmation_required"
+    | "password_confirmation_invalid"
+    | "password_confirmation_throttled";
+
+const PASSWORD_CONFIRMATION_CODES: readonly string[] = [
+    "password_confirmation_required",
+    "password_confirmation_invalid",
+    "password_confirmation_throttled",
+];
+
+/**
+ * The backend refused the action because the password did not confirm the
+ * user's identity. Nothing was changed. Typed so the confirmation dialog can
+ * stay open and say so inline, instead of a generic failure toast.
+ */
+export class PasswordConfirmationError extends Error {
+    readonly code: PasswordConfirmationCode;
+    readonly retryAfterSeconds: number | undefined;
+    constructor(code: PasswordConfirmationCode, message: string, retryAfterSeconds?: number) {
+        super(message);
+        this.name = "PasswordConfirmationError";
+        this.code = code;
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+}
+
+export function isPasswordConfirmationError(err: unknown): err is PasswordConfirmationError {
+    return err instanceof PasswordConfirmationError;
+}
+
+const PASSWORD_CONFIRMATION_FALLBACK: Record<PasswordConfirmationCode, string> = {
+    password_confirmation_required: "Confirma la acción con tu contraseña actual.",
+    password_confirmation_invalid: "La contraseña no es correcta. No se realizó ningún cambio.",
+    password_confirmation_throttled:
+        "Demasiados intentos con contraseña incorrecta. Espera unos minutos antes de volver a intentarlo.",
+};
+
+function parsePasswordConfirmationError(bodyText: string): PasswordConfirmationError | null {
+    try {
+        const detail = (JSON.parse(bodyText) as { detail?: unknown }).detail;
+        if (typeof detail !== "object" || detail === null || Array.isArray(detail)) return null;
+        const { code, message, retry_after_seconds: retry } = detail as {
+            code?: unknown; message?: unknown; retry_after_seconds?: unknown;
+        };
+        if (typeof code !== "string" || !PASSWORD_CONFIRMATION_CODES.includes(code)) return null;
+        const typed = code as PasswordConfirmationCode;
+        return new PasswordConfirmationError(
+            typed,
+            typeof message === "string" && message ? message : PASSWORD_CONFIRMATION_FALLBACK[typed],
+            typeof retry === "number" ? retry : undefined,
+        );
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Input of a password-confirmed action. The password is sent once in the
+ * request body (never a URL) and must not be kept by the caller after the
+ * call — see `PasswordConfirmationDialog`.
+ */
+export interface ConfirmedActionInput {
+    password: string;
+    changelog?: string;
+}
+
+async function throwForConfirmedAction(res: Response, fallback: string): Promise<never> {
+    const errText = await res.text();
+    const confirmation = parsePasswordConfirmationError(errText);
+    if (confirmation) throw confirmation;
+    throw new Error(parseFastApiErrorDetail(errText) ?? `${fallback} (${res.status})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,17 +481,21 @@ export async function updateReportPresentation(
  * (`reports:manage_templates`); the backend is authoritative and refuses a
  * signed, published or retracted report outright. See
  * `canReopenApprovedReport` in `lib/rbac.ts` for the UX mirror.
+ *
+ * Céluma 1.4 (#13): confirmed with the user's own current password; a refusal
+ * is a `PasswordConfirmationError` and changes nothing. `changelog` is the
+ * optional reason recorded in the audit and the timeline.
  */
-export async function reopenReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+export async function reopenReport(
+    reportId: string,
+    { password, changelog }: ConfirmedActionInput,
+): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/reopen`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ changelog }),
+        body: JSON.stringify({ changelog: changelog || undefined, password }),
     });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Error al reabrir reporte: ${res.status} - ${errText}`);
-    }
+    if (!res.ok) await throwForConfirmedAction(res, "Error al reabrir reporte");
     return await res.json();
 }
 
@@ -426,17 +512,16 @@ export async function requestChanges(reportId: string, comment: string): Promise
     return await res.json();
 }
 
-export async function signReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
+export async function signReport(
+    reportId: string,
+    { password, changelog }: ConfirmedActionInput,
+): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/sign`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ changelog }),
+        body: JSON.stringify({ changelog, password }),
     });
-    if (!res.ok) {
-        const errText = await res.text();
-        const detail = parseFastApiErrorDetail(errText);
-        throw new Error(detail ?? `Error al firmar reporte (${res.status})`);
-    }
+    if (!res.ok) await throwForConfirmedAction(res, "Error al firmar reporte");
     return await res.json();
 }
 
@@ -461,20 +546,74 @@ export interface ReportSignAndPublishResponse extends ReportActionResponse {
  *  signature) and publishes in one call. Replaces the two-button flow:
  *  "Generate official PDF" + "Sign and publish". A 409 means a
  *  sign-and-publish attempt is already running (double-click or another
- *  tab)—display the backend message verbatim; retrying after waiting is safe. */
+ *  tab)—display the backend message verbatim; retrying after waiting is safe.
+ *  Céluma 1.4 (#13): confirmed with the signer's own current password; a
+ *  refusal is a `PasswordConfirmationError` and nothing was signed. */
 export async function signAndPublishReport(
     reportId: string,
-    changelog?: string
+    { password, changelog }: ConfirmedActionInput,
 ): Promise<ReportSignAndPublishResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/sign-and-publish`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ changelog }),
+        body: JSON.stringify({ changelog, password }),
+    });
+    if (!res.ok) await throwForConfirmedAction(res, "Error al firmar y publicar el reporte");
+    return await res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Céluma 1.4 (#13): amendments of signed reports
+// ---------------------------------------------------------------------------
+
+export interface ReportAmendmentActionResponse extends ReportActionResponse {
+    amendment: ReportAmendmentInfo;
+    version_no: number | null;
+}
+
+/**
+ * Reopen a PUBLISHED report for amendment ("reopening after signature").
+ * The backend creates a complete draft copy of the delivered emission; the
+ * signed original is never modified and stays delivered until the amendment
+ * is signed. Confirmed with the user's own password; a refusal is a
+ * `PasswordConfirmationError` and changes nothing.
+ */
+export async function openReportAmendment(
+    reportId: string,
+    { category, reason, password }: { category: AmendmentCategory; reason: string; password: string },
+): Promise<ReportAmendmentActionResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/amendments`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ category, reason, password }),
+    });
+    if (!res.ok) await throwForConfirmedAction(res, "No se pudo abrir la enmienda");
+    return await res.json();
+}
+
+/** Cancel the open amendment: the delivered emission becomes current again. */
+export async function cancelReportAmendment(
+    reportId: string,
+    amendmentId: string,
+    { reason, password }: { reason: string; password: string },
+): Promise<ReportAmendmentActionResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/amendments/${amendmentId}/cancel`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ reason, password }),
+    });
+    if (!res.ok) await throwForConfirmedAction(res, "No se pudo cancelar la enmienda");
+    return await res.json();
+}
+
+/** Authorized history: every signed emission and every amendment. */
+export async function getReportEmissions(reportId: string): Promise<ReportEmissionsResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/emissions`, {
+        headers: authHeaders(),
     });
     if (!res.ok) {
         const errText = await res.text();
-        const detail = parseFastApiErrorDetail(errText);
-        throw new Error(detail ?? `Error al firmar y publicar el reporte (${res.status})`);
+        throw new Error(parseFastApiErrorDetail(errText) ?? `No se pudo cargar el historial (${res.status})`);
     }
     return await res.json();
 }

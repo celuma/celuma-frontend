@@ -151,7 +151,7 @@ async function publishedReport(page: Page, request: APIRequestContext, lab: Lab,
     await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
     await api(request, "POST", `/api/v1/reports/${reportId}/approve`, { token: reviewerToken, data: {} });
     const published = await api<{ status: string; version_no: number; pdf_generation_status: string }>(
-        request, "POST", `/api/v1/reports/${reportId}/sign-and-publish`, { token: reviewerToken, data: {} });
+        request, "POST", `/api/v1/reports/${reportId}/sign-and-publish`, { token: reviewerToken, data: { password: reviewerPassword } });
     expect(published.status).toBe("PUBLISHED");
     expect(published.pdf_generation_status).toBe("READY");
     return { reportId: reportId!, versionNo: published.version_no, reviewerToken };
@@ -392,7 +392,7 @@ async function draftReport(page: Page, request: APIRequestContext, lab: Lab, ord
     const reportId = (await api<{ report_id: string }>(request, "GET", `/api/v1/laboratory/orders/${orderId}`, { token: lab.token })).report_id!;
     const reviewerToken = (await api<{ access_token: string }>(request, "POST", "/api/v1/auth/login", {
         data: { username_or_email: reviewerEmail, password: reviewerPassword } })).access_token;
-    return { reportId, reviewerToken };
+    return { reportId, reviewerToken, reviewerPassword };
 }
 
 test.describe("management inside the window and its blockers", () => {
@@ -446,7 +446,7 @@ test.describe("management inside the window and its blockers", () => {
         await techPage.close();
 
         // --- a report in DRAFT does not close the window; submitting it does, and so does approval
-        const { reportId, reviewerToken } = await draftReport(page, request, lab, orderId);
+        const { reportId, reviewerToken, reviewerPassword } = await draftReport(page, request, lab, orderId);
         await api(request, "PATCH", `/api/v1/laboratory/orders/${orderId}`, { token: lab.token, status: 200, data: { requesting_physician_ids: [docA, docB] } });
         await api(request, "POST", `/api/v1/reports/${reportId}/submit`, { token: lab.token, data: {} });
         await page.goto(`/orders/${orderId}`);
@@ -460,7 +460,7 @@ test.describe("management inside the window and its blockers", () => {
         await expect(page.getByTestId("sample-correct-button")).toBeDisabled();
         await api(request, "POST", `/api/v1/laboratory/samples/${s2}/code-correction`, { token: lab.token, status: 409, data: { sample_code: "X-2", reason: "tardío" } });
         // a draft RETURNED from review stays protected by history (reopen is the supported flow, not this editor)
-        await api(request, "POST", `/api/v1/reports/${reportId}/reopen`, { token: reviewerToken, data: {} }).catch(() => undefined);
+        await api(request, "POST", `/api/v1/reports/${reportId}/reopen`, { token: reviewerToken, data: { password: reviewerPassword } }).catch(() => undefined);
         await api(request, "PATCH", `/api/v1/laboratory/orders/${orderId}`, { token: lab.token, status: 409, data: { expediente: "2" } });
         expect(sql(`SELECT expediente FROM "order" WHERE id = '${orderId}'`)).toBe("0099");
         expect(sql(`SELECT count(*) FROM sample_code_correction WHERE tenant_id = '${lab.tenantId}'`)).toBe("1");  // only the in-window correction

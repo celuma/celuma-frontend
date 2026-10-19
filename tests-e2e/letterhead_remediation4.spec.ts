@@ -149,6 +149,14 @@ async function login(page: Page, lab: { email: string; password: string }) {
     await expect(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 }
 
+/** Céluma 1.4 (#13): signing and reopening open a password confirmation; the
+ *  acting user types their own (synthetic) password inside the dialog. */
+async function confirmWithPassword(page: Page, password: string) {
+    const dialog = page.getByRole("dialog");
+    await dialog.getByTestId("password-confirmation-input").fill(password);
+    await dialog.getByTestId("password-confirmation-submit").click();
+}
+
 /**
  * Open "Rename" (which edits name AND description) from the menu
  * actions of the first row. The item is located within the menu
@@ -447,6 +455,7 @@ test.describe("Fourth Remediation — Legacy letterhead and local printing", () 
         await expect(reviewerPage.getByRole("button", { name: "Imprimir borrador" })).toBeVisible();
 
         await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
+        await confirmWithPassword(reviewerPage, reviewerPassword);
         await expect(reviewerPage.getByRole("button", { name: "Descargar PDF oficial" }))
             .toBeVisible({ timeout: 45_000 });
 
