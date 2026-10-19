@@ -176,6 +176,14 @@ async function login(page: Page, lab: { email: string; password: string }) {
     await expect(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)).toBeVisible({ timeout: 15_000 });
 }
 
+/** Céluma 1.4 (#13): signing and reopening open a password confirmation; the
+ *  acting user types their own (synthetic) password inside the dialog. */
+async function confirmWithPassword(page: Page, password: string) {
+    const dialog = page.getByRole("dialog");
+    await dialog.getByTestId("password-confirmation-input").fill(password);
+    await dialog.getByTestId("password-confirmation-submit").click();
+}
+
 /** The letterhead selector, as seen by the user. */
 function letterheadSelect(page: Page) {
     return page.getByTestId("letterhead-select").locator(".ant-select");
@@ -449,6 +457,7 @@ test.describe("Fifth remedy — download from official PDF", () => {
             (r) => r.url().includes("/sign-and-publish") && r.request().method() === "POST"
         );
         await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
+        await confirmWithPassword(reviewerPage, signerPassword);
         const published = await (await publishResponse).json();
 
         expect(published.status).toBe("PUBLISHED");

@@ -12,7 +12,7 @@
  * status codes (§9.2).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { message } from "antd";
 import ReportEditor from "../../components/report/report_editor";
@@ -407,6 +407,17 @@ describe("Observation A — letterhead selector across the lifecycle", () => {
     });
 });
 
+/** Céluma 1.4 (#13): "Firmar y publicar" opens the password confirmation.
+ *  Types a synthetic password (never a real credential) and confirms inside
+ *  the dialog, whose confirm button carries the same label as the trigger. */
+async function confirmSignWithPassword() {
+    const dialog = await screen.findByRole("dialog", {}, { timeout: PANEL_TIMEOUT });
+    fireEvent.change(within(dialog).getByTestId("password-confirmation-input"), {
+        target: { value: "synthetic-confirmation" },
+    });
+    fireEvent.click(within(dialog).getByTestId("password-confirmation-submit"));
+}
+
 describe("Observation B — official PDF download", () => {
     // Signing is a reviewer action: only the assigned reviewer ever sees
     // "Firmar y publicar" from Céluma 1.3.1 onward (Block A). These tests are
@@ -437,6 +448,7 @@ describe("Observation B — official PDF download", () => {
             expect(screen.getByRole("button", { name: /Firmar y publicar/i })).toBeTruthy();
         }, { timeout: PANEL_TIMEOUT });
         fireEvent.click(screen.getByRole("button", { name: /Firmar y publicar/i }));
+        await confirmSignWithPassword();
 
         await waitFor(() => {
             expect(screen.getByTestId("download-official-pdf")).toBeTruthy();
@@ -464,6 +476,7 @@ describe("Observation B — official PDF download", () => {
         renderEditor();
         await waitFor(() => screen.getByRole("button", { name: /Firmar y publicar/i }), { timeout: PANEL_TIMEOUT });
         fireEvent.click(screen.getByRole("button", { name: /Firmar y publicar/i }));
+        await confirmSignWithPassword();
         await waitFor(() => screen.getByTestId("download-official-pdf"), { timeout: PANEL_TIMEOUT });
 
         fireEvent.click(screen.getByTestId("download-official-pdf"));
@@ -585,11 +598,52 @@ describe("Observation B — official PDF download", () => {
         renderEditor();
         await waitFor(() => screen.getByRole("button", { name: /Firmar y publicar/i }), { timeout: PANEL_TIMEOUT });
         fireEvent.click(screen.getByRole("button", { name: /Firmar y publicar/i }));
+        await confirmSignWithPassword();
 
         await waitFor(() => expect(screen.getByTestId("download-official-pdf")).toBeTruthy(), { timeout: PANEL_TIMEOUT });
         // It remains after refresh.
         await new Promise((r) => setTimeout(r, 50));
         expect(screen.getByTestId("download-official-pdf")).toBeTruthy();
+    });
+
+    it("a refused password publishes nothing and keeps the dialog open (1.4 #13)", async () => {
+        vi.spyOn(reportService, "getReportFull").mockResolvedValue(buildFull("APPROVED"));
+        mockLetterheadCatalog();
+        const sign = vi.spyOn(reportService, "signAndPublishReport").mockRejectedValue(
+            new reportService.PasswordConfirmationError(
+                "password_confirmation_invalid",
+                "La contraseña no es correcta. No se realizó ningún cambio.",
+            )
+        );
+        const success = vi.spyOn(message, "success");
+
+        renderEditor();
+        await waitFor(() => screen.getByRole("button", { name: /Firmar y publicar/i }), { timeout: PANEL_TIMEOUT });
+        fireEvent.click(screen.getByRole("button", { name: /Firmar y publicar/i }));
+        await confirmSignWithPassword();
+
+        await waitFor(() => expect(sign).toHaveBeenCalledWith(REPORT_ID, { password: "synthetic-confirmation" }));
+        const dialog = await screen.findByRole("dialog");
+        await waitFor(() =>
+            expect(within(dialog).getByTestId("password-confirmation-error").textContent).toMatch(/no es correcta/i)
+        );
+        expect(success).not.toHaveBeenCalled();
+        expect(screen.queryByTestId("download-official-pdf")).toBeNull();
+    });
+
+    it("cancelling the confirmation signs nothing (1.4 #13)", async () => {
+        vi.spyOn(reportService, "getReportFull").mockResolvedValue(buildFull("APPROVED"));
+        mockLetterheadCatalog();
+        const sign = vi.spyOn(reportService, "signAndPublishReport");
+
+        renderEditor();
+        await waitFor(() => screen.getByRole("button", { name: /Firmar y publicar/i }), { timeout: PANEL_TIMEOUT });
+        fireEvent.click(screen.getByRole("button", { name: /Firmar y publicar/i }));
+        const dialog = await screen.findByRole("dialog", {}, { timeout: PANEL_TIMEOUT });
+        fireEvent.click(within(dialog).getByText("Cancelar"));
+
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(sign).not.toHaveBeenCalled();
     });
 
     it("local printing remains available as a secondary action", async () => {

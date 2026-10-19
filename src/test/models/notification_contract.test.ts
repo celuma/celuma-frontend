@@ -58,6 +58,8 @@ describe("enum sets match the Block B contract", () => {
             "REPORT_SUBMITTED",
             "REPORT_PDF_READY",
             "REPORT_PUBLISHED",
+            // Céluma 1.4 (#13): amendment republication (in-app only).
+            "REPORT_REPUBLISHED",
             "REPORT_RETRACTED",
             "ASSIGNMENT_ADDED",
             "SAMPLE_STATUS_CHANGED",

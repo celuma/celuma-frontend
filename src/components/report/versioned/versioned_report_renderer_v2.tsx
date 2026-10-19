@@ -1,4 +1,5 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
+import AmendmentIdentification from "../amendment_identification";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
 import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
@@ -817,6 +818,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     aria-hidden
                 >
                     <div id="reporte-content-v2" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
+                        {/* Céluma 1.4 (#13): an amended emission identifies itself first. */}
+                        {contentData.amendment && <AmendmentIdentification amendment={contentData.amendment} />}
                         <div style={{ marginBottom: 12 }}>
                             {orderedBaseRows.map(({ key, label, value }) => (
                                 <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>

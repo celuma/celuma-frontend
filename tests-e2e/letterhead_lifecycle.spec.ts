@@ -27,7 +27,7 @@
  * Letterheads, the editor's letterhead selector, and the signature/PDF flow
  * single action.
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -59,6 +59,14 @@ async function apiJson<T>(
         throw new Error(`${method} ${urlPath} -> ${res.status()}: ${await res.text()}`);
     }
     return (await res.json()) as T;
+}
+
+/** Céluma 1.4 (#13): signing and reopening open a password confirmation; the
+ *  acting user types their own (synthetic) password inside the dialog. */
+async function confirmWithPassword(page: Page, password: string) {
+    const dialog = page.getByRole("dialog");
+    await dialog.getByTestId("password-confirmation-input").fill(password);
+    await dialog.getByTestId("password-confirmation-submit").click();
 }
 
 test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", () => {
@@ -454,6 +462,7 @@ test.describe("Letterhead (letterhead) lifecycle — post-Phase-2 remediation", 
         ).toBeVisible();
 
         await reviewerPage.getByRole("button", { name: "Firmar y publicar" }).click();
+        await confirmWithPassword(reviewerPage, reviewerPassword);
         // The single action generates the official PDF (reflecting the
         // signed state) AND publishes — a longer wait than the old
         // "generate" step alone, since it now does both.

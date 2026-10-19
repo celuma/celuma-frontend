@@ -277,9 +277,12 @@ export default function OrderDetail() {
     // only a local print view via usePdfExport, not the persisted official
     // PDF). See signed-pdf-publication-workflow.md.
     const handleDownloadOfficialPdf = async () => {
-        if (!latestReport?.id || latestReport.version_no == null) return;
+        // Céluma 1.4 (#13): the delivered emission (latest signed version),
+        // which during an amendment is NOT the current draft version.
+        const versionNo = latestReport?.delivered_emission?.version_no ?? latestReport?.version_no;
+        if (!latestReport?.id || versionNo == null) return;
         try {
-            const { pdf_url } = await getOfficialPdfDownloadUrl(latestReport.id, latestReport.version_no);
+            const { pdf_url } = await getOfficialPdfDownloadUrl(latestReport.id, versionNo);
             window.open(pdf_url, "_blank");
         } catch (err) {
             showCelumaApiError(err, "Error al descargar el PDF oficial.");
@@ -789,6 +792,19 @@ export default function OrderDetail() {
                                     {latestReport?.status
                                         ? renderStatusChip(latestReport.status, "report")
                                         : <span style={{ fontSize: 12, color: tokens.textSecondary }}>—</span>}
+                                    {/* Céluma 1.4 (#13): internal amendment-in-progress indicator. */}
+                                    {latestReport?.open_amendment && (
+                                        <span
+                                            data-testid="order-amendment-in-progress"
+                                            style={{
+                                                marginLeft: 6, fontSize: 12, fontWeight: 600, color: "#c2410c",
+                                                background: "#fff7ed", border: "1px solid #fed7aa",
+                                                borderRadius: 12, padding: "2px 8px",
+                                            }}
+                                        >
+                                            Enmienda {latestReport.open_amendment.amendment_no} en curso
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -801,7 +817,7 @@ export default function OrderDetail() {
                             >
                                 Actualizar
                             </CelumaButton>
-                            {latestReport?.status === "PUBLISHED" && hasPermission("reports:read") && (
+                            {(latestReport?.status === "PUBLISHED" || latestReport?.open_amendment) && hasPermission("reports:read") && (
                                 <CelumaButton
                                     size="small"
                                     type="primary"
@@ -1362,7 +1378,74 @@ export default function OrderDetail() {
                                                 </span>
                                             ) : ` en la muestra ${sampleCode}`;
                                         };
-                                        
+
+                                        // Céluma 1.4 (#13): one rendering for both stored
+                                        // publication shapes (see the REPORT_PUBLISHED case).
+                                        const renderReportPublished = (m: Record<string, unknown>) => {
+                                            const reportId = m.report_id as string;
+                                            const signerName = m.signer_name as string;
+                                            const versionNo = m.version_no as number | undefined;
+                                            // Céluma 1.4 (#13): an amendment's republication supersedes
+                                            // the emission it amends.
+                                            const republished = m.action === "REPORT_REPUBLISHED";
+                                            const verb = republished ? "firmó y republicó" : "firmó y publicó";
+                                            return (
+                                                <span>
+                                                    {signerName ? `${signerName} ${verb}` : verb.charAt(0).toUpperCase() + verb.slice(1)} el{" "}
+                                                    {reportId ? (
+                                                        <a
+                                                            href={`/reports/${reportId}`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                navigate(`/reports/${reportId}`);
+                                                            }}
+                                                            style={{
+                                                                color: "#49b6ad",
+                                                                fontWeight: 600,
+                                                                textDecoration: "none",
+                                                                borderBottom: "1px dashed #49b6ad",
+                                                            }}
+                                                        >
+                                                            reporte
+                                                        </a>
+                                                    ) : "reporte"}
+                                                    {republished ? (
+                                                        <span style={{ color: "#888", marginLeft: 4 }}>
+                                                            enmendado (enmienda {String(m.amendment_no ?? "?")}, versión {String(versionNo ?? "?")}; sustituye a la versión {String(m.amends_version_no ?? "?")})
+                                                        </span>
+                                                    ) : typeof versionNo === "number" && (
+                                                        <span style={{ color: "#888", marginLeft: 4 }}>
+                                                            (versión {versionNo})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            );
+                                        };
+
+                                        // Céluma 1.4 (#13): reopening for amendment and cancelling one.
+                                        const renderAmendmentStatusChange = (m: Record<string, unknown>) => {
+                                            const amendmentNo = String(m.amendment_no ?? "?");
+                                            const reason = m.reason as string | null | undefined;
+                                            const cancelled = m.action === "REPORT_AMENDMENT_CANCELLED";
+                                            return (
+                                                <span>
+                                                    {cancelled
+                                                        ? `Canceló la enmienda ${amendmentNo} del reporte`
+                                                        : `Reabrió el reporte para la enmienda ${amendmentNo}`}
+                                                    <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                        {cancelled
+                                                            ? `— vuelve a la emisión firmada (versión ${String(m.version_no ?? "?")})`
+                                                            : `— parte de la emisión firmada (versión ${String(m.amends_version_no ?? "?")}); sigue vigente hasta la republicación`}
+                                                    </span>
+                                                    {reason && (
+                                                        <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                            : "{reason}"
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            );
+                                        };
+
                                         switch (event.event_type) {
                                             case "SAMPLE_STATE_CHANGED":
                                             case "SAMPLE_DAMAGED":
@@ -1564,7 +1647,22 @@ export default function OrderDetail() {
                                                     </span>
                                                 ) : "Envió a revisión el reporte";
                                             }
+                                            // Céluma 1.4 (#13): a publication. New rows are
+                                            // REPORT_PUBLISHED (identified by `meta.action`);
+                                            // rows written before 1.4 are REPORT_APPROVED with
+                                            // `published: true` and are publications too, never
+                                            // a second approval. Unknown future actions fall
+                                            // back to the stored description.
+                                            case "REPORT_PUBLISHED": {
+                                                if (meta.action && meta.action !== "REPORT_PUBLISHED" && meta.action !== "REPORT_REPUBLISHED") {
+                                                    return event.description || event.event_type;
+                                                }
+                                                return renderReportPublished(meta);
+                                            }
                                             case "REPORT_APPROVED": {
+                                                if (meta.published === true) {
+                                                    return renderReportPublished(meta);
+                                                }
                                                 const reportId = meta.report_id as string;
                                                 const reviewerName = meta.reviewer_name as string;
                                                 const comment = meta.comment as string;
@@ -1638,10 +1736,15 @@ export default function OrderDetail() {
                                             // falls through to `default`, which renders the
                                             // stored description.
                                             case "STATUS_CHANGED": {
+                                                if (meta.action === "REPORT_REOPENED_FOR_AMENDMENT" || meta.action === "REPORT_AMENDMENT_CANCELLED") {
+                                                    return renderAmendmentStatusChange(meta);
+                                                }
                                                 if (meta.action !== "REPORT_REOPENED") {
                                                     return event.description || event.event_type;
                                                 }
                                                 const reportId = meta.report_id as string;
+                                                // Céluma 1.4 (#13): the optional reason given when reopening.
+                                                const reason = meta.reason as string | null | undefined;
                                                 return (
                                                     <span>
                                                         Reabrió el{" "}
@@ -1665,6 +1768,11 @@ export default function OrderDetail() {
                                                         <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
                                                             — vuelve a borrador
                                                         </span>
+                                                        {reason && (
+                                                            <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                                : "{reason}"
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 );
                                             }
@@ -2082,7 +2190,26 @@ export default function OrderDetail() {
 
                                     const userName = event.created_by_name || "Sistema";
                                     const userAvatar = event.created_by_avatar;
-                                    const actionText = buildActionText();
+                                    const baseActionText = buildActionText();
+                                    // Céluma 1.4 (#13): transitions taken inside an amendment say so,
+                                    // linking the amendment's whole history to its source emission.
+                                    const eventMeta = (event.metadata || {}) as Record<string, unknown>;
+                                    const showsAmendment = eventMeta.amendment_no != null && [
+                                        "REPORT_VERSION_CREATED", "REPORT_SUBMITTED", "REPORT_APPROVED",
+                                        "REPORT_CHANGES_REQUESTED",
+                                    ].concat(eventMeta.action === "REPORT_REOPENED" ? ["STATUS_CHANGED"] : [])
+                                        .includes(event.event_type);
+                                    const actionText = showsAmendment ? (
+                                        <span>
+                                            {baseActionText}
+                                            <span
+                                                data-testid="timeline-amendment-tag"
+                                                style={{ color: "#c2410c", marginLeft: 4, fontSize: 12 }}
+                                            >
+                                                · enmienda {String(eventMeta.amendment_no)}
+                                            </span>
+                                        </span>
+                                    ) : baseActionText;
 
                                     return {
                                         dot: isSameUserAsPrevious ? (
