@@ -10,6 +10,15 @@ type Props = {
     disabled?: boolean;
     error?: string;
     autoFocus?: boolean;
+    /**
+     * Optional rewrite of what the user typed or pasted (e.g. flatten line
+     * breaks, cap the length). When it changes the text, the caret is put back
+     * where the edit logically ended instead of jumping to the end; plain typing
+     * is passed through untouched.
+     */
+    normalize?: (raw: string) => string;
+    /** Accessible name for the textarea (Spanish, per field). */
+    ariaLabel?: string;
     /** Show a live character counter (only when `maxLength` is set). Default true. */
     showCount?: boolean;
     /** Optional control rendered inside the box, bottom-right (e.g. a send button). */
@@ -35,6 +44,8 @@ export default function CelumaTextArea({
     disabled,
     error,
     autoFocus,
+    ariaLabel,
+    normalize,
     showCount = true,
     action,
     inputRef,
@@ -83,7 +94,20 @@ export default function CelumaTextArea({
                 <textarea
                     ref={inputRef}
                     value={value ?? ""}
-                    onChange={(e) => onChange(e.target.value)}
+                    onChange={(e) => {
+                        const el = e.target;
+                        const raw = el.value;
+                        const next = normalize ? normalize(raw) : raw;
+                        if (next !== raw) {
+                            // Where the caret belongs: the normalized text that precedes it.
+                            const caret = Math.min(normalize!(raw.slice(0, el.selectionStart ?? raw.length)).length, next.length);
+                            // React re-syncs the DOM value after this handler; restore afterwards.
+                            queueMicrotask(() => {
+                                if (document.activeElement === el && el.value === next) el.setSelectionRange(caret, caret);
+                            });
+                        }
+                        onChange(next);
+                    }}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
                     onKeyDown={onKeyDown}
@@ -92,6 +116,7 @@ export default function CelumaTextArea({
                     maxLength={maxLength}
                     disabled={disabled}
                     autoFocus={autoFocus}
+                    aria-label={ariaLabel}
                     style={{
                         flex: 1,
                         minWidth: 0,

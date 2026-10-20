@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
     message, Typography, Card, Image, Modal, Avatar, Divider, Form,
 } from "antd";
 import {
     UserOutlined, FileTextOutlined,
-    DeleteOutlined, FilePdfOutlined, SaveOutlined, EditOutlined, SafetyCertificateOutlined,
+    DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, FilePdfOutlined, SaveOutlined, EditOutlined, SafetyCertificateOutlined,
     ExclamationCircleOutlined, CalendarOutlined, ContainerOutlined,
     AuditOutlined, CheckCircleOutlined, SendOutlined, PrinterOutlined,
 } from "@ant-design/icons";
@@ -43,7 +43,10 @@ import {
 } from "../../services/signature_service";
 import { showCelumaWarning, showCelumaApiError } from "../../lib/celuma_feedback";
 import { buildReportPdfFilename } from "../../lib/report_filename";
-import type { ReportImage } from "./report_images";
+import {
+    FIGURE_CAPTION_MAX_LENGTH, figureRefs, moveFigure, normalizeCaption, removeFigure, setFigureCaption,
+    type FigureRef,
+} from "./report_figures";
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
 import { useLocalPrint, localPrintMarkForStatus } from "../../hooks/use_local_print";
@@ -93,7 +96,7 @@ import { PERMS } from "../../lib/rbac";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const NOTE_MAX_LENGTH = 25;
+const NOTE_MAX_LENGTH = FIGURE_CAPTION_MAX_LENGTH;
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -295,8 +298,8 @@ const ReportEditor: React.FC = () => {
     // section content: key → string for text/richtext/table/numeric, or TemplateImageItem[] for images
     const [sectionContent, setSectionContent] = useState<Record<string, string | TemplateImageItem[]>>({});
 
-    // Images per section (derived from sectionContent for type=images)
-    const [reportImages, setReportImages] = useState<ReportImage[]>([]);
+    // Which figure control must hold focus after a reorder (see moveImage).
+    const pendingFigureFocus = useRef<{ key: string; direction: "up" | "down" } | null>(null);
 
     // Existing envelope (for editing)
     const [envelope, setEnvelope] = useState<ReportEnvelope | null>(null);
@@ -1037,12 +1040,30 @@ const ReportEditor: React.FC = () => {
 
     // User role fetched via useUserProfile hook above (no separate effect needed)
 
-    // Keep reportImages in sync with the images section
-    useEffect(() => {
-        if (!imagesSectionKey) return;
-        const imgs = (sectionContent[imagesSectionKey] ?? []) as TemplateImageItem[];
-        setReportImages(imgs.map((i) => ({ id: i.id, url: i.url, caption: i.caption, thumbnailUrl: i.url })));
-    }, [imagesSectionKey, sectionContent]);
+    // Figures of the report, derived synchronously from the section content.
+    // (#20) This used to be a copy kept in sync by an effect, so every keystroke
+    // rendered the caption textarea once with the previous value — React reset the
+    // DOM value and the follow-up render wrote the new one, which moves the caret
+    // to the end. The textarea must read the state that the keystroke just set.
+    const reportImages = useMemo(
+        () => (imagesSectionKey ? ((sectionContent[imagesSectionKey] ?? []) as TemplateImageItem[]) : []),
+        [imagesSectionKey, sectionContent]
+    );
+    const reportImageRefs = useMemo(() => figureRefs(reportImages), [reportImages]);
+
+    // (#18) Keep keyboard focus on the moved figure's control once it re-renders.
+    // If the figure reached the first/last position its button is now disabled,
+    // so focus falls to the opposite control instead of being lost.
+    useLayoutEffect(() => {
+        const pending = pendingFigureFocus.current;
+        if (!pending) return;
+        pendingFigureFocus.current = null;
+        const card = document.querySelector<HTMLElement>(`[data-testid="report-figure-${CSS.escape(pending.key)}"]`);
+        if (!card) return;
+        const wanted = card.querySelector<HTMLButtonElement>(`button[aria-label^="${pending.direction === "up" ? "Subir" : "Bajar"} "]`);
+        const other = card.querySelector<HTMLButtonElement>(`button[aria-label^="${pending.direction === "up" ? "Bajar" : "Subir"} "]`);
+        (wanted && !wanted.disabled ? wanted : other)?.focus();
+    }, [sectionContent]);
 
     // ---------------------------------------------------------------------------
     // Build envelope for save/preview
@@ -1800,19 +1821,28 @@ const ReportEditor: React.FC = () => {
         }
     };
 
-    const updateImageCaption = (sectionKey: string, index: number, caption: string) => {
-        setSectionContent((prev) => {
-            const imgs = [...((prev[sectionKey] ?? []) as TemplateImageItem[])];
-            imgs[index] = { ...imgs[index], caption };
-            return { ...prev, [sectionKey]: imgs };
-        });
+    // Figure mutations resolve the figure by identity (image id + occurrence)
+    // against the latest array, never by the on-screen index.
+    const updateImageCaption = (sectionKey: string, ref: FigureRef, caption: string) => {
+        setSectionContent((prev) => ({
+            ...prev,
+            [sectionKey]: setFigureCaption((prev[sectionKey] ?? []) as TemplateImageItem[], ref, caption),
+        }));
     };
 
-    const removeImage = (sectionKey: string, index: number) => {
-        setSectionContent((prev) => {
-            const imgs = ((prev[sectionKey] ?? []) as TemplateImageItem[]).filter((_, i) => i !== index);
-            return { ...prev, [sectionKey]: imgs };
-        });
+    const removeImage = (sectionKey: string, ref: FigureRef) => {
+        setSectionContent((prev) => ({
+            ...prev,
+            [sectionKey]: removeFigure((prev[sectionKey] ?? []) as TemplateImageItem[], ref),
+        }));
+    };
+
+    const moveImage = (sectionKey: string, ref: FigureRef, delta: -1 | 1) => {
+        pendingFigureFocus.current = { key: ref, direction: delta < 0 ? "up" : "down" };
+        setSectionContent((prev) => ({
+            ...prev,
+            [sectionKey]: moveFigure((prev[sectionKey] ?? []) as TemplateImageItem[], ref, delta),
+        }));
     };
 
     // ---------------------------------------------------------------------------
@@ -2575,11 +2605,14 @@ const ReportEditor: React.FC = () => {
                                                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
                                                     {reportImages.map((img, idx) => {
                                                         const note = img.caption ?? "";
+                                                        const ref = reportImageRefs[idx];
+                                                        const cardKey = ref;
+                                                        const figureLabel = `Figura ${idx + 1}`;
                                                         return (
-                                                            <Panel key={img.id ?? idx} style={{ display: "flex", gap: 12, padding: 12, alignItems: "stretch" }}>
+                                                            <Panel key={cardKey} data-testid={`report-figure-${cardKey}`} style={{ display: "flex", gap: 12, padding: 12, alignItems: "stretch" }}>
                                                                 <div style={{ flex: "0 0 30%", aspectRatio: "1/1", borderRadius: 10, overflow: "hidden", background: "#f1f5f9", flexShrink: 0 }}>
                                                                     <Image
-                                                                        src={img.thumbnailUrl || img.url}
+                                                                        src={img.url}
                                                                         alt={img.caption || `Figura ${idx + 1}`}
                                                                         wrapperStyle={{ width: "100%", height: "100%", display: "block" }}
                                                                         style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer", display: "block" }}
@@ -2592,14 +2625,30 @@ const ReportEditor: React.FC = () => {
                                                                         <span style={{ fontWeight: 700, color: tokens.textPrimary, fontFamily: tokens.titleFont }}>{`Figura ${idx + 1}`}</span>
                                                                         {!isReadOnly && (
                                                                             <ActionButtonPanel
-                                                                                size="xxsmall"
-                                                                                actions={[{
-                                                                                    icon: <DeleteOutlined />,
-                                                                                    tooltip: "Quitar del reporte",
-                                                                                    ariaLabel: "Quitar imagen",
-                                                                                    danger: true,
-                                                                                    onClick: () => imagesSectionKey && removeImage(imagesSectionKey, idx),
-                                                                                }]}
+                                                                                size="xsmall"
+                                                                                actions={[
+                                                                                    {
+                                                                                        icon: <ArrowUpOutlined />,
+                                                                                        tooltip: "Subir figura",
+                                                                                        ariaLabel: `Subir ${figureLabel}`,
+                                                                                        disabled: idx === 0,
+                                                                                        onClick: () => imagesSectionKey && moveImage(imagesSectionKey, ref, -1),
+                                                                                    },
+                                                                                    {
+                                                                                        icon: <ArrowDownOutlined />,
+                                                                                        tooltip: "Bajar figura",
+                                                                                        ariaLabel: `Bajar ${figureLabel}`,
+                                                                                        disabled: idx === reportImages.length - 1,
+                                                                                        onClick: () => imagesSectionKey && moveImage(imagesSectionKey, ref, 1),
+                                                                                    },
+                                                                                    {
+                                                                                        icon: <DeleteOutlined />,
+                                                                                        tooltip: "Quitar del reporte",
+                                                                                        ariaLabel: `Quitar ${figureLabel}`,
+                                                                                        danger: true,
+                                                                                        onClick: () => imagesSectionKey && removeImage(imagesSectionKey, ref),
+                                                                                    },
+                                                                                ]}
                                                                             />
                                                                         )}
                                                                     </div>
@@ -2609,8 +2658,14 @@ const ReportEditor: React.FC = () => {
                                                                         rows={2}
                                                                         maxLength={NOTE_MAX_LENGTH}
                                                                         placeholder="Nota para esta imagen"
+                                                                        ariaLabel={`Nota de ${figureLabel}`}
+                                                                        onKeyDown={(e) => {
+                                                                            // Captions are single-line: Enter must not insert a break.
+                                                                            if (e.key === "Enter") e.preventDefault();
+                                                                        }}
+                                                                        normalize={normalizeCaption}
                                                                         onChange={(v) => {
-                                                                            if (imagesSectionKey) updateImageCaption(imagesSectionKey, idx, v.slice(0, NOTE_MAX_LENGTH));
+                                                                            if (imagesSectionKey) updateImageCaption(imagesSectionKey, ref, v);
                                                                         }}
                                                                     />
                                                                 </div>
