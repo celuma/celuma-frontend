@@ -487,6 +487,33 @@ const ReportEditor: React.FC = () => {
         [envelope?.status, legacyAuthoringBlocked, userCanActAsReviewer, orderReviewers]
     );
 
+    // Céluma 1.4: say WHY the review actions are absent. A review row is an assignment, not
+    // availability — an assignee who lost the reviewer role (or is inactive) cannot act, and an
+    // administrator is not a reviewer. This only explains and routes; authorization is the
+    // backend's (role + capability + assignment + tenant + state).
+    const reviewAvailabilityNote = useMemo(() => {
+        const status = envelope?.status;
+        if (status !== "IN_REVIEW" && status !== "APPROVED") return null;
+        if (status === "IN_REVIEW" ? canApprove : canSign) return null;
+        const assigned = orderReviewers ?? [];
+        const eligible = assigned.filter((r) => r.eligible !== false);
+        if (eligible.length === 0) {
+            return {
+                kind: "none" as const,
+                text: "Este reporte está en revisión, pero ningún revisor asignado puede revisarlo " +
+                    "(perdió el rol de revisor o está inactivo). Un administrador no puede aprobar ni firmar. " +
+                    "Quien administra las asignaciones debe asignar un revisor activo desde la orden.",
+            };
+        }
+        const names = eligible.map((r) => r.name).join(", ");
+        return {
+            kind: "route" as const,
+            text: status === "IN_REVIEW"
+                ? `Solo los revisores asignados pueden aprobar o solicitar cambios: ${names}.`
+                : `Solo los revisores asignados pueden firmar y publicar: ${names}.`,
+        };
+    }, [envelope?.status, canApprove, canSign, orderReviewers]);
+
     // Céluma 1.3.1 Block B (CEL-131-03) — "Reabrir reporte".
     //
     // APPROVED + UNSIGNED only. A signed report is PUBLISHED, so the status
@@ -2178,6 +2205,32 @@ const ReportEditor: React.FC = () => {
                             </CelumaButton>
                         )}
                     </div>
+                    {reviewAvailabilityNote && (
+                        <div
+                            data-testid="review-availability-note"
+                            role="note"
+                            style={{
+                                marginTop: 12, fontSize: 12.5, lineHeight: 1.45, borderRadius: 10, padding: "10px 12px",
+                                background: reviewAvailabilityNote.kind === "none" ? "#fffbeb" : "#f8fafc",
+                                border: `1px solid ${reviewAvailabilityNote.kind === "none" ? "#fde68a" : "#e5e7eb"}`,
+                                color: reviewAvailabilityNote.kind === "none" ? "#b45309" : tokens.textSecondary,
+                            }}
+                        >
+                            {reviewAvailabilityNote.text}
+                            {reviewAvailabilityNote.kind === "none" && order?.id && (
+                                <>
+                                    {" "}
+                                    <a
+                                        href={`/orders/${order.id}`}
+                                        onClick={(e) => { e.preventDefault(); navigate(`/orders/${order.id}`); }}
+                                        style={{ fontWeight: 600, color: tokens.primary }}
+                                    >
+                                        Ir a la orden
+                                    </a>
+                                </>
+                            )}
+                        </div>
+                    )}
                     {userHasPermission(PERMS.REPORTS_READ) && envelope?.status !== "PUBLISHED" && (
                         <div style={{ marginTop: 8 }}>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

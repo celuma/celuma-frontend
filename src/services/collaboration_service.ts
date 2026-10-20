@@ -38,8 +38,13 @@ async function putJSON<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-        throw new Error(message);
+        // FastAPI errors carry `detail`: a string, or {code, message} for the actionable Spanish ones.
+        const body = parsed as { message?: string; detail?: unknown } | undefined;
+        const detail = body?.detail;
+        const detailMessage = typeof detail === "string"
+            ? detail
+            : (detail as { message?: string } | undefined)?.message;
+        throw new Error(detailMessage ?? body?.message ?? `${res.status} ${res.statusText}`);
     }
     return parsed as TRes;
 }
