@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import type { ResolvedSignatureMetadata } from "../../models/report";
+import { formatSignedDate } from "./signature_format";
 
 export interface SignatureBlockSigner {
     full_name: string;
@@ -10,19 +11,6 @@ interface SignatureBlockProps {
     signedBy?: SignatureBlockSigner | null;
     /** ISO 8601 timestamp from ReportVersion.signed_at */
     signedAt?: string | null;
-}
-
-const DATE_FORMATTER = new Intl.DateTimeFormat("es-MX", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-});
-
-function formatSignedDate(iso?: string | null): string | null {
-    if (!iso) return null;
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return null;
-    return DATE_FORMATTER.format(date).replace(/\./g, "");
 }
 
 const containerStyle: CSSProperties = {

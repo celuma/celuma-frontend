@@ -67,6 +67,7 @@ import {
     resolveSignatureMetadata,
     SYSTEM_METADATA_BASE_FIELDS,
 } from "../../models/report";
+import { formatSampleCodes } from "../../lib/sample_codes";
 import FloatingCaptionInput from "../ui/floating_caption_input";
 import FloatingCaptionSelect from "../ui/floating_caption_select";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem } from "../ui/record_card";
@@ -628,6 +629,34 @@ const ReportEditor: React.FC = () => {
         [isReadOnly, userHasPermission]
     );
 
+    // Céluma 1.4 (#12): a sample code can be corrected from the order page while this report is
+    // open. When the author comes back to the tab, re-read ONLY the order's samples: the live
+    // `sample_codes` preview follows the correction while everything the author typed (field values,
+    // sections, figures, unsaved edits) stays untouched. The server resolves the real value on the
+    // next save regardless of what this client holds.
+    useEffect(() => {
+        if (!canSaveContent || !reportId) return;
+        let cancelled = false;
+        const refreshSamples = async () => {
+            if (document.visibilityState === "hidden") return;
+            try {
+                const fresh = await getReportFull(reportId);
+                if (cancelled) return;
+                setFullData((prev) => {
+                    if (!prev || formatSampleCodes(prev.samples) === formatSampleCodes(fresh.samples)) return prev;
+                    return { ...prev, samples: fresh.samples };
+                });
+            } catch { /* keep what is shown; the next save still stores the server's value */ }
+        };
+        window.addEventListener("focus", refreshSamples);
+        document.addEventListener("visibilitychange", refreshSamples);
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", refreshSamples);
+            document.removeEventListener("visibilitychange", refreshSamples);
+        };
+    }, [canSaveContent, reportId]);
+
     // Custom base fields (from template), ordered by template.base_order
     const customBaseFields = useMemo(() => {
         if (!template) return [];
@@ -1131,6 +1160,16 @@ const ReportEditor: React.FC = () => {
             if (report.base["expediente"]) {
                 report.base["expediente"].value = order.expediente ?? "";
             }
+            // Céluma 1.4 (#12): the order's actual sample codes, never typed by the author. While the
+            // content is editable the preview follows the live samples (so a code corrected elsewhere
+            // shows up without touching the author's edits); once it is not, the stored value stands,
+            // exactly like `reception_date` (the server stops refreshing it with authoring).
+            if (report.base["sample_codes"]) {
+                const persistedCodes = envelope?.report?.base?.["sample_codes"]?.value;
+                report.base["sample_codes"].value = isReadOnly && typeof persistedCodes === "string"
+                    ? persistedCodes
+                    : formatSampleCodes(fullData.samples);
+            }
         }
 
         // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04).
@@ -1305,7 +1344,7 @@ const ReportEditor: React.FC = () => {
                 : (envelope?.resolved_resources ?? selectedLetterheadResources ?? undefined),
         };
     }, [
-        template, fullData, customBaseFields, baseValues, sectionContent, envelope, session,
+        template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, isReadOnly,
         reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
         v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
         selectedLetterheadPresentation,
@@ -1318,7 +1357,7 @@ const ReportEditor: React.FC = () => {
         try { return buildEnvelope(); } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
-        template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope,
+        template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope, isReadOnly,
         showSignatureSection, requireDigitalSignature,
         // Post-Phase-2 remediation: without these, switching the "Membrete"
         // selector updated selectedLetterheadPresentation but this memo

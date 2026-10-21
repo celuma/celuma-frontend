@@ -86,6 +86,10 @@ interface EditableRowProps {
     effectiveType?: TemplateFieldType | "date";
     currentValue?: string;
     isSection?: boolean;
+    /** Céluma 1.4 (#15): a visible predefined base field can also be printed on every page after the first. */
+    repeatable?: boolean;
+    repeatOnEveryPage?: boolean;
+    onToggleRepeat?: (key: string, checked: boolean) => void;
     onToggleVisible: (key: string, checked: boolean) => void;
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
@@ -102,6 +106,9 @@ function EditableRow({
     effectiveType,
     currentValue,
     isSection = false,
+    repeatable = false,
+    repeatOnEveryPage = false,
+    onToggleRepeat,
     onToggleVisible,
     onRename,
     onChangeType,
@@ -178,6 +185,18 @@ function EditableRow({
                     <span style={FIELD_TYPE_CHIP_STYLE}>
                         {type === "images" ? "Imágenes" : type === "richtext" ? "Texto enriquecido" : type === "numeric" ? "Numérico" : "Texto"}
                     </span>
+                )}
+                {repeatable && onToggleRepeat && (
+                    <Checkbox
+                        checked={isVisible && repeatOnEveryPage}
+                        disabled={!isVisible}
+                        onChange={(e) => onToggleRepeat(itemKey, e.target.checked)}
+                        aria-label={`Repetir ${label} en cada página`}
+                        data-testid={`repeat-${itemKey}`}
+                        style={{ fontSize: 12, whiteSpace: "nowrap" }}
+                    >
+                        Repetir en cada página
+                    </Checkbox>
                 )}
                 {!isPredefined && type && onChangeType && (
                     <TypePillSelect
@@ -303,6 +322,7 @@ interface DraggableListProps {
     isPredefined: (key: string) => boolean;
     isSection?: boolean;
     onReorder: (newItems: DraggableItem[]) => void;
+    onToggleRepeat?: (key: string, checked: boolean) => void;
     onToggleVisible: (key: string, checked: boolean) => void;
     onRename: (key: string, newLabel: string) => void;
     onChangeType?: (key: string, newType: TemplateFieldType) => void;
@@ -315,6 +335,7 @@ function DraggableList({
     isPredefined,
     isSection = false,
     onReorder,
+    onToggleRepeat,
     onToggleVisible,
     onRename,
     onChangeType,
@@ -365,6 +386,9 @@ function DraggableList({
                         effectiveType={effectiveType}
                         currentValue={currentValue}
                         isSection={isSection}
+                        repeatable={!isSection && predefined && !!onToggleRepeat}
+                        repeatOnEveryPage={(cfg as { repeat_on_every_page?: boolean }).repeat_on_every_page === true}
+                        onToggleRepeat={onToggleRepeat}
                         onToggleVisible={onToggleVisible}
                         onRename={onRename}
                         onChangeType={onChangeType}
@@ -634,6 +658,19 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             prev.map((item) =>
                 item.key === key ? { ...item, cfg: { ...item.cfg, is_visible: checked } } : item
             )
+        );
+    };
+
+    // Céluma 1.4 (#15): only an explicit `true` is stored; unchecking removes the flag so a template
+    // that never used the option keeps its exact previous JSON.
+    const toggleBaseRepeat = (key: string, checked: boolean) => {
+        setBaseItems((prev) =>
+            prev.map((item) => {
+                if (item.key !== key) return item;
+                const { repeat_on_every_page: _previous, ...rest } = item.cfg as ReportBaseFieldConfig;
+                void _previous;
+                return { ...item, cfg: (checked ? { ...rest, repeat_on_every_page: true } : rest) as ReportBaseFieldConfig };
+            })
         );
     };
 
@@ -936,6 +973,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                             isPredefined={(k) => PREDEFINED_BASE_KEYS.includes(k)}
                             isSection={false}
                             onReorder={setBaseItems}
+                            onToggleRepeat={toggleBaseRepeat}
                             onToggleVisible={toggleBaseVisible}
                             onRename={renameBaseField}
                             onChangeType={changeBaseFieldType}

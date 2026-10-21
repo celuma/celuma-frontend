@@ -63,7 +63,35 @@ export interface FigureLab {
     imageIds: Record<string, string>;
 }
 
-export async function figureLab(request: APIRequestContext, labels: string[]): Promise<FigureLab> {
+/** Céluma 1.4 (#12/#14/#15/#19): optional extras so the composition spec can reuse this lab. */
+export interface FigureLabOptions {
+    /** Replaces the default template JSON (base fields, sections, signatureMetadata). */
+    templateJson?: Record<string, unknown>;
+    /** Order fields: the optional request reference and the legacy free-text requester. */
+    expediente?: string;
+    requestedBy?: string;
+    /** Extra samples on the order (the first one is always created). */
+    extraSamples?: number;
+    /** Upload a wide synthetic autograph for the reviewer, so a signed report carries one. */
+    uploadSignature?: boolean;
+    /** Margins (cm) of the default letterhead. */
+    marginsCm?: number;
+}
+
+/** A 360x120 PNG "signature": a stroke on a transparent background. */
+export function autographPng(): Buffer {
+    const canvas = createCanvas(360, 120);
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "#0d1b2a";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(10, 90);
+    ctx.bezierCurveTo(90, 10, 180, 120, 350, 30);
+    ctx.stroke();
+    return canvas.toBuffer("image/png");
+}
+
+export async function figureLab(request: APIRequestContext, labels: string[], opts: FigureLabOptions = {}): Promise<FigureLab> {
     const suffix = uniqueSuffix();
     const adminEmail = `e2e-figs14-admin-${suffix}@example.com`;
     const reg = await api<{ tenant_id: string; branch_id: string }>(request, "POST", "/api/v1/auth/register/unified", {
@@ -83,7 +111,7 @@ export async function figureLab(request: APIRequestContext, labels: string[]): P
     await api(request, "PUT", `/api/v1/report-letterheads/${letterhead.id}/versions/current`, {
         data: {
             configuration: {
-                paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: 2, right: 2, bottom: 2, left: 2 } },
+                paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: opts.marginsCm ?? 2, right: opts.marginsCm ?? 2, bottom: opts.marginsCm ?? 2, left: opts.marginsCm ?? 2 } },
                 header: { enabled: true, institution_name: "Laboratorio Sintético" },
                 footer: { enabled: true, custom_text: "Pie sintético", show_page_number: true },
                 style: { primary_color: "#336699" },
@@ -93,7 +121,7 @@ export async function figureLab(request: APIRequestContext, labels: string[]): P
     });
     await api(request, "POST", `/api/v1/report-letterheads/${letterhead.id}/default`, { token: admin });
 
-    const templateJson = {
+    const templateJson = opts.templateJson ?? {
         base: { diagnosis: { is_visible: true, label: "Diagnóstico", is_custom: true, type: "text", value: "" } },
         sections: {
             hallazgos: { is_visible: true, label: "Hallazgos", type: "richtext", content: "" },
@@ -120,6 +148,8 @@ export async function figureLab(request: APIRequestContext, labels: string[]): P
         data: {
             tenant_id: reg.tenant_id, branch_id: reg.branch_id, patient_id: patient.id,
             study_type_id: studyType.id,
+            ...(opts.expediente ? { expediente: opts.expediente } : {}),
+            ...(opts.requestedBy ? { requested_by: opts.requestedBy } : {}),
         },
         token: admin,
     });
@@ -134,6 +164,15 @@ export async function figureLab(request: APIRequestContext, labels: string[]): P
         token: admin,
     });
     const sampleId = sample.id;
+    for (let i = 0; i < (opts.extraSamples ?? 0); i += 1) {
+        await api(request, "POST", "/api/v1/laboratory/samples/", {
+            data: {
+                tenant_id: reg.tenant_id, branch_id: reg.branch_id, order_id: order.id,
+                sample_type_id: sampleType.id, collected_at: "2026-10-01T10:00:00", received_at: "2026-10-01T11:00:00",
+            },
+            token: admin,
+        });
+    }
 
     const imageIds: Record<string, string> = {};
     for (const [i, label] of labels.entries()) {
@@ -171,6 +210,15 @@ export async function figureLab(request: APIRequestContext, labels: string[]): P
         },
         token: admin,
     });
+
+    if (opts.uploadSignature) {
+        const res = await request.fetch(`${API_BASE}/api/v1/users/me/signature`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${reviewerToken}` },
+            multipart: { file: { name: "firma.png", mimeType: "image/png", buffer: autographPng() } },
+        });
+        expect(res.ok(), await res.text()).toBeTruthy();
+    }
 
     return {
         adminEmail, reviewerEmail, admin, reviewerToken, orderId: order.id, reportId: report.id,

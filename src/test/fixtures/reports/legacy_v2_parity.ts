@@ -357,6 +357,38 @@ const multipagePair = makeParityPair(multipageContent, {
     key: "multipage", title: "Parity — multipage report", status: "APPROVED",
 });
 
+// --------------------------------------------------------------------------
+// Case 6 — multipage-fit (Céluma 1.4, #19). Same intent as case 5 but no single
+// section is taller than a page, so the frozen Legacy renderer paginates it
+// without clipping and V2 must break at exactly the same points. Case 5's sections
+// ARE taller than a page: Legacy silently clips them (the defect #19 fixes in V2),
+// so case 5 can only be compared for completeness, not for identical breaks.
+// --------------------------------------------------------------------------
+const multipageFitContent: ReportContent = {
+    base: BASE_FIELDS,
+    sections: {
+        section_macroscopic: {
+            is_visible: true, label: "Macroscópica", type: "richtext",
+            content: Array.from({ length: 6 }, (_, i) => longParagraph(i + 1)).join(""),
+        },
+        section_microscopic: {
+            is_visible: true, label: "Microscópica", type: "richtext",
+            content: Array.from({ length: 6 }, (_, i) => longParagraph(i + 7)).join(""),
+        },
+        section_notes: {
+            is_visible: true, label: "Notas", type: "richtext",
+            content: Array.from({ length: 6 }, (_, i) => longParagraph(i + 13)).join(""),
+        },
+    },
+    base_order: BASE_ORDER,
+    section_order: ["section_macroscopic", "section_microscopic", "section_notes"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+const multipageFitPair = makeParityPair(multipageFitContent, {
+    key: "multipagefit", title: "Parity — multipage report, no oversize section", status: "APPROVED",
+});
+
 /** The five minimum cases required by the fourth remediation (§15). */
 export const LEGACY_V2_PARITY_CASES = [
     { key: "short", description: "short report without images" },
@@ -364,6 +396,7 @@ export const LEGACY_V2_PARITY_CASES = [
     { key: "images", description: "report with images" },
     { key: "signed", description: "signed report" },
     { key: "multipage", description: "multipage report" },
+    { key: "multipagefit", description: "multipage report without an oversize section" },
 ] as const;
 
 // Exported individually as well as in the map so unit tests (vitest) can
@@ -378,6 +411,8 @@ export const paritySignedLegacy = signedPair.legacy;
 export const paritySignedV2 = signedPair.v2;
 export const parityMultipageLegacy = multipagePair.legacy;
 export const parityMultipageV2 = multipagePair.v2;
+export const parityMultipagefitLegacy = multipageFitPair.legacy;
+export const parityMultipagefitV2 = multipageFitPair.v2;
 
 export const allLegacyV2ParityFixtures: Record<string, ReportEnvelope> = {
     parityShortLegacy,
@@ -390,4 +425,6 @@ export const allLegacyV2ParityFixtures: Record<string, ReportEnvelope> = {
     paritySignedV2,
     parityMultipageLegacy,
     parityMultipageV2,
+    parityMultipagefitLegacy,
+    parityMultipagefitV2,
 };

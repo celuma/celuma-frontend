@@ -58,8 +58,9 @@ async function measure(page: Page): Promise<OuterGaps> {
     return page.evaluate((pxPerMm) => {
         const pg = document.querySelectorAll('div[style*="8.5in"]')[0] as HTMLElement;
         const pr = pg.getBoundingClientRect();
+        // Céluma 1.4: the per-page repeated/signature bands are not the letterhead footer.
         const kids = Array.from(pg.children).filter(
-            (el): el is HTMLElement => el instanceof HTMLElement,
+            (el): el is HTMLElement => el instanceof HTMLElement && !el.dataset.pageBand,
         );
         const header = kids.find((el) => el.style.top && !el.style.bottom);
         const footer = kids.find((el) => el.style.bottom && !el.style.top);

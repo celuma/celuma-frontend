@@ -16,6 +16,10 @@ export interface ReportBaseFieldPredefined {
     is_visible: boolean;
     label: string;
     value: string;           // empty in template, filled in report
+    /** Céluma 1.4 (#15): when true, a visible predefined field is also printed in a compact band
+     *  below the letterhead on every page after the first. Absent = false, so every template and
+     *  frozen snapshot created before the option exists renders exactly as before. */
+    repeat_on_every_page?: boolean;
 }
 
 /** A custom base field created by the user — only text/numeric */
@@ -478,6 +482,10 @@ export const DEFAULT_BASE_FIELDS: Record<string, ReportBaseFieldPredefined> = {
     // Céluma 1.4 (#16): the order's optional request reference (server-owned like the system fields below).
     // Hidden by default: most orders have none, and a template opts in by making it visible.
     expediente:             { is_visible: false, label: "Expediente",           value: "" },
+    // Céluma 1.4 (#12): the actual codes of the order's linked samples, resolved by the server
+    // (report_metadata.py) so the author never retypes them. Hidden by default, like `expediente`:
+    // a template opts in by making it visible.
+    sample_codes:           { is_visible: false, label: "Códigos de muestra",   value: "" },
     // Céluma 1.3.1 Block D (CEL-131-04): server-resolved, like the fields
     // above — the backend overwrites these on every save
     // (report_metadata.py) and the report editor never renders them as

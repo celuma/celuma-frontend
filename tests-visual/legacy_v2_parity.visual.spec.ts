@@ -15,7 +15,21 @@ const LEGACY_V2_PARITY_CASES = [
     { key: "images", description: "report with images" },
     { key: "signed", description: "signed report" },
     { key: "multipage", description: "multipage report" },
+    { key: "multipagefit", description: "multipage report without an oversize section" },
 ] as const;
+
+/**
+ * Céluma 1.4 (#19). In "multipage" each section is taller than one page. The frozen Legacy renderer
+ * (and the V2 renderer before 1.4) place such a section whole on a fresh page and clip what does not fit;
+ * V2 now splits it across pages, so identical page breaks are neither expected nor desirable there. That
+ * case is compared for COMPLETENESS (same text, no loss, V2 never fewer pages). Identical breaks are
+ * still enforced, strictly, by "multipagefit", whose sections each fit a page.
+ */
+const OVERSIZE_SECTION_CASES = new Set<string>(["multipage"]);
+/** "multipagefit" is new in 1.4 and has no committed Legacy golden: it is compared geometry/PDF only. */
+const NO_PIXEL_GOLDEN_CASES = new Set<string>(["multipagefit"]);
+/** V2 draws a compact per-page signature where Legacy draws a terminal block (#14): different by design. */
+const SIGNATURE_DIFFERS_CASES = new Set<string>(["signed"]);
 
 /**
  * Fourth post-Phase 2 remediation — Legacy ↔ V2 VISUAL PARITY (§15 and §16
@@ -53,6 +67,14 @@ const LEGACY_V2_PARITY_CASES = [
  * to make CI green again.
  */
 const MAX_DIFF_PIXEL_RATIO = 0;
+
+/**
+ * Céluma 1.4 (#14): Legacy keeps its large terminal signature block; V2 now draws a compact one on
+ * every page. That difference is intended, so this parity (letterhead, margins, content, pagination)
+ * is compared with the signature hidden on both sides. The signature itself is covered by
+ * report_composition.visual.spec.ts and signature_autograph.visual.spec.ts.
+ */
+const HIDE_SIGNATURE = "&signature=hide";
 const PER_PIXEL_THRESHOLD = 0;
 
 interface PageGeometry {
@@ -68,6 +90,8 @@ interface PageGeometry {
     footerBottomFromPage: number;
     footerHeight: number;
     text: string;
+    /** Text of the rendered pages only (`text` also includes the hidden pagination source). */
+    pagesText: string;
     perPageTextLengths: number[];
 }
 
@@ -117,6 +141,7 @@ async function readGeometry(page: import("@playwright/test").Page): Promise<Page
                 : -1,
             footerHeight: footer ? round(footer.getBoundingClientRect().height) : -1,
             text: (host.innerText || "").replace(/\s+/g, " ").trim(),
+            pagesText: pages.map((p) => p.innerText || "").join(" ").replace(/\s+/g, " ").trim(),
             perPageTextLengths: pages.map((p) => (p.innerText || "").replace(/\s+/g, " ").trim().length),
         };
     });
@@ -128,11 +153,11 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
     const v2Fixture = `parity${capitalized}V2`;
 
     test(`Legacy ↔ V2 parity — ${description}: geometry and pagination`, async ({ page }) => {
-        await page.goto(`/?fixture=${legacyFixture}`);
+        await page.goto(`/?fixture=${legacyFixture}${HIDE_SIGNATURE}`);
         await page.waitForSelector('[data-ready="true"]');
         const legacy = await readGeometry(page);
 
-        await page.goto(`/?fixture=${v2Fixture}`);
+        await page.goto(`/?fixture=${v2Fixture}${HIDE_SIGNATURE}`);
         await page.waitForSelector('[data-ready="true"]');
         const v2 = await readGeometry(page);
 
@@ -152,11 +177,23 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
         expect(v2.bodyTop).toBe(legacy.bodyTop);
         expect(v2.bodyClientHeight).toBe(legacy.bodyClientHeight);
         // Pagination: same page count and text distribution.
-        expect(v2.pageCount).toBe(legacy.pageCount);
-        expect(v2.perPageTextLengths).toEqual(legacy.perPageTextLengths);
+        if (OVERSIZE_SECTION_CASES.has(key)) {
+            expect(v2.pageCount).toBeGreaterThanOrEqual(legacy.pageCount);
+            // Nothing is lost: all 24 synthetic paragraphs are present, once each.
+            for (let n = 1; n <= 24; n += 1) {
+                const occurrences = v2.pagesText.split(`Párrafo sintético ${n} de la suite`).length - 1;
+                expect(occurrences, `paragraph ${n}`).toBe(1);
+            }
+        } else {
+            expect(v2.pageCount).toBe(legacy.pageCount);
+            expect(v2.perPageTextLengths).toEqual(legacy.perPageTextLengths);
+        }
     });
 
     test(`Legacy ↔ V2 parity — ${description}: pixels (V2 against case Legacy golden)`, async ({ page }) => {
+        test.skip(OVERSIZE_SECTION_CASES.has(key), "V2 splits a section taller than a page (#19); Legacy clips it, so the pixels differ by design");
+        test.skip(SIGNATURE_DIFFERS_CASES.has(key), "V2's compact per-page signature (#14) intentionally differs from Legacy's terminal block; the signature is covered by report_composition and signature_autograph specs");
+        test.skip(NO_PIXEL_GOLDEN_CASES.has(key), "no committed Legacy golden for this case; geometry and PDF parity cover it");
         // First, establish the baseline from Legacy...
         await page.goto(`/?fixture=${legacyFixture}`);
         await page.waitForSelector('[data-ready="true"]');

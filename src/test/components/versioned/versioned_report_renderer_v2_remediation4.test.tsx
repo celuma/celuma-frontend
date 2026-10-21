@@ -50,6 +50,17 @@ function presentationOf(report: ReportEnvelope): MutablePresentation {
     return (report.report.rendering_snapshot as { presentation: MutablePresentation }).presentation;
 }
 
+/** Céluma 1.4 (#14): the compact signature band reserves space above the footer on every page, so a
+ *  test of the letterhead's own header/footer/body geometry hides it to isolate that geometry. The
+ *  band itself is covered by report_composition.test.ts and tests-visual/report_composition. */
+function withoutSignature(report: ReportEnvelope): ReportEnvelope {
+    (report.report as { signatureMetadata?: unknown }).signatureMetadata = {
+        show_signature_section: false,
+        require_digital_signature: false,
+    };
+    return report;
+}
+
 /** typography complete; historical V2 fixtures do not come with the object
  * `typography`, so the tests that exercise field typographic do
  * they put integer instead of mutating to key about `undefined`. */
@@ -67,8 +78,9 @@ function withTypography(report: ReportEnvelope, overrides: Record<string, unknow
 /** The three bands are direct children of the page: header (`top` without
  *  `bottom`), footer (`bottom` without `top`), and body (both). */
 function bandsOf(page: HTMLElement) {
+    // Céluma 1.4: the repeated-fields and signature bands carry `data-page-band` and have their own tests.
     const children = Array.from(page.children).filter(
-        (el): el is HTMLElement => el instanceof HTMLElement,
+        (el): el is HTMLElement => el instanceof HTMLElement && !el.dataset.pageBand,
     );
     return {
         header: children.find((el) => el.style.top && !el.style.bottom),
@@ -180,7 +192,7 @@ describe("VersionedReportRendererV2 — configurable band geometry", () => {
     });
 
     it("content_gap_mm and body_padding_top_mm define the paginable area", () => {
-        const report = clone(v2CompleteBranding);
+        const report = withoutSignature(clone(v2CompleteBranding));
         const p = presentationOf(report);
         p.header.offset_mm = 0;
         p.header.height_mm = 28;
@@ -208,7 +220,7 @@ describe("VersionedReportRendererV2 — configurable band geometry", () => {
         // never by bodyTop — with a header present, bodyTop is the safe-area
         // boundary below it. An earlier revision of this test asserted
         // bodyTop === "5mm", which drew report content on top of the header.
-        const report = clone(v2CompleteBranding);
+        const report = withoutSignature(clone(v2CompleteBranding));
         const p = presentationOf(report);
         const paper = p.paper as unknown as { margins_cm: { top: number; right: number; bottom: number; left: number } };
         paper.margins_cm = { ...paper.margins_cm, top: 0.5, bottom: 4.0 };

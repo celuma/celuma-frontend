@@ -13,6 +13,7 @@ import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/repo
 // Fourth post-Phase 2 remediation: PAIRED Legacy ↔ V2 fixtures (same
 // clinical content, two renderers) for legacy_v2_parity.visual.spec.ts.
 import { allLegacyV2ParityFixtures } from "../../src/test/fixtures/reports/legacy_v2_parity";
+import { buildCompositionReport, LONG_SIGNER_NAME, type CompositionScenario } from "../../src/test/fixtures/reports/composition_scenarios";
 import { NotificationHarness } from "./notification_scenarios";
 import { NotificationPreferenceHarness } from "./notification_preference_scenarios";
 import { UsageHarness } from "./usage_scenarios";
@@ -84,9 +85,20 @@ function waitForImages(host: HTMLElement): Promise<void> {
 function applyGeometryOverrides(fixture: ReportEnvelope, params: URLSearchParams): ReportEnvelope {
     const margins = params.get("margins");
     const clearOffsets = params.get("clearOffsets") === "1";
-    if (!margins && !clearOffsets) return fixture;
+    // Céluma 1.4 (#14): V2 no longer ends a report with Legacy's large terminal signature block (it
+    // draws a compact one on every page), so a Legacy <-> V2 pixel/pagination parity comparison
+    // hides the signature on BOTH sides and leaves the signature to its own suites.
+    const hideSignature = params.get("signature") === "hide";
+    if (!margins && !clearOffsets && !hideSignature) return fixture;
 
     const next = JSON.parse(JSON.stringify(fixture)) as ReportEnvelope;
+    if (hideSignature) {
+        (next.report as { signatureMetadata?: unknown }).signatureMetadata = {
+            show_signature_section: false,
+            require_digital_signature: false,
+        };
+    }
+    if (!margins && !clearOffsets) return next;
     const presentation = (next.report.rendering_snapshot as {
         presentation: {
             paper: { margins_cm: { top: number; right: number; bottom: number; left: number } };
@@ -106,10 +118,29 @@ function applyGeometryOverrides(fixture: ReportEnvelope, params: URLSearchParams
     return next;
 }
 
+/**
+ * Céluma 1.4 (#12/#14/#15/#19): `?composition=<url-encoded JSON CompositionScenario>` builds a
+ * synthetic report on the fly (N figures, repeated fields, signature shape, long values, margins...),
+ * so page-composition cases can be driven from a spec without a fixture per case. `?longSigner=1`
+ * swaps the signer's display name for a very long one.
+ */
+function compositionFixture(params: URLSearchParams): ReportEnvelope | undefined {
+    const raw = params.get("composition");
+    if (!raw) return undefined;
+    return buildCompositionReport(JSON.parse(raw) as CompositionScenario);
+}
+
+function signerLookupFor(params: URLSearchParams): SignerLookupEntry[] {
+    if (params.get("longSigner") !== "1") return DEFAULT_SIGNER_LOOKUP;
+    return DEFAULT_SIGNER_LOOKUP.map((entry) =>
+        entry.id.endsWith("0199") ? { ...entry, name: LONG_SIGNER_NAME } : entry,
+    );
+}
+
 function Harness() {
     const params = new URLSearchParams(window.location.search);
     const fixtureKey = params.get("fixture") ?? "";
-    const rawFixture = allFixtures[fixtureKey];
+    const rawFixture = compositionFixture(params) ?? allFixtures[fixtureKey];
     const fixture = rawFixture ? applyGeometryOverrides(rawFixture, params) : rawFixture;
     const ref = createRef<ReportPreviewPagesRef>();
     const [ready, setReady] = useState(false);
@@ -138,7 +169,7 @@ function Harness() {
 
     return (
         <div id="pages-host" data-ready={ready ? "true" : "false"}>
-            <ReportRendererResolver ref={ref} report={fixture} signerLookup={DEFAULT_SIGNER_LOOKUP} />
+            <ReportRendererResolver ref={ref} report={fixture} signerLookup={signerLookupFor(params)} />
         </div>
     );
 }
@@ -159,7 +190,11 @@ function Harness() {
  * Usage: /?internal_render=1&fixture=<key>
  */
 function InternalRenderHarness({ fixtureKey }: { fixtureKey: string }) {
-    const fixture = allFixtures[fixtureKey];
+    const params = new URLSearchParams(window.location.search);
+    const composed = compositionFixture(params);
+    const named = allFixtures[fixtureKey];
+    const fixture = composed ?? (named ? applyGeometryOverrides(named, params) : named);
+    const signerLookup = signerLookupFor(params);
 
     // Synchronous (render-body, not useEffect): InternalReportRender reads
     // the token from location.hash in ITS OWN mount-time effect, which (as
@@ -176,7 +211,7 @@ function InternalRenderHarness({ fixtureKey }: { fixtureKey: string }) {
         window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
             if (String(input).includes("/reports/internal/render-data/")) {
                 return new Response(
-                    JSON.stringify({ ...fixture, signer_lookup: DEFAULT_SIGNER_LOOKUP }),
+                    JSON.stringify({ ...fixture, signer_lookup: signerLookup }),
                     { status: 200, headers: { "Content-Type": "application/json" } },
                 );
             }

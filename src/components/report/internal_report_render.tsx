@@ -53,7 +53,7 @@ function waitForImages(host: HTMLElement): Promise<void> {
  *  failed load too, and a failed <img> stays in the DOM at zero width — which
  *  is precisely what a viewer sees as "the signature is missing from the
  *  official PDF". */
-function requiredAutographFailure(data: InternalRenderData): string | null {
+function requiredAutographFailure(data: InternalRenderData, pages: HTMLElement[]): string | null {
     const meta = (data as { report?: { signatureMetadata?: Record<string, unknown> } })
         .report?.signatureMetadata;
     const requiresAutograph = Boolean(
@@ -64,9 +64,14 @@ function requiredAutographFailure(data: InternalRenderData): string | null {
     if (!requiresAutograph || !data.signed_at) return null;
 
     if (!meta?.signature_url) return "SIGNATURE_URL_MISSING";
-    const img = document.querySelector<HTMLImageElement>('img[data-signature-autograph="required"]');
-    if (!img) return "SIGNATURE_NOT_RENDERED";
-    if (!img.naturalWidth) return "SIGNATURE_NOT_LOADED";
+    // Céluma 1.4 (#14): the compact signature is drawn on EVERY page, so the
+    // autograph must be present and decoded on every page, not just once.
+    if (pages.length === 0) return "SIGNATURE_NOT_RENDERED";
+    for (const page of pages) {
+        const img = page.querySelector<HTMLImageElement>('img[data-signature-autograph="required"]');
+        if (!img) return "SIGNATURE_NOT_RENDERED";
+        if (!img.naturalWidth) return "SIGNATURE_NOT_LOADED";
+    }
     return null;
 }
 
@@ -170,7 +175,7 @@ export default function InternalReportRender() {
                 // readiness, but it means "ready" alone never distinguished a
                 // loaded autograph from a broken one. This does, and refuses to
                 // signal ready when a required autograph is missing.
-                const failure = requiredAutographFailure(data);
+                const failure = requiredAutographFailure(data, pages);
                 if (failure) {
                     document.documentElement.dataset.reportRenderError = failure;
                     return;
