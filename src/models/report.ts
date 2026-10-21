@@ -411,7 +411,7 @@ export interface ReportFullResponse {
         study_type_id?: string | null;
         invoice_id?: string | null;
         assignees?: Array<{ id: string; name: string; email: string; avatar_url?: string | null }>;
-        reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null }>;
+        reviewers?: Array<{ id: string; name: string; email: string; avatar_url?: string | null; status: string; review_id?: string | null; eligible?: boolean | null }>;
         labels?: Array<{ id: string; name: string; color: string; inherited?: boolean }>;
         requesting_physician?: {
             id: string;

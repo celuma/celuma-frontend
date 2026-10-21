@@ -26,6 +26,8 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
         new Set(reviewers.map(r => r.id))
     );
 
+    const eligibleReviewers = reviewers.filter((r) => r.eligible !== false);
+    const noneCanReview = reviewers.length > 0 && eligibleReviewers.length === 0;
     const showWarning = reviewers.length === 0 && orderStatus === "REVIEW";
 
     const handleToggle = (id: string) => {
@@ -93,7 +95,9 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                             // Sync the selection with what's currently applied each time we open,
                             // so it reflects the latest order state (props may have loaded/changed
                             // after mount). Otherwise applying would wipe existing reviewers.
-                            if (open) setSelectedIds(new Set(reviewers.map(r => r.id)));
+                            // Assignees who can no longer review are NOT pre-selected, so applying
+                            // replaces them with the chosen eligible reviewers.
+                            if (open) setSelectedIds(new Set(reviewers.filter(r => r.eligible !== false).map(r => r.id)));
                             else setSearchTerm("");
                         }}
                         trigger={["click"]}
@@ -114,7 +118,7 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                     >
                         {/* Reached only when `disabled` is false — the branch
                             above is the authorization gate now. */}
-                        <RailConfigButton />
+                        <RailConfigButton data-testid="reviewers-picker-trigger" />
                     </Dropdown>
                 )}
             />
@@ -125,6 +129,19 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                 </div>
             ) : reviewers.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {noneCanReview && (
+                        <div
+                            data-testid="reviewers-none-eligible"
+                            style={{
+                                fontSize: 12.5, lineHeight: 1.45, borderRadius: 10, padding: "10px 12px",
+                                background: "#fffbeb", border: "1px solid #fde68a", color: "#b45309",
+                            }}
+                        >
+                            Ningún revisor asignado puede revisar esta orden. {disabled
+                                ? "Pide a quien administra las asignaciones que asigne un revisor activo."
+                                : "Usa el selector para asignar un revisor activo."}
+                        </div>
+                    )}
                     {reviewers.map(reviewer => {
                         // Determine status icon and color
                         let statusIcon = null;
@@ -174,6 +191,13 @@ export default function ReviewersSection({ reviewers, allUsers, onUpdate, disabl
                                 }}>
                                     {reviewer.name}
                                 </span>
+                                {reviewer.eligible === false && (
+                                    <Tooltip title="Ya no tiene el rol de revisor o está inactivo: no puede aprobar ni firmar.">
+                                        <span data-testid="reviewer-ineligible" style={{ fontSize: 11.5, color: "#b45309", whiteSpace: "nowrap" }}>
+                                            No puede revisar
+                                        </span>
+                                    </Tooltip>
+                                )}
                                 <Tooltip title={statusTooltip}>
                                     <span style={{
                                         fontSize: 16,

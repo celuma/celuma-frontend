@@ -22,6 +22,8 @@ export interface UserRef {
 export interface ReviewerWithStatus extends UserRef {
     status: "pending" | "approved" | "rejected";
     review_id?: string | null;
+    /** false when this assignee can no longer act as reviewer (role revoked, inactive). */
+    eligible?: boolean | null;
 }
 
 export interface WorklistItem {
