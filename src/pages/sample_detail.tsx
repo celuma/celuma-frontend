@@ -12,6 +12,7 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
+import { ACCEPT_ANY_IMAGE, sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
 import CelumaButton from "../components/ui/button";
@@ -19,6 +20,7 @@ import Panel from "../components/ui/panel";
 import ActionButtonPanel from "../components/ui/action_button_panel";
 import CelumaTextArea from "../components/ui/textarea_field";
 import UploadDropzone from "../components/ui/upload_dropzone";
+import { useNotice } from "../hooks/use_notice";
 import ImageGalleryCard from "../components/ui/image_gallery_card";
 import ConfirmDialog from "../components/ui/confirm_dialog";
 import CelumaTabs from "../components/ui/celuma_tabs";
@@ -121,6 +123,7 @@ type EventsResponse = {
 };
 
 export default function SampleDetailPage() {
+    const notice = useNotice();
     const { sampleId } = useParams();
     const navigate = useNavigate();
     const { pathname } = useLocation();
@@ -364,17 +367,14 @@ export default function SampleDetailPage() {
                 });
                 if (!res.ok) {
                     const text = await res.text();
-                    let parsed: unknown = undefined;
-                    try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                    const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-                    throw new Error(msg);
+                    throw new Error(sampleImageUploadErrorMessage(res.status, text, res.statusText));
                 }
-                message.success(`"${fileName}" subida correctamente`);
+                notice.success(`"${fileName}" subida correctamente`);
                 options.onSuccess?.({}, undefined as unknown as XMLHttpRequest);
                 await refresh();
             } catch (e) {
                 const errMsg = e instanceof Error ? e.message : "Error al subir la imagen";
-                message.error(`Error al subir "${fileName}": ${errMsg}`);
+                notice.error(`Error al subir "${fileName}": ${errMsg}`);
                 options.onError?.(new ProgressEvent("error"));
             } finally {
                 // Remove from uploading files list
@@ -779,7 +779,7 @@ export default function SampleDetailPage() {
                 {canUploadImages && (
                     <UploadDropzone
                         customRequest={uploadProps.customRequest}
-                        accept="image/*"
+                        accept={ACCEPT_ANY_IMAGE}
                         uploading={uploading}
                         uploadingFiles={uploadingFiles}
                     />

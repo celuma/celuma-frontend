@@ -16,6 +16,7 @@ import type {
     ReportAmendmentInfo,
     ReportEmissionsResponse,
 } from "../models/report";
+import { sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import { buildReportPdfFilename } from "../lib/report_filename";
 import type { StudyTypeReportDefaults } from "../models/report_letterhead";
 
@@ -320,7 +321,7 @@ export async function uploadReportImage(
     });
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Error al subir imagen: ${res.status} - ${errText}`);
+        throw new Error(sampleImageUploadErrorMessage(res.status, errText, res.statusText));
     }
     return (await res.json()) as UploadImageResponse;
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Modal, Typography, message, Button, Space, Input, Popconfirm, Tooltip } from "antd";
+import { Upload, Modal, Typography, Button, Space, Input, Popconfirm, Tooltip } from "antd";
 import type { UploadFile, UploadProps } from "antd/es/upload/interface";
 import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import { uploadReportImage, deleteReportImage, type UploadImageResponse } from "../../services/report_service";
+import { useNotice } from "../../hooks/use_notice";
+import { ACCEPT_EXTENSIONS, MAX_MB_NONRAW, MAX_MB_RAW, sampleImageFileError } from "../../lib/sample_image_formats";
 
 export type ReportImage = {
     id?: string;
@@ -20,15 +22,6 @@ type UploadImageServerResp = UploadImageResponse & {
     sample_image_id?: string;
 };
 
-// Formats and limits for upload
-const RAW_EXT = [".cr2", ".cr3", ".nef", ".nrw", ".arw", ".sr2", ".raf", ".rw2", ".orf", ".pef", ".dng"];
-const NONRAW_EXT = [".jpg", ".jpeg", ".png"];
-const MAX_MB_RAW = 500;
-const MAX_MB_NONRAW = 50;
-
-// Validation in the <input type="file" />
-const ACCEPT_EXTENSIONS = [...RAW_EXT, ...NONRAW_EXT].join(",");
-
 // Props is controlled component for images in a report
 type Props = {
     sampleId: string;
@@ -45,20 +38,8 @@ type Props = {
     deleteInBackend?: boolean;
 };
 
-function getExt(name: string): string {
-    const dot = name.lastIndexOf(".");
-    return dot >= 0 ? name.slice(dot).toLowerCase() : "";
-}
-
-function isRawExt(ext: string): boolean {
-    return RAW_EXT.includes(ext);
-}
-
-function isNonRawExt(ext: string): boolean {
-    return NONRAW_EXT.includes(ext);
-}
-
-export default function ReportImages({ sampleId, value, onChange, maxCount = 8, disabled, label = "Imágenes", helpText = `Arrastra o haz clic. RAW hasta ${MAX_MB_RAW}MB • JPG/PNG hasta ${MAX_MB_NONRAW}MB`, dragAndDrop = true, deleteInBackend = false }: Props) {
+export default function ReportImages({ sampleId, value, onChange, maxCount = 8, disabled, label = "Imágenes", helpText = `Arrastra o haz clic. RAW hasta ${MAX_MB_RAW}MB • JPG/PNG/HEIC hasta ${MAX_MB_NONRAW}MB`, dragAndDrop = true, deleteInBackend = false }: Props) {
+    const message = useNotice();
     const [fileList, setFileList] = useState<UploadFile[]>([]);
     // Models for viewing image and editing caption
     const [viewModal, setViewModal] = useState<{ open: boolean; index: number | null }>({
@@ -89,31 +70,9 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
 
     // Validations
     const validateFile = (file: File) => {
-        const ext = getExt(file.name);
-        const sizeMB = file.size / 1024 / 1024;
-
-        if (isRawExt(ext)) {
-            if (sizeMB > MAX_MB_RAW) {
-                message.error(`El archivo RAW excede el límite de ${MAX_MB_RAW} MB.`);
-                return false;
-            }
-            return true;
-        }
-
-        if (isNonRawExt(ext)) {
-            if (sizeMB > MAX_MB_NONRAW) {
-                message.error(`La imagen excede el límite de ${MAX_MB_NONRAW} MB.`);
-                return false;
-            }
-            return true;
-        }
-
-        message.error(
-            "Formato no compatible. Formatos permitidos:\n" +
-            `RAW: ${RAW_EXT.join(", ")}\n` +
-            `NO-RAW: ${NONRAW_EXT.join(", ")}`
-        );
-        return false;
+        const problem = sampleImageFileError(file);
+        if (problem) message.error(problem);
+        return problem === null;
     };
 
     const beforeUpload: UploadProps["beforeUpload"] = (file) => validateFile(file as File) ? true : Upload.LIST_IGNORE;
@@ -163,7 +122,7 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                 message.error(msg);
             }
         };
-    }, [sampleId, value, maxCount, emit]);
+    }, [sampleId, value, maxCount, emit, message]);
 
     // Delete
     const removeAt = async (idx: number) => {
