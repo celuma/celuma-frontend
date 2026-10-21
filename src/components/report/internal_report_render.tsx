@@ -75,6 +75,16 @@ function requiredAutographFailure(data: InternalRenderData, pages: HTMLElement[]
     return null;
 }
 
+/** Independent review R1/R2: a report is only ready when it produced real pages AND the renderer did not
+ *  flag a layout failure (no usable body, or an indivisible unit that does not fit a page). This is
+ *  independent of any signature setting: a clipped or empty clinical document is never "ready". */
+function layoutFailure(pages: HTMLElement[]): string | null {
+    const flagged = document.querySelector<HTMLElement>("#report-render-host [data-layout-error]");
+    const code = flagged?.getAttribute("data-layout-error");
+    if (code) return `LAYOUT_${code}`;
+    return pages.length === 0 ? "LAYOUT_NO_PAGES" : null;
+}
+
 /** Render tokens live in the URL fragment (`#token=...`), never the query
  * string — fragments are never sent to the server, so they can't leak into
  * access logs the way a `?token=...` query param would. */
@@ -175,7 +185,7 @@ export default function InternalReportRender() {
                 // readiness, but it means "ready" alone never distinguished a
                 // loaded autograph from a broken one. This does, and refuses to
                 // signal ready when a required autograph is missing.
-                const failure = requiredAutographFailure(data, pages);
+                const failure = layoutFailure(pages) ?? requiredAutographFailure(data, pages);
                 if (failure) {
                     document.documentElement.dataset.reportRenderError = failure;
                     return;

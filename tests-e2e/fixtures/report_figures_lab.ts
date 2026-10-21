@@ -76,6 +76,9 @@ export interface FigureLabOptions {
     uploadSignature?: boolean;
     /** Margins (cm) of the default letterhead. */
     marginsCm?: number;
+    /** Letterhead band heights (mm), to leave a deliberately small usable body. */
+    headerHeightMm?: number;
+    footerHeightMm?: number;
 }
 
 /** A 360x120 PNG "signature": a stroke on a transparent background. */
@@ -112,8 +115,8 @@ export async function figureLab(request: APIRequestContext, labels: string[], op
         data: {
             configuration: {
                 paper: { size: "LETTER", orientation: "PORTRAIT", margins_cm: { top: opts.marginsCm ?? 2, right: opts.marginsCm ?? 2, bottom: opts.marginsCm ?? 2, left: opts.marginsCm ?? 2 } },
-                header: { enabled: true, institution_name: "Laboratorio Sintético" },
-                footer: { enabled: true, custom_text: "Pie sintético", show_page_number: true },
+                header: { enabled: true, institution_name: "Laboratorio Sintético", ...(opts.headerHeightMm ? { height_mm: opts.headerHeightMm } : {}) },
+                footer: { enabled: true, custom_text: "Pie sintético", show_page_number: true, ...(opts.footerHeightMm ? { height_mm: opts.footerHeightMm } : {}) },
                 style: { primary_color: "#336699" },
             },
         },

@@ -1558,7 +1558,18 @@ const ReportEditor: React.FC = () => {
                 // The report IS submitted. A refresh failure must not look
                 // like a failed submission.
             }
-        } catch (err) { showCelumaApiError(err, "Error al enviar el reporte."); }
+        } catch (err) {
+            // Céluma 1.4 (#12): a sample code was corrected after the last save. The preview already shows
+            // the current codes; saving stores them, then the submission goes through.
+            if (err instanceof Error && err.message.includes("report_sample_codes_stale")) {
+                showCelumaWarning(
+                    "Los códigos de muestra cambiaron",
+                    "La orden tiene códigos de muestra nuevos desde el último guardado. Guarda el reporte y vuelve a enviarlo a revisión.",
+                );
+                return;
+            }
+            showCelumaApiError(err, "Error al enviar el reporte.");
+        }
     };
 
     const handleApprove = async () => {

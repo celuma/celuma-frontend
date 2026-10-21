@@ -325,3 +325,116 @@ test.describe("official render route and PDF page count", () => {
         });
     }
 });
+
+// ---------------------------------------------------------------------------------------------------
+// Independent review round 1 (R1/R2): oversize indivisible/text units and unusable layouts are never
+// "ready", never clipped, and never exported as a warning-only page.
+// ---------------------------------------------------------------------------------------------------
+
+interface RenderOutcome {
+    ready: string | null;
+    error: string | null;
+    pages: number;
+    overflowPx: number[];
+    pagesText: string;
+    pdfPages: number;
+    warning: boolean;
+    overflowWarning: boolean;
+}
+
+async function officialRender(page: Page, scenario: CompositionScenario): Promise<RenderOutcome> {
+    await page.goto(`/?internal_render=1&composition=${encodeURIComponent(JSON.stringify(scenario))}`);
+    await page.waitForFunction(
+        () => document.documentElement.dataset.reportReady === "true" || !!document.documentElement.dataset.reportRenderError,
+        undefined,
+        { timeout: 30_000 },
+    );
+    await page.waitForTimeout(200);
+    const facts = await page.evaluate(() => {
+        const pages = Array.from(document.querySelectorAll<HTMLElement>("#report-render-host div")).filter(
+            (d) => d.style.width === "8.5in" && d.style.position === "relative",
+        );
+        return {
+            ready: document.documentElement.dataset.reportReady ?? null,
+            error: document.documentElement.dataset.reportRenderError ?? null,
+            pages: pages.length,
+            overflowPx: pages.map((p) => {
+                const b = p.querySelector<HTMLElement>('[data-page-region="body"]')!;
+                return b.scrollHeight - b.clientHeight;
+            }),
+            // Body text only, joined without separators: a word-split paragraph is whole again.
+            pagesText: pages.map((p) => p.querySelector('[data-page-region="body"]')?.textContent ?? "").join(""),
+            warning: !!document.querySelector('[data-testid="unusable-page-layout"]'),
+            overflowWarning: !!document.querySelector('[data-testid="layout-overflow"]'),
+        };
+    });
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    const pdfPages = (pdf.toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
+    return { ...facts, pdfPages };
+}
+
+const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
+const FILLER = "Texto de relleno sin relevancia clínica real";
+
+test.describe("R1 — oversize text is paginated, oversize indivisible units fail safely", () => {
+    test("one paragraph of ~9k characters keeps all its text across pages, ready, PDF pages = live pages", async ({ page }) => {
+        const out = await officialRender(page, { figures: 0, paragraphs: 1, paragraphRepeats: 80 });
+        expect(out.error).toBeNull();
+        expect(out.ready).toBe("true");
+        out.overflowPx.forEach((o) => expect(o).toBeLessThanOrEqual(0));
+        expect(occurrences(out.pagesText, FILLER)).toBe(80);
+        expect(out.pages).toBeGreaterThan(1);
+        expect(out.pdfPages).toBe(out.pages);
+    });
+
+    test("inline formatting survives the split and every sentence is present once", async ({ page }) => {
+        const out = await officialRender(page, { figures: 0, paragraphs: 1, paragraphRepeats: 80, inlineMarkup: true });
+        expect(out.ready).toBe("true");
+        out.overflowPx.forEach((o) => expect(o).toBeLessThanOrEqual(0));
+        expect(occurrences(out.pagesText, FILLER)).toBe(80);
+        const strongs = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#report-render-host strong")).filter((e) => !e.closest("[aria-hidden]")).length,
+        );
+        expect(strongs).toBeGreaterThanOrEqual(80);
+    });
+
+    test("a list taller than a page keeps every item once and in order", async ({ page }) => {
+        const out = await officialRender(page, { figures: 0, paragraphs: 1, listItems: 70 });
+        expect(out.ready).toBe("true");
+        out.overflowPx.forEach((o) => expect(o).toBeLessThanOrEqual(0));
+        for (let i = 1; i <= 70; i += 1) expect(occurrences(out.pagesText, `Elemento ${i} de la lista`), `item ${i}`).toBe(1);
+        const order = [...out.pagesText.matchAll(/Elemento (\d+) de la lista/g)].map((m) => Number(m[1]));
+        expect(order).toEqual(Array.from({ length: 70 }, (_, i) => i + 1));
+    });
+
+    test("an atomic figure row taller than the usable body is a controlled layout failure, never ready", async ({ page }) => {
+        // Body stays usable (about 52 mm, above the 30 mm floor) but a row of figure cards (~63 mm) cannot fit it.
+        const out = await officialRender(page, { figures: 4, paragraphs: 0, margins: [4, 1.5, 4, 1.5], headerHeightMm: 70, footerHeightMm: 45 });
+        expect(out.ready).toBeNull();
+        expect(out.error).toBe("LAYOUT_OVERFLOW");
+        expect(out.overflowWarning).toBe(true);
+    });
+});
+
+test.describe("R2 — an unusable layout is a layout failure under every signature setting", () => {
+    const longPatient = "Identificación ficticia para prueba. ".repeat(300);
+    for (const signature of ["hidden", "unsigned", "plain", "signed"] as const) {
+        test(`repeated band exhausts the page (signature: ${signature})`, async ({ page }) => {
+            const out = await officialRender(page, {
+                figures: 1, paragraphs: 0, signature, repeat: ["patient"], extraBase: { patient: longPatient },
+            });
+            expect(out.ready).toBeNull();
+            expect(out.error).toMatch(/^LAYOUT_/);
+            expect(out.pages).toBe(0);
+        });
+    }
+
+    test("a valid layout still signals ready with no signature requirement at all", async ({ page }) => {
+        for (const signature of ["hidden", "unsigned", "plain", "signed"] as const) {
+            const out = await officialRender(page, { figures: 3, paragraphs: 2, signature });
+            expect(out.error, signature).toBeNull();
+            expect(out.ready, signature).toBe("true");
+            expect(out.pages).toBeGreaterThan(0);
+        }
+    });
+});

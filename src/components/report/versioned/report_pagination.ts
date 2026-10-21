@@ -20,8 +20,13 @@
  *      are placed together with the child that follows them, so a title is never stranded at the bottom
  *      of a page, and a decorative separator (`data-page-separator`) that would head a continuation page
  *      is left out;
- *   5. a unit that does not fit even alone on an empty page is still placed (never dropped) and counted
- *      in `overflowedUnits`, which a caller can surface instead of the content being silently clipped.
+ *   5. a text unit (a paragraph, list item, heading or any block holding only inline content) taller than
+ *      a page is split between words, keeping its inline formatting (bold, links...) and its order; the
+ *      continuation keeps the same element;
+ *   6. a unit that cannot be divided and does not fit even alone on an empty page (an oversize figure
+ *      row, a table row, an image) is still placed (never dropped) and counted in `overflowedUnits`;
+ *      the caller MUST treat that as a layout failure (the renderer marks the page host and the official
+ *      render route refuses to signal readiness) instead of letting the content be silently clipped.
  *
  * Measuring is delegated (`fits`) so the algorithm has no layout dependency and can be unit tested with
  * a height model in jsdom; the renderer passes the real `scrollHeight <= clientHeight`.
@@ -59,6 +64,54 @@ export const ATOMIC_ATTR = "data-page-atomic";
 export const KEEP_WITH_NEXT_ATTR = "data-keep-with-next";
 /** A purely decorative rule: omitted when it would be the first thing on a continuation page. */
 export const SEPARATOR_ATTR = "data-page-separator";
+
+const ATOMIC_INLINE_TAGS = new Set(["BR", "IMG", "SVG", "CANVAS", "INPUT", "HR"]);
+
+/** A block whose content is only inline (text and inline markup): can be divided between words. */
+function isTextSplittable(el: HTMLElement): boolean {
+    if (el.hasAttribute(ATOMIC_ATTR) || isSplittable(el)) return false;
+    if (el.tagName === "TABLE" || el.tagName === "TR" || ATOMIC_INLINE_TAGS.has(el.tagName)) return false;
+    return (el.textContent ?? "").trim().length > 0;
+}
+
+interface TextToken {
+    /** Words (with their trailing whitespace) or an indivisible inline element (`atom`). */
+    text?: string;
+    atom?: HTMLElement;
+    /** Source inline elements the token sits inside, outermost first. */
+    chain: HTMLElement[];
+}
+
+function tokenize(node: Node, chain: HTMLElement[], out: TextToken[]): void {
+    node.childNodes.forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+            (child.textContent ?? "").match(/\s*\S+\s*|\s+/g)?.forEach((text) => out.push({ text, chain }));
+        } else if (child instanceof HTMLElement) {
+            if (ATOMIC_INLINE_TAGS.has(child.tagName) || !(child.textContent ?? "").trim()) {
+                out.push({ atom: child, chain });
+            } else {
+                tokenize(child, [...chain, child], out);
+            }
+        }
+    });
+}
+
+/** Rebuilds `shell` (an empty clone of the unit) holding `tokens`, re-creating the inline wrappers. */
+function fillShell(shell: HTMLElement, tokens: TextToken[]): void {
+    const stack: Array<{ src: HTMLElement; el: HTMLElement }> = [];
+    tokens.forEach((token) => {
+        let common = 0;
+        while (common < stack.length && common < token.chain.length && stack[common].src === token.chain[common]) common += 1;
+        stack.length = common;
+        for (let i = common; i < token.chain.length; i += 1) {
+            const el = token.chain[i].cloneNode(false) as HTMLElement;
+            (stack.length ? stack[stack.length - 1].el : shell).appendChild(el);
+            stack.push({ src: token.chain[i], el });
+        }
+        const target = stack.length ? stack[stack.length - 1].el : shell;
+        target.appendChild(token.atom ? (token.atom.cloneNode(true) as HTMLElement) : document.createTextNode(token.text ?? ""));
+    });
+}
 
 function isSplittable(el: HTMLElement): boolean {
     if (el.hasAttribute(ATOMIC_ATTR)) return false;
@@ -114,7 +167,7 @@ export function paginateSource(root: HTMLElement, hooks: PaginationHooks): Pagin
     };
 
     /** Appends clones of `nodes` under the shells of `chain`, creating any shell this page lacks. */
-    const attach = (nodes: HTMLElement[], chain: HTMLElement[], placement: Placement) => {
+    const attach = (nodes: HTMLElement[], chain: HTMLElement[], placement: Placement, deep = true) => {
         let parent: HTMLElement = page.body;
         chain.forEach((source, depth) => {
             let shell = page.shells.get(source);
@@ -136,7 +189,7 @@ export function paginateSource(root: HTMLElement, hooks: PaginationHooks): Pagin
             parent = shell;
         });
         nodes.forEach((node) => {
-            const clone = node.cloneNode(true) as HTMLElement;
+            const clone = deep ? (node.cloneNode(true) as HTMLElement) : node;
             parent.appendChild(clone);
             placement.nodes.push(clone);
         });
@@ -183,14 +236,63 @@ export function paginateSource(root: HTMLElement, hooks: PaginationHooks): Pagin
     };
 
     const placeBlock = (node: HTMLElement, chain: HTMLElement[]) => {
-        if (placeWhole([node], chain, false, isSplittable(node))) return;
+        if (placeWhole([node], chain, false, isSplittable(node) || isTextSplittable(node))) return;
         // Taller than a whole page (rule 3): split it, or, as a last resort, place it and report it.
         if (isSplittable(node)) {
             placeChildren(node, [...chain, node]);
             return;
         }
+        if (isTextSplittable(node)) {
+            splitText(node, chain);
+            return;
+        }
         attach([node], chain, emptyPlacement());
         overflowedUnits += 1;
+    };
+
+    /** Rule 5: distributes a text unit taller than a page over as many pages as it needs. */
+    const splitText = (node: HTMLElement, chain: HTMLElement[]) => {
+        const tokens: TextToken[] = [];
+        tokenize(node, [], tokens);
+        let from = 0;
+        let continuation = false;
+        const build = (count: number): HTMLElement => {
+            const shell = node.cloneNode(false) as HTMLElement;
+            if (continuation && node.tagName === "LI") shell.style.listStyleType = "none";
+            fillShell(shell, tokens.slice(from, from + count));
+            return shell;
+        };
+        const fitsCount = (count: number): boolean => {
+            const placement = emptyPlacement();
+            attach([build(count)], chain, placement, false);
+            const ok = hooks.fits(page.body);
+            rollback(placement);
+            return ok;
+        };
+        while (from < tokens.length) {
+            let lo = 0;
+            let hi = tokens.length - from;
+            while (lo < hi) {
+                const mid = Math.ceil((lo + hi) / 2);
+                if (fitsCount(mid)) lo = mid; else hi = mid - 1;
+            }
+            if (lo === 0) {
+                if (!page.isEmpty) {
+                    startPage();
+                    continue;
+                }
+                // Not even one word/element fits an empty page: indivisible, report it.
+                attach([build(1)], chain, emptyPlacement(), false);
+                overflowedUnits += 1;
+                from += 1;
+                continuation = true;
+                continue;
+            }
+            attach([build(lo)], chain, emptyPlacement(), false);
+            from += lo;
+            continuation = true;
+            if (from < tokens.length) startPage();
+        }
     };
 
     const placeChildren = (parent: HTMLElement, chain: HTMLElement[]) => {

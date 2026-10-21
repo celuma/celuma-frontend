@@ -24,12 +24,21 @@ export interface CompositionScenario {
     autograph?: "default" | "wide" | "tall" | "square";
     /** Number of filler paragraphs before the images, to force several pages. */
     paragraphs?: number;
+    /** Repeat each filler paragraph's sentence this many times (one very long paragraph, default 3). */
+    paragraphRepeats?: number;
+    /** Wrap every other sentence of the filler paragraphs in <strong> (inline formatting must survive splits). */
+    inlineMarkup?: boolean;
+    /** Append an ordered list of this many long items (a list taller than a page). */
+    listItems?: number;
     /** Use very long patient / requester / signer names and many sample codes. */
     longValues?: boolean;
     /** Markdown table rows to add (long table that must split across pages). */
     tableRows?: number;
     /** Margins in cm: top,right,bottom,left. */
     margins?: [number, number, number, number];
+    /** Letterhead band heights (mm), to leave a deliberately small usable body. */
+    headerHeightMm?: number;
+    footerHeightMm?: number;
     /** Hide the footer / header to cover letterheads without them. */
     footer?: boolean;
     header?: boolean;
@@ -74,8 +83,8 @@ export function buildCompositionReport(s: CompositionScenario): ReportEnvelope {
             template: { base: Record<string, Record<string, unknown>>; base_order?: string[]; sections: Record<string, unknown> };
             presentation: {
                 paper: { margins_cm: { top: number; right: number; bottom: number; left: number } };
-                footer: { enabled: boolean };
-                header: { enabled: boolean };
+                footer: { enabled: boolean; height_mm?: number };
+                header: { enabled: boolean; height_mm?: number };
             };
         };
     };
@@ -113,10 +122,20 @@ export function buildCompositionReport(s: CompositionScenario): ReportEnvelope {
         ...sections.section_macroscopic,
         content: Array.from({ length: s.paragraphs ?? 2 }, (_, i) =>
             `<p>Párrafo sintético ${i + 1}. ` +
-            "Texto de relleno sin relevancia clínica real para forzar la paginación del reporte en varias páginas de prueba. ".repeat(3) +
+            "Texto de relleno sin relevancia clínica real para forzar la paginación del reporte en varias páginas de prueba. ".repeat(s.paragraphRepeats ?? 3) +
             "</p>",
         ).join(""),
     };
+    if (s.inlineMarkup) {
+        sections.section_macroscopic.content = String(sections.section_macroscopic.content).replace(
+            /Texto de relleno sin relevancia clínica real para forzar la paginación del reporte en varias páginas de prueba\. /g,
+            "<strong>Texto de relleno sin relevancia clínica real</strong> para forzar la paginación del reporte en varias páginas de prueba. ",
+        );
+    }
+    if (s.listItems) {
+        sections.section_macroscopic.content += `<ol>${Array.from({ length: s.listItems }, (_, i) =>
+            `<li>Elemento ${i + 1} de la lista sintética. ${"Texto de lista sin relevancia clínica real. ".repeat(6)}</li>`).join("")}</ol>`;
+    }
     sections.section_microscopic = { ...sections.section_microscopic, content: "<p>Microscópica breve sintética.</p>" };
     if (s.tableRows) {
         const rows = Array.from({ length: s.tableRows }, (_, i) => `| Hallazgo ${i + 1} | Resultado sintético ${i + 1} |`);
@@ -163,6 +182,8 @@ export function buildCompositionReport(s: CompositionScenario): ReportEnvelope {
         const [top, right, bottom, left] = s.margins;
         snapshot.presentation.paper.margins_cm = { top, right, bottom, left };
     }
+    if (s.headerHeightMm !== undefined) snapshot.presentation.header.height_mm = s.headerHeightMm;
+    if (s.footerHeightMm !== undefined) snapshot.presentation.footer.height_mm = s.footerHeightMm;
     if (s.footer === false) snapshot.presentation.footer.enabled = false;
     if (s.header === false) snapshot.presentation.header.enabled = false;
 

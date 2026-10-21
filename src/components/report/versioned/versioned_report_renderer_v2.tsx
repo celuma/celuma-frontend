@@ -270,6 +270,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
         // repeated band + signature leave a usable body is only known there; the render path reads it
         // back from this flag (the host stays mounted so a later report change can recover).
         const [compositionUnusable, setCompositionUnusable] = useState(false);
+        // Indivisible units that did not fit a page (an oversize figure row or table row): a layout
+        // FAILURE, never a silently clipped page. The page host also carries `data-layout-error` so the
+        // official render route refuses readiness (see internal_report_render.tsx).
+        const [overflowedUnits, setOverflowedUnits] = useState(0);
 
         useImperativeHandle(ref, () => ({
             getPages: () => {
@@ -290,6 +294,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const host = previewHostRef.current;
             if (!host) return;
             host.innerHTML = "";
+            delete host.dataset.layoutError;
+            setOverflowedUnits(0);
             // Recomputed here (not taken from the outer `validation` const)
             // so this effect's dependency array can stay [report,
             // signerLookup] — same stability as LegacyReportRendererV1 —
@@ -367,7 +373,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 : 0;
             const composition = resolvePageComposition({ layout, repeatedBandMm, signatureBandMm });
             setCompositionUnusable(!composition.usable);
-            if (!composition.usable) return;
+            if (!composition.usable) {
+                host.dataset.layoutError = "UNUSABLE";
+                return;
+            }
 
             const primaryColor = presentation.style.primary_color;
             // `true` in the header / `false` in the footer = the real
@@ -726,11 +735,15 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             };
 
             const work = sourceInDOM.cloneNode(true) as HTMLElement;
-            paginateSource(work, {
+            const pagination = paginateSource(work, {
                 newPage: makePage,
                 fits: (body) => body.scrollHeight <= body.clientHeight,
                 discardLastPage: () => host.lastElementChild?.remove(),
             });
+            if (pagination.overflowedUnits > 0) {
+                host.dataset.layoutError = "OVERFLOW";
+                setOverflowedUnits(pagination.overflowedUnits);
+            }
 
             // Second pass: page numbers depend on the final page count, only
             // known once pagination above has finished.
@@ -853,6 +866,28 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             Con los campos repetidos y la firma de cada página, los márgenes y las bandas de
                             encabezado/pie no dejan espacio suficiente para el contenido. Reduce los márgenes o la
                             altura del encabezado/pie en el membrete, o quita campos repetidos de la plantilla.
+                        </p>
+                    </div>
+                )}
+                {overflowedUnits > 0 && (
+                    <div
+                        role="alert"
+                        style={{
+                            padding: 16,
+                            marginBottom: 12,
+                            border: "1px solid #f5c2c0",
+                            borderRadius: 12,
+                            background: "#fff5f5",
+                            color: "#7a1f1c",
+                            fontFamily: "Arial, sans-serif",
+                        }}
+                        data-testid="layout-overflow"
+                    >
+                        <p style={{ margin: 0, fontWeight: 700 }}>Hay contenido que no cabe en la página</p>
+                        <p style={{ margin: "6px 0 0 0" }}>
+                            Un elemento indivisible (una fila de figuras o de una tabla) es más alto que el área útil de la
+                            página y se vería cortado. Reduce los márgenes o la altura del encabezado/pie en el membrete,
+                            los campos repetidos, o el tamaño del contenido. Mientras tanto no se genera un PDF oficial.
                         </p>
                     </div>
                 )}

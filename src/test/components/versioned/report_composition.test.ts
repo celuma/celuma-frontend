@@ -94,6 +94,9 @@ describe("resolvePageComposition — one calculation reserves every band", () =>
 
 /** Each element's cost is its `data-h` (default 0); a body fits while the sum stays within capacity. */
 function heightOf(el: Element): number {
+    const perChar = (el as HTMLElement).dataset.cpc;
+    // `data-cpc` models flowing text: the cost grows with the characters it holds (children included).
+    if (perChar) return Number((el as HTMLElement).dataset.h ?? 0) + (el.textContent ?? "").length * Number(perChar);
     return Number((el as HTMLElement).dataset.h ?? 0) + Array.from(el.children).reduce((n, c) => n + heightOf(c), 0);
 }
 function paginate(html: string, capacity: number) {
@@ -114,6 +117,57 @@ function paginate(html: string, capacity: number) {
 // A row costs 10 however many figures it holds (they sit side by side).
 const figure = (n: number) => `<div data-figure="${n}">Figura ${n}</div>`;
 const row = (...n: number[]) => `<div ${ATOMIC_ATTR}="true" data-h="10">${n.map(figure).join("")}</div>`;
+
+describe("paginateSource — oversize text and indivisible units (review R1)", () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i + 1}`).join(" ");
+
+    it("splits one paragraph taller than a page between words, losing and reordering nothing", () => {
+        const text = words(200);
+        const { pages, result } = paginate(`<p data-cpc="1">${text}</p>`, 300);
+        expect(result.overflowedUnits).toBe(0);
+        expect(pages.length).toBeGreaterThan(2);
+        pages.forEach((p) => expect(heightOf(p)).toBeLessThanOrEqual(300));
+        expect(pages.map((p) => p.textContent).join("")).toBe(text);
+    });
+
+    it("keeps inline formatting across the split", () => {
+        const html = `<p data-cpc="1">${words(60)} <strong>${words(60).replace(/w/g, "b")}</strong> <a href="#x">${words(60).replace(/w/g, "l")}</a></p>`;
+        const { pages, result } = paginate(html, 250);
+        expect(result.overflowedUnits).toBe(0);
+        const strong = pages.flatMap((p) => Array.from(p.querySelectorAll("strong")).map((e) => e.textContent)).join("");
+        const link = pages.flatMap((p) => Array.from(p.querySelectorAll("a")).map((e) => e.textContent)).join("");
+        expect(strong).toBe(words(60).replace(/w/g, "b"));
+        expect(link).toBe(words(60).replace(/w/g, "l"));
+        pages.forEach((p) => p.querySelectorAll("a").forEach((a) => expect(a.getAttribute("href")).toBe("#x")));
+    });
+
+    it("splits a list item taller than a page and keeps the list order and numbering", () => {
+        const items = Array.from({ length: 3 }, (_, i) => `<li data-cpc="1">item${i + 1} ${words(150)}</li>`).join("");
+        const { pages, result } = paginate(`<ol>${items}</ol>`, 300);
+        expect(result.overflowedUnits).toBe(0);
+        const all = pages.map((p) => p.textContent).join("");
+        expect(all).toBe(Array.from({ length: 3 }, (_, i) => `item${i + 1} ${words(150)}`).join(""));
+        // Continuation chunks of an item do not print a second bullet.
+        const chunks = pages.flatMap((p) => Array.from(p.querySelectorAll<HTMLElement>("li")));
+        expect(chunks.filter((li) => li.style.listStyleType === "none").length).toBeGreaterThan(0);
+    });
+
+    it("an oversize paragraph starts on the page that still has room", () => {
+        const { pages } = paginate(`<p data-h="10">intro</p><p data-cpc="1">${words(120)}</p>`, 200);
+        expect(pages[0].textContent?.startsWith("introw1 w2")).toBe(true);
+    });
+
+    it("an indivisible unit taller than a page is placed AND reported, never silently dropped", () => {
+        const { pages, result } = paginate(`<div ${ATOMIC_ATTR}="true" data-h="999">fila</div><table><tbody><tr data-h="999"><td>x</td></tr></tbody></table>`, 100);
+        expect(result.overflowedUnits).toBe(2);
+        expect(pages.map((p) => p.textContent).join("|")).toBe("fila|x");
+    });
+
+    it("a single word wider than an empty page is reported", () => {
+        const { result } = paginate(`<p data-cpc="50">tiny enormous</p>`, 100);
+        expect(result.overflowedUnits).toBeGreaterThan(0);
+    });
+});
 
 describe("paginateSource", () => {
     it("never clips: a grid taller than a page flows across pages, each figure once and in order", () => {
