@@ -5,13 +5,13 @@
  * clones those pages into a bare iframe), and both are MEASURED before pagination so the space they
  * take is reserved by `resolvePageComposition` rather than guessed.
  *
- * Every dimension below is a REVIEW CANDIDATE, not an owner-approved design (see
- * celuma-engineering/specs/reports/renderer.md, "Report composition"): they live in one place so a
- * reviewer can change them without touching layout logic.
+ * Dimensions were accepted in the owner visual review (2026-10-21; see
+ * celuma-engineering/specs/reports/renderer.md, "Report composition"). They live in one place so a
+ * later visual adjustment does not require changing layout logic.
  */
 import { formatSignedDate } from "../signature_format";
 
-/** Maximum signature image area (candidate from the #14 handoff: 45 mm x 12 mm). */
+/** Maximum signature image area (owner-reviewed #14 design: 45 mm x 12 mm). */
 export const SIGNATURE_IMAGE_MAX_WIDTH_MM = 45;
 export const SIGNATURE_IMAGE_MAX_HEIGHT_MM = 12;
 /** Width of the signature block: the line and the identity text wrap inside it, never beyond it. */

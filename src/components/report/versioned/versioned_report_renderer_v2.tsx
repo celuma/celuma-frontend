@@ -64,10 +64,14 @@ const CM_TO_MM = 10;
 const HEADER_BAND_MM = 24;
 const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
-/** Font size of the repeated-fields band (Céluma 1.4, #15; a review candidate, see report_page_bands.ts). */
+/** Font size of the repeated-fields band (Céluma 1.4, #15; see report_page_bands.ts). */
 const REPEATED_BAND_FONT_PT = 8;
 /** Figures per row of the images section. */
 const FIGURES_PER_ROW = 3;
+/** Keep one/two-row sections at their existing size; compact taller grids without cropping. */
+const FIGURE_IMAGE_HEIGHT_PX = 200;
+/** Leaves room for a 3 x 3 section at 5 mm margins; taller bands still paginate naturally. */
+const COMPACT_FIGURE_IMAGE_HEIGHT_PX = 180;
 
 // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this used to
 // be a hardcoded literal, "duplicated deliberately … to keep V2 fully
@@ -931,6 +935,9 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                         : []
                                 ) as TemplateImageItem[];
                                 if (images.length === 0) return null;
+                                const figureImageHeightPx = images.length > FIGURES_PER_ROW * 2
+                                    ? COMPACT_FIGURE_IMAGE_HEIGHT_PX
+                                    : FIGURE_IMAGE_HEIGHT_PX;
                                 // Céluma 1.4 (#19): the figures are laid out as rows of
                                 // three. Each row is one unbreakable unit (a figure and its
                                 // caption always travel together, in stored order) and rows flow
@@ -967,7 +974,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                                         <img
                                                             src={img.url}
                                                             alt={img.caption || `Figura ${idx + 1}`}
-                                                            style={{ width: "100%", height: 200, objectFit: "contain", background: "#fafafa", display: "block" }}
+                                                            style={{ width: "100%", height: figureImageHeightPx, objectFit: "contain", background: "#fafafa", display: "block" }}
                                                             crossOrigin="anonymous"
                                                         />
                                                         <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>

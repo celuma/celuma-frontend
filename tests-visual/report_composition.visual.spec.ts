@@ -164,6 +164,30 @@ test.describe("figures: 9, 10, 12 and 20 paginate without clipping (#19)", () =>
     });
 });
 
+test.describe("three rows of figures at 5 mm margins (#19)", () => {
+    for (const figures of [9, 10, 12, 20]) {
+        for (const mixedAspect of [false, true]) {
+            test(`${figures} figures at 5 mm${mixedAspect ? " (mixed aspect ratios)" : ""}`, async ({ page }) => {
+                const pages = await loadComposition(page, {
+                    figures, mixedAspect, paragraphs: 0,
+                    margins: [0.5, 0.5, 0.5, 0.5],
+                    repeat: ["patient", "requesting_physician", "sample_codes", "expediente"],
+                    extraBase: { sample_codes: "CU011026, CU021026, CU031026", expediente: "SYN-001" },
+                }, "&clearOffsets=1");
+                expectCoherentPages(pages, { figures, signature: true, repeated: true });
+                if (figures === 9) {
+                    // The complete section (including its heading) fits together on a fresh page.
+                    const imagePages = pages.filter((g) => g.figures.length > 0);
+                    expect(imagePages).toHaveLength(1);
+                    expect(imagePages[0].figures).toHaveLength(9);
+                    expect(imagePages[0].bodyText).toContain("Imágenes");
+                }
+                if (figures === 20) expect(pages.some((g) => g.figures.length === 9)).toBe(true);
+            });
+        }
+    }
+});
+
 test.describe("repeated fields (#15) and sample codes (#12)", () => {
     test("repeats the chosen visible fields, in report order, on pages after the first only", async ({ page }) => {
         const pages = await loadComposition(page, {
