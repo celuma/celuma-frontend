@@ -34,7 +34,11 @@ const CASES = [
     { key: "images", description: "report with images" },
     { key: "signed", description: "signed report" },
     { key: "multipage", description: "multipage report" },
+    { key: "multipagefit", description: "multipage report without an oversize section" },
 ] as const;
+
+/** See legacy_v2_parity.visual.spec.ts: Legacy clips a section taller than a page, V2 splits it (#19). */
+const OVERSIZE_SECTION_CASES = new Set<string>(["multipage"]);
 
 /** Rasterization scale. 2 ≈ 144 dpi: sufficient for a half-millimeter shift
  *  to be visible without making tests slow. */
@@ -44,8 +48,8 @@ const RASTER_SCALE = 2;
  *  documented in legacy-pdf-parity-report.md instead of raising this value. */
 const MAX_DIFF_PIXEL_RATIO = 0;
 
-async function renderPdf(page: Page, fixture: string): Promise<Buffer> {
-    await page.goto(`/?internal_render=1&fixture=${fixture}`);
+async function renderPdf(page: Page, fixture: string, extra = ""): Promise<Buffer> {
+    await page.goto(`/?internal_render=1&fixture=${fixture}${extra}`);
     // Same selector awaited by the official generator.
     await page.waitForSelector('html[data-report-ready="true"]', { state: "attached", timeout: 30_000 });
     return page.pdf({ preferCSSPageSize: true, printBackground: true });
@@ -174,12 +178,30 @@ for (const { key, description } of CASES) {
 
     test(`Legacy ↔ V2 PDF parity — ${description}`, async ({ page }) => {
         test.slow();
-        const legacyBytes = await renderPdf(page, `parity${capitalized}Legacy`);
-        const v2Bytes = await renderPdf(page, `parity${capitalized}V2`);
+        // Céluma 1.4 (#14): V2's compact per-page signature intentionally differs from Legacy's
+        // terminal block, so the artifact comparison hides the signature on both sides; the signed
+        // case below still checks that the real signer appears in both PDFs.
+        const legacyBytes = await renderPdf(page, `parity${capitalized}Legacy`, "&signature=hide");
+        const v2Bytes = await renderPdf(page, `parity${capitalized}V2`, "&signature=hide");
 
         const legacy = await readPdfFacts(legacyBytes);
         const v2 = await readPdfFacts(v2Bytes);
 
+        if (OVERSIZE_SECTION_CASES.has(key)) {
+            // Completeness only: V2 never loses text Legacy had, and never has fewer pages.
+            expect(v2.pageCount).toBeGreaterThanOrEqual(legacy.pageCount);
+            expect(v2.mediaBoxes.every((m) => m === "612x792")).toBe(true);
+            // Nothing is lost: every one of the 24 synthetic paragraphs is in the V2 PDF, once each.
+            const v2Text = v2.perPageText.join(" ").replace(/\s+/g, " ");
+            for (let n = 1; n <= 24; n += 1) {
+                expect(v2Text.split(`Párrafo sintético ${n} de la suite`).length - 1, `paragraph ${n}`).toBe(1);
+            }
+            const v2Pages = await rasterizePages(v2Bytes);
+            v2Pages.forEach((raster, i) => {
+                expect(isBlank(raster, v2.perPageText[i]), `V2 p.${i + 1} is blank`).toBe(false);
+            });
+            return;
+        }
         // Same page count and physical size.
         expect(v2.pageCount).toBe(legacy.pageCount);
         expect(v2.mediaBoxes).toEqual(legacy.mediaBoxes);

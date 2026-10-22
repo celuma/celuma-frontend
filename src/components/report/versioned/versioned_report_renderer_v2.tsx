@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle, type CSSProperties } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import AmendmentIdentification from "../amendment_identification";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
 import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
@@ -8,12 +8,20 @@ import {
     RICH_TEXT_CONTENT_CSS,
     normalizeRichTextForRender,
 } from "../rich_text_render";
-import SignatureBlock, { type SignatureBlockSigner } from "../signature_block";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
 import type { PageLayout } from "./page_layout";
 import { extractRenderingSnapshot } from "./report_snapshot_validation";
-import { resolvePageLayout } from "./page_layout";
+import { resolvePageComposition, resolvePageLayout } from "./page_layout";
+import { ATOMIC_ATTR, KEEP_WITH_NEXT_ATTR, SEPARATOR_ATTR, paginateSource } from "./report_pagination";
+import {
+    buildCompactSignature,
+    buildRepeatedFieldsBand,
+    measureElementMm,
+    NOMINAL_REPEATED_BAND_MM,
+    nominalSignatureBandMm,
+} from "./report_page_bands";
+import { resolveRepeatedFieldRows } from "./repeated_fields";
 import {
     DEFAULT_FOOTER_TEXT,
     DEFAULT_INSTITUTION_NAME,
@@ -56,6 +64,14 @@ const CM_TO_MM = 10;
 const HEADER_BAND_MM = 24;
 const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
+/** Font size of the repeated-fields band (Céluma 1.4, #15; see report_page_bands.ts). */
+const REPEATED_BAND_FONT_PT = 8;
+/** Figures per row of the images section. */
+const FIGURES_PER_ROW = 3;
+/** Keep one/two-row sections at their existing size; compact taller grids without cropping. */
+const FIGURE_IMAGE_HEIGHT_PX = 200;
+/** Leaves room for a 3 x 3 section at 5 mm margins; taller bands still paginate naturally. */
+const COMPACT_FIGURE_IMAGE_HEIGHT_PX = 180;
 
 // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this used to
 // be a hardcoded literal, "duplicated deliberately … to keep V2 fully
@@ -254,6 +270,14 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
     ({ report, style, signerLookup }, ref) => {
         const previewHostRef = useRef<HTMLDivElement>(null);
         const hiddenSourceRef = useRef<HTMLDivElement>(null);
+        // Céluma 1.4: bands are measured inside the pagination effect, so whether header + footer +
+        // repeated band + signature leave a usable body is only known there; the render path reads it
+        // back from this flag (the host stays mounted so a later report change can recover).
+        const [compositionUnusable, setCompositionUnusable] = useState(false);
+        // Indivisible units that did not fit a page (an oversize figure row or table row): a layout
+        // FAILURE, never a silently clipped page. The page host also carries `data-layout-error` so the
+        // official render route refuses readiness (see internal_report_render.tsx).
+        const [overflowedUnits, setOverflowedUnits] = useState(0);
 
         useImperativeHandle(ref, () => ({
             getPages: () => {
@@ -274,6 +298,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const host = previewHostRef.current;
             if (!host) return;
             host.innerHTML = "";
+            delete host.dataset.layoutError;
+            setOverflowedUnits(0);
             // Recomputed here (not taken from the outer `validation` const)
             // so this effect's dependency array can stay [report,
             // signerLookup] — same stability as LegacyReportRendererV1 —
@@ -300,8 +326,6 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             const footerHeightMm = layout.footer.heightMm;
             const headerOffsetMm = layout.header.topMm;
             const footerOffsetMm = layout.footer.bottomMm;
-            const bodyTopMm = layout.body.topMm;
-            const bodyBottomMm = layout.body.bottomMm;
             // Horizontal insets are always the literal margins — this
             // letterhead model has no side bands (see page_layout.ts).
             const marginLeftMm = layout.body.leftMm;
@@ -319,7 +343,44 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
             if (!layout.usable) return;
 
             const contentWpx = Math.round(layout.body.availableWidthMm / PX_TO_MM);
-            const contentHpx = Math.round(layout.body.availableHeightMm / PX_TO_MM);
+
+            // Céluma 1.4 (#14/#15/#19): the repeated-fields band (pages 2+) and the compact
+            // signature band (every page) are built and MEASURED first, then reserved by the same
+            // composition that already accounts for header and footer, so the body of each page is
+            // exactly what remains and every content type paginates against that one number.
+            const repeatedRows = resolveRepeatedFieldRows(report, effectValidation.snapshot.template);
+            const bandStyle = {
+                fontFamily: fontFamilyCss((presentation.style.typography ?? DEFAULT_TYPOGRAPHY).font_family),
+                fontSizePt: REPEATED_BAND_FONT_PT,
+                color: "#000",
+            };
+            const contentData = report.report ?? { base: {}, sections: {} };
+            const signatureMeta = resolveSignatureMetadata(
+                contentData as { signatureMetadata?: ReportEnvelope["report"]["signatureMetadata"] },
+            );
+            const signerEntry = report.signed_by
+                ? signerLookup?.find((u) => u.id === report.signed_by)
+                : undefined;
+            const buildSignature = () => buildCompactSignature({
+                requireDigitalSignature: signatureMeta.require_digital_signature,
+                signatureUrl: signatureMeta.signature_url ?? null,
+                signerName: signerEntry?.name ?? null,
+                signedAt: report.signed_at ?? null,
+            });
+            const repeatedBandMm = repeatedRows.length > 0
+                ? (measureElementMm(host, buildRepeatedFieldsBand(repeatedRows, bandStyle), contentWpx, PX_TO_MM)
+                    || NOMINAL_REPEATED_BAND_MM)
+                : 0;
+            const signatureBandMm = signatureMeta.show_signature_section
+                ? (measureElementMm(host, buildSignature(), contentWpx, PX_TO_MM)
+                    || nominalSignatureBandMm(signatureMeta.require_digital_signature))
+                : 0;
+            const composition = resolvePageComposition({ layout, repeatedBandMm, signatureBandMm });
+            setCompositionUnusable(!composition.usable);
+            if (!composition.usable) {
+                host.dataset.layoutError = "UNUSABLE";
+                return;
+            }
 
             const primaryColor = presentation.style.primary_color;
             // `true` in the header / `false` in the footer = the real
@@ -434,7 +495,9 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 ] as Array<BandLine | null>).filter((l): l is BandLine => l !== null)
                 : [];
 
-            const makePage = () => {
+            const makePage = (pageIndex: number) => {
+                const bounds = pageIndex === 0 ? composition.first : composition.continuation;
+                const bodyHpx = Math.round(bounds.availableHeightMm / PX_TO_MM);
                 const page = document.createElement("div");
                 page.style.width = "8.5in";
                 page.style.height = "11in";
@@ -447,6 +510,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
 
                 if (headerEnabled) {
                     const header = document.createElement("div");
+                    header.dataset.pageRegion = "header";
                     header.style.position = "absolute";
                     header.style.top = `${headerOffsetMm}mm`;
                     header.style.left = `${marginLeftMm}mm`;
@@ -525,15 +589,27 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     page.appendChild(header);
                 }
 
+                // Pages after the first repeat the template's chosen identification fields in a
+                // compact band under the header (page 1 already prints every visible field).
+                if (pageIndex > 0 && composition.repeatedBand) {
+                    const band = buildRepeatedFieldsBand(repeatedRows, bandStyle);
+                    band.style.position = "absolute";
+                    band.style.top = `${composition.repeatedBand.topMm}mm`;
+                    band.style.left = `${marginLeftMm}mm`;
+                    band.style.right = `${marginRightMm}mm`;
+                    page.appendChild(band);
+                }
+
                 const body = document.createElement("div");
+                body.dataset.pageRegion = "body";
                 body.style.position = "absolute";
-                body.style.top = `${bodyTopMm}mm`;
-                body.style.bottom = `${bodyBottomMm}mm`;
+                body.style.top = `${bounds.topMm}mm`;
+                body.style.bottom = `${bounds.bottomMm}mm`;
                 body.style.left = `${marginLeftMm}mm`;
                 body.style.right = `${marginRightMm}mm`;
                 body.style.overflow = "hidden";
                 body.style.width = `${contentWpx}px`;
-                body.style.height = `${contentHpx}px`;
+                body.style.height = `${bodyHpx}px`;
                 body.style.boxSizing = "border-box";
                 body.style.background = "#ffffff";
                 body.style.backgroundColor = "#ffffff";
@@ -557,8 +633,20 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 // page-by-page comparison with the Legacy PDF impossible.
                 page.appendChild(body);
 
+                // Compact signature of THIS page: reserved above the footer clearance on every
+                // page, never a second large terminal block.
+                if (composition.signatureBand) {
+                    const signature = buildSignature();
+                    signature.style.position = "absolute";
+                    signature.style.bottom = `${composition.signatureBand.bottomMm}mm`;
+                    signature.style.left = `${marginLeftMm}mm`;
+                    signature.style.right = `${marginRightMm}mm`;
+                    page.appendChild(signature);
+                }
+
                 if (footerEnabled) {
                     const footer = document.createElement("div");
+                    footer.dataset.pageRegion = "footer";
                     footer.style.position = "absolute";
                     footer.style.bottom = `${footerOffsetMm}mm`;
                     footer.style.left = `${marginLeftMm}mm`;
@@ -647,56 +735,19 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 page.appendChild(richTextStyle);
 
                 host.appendChild(page);
-                return { page, body };
+                return body;
             };
 
             const work = sourceInDOM.cloneNode(true) as HTMLElement;
-            const nodes = Array.from(work.childNodes);
-
-            const fits = (container: HTMLElement, el: HTMLElement) => {
-                container.appendChild(el);
-                const ok = container.scrollHeight <= container.clientHeight;
-                if (!ok) container.removeChild(el);
-                return ok;
-            };
-
-            let { body } = makePage();
-
-            nodes.forEach((node) => {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    const span = document.createElement("span");
-                    span.textContent = node.textContent || "";
-                    if (!fits(body, span)) {
-                        ({ body } = makePage());
-                        body.appendChild(span);
-                    }
-                    return;
-                }
-
-                const elem = node as HTMLElement;
-                if (!(elem instanceof HTMLElement)) return;
-
-                const block = elem.cloneNode(true) as HTMLElement;
-                if (fits(body, block)) return;
-
-                ({ body } = makePage());
-                if (block.scrollHeight <= body.clientHeight) {
-                    body.appendChild(block);
-                    return;
-                }
-
-                const shell = block.cloneNode(false) as HTMLElement;
-                body.appendChild(shell);
-                Array.from(block.childNodes).forEach((child) => {
-                    const c = child.cloneNode(true) as HTMLElement;
-                    if (!fits(body, c)) {
-                        ({ body } = makePage());
-                        body.appendChild(c);
-                    } else {
-                        shell.appendChild(c);
-                    }
-                });
+            const pagination = paginateSource(work, {
+                newPage: makePage,
+                fits: (body) => body.scrollHeight <= body.clientHeight,
+                discardLastPage: () => host.lastElementChild?.remove(),
             });
+            if (pagination.overflowedUnits > 0) {
+                host.dataset.layoutError = "OVERFLOW";
+                setOverflowedUnits(pagination.overflowedUnits);
+            }
 
             // Second pass: page numbers depend on the final page count, only
             // known once pagination above has finished.
@@ -773,16 +824,6 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
 
         const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, contentData);
 
-        const signatureMeta = resolveSignatureMetadata(
-            contentData as { signatureMetadata?: ReportEnvelope["report"]["signatureMetadata"] },
-        );
-        const signerEntry = report.signed_by
-            ? signerLookup?.find((u) => u.id === report.signed_by)
-            : undefined;
-        const signerDisplay: SignatureBlockSigner | undefined = signerEntry
-            ? { full_name: signerEntry.name }
-            : undefined;
-
         const orderedBaseRows = baseOrder
             .map((k) => {
                 const v = tmpl.base[k];
@@ -812,6 +853,48 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
 
         return (
             <div style={style}>
+                {compositionUnusable && (
+                    <div
+                        style={{
+                            padding: 24,
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 12,
+                            background: "#fafbfc",
+                            color: "#374151",
+                            fontFamily: "Arial, sans-serif",
+                        }}
+                        data-testid="unusable-page-layout"
+                    >
+                        <p style={{ margin: 0, fontWeight: 700 }}>Configuración de página sin área útil</p>
+                        <p style={{ margin: "8px 0 0 0" }}>
+                            Con los campos repetidos y la firma de cada página, los márgenes y las bandas de
+                            encabezado/pie no dejan espacio suficiente para el contenido. Reduce los márgenes o la
+                            altura del encabezado/pie en el membrete, o quita campos repetidos de la plantilla.
+                        </p>
+                    </div>
+                )}
+                {overflowedUnits > 0 && (
+                    <div
+                        role="alert"
+                        style={{
+                            padding: 16,
+                            marginBottom: 12,
+                            border: "1px solid #f5c2c0",
+                            borderRadius: 12,
+                            background: "#fff5f5",
+                            color: "#7a1f1c",
+                            fontFamily: "Arial, sans-serif",
+                        }}
+                        data-testid="layout-overflow"
+                    >
+                        <p style={{ margin: 0, fontWeight: 700 }}>Hay contenido que no cabe en la página</p>
+                        <p style={{ margin: "6px 0 0 0" }}>
+                            Un elemento indivisible (una fila de figuras o de una tabla) es más alto que el área útil de la
+                            página y se vería cortado. Reduce los márgenes o la altura del encabezado/pie en el membrete,
+                            los campos repetidos, o el tamaño del contenido. Mientras tanto no se genera un PDF oficial.
+                        </p>
+                    </div>
+                )}
                 <div
                     ref={hiddenSourceRef}
                     style={{ position: "fixed", left: "-10000px", top: 0, width: 0, height: 0, overflow: "hidden" }}
@@ -829,11 +912,11 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             ))}
                         </div>
 
-                        <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                        <hr {...{ [KEEP_WITH_NEXT_ATTR]: "true", [SEPARATOR_ATTR]: "true" }} style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
 
                         {sections.map(({ key, section, savedContent }) => {
                             const sectionHeader = (
-                                <h3 style={{
+                                <h3 {...{ [KEEP_WITH_NEXT_ATTR]: "true" }} style={{
                                     margin: "0 0 6px 0",
                                     fontSize: "11pt",
                                     fontWeight: 700,
@@ -852,37 +935,58 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                         : []
                                 ) as TemplateImageItem[];
                                 if (images.length === 0) return null;
+                                const figureImageHeightPx = images.length > FIGURES_PER_ROW * 2
+                                    ? COMPACT_FIGURE_IMAGE_HEIGHT_PX
+                                    : FIGURE_IMAGE_HEIGHT_PX;
+                                // Céluma 1.4 (#19): the figures are laid out as rows of
+                                // three. Each row is one unbreakable unit (a figure and its
+                                // caption always travel together, in stored order) and rows flow
+                                // across pages, so any number of figures paginates instead of the
+                                // grid being cut off at the bottom of one page.
+                                const rows: Array<Array<{ img: TemplateImageItem; idx: number }>> = [];
+                                images.forEach((img, idx) => {
+                                    if (idx % FIGURES_PER_ROW === 0) rows.push([]);
+                                    rows[rows.length - 1].push({ img, idx });
+                                });
                                 return (
                                     <div key={key} style={{ marginBottom: 14 }}>
-                                        <hr style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                                        <hr {...{ [KEEP_WITH_NEXT_ATTR]: "true", [SEPARATOR_ATTR]: "true" }} style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
                                         {sectionHeader}
-                                        <div style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                            gap: 10,
-                                        }}>
-                                            {images.map((img, idx) => (
-                                                <div key={img.id || idx} style={{
-                                                    border: "1px solid #e5e7eb",
-                                                    borderRadius: 6,
-                                                    overflow: "hidden",
-                                                    background: "#fff",
-                                                }}>
-                                                    <img
-                                                        src={img.url}
-                                                        alt={img.caption || `Figura ${idx + 1}`}
-                                                        style={{ width: "100%", height: 200, objectFit: "contain", background: "#fafafa", display: "block" }}
-                                                        crossOrigin="anonymous"
-                                                    />
-                                                    <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>
-                                                        <b>Figura {idx + 1}.</b>{" "}
-                                                        {img.caption && img.caption.trim().length > 0
-                                                            ? img.caption
-                                                            : <em> </em>}
+                                        {rows.map((row, rowIdx) => (
+                                            <div
+                                                key={rowIdx}
+                                                {...{ [ATOMIC_ATTR]: "true" }}
+                                                data-figure-row={rowIdx + 1}
+                                                style={{
+                                                    display: "grid",
+                                                    gridTemplateColumns: `repeat(${FIGURES_PER_ROW}, minmax(0, 1fr))`,
+                                                    gap: 10,
+                                                    marginBottom: 10,
+                                                }}
+                                            >
+                                                {row.map(({ img, idx }) => (
+                                                    <div key={img.id || idx} data-figure={idx + 1} style={{
+                                                        border: "1px solid #e5e7eb",
+                                                        borderRadius: 6,
+                                                        overflow: "hidden",
+                                                        background: "#fff",
+                                                    }}>
+                                                        <img
+                                                            src={img.url}
+                                                            alt={img.caption || `Figura ${idx + 1}`}
+                                                            style={{ width: "100%", height: figureImageHeightPx, objectFit: "contain", background: "#fafafa", display: "block" }}
+                                                            crossOrigin="anonymous"
+                                                        />
+                                                        <div style={{ padding: "5px 8px", fontSize: "9pt", borderTop: "1px solid #f0f0f0" }}>
+                                                            <b>Figura {idx + 1}.</b>{" "}
+                                                            {img.caption && img.caption.trim().length > 0
+                                                                ? img.caption
+                                                                : <em> </em>}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                                ))}
+                                            </div>
+                                        ))}
                                     </div>
                                 );
                             }
@@ -924,11 +1028,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                             );
                         })}
 
-                        <SignatureBlock
-                            signatureMetadata={signatureMeta}
-                            signedBy={signerDisplay}
-                            signedAt={report.signed_at}
-                        />
+                        {/* Céluma 1.4 (#14): the signature is no longer a terminal block of the flow;
+                            a compact one is reserved and drawn on every page (report_page_bands.ts). */}
                     </div>
                 </div>
 

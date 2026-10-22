@@ -37,6 +37,17 @@ function presentationOf(report: ReportEnvelope): MutablePresentation {
     return (report.report.rendering_snapshot as { presentation: MutablePresentation }).presentation;
 }
 
+/** Céluma 1.4 (#14): the compact signature band reserves space above the footer on every page, so a
+ *  test of the letterhead's own header/footer/body geometry hides it to isolate that geometry. The
+ *  band itself is covered by report_composition.test.ts and tests-visual/report_composition. */
+function withoutSignature(report: ReportEnvelope): ReportEnvelope {
+    (report.report as { signatureMetadata?: unknown }).signatureMetadata = {
+        show_signature_section: false,
+        require_digital_signature: false,
+    };
+    return report;
+}
+
 function setMargins(report: ReportEnvelope, margins: Partial<Record<"top" | "right" | "bottom" | "left", number>>) {
     const paper = presentationOf(report).paper as unknown as {
         margins_cm: { top: number; right: number; bottom: number; left: number };
@@ -67,8 +78,10 @@ function renderPages(report: ReportEnvelope) {
 
 /** The three bands are direct children of a page element. */
 function bandsOf(page: HTMLElement) {
+    // Céluma 1.4: the repeated-fields and signature bands are also direct children; they carry
+    // `data-page-band` and are asserted on separately (report_composition tests).
     const children = Array.from(page.children).filter(
-        (el): el is HTMLElement => el instanceof HTMLElement,
+        (el): el is HTMLElement => el instanceof HTMLElement && !el.dataset.pageBand,
     );
     return {
         header: children.find((el) => el.style.top && !el.style.bottom),
@@ -146,7 +159,7 @@ describe("VersionedReportRendererV2 — no header / no footer fall back to the m
     });
 
     it("footer disabled + 0.5cm bottom margin: body's bottom inset is exactly 5mm", () => {
-        const report = clone(v2CompleteBranding);
+        const report = withoutSignature(clone(v2CompleteBranding));
         setMargins(report, { bottom: 0.5 });
         presentationOf(report).footer.enabled = false;
 
@@ -169,7 +182,7 @@ describe("VersionedReportRendererV2 — no header / no footer fall back to the m
 
 describe("VersionedReportRendererV2 — footer must never overlap the body (§23)", () => {
     it("0.5cm bottom margin + 20mm footer: body ends ABOVE the footer band", () => {
-        const report = clone(v2CompleteBranding);
+        const report = withoutSignature(clone(v2CompleteBranding));
         setMargins(report, { bottom: 0.5 });
         const p = presentationOf(report);
         p.footer.height_mm = 20;
@@ -186,7 +199,7 @@ describe("VersionedReportRendererV2 — footer must never overlap the body (§23
 
 describe("VersionedReportRendererV2 — Legacy and custom V2 share one layout principle (§26)", () => {
     it("an unedited Legacy-imported letterhead renders its historical 28mm/20mm body box", () => {
-        const { header, footer, body } = bandsOf(renderPages(clone(paritySignedV2))[0] as HTMLElement);
+        const { header, footer, body } = bandsOf(renderPages(withoutSignature(clone(paritySignedV2)))[0] as HTMLElement);
         expect(header!.style.top).toBe("0mm");
         expect(footer!.style.bottom).toBe("0mm");
         expect(body!.style.top).toBe("28mm");
@@ -267,26 +280,29 @@ describe("VersionedReportRendererV2 — pagination uses the safe area on EVERY p
         }
     });
 
-    it("the signature block flows inside the body box, so it inherits the same safe area (§16)", () => {
-        // The signature is a normal child of `#reporte-content-v2`, not an
-        // independently-positioned band: it is paginated by the same
-        // `fits()` loop as any paragraph, so it can never overlap the
-        // footer as long as the body box does not.
+    it("the compact signature is a reserved band above the footer on EVERY page, and the body clears it (§16, #14)", () => {
+        // Céluma 1.4 (#14): the signature is no longer the last block of the flow. It is a band
+        // drawn on every page, reserved BEFORE pagination, so the body can never reach it.
         const report = clone(paritySignedV2);
         setMargins(report, { bottom: 0.5 });
         presentationOf(report).footer.offset_mm = null;
 
         const pages = renderPages(report);
-        const signaturePage = pages.find((page) => page.textContent?.includes("Firmado"));
-        expect(signaturePage).toBeDefined();
-
-        const { footer, body } = bandsOf(signaturePage as HTMLElement);
-        // The signature lives in the body element, not the footer band.
-        expect(body!.textContent).toContain("Firmado");
-        expect(footer!.textContent).not.toContain("Firmado");
-        expect(mm(body!.style.bottom)).toBeGreaterThanOrEqual(
-            mm(footer!.style.bottom) + mm(footer!.style.height),
-        );
+        expect(pages.length).toBeGreaterThanOrEqual(1);
+        for (const page of pages) {
+            const { footer, body } = bandsOf(page as HTMLElement);
+            const signature = page.querySelector<HTMLElement>('[data-page-band="signature"]');
+            expect(signature).not.toBeNull();
+            expect(signature!.textContent).toContain("Firmado");
+            // Not in the body flow and not in the footer band.
+            expect(body!.textContent).not.toContain("Firmado");
+            expect(footer!.textContent).not.toContain("Firmado");
+            // The band sits on the footer clearance; the body ends above the band.
+            expect(mm(signature!.style.bottom)).toBeGreaterThanOrEqual(
+                mm(footer!.style.bottom) + mm(footer!.style.height),
+            );
+            expect(mm(body!.style.bottom)).toBeGreaterThan(mm(signature!.style.bottom));
+        }
     });
 });
 

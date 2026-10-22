@@ -66,6 +66,8 @@ describe("VersionedReportRendererV2 — footer logo (Legacy parity)", () => {
                 if (!node) return "other";
             }
             if (!node) return "other";
+            // Céluma 1.4: the per-page signature/repeated bands are neither header nor footer.
+            if (node.dataset.pageBand) return "other";
             const hasTop = !!node.style.top;
             const hasBottom = !!node.style.bottom;
             if (hasTop && hasBottom) return "body";

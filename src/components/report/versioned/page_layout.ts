@@ -218,3 +218,86 @@ export function resolvePageLayout(input: PageLayoutInput): PageLayout {
         usable: availableHeightMm > 0 && availableWidthMm > 0,
     };
 }
+
+// ---------------------------------------------------------------------------
+// Page composition (Céluma 1.4, #14 / #15 / #19)
+// ---------------------------------------------------------------------------
+//
+// `resolvePageLayout` answers "where may the body go between the letterhead header and footer".
+// Report composition adds two more things that take space INSIDE that safe area and therefore must
+// be reserved by the SAME calculation, before any content is paginated:
+//
+//   - the repeated-fields band (#15): drawn under the header on every page AFTER the first (page 1
+//     already prints every visible field in the body, so repeating them there would duplicate them);
+//   - the compact signature band (#14): drawn above the footer clearance on EVERY page.
+//
+// Both heights are MEASURED from the real DOM by the renderer (a long requester list or signer name
+// wraps), then handed to this pure function, so the body of every page is exactly what remains after
+// header, repeated band, signature band and footer. Nothing else decides where content may go.
+
+/** Clearance between the repeated-fields band and the body that follows it. */
+export const REPEATED_BAND_GAP_MM = 2;
+/** Clearance between the end of the body and the signature band below it. */
+export const SIGNATURE_BAND_GAP_MM = 2;
+/** Below this body height a composed page is refused rather than paginated one line per page. */
+export const MIN_COMPOSED_BODY_HEIGHT_MM = 30;
+
+export interface PageCompositionInput {
+    layout: PageLayout;
+    /** Measured height of the repeated-fields band; `0` = none configured. */
+    repeatedBandMm: number;
+    /** Measured height of the compact signature band; `0` = signature section hidden. */
+    signatureBandMm: number;
+}
+
+export interface ComposedBodyBounds {
+    /** Inset from the page's top edge to the first line of body content. */
+    topMm: number;
+    /** Inset from the page's bottom edge to the last line of body content. */
+    bottomMm: number;
+    availableHeightMm: number;
+}
+
+export interface PageComposition {
+    /** Page 1: the header, then the body (all visible fields are printed in the body). */
+    first: ComposedBodyBounds;
+    /** Pages 2+: the header, the repeated band, then the body. */
+    continuation: ComposedBodyBounds;
+    /** Repeated band position (inset from the top edge); `null` when not configured. */
+    repeatedBand: { topMm: number; heightMm: number } | null;
+    /** Signature band position (inset from the bottom edge); `null` when hidden. */
+    signatureBand: { bottomMm: number; heightMm: number } | null;
+    /** `false` when header + bands + footer leave no sensible body area on some page. */
+    usable: boolean;
+}
+
+export function resolvePageComposition(input: PageCompositionInput): PageComposition {
+    const { layout } = input;
+    const repeated = input.repeatedBandMm > 0 ? input.repeatedBandMm : 0;
+    const signature = input.signatureBandMm > 0 ? input.signatureBandMm : 0;
+
+    const bottomMm = layout.body.bottomMm + (signature > 0 ? signature + SIGNATURE_BAND_GAP_MM : 0);
+    const pageHeightMm = layout.body.availableHeightMm + layout.body.topMm + layout.body.bottomMm;
+    const bounds = (topMm: number): ComposedBodyBounds => ({
+        topMm,
+        bottomMm,
+        availableHeightMm: pageHeightMm - topMm - bottomMm,
+    });
+
+    const first = bounds(layout.body.topMm);
+    const continuationTop = layout.body.topMm + (repeated > 0 ? repeated + REPEATED_BAND_GAP_MM : 0);
+    const continuation = bounds(continuationTop);
+
+    const composed = repeated > 0 || signature > 0;
+    const usable = layout.usable && (!composed
+        || (first.availableHeightMm >= MIN_COMPOSED_BODY_HEIGHT_MM
+            && continuation.availableHeightMm >= MIN_COMPOSED_BODY_HEIGHT_MM));
+
+    return {
+        first,
+        continuation,
+        repeatedBand: repeated > 0 ? { topMm: layout.body.topMm, heightMm: repeated } : null,
+        signatureBand: signature > 0 ? { bottomMm: layout.body.bottomMm, heightMm: signature } : null,
+        usable,
+    };
+}
