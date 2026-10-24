@@ -1,6 +1,10 @@
+import { useCallback, useRef } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { tokens } from "../design/tokens";
+import type { SpellingFieldOptions } from "../spelling/spelling_context";
+import { useQuillSpelling } from "../spelling/quill_spelling";
+import { SpellingSummary } from "../spelling/spelling_summary";
 
 type Props = {
     value: string;
@@ -11,6 +15,12 @@ type Props = {
     modules?: Record<string, unknown>;
     /** Min height of the editor area. */
     minHeight?: number;
+    /**
+     * Opt-in local spelling assistance (report authoring only, Céluma 1.4 #29).
+     * Requires an enclosing SpellingProvider; other screens pass nothing and
+     * keep the editor exactly as before.
+     */
+    spelling?: SpellingFieldOptions;
 };
 
 const DEFAULT_MODULES = {
@@ -39,9 +49,20 @@ export default function CelumaRichText({
     placeholder,
     modules = DEFAULT_MODULES,
     minHeight = 140,
+    spelling,
 }: Props) {
-    return (
-        <div className="celuma-quill">
+    const quillRef = useRef<ReactQuill | null>(null);
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const getQuill = useCallback(() => {
+        try {
+            return quillRef.current?.getEditor() ?? null;
+        } catch {
+            return null;
+        }
+    }, []);
+    const assist = useQuillSpelling({ spelling, getQuill, wrapperRef, readOnly });
+    const editor = (
+        <div className="celuma-quill" ref={wrapperRef} style={spelling ? { position: "relative" } : undefined}>
             <style>{`
                 .celuma-quill { border-radius: 12px; }
                 .celuma-quill .ql-toolbar.ql-snow {
@@ -111,6 +132,7 @@ export default function CelumaRichText({
                 .celuma-quill .ql-snow a { color: ${tokens.primary}; }
             `}</style>
             <ReactQuill
+                ref={quillRef}
                 theme="snow"
                 value={value}
                 onChange={onChange}
@@ -118,6 +140,15 @@ export default function CelumaRichText({
                 placeholder={placeholder}
                 modules={modules}
             />
+            {assist.layer}
+            {assist.description}
         </div>
+    );
+    if (!spelling) return editor;
+    return (
+        <>
+            {editor}
+            <SpellingSummary groupId={spelling.groupId ?? spelling.fieldId} style={{ marginTop: 6 }} />
+        </>
     );
 }

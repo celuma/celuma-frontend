@@ -85,6 +85,8 @@ import CelumaRichText from "../ui/celuma_rich_text";
 import CelumaSwitch from "../ui/celuma_switch";
 import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
+import SpellingProvider from "../spelling/spelling_provider";
+import { SpellingStatusNotice } from "../spelling/spelling_summary";
 import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
 import { renderStatusChip, getSampleTypeConfig, sampleTypeLabel } from "../ui/table_helpers";
@@ -2058,8 +2060,13 @@ const ReportEditor: React.FC = () => {
     // Render
     // ---------------------------------------------------------------------------
 
+    // Céluma 1.4 (#29): local spelling assistance follows the CONTENT gate
+    // (`canSaveContent`: DRAFT, not legacy-blocked, and `reports:edit`).
+    // Presentation-only reviewer authority never enables it, and read-only,
+    // signed or published reports start no check and load no worker. Each
+    // report gets its own session: ignore decisions never carry over.
     return (
-        <>
+        <SpellingProvider enabled={canSaveContent} scopeKey={reportId ? `report:${reportId}` : `new:${prefilledOrderId}`}>
             <style>{letterStyles}</style>
             <style>{`
               .re-two-column { display: grid; gap: ${columnGapValue}; grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -2579,12 +2586,16 @@ const ReportEditor: React.FC = () => {
                                 <div>
                                     <SectionTitle style={{ marginBottom: 12 }}>Detalles del reporte</SectionTitle>
                                     <div style={{ display: "grid", gap: 16 }}>
+                                        <SpellingStatusNotice />
                                         <FloatingCaptionInput
                                             label="Nombre del reporte"
                                             value={reportTitle}
                                             disabled={isReadOnly}
                                             onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); }}
+                                            spelling={{ fieldId: "title", label: "Nombre del reporte" }}
                                         />
+                                        {/* #29: custom base fields get no spelling assistance — the template
+                                            `text` type does not tell prose from names, identifiers or codes. */}
                                         {hasCustomFields && (
                                             <div className="re-grid-2">
                                                 {customBaseFields.map(({ key, field }) => (
@@ -2620,6 +2631,7 @@ const ReportEditor: React.FC = () => {
                                                     }
                                                     readOnly={isReadOnly}
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
+                                                    spelling={{ fieldId: `section:${key}`, label: section.label }}
                                                 />
                                             </div>
                                         );
@@ -2669,6 +2681,7 @@ const ReportEditor: React.FC = () => {
                                                         setSectionContent((prev) => ({ ...prev, [key]: v }))
                                                     }
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
+                                                    spelling={{ fieldId: `section:${key}`, label: section.label }}
                                                 />
                                             </div>
                                         );
@@ -2770,6 +2783,7 @@ const ReportEditor: React.FC = () => {
                                                                         onChange={(v) => {
                                                                             if (imagesSectionKey) updateImageCaption(imagesSectionKey, ref, v);
                                                                         }}
+                                                                        spelling={{ fieldId: `caption:${ref}`, label: `Nota de ${figureLabel}` }}
                                                                     />
                                                                 </div>
                                                             </Panel>
@@ -2895,7 +2909,11 @@ const ReportEditor: React.FC = () => {
                     }}>Guardar</CelumaButton>,
                 ]}
             >
-                <TableEditor value={tableDraft} onChange={setTableDraft} />
+                <TableEditor
+                    value={tableDraft}
+                    onChange={setTableDraft}
+                    spelling={tableModal ? { groupId: `table:${tableModal.key}`, label: tableModal.label } : undefined}
+                />
             </CelumaModal>
 
             {/* Approve modal */}
@@ -3022,7 +3040,7 @@ const ReportEditor: React.FC = () => {
                     setSignConfirmError(null);
                 }}
             />
-        </>
+        </SpellingProvider>
     );
 };
 
