@@ -34,10 +34,15 @@ describe("findCheckableWords", () => {
         expect(words(text)).toEqual(["Caso", "con", "en"]);
     });
 
-    it("skips acronyms, units after numbers, single letters, URLs, e-mail and other scripts", () => {
+    it("skips short abbreviations, units after numbers, single letters, URLs, e-mail and other scripts", () => {
         const text =
-            "PAAF e IHQ: mide 3 mm y 2 cm; ver https://ejemplo.mx/caso o soporte@ejemplo.mx; β-catenina y 5 µm.";
+            "IHQ e HE: mide 3 mm y 2 cm; ver https://ejemplo.mx/caso o soporte@ejemplo.mx; β-catenina y 5 µm.";
         expect(words(text)).toEqual(["mide", "ver"]);
+    });
+
+    it("passes 4–5 letter ALL-CAPS tokens to the engine instead of skipping them, so upper-case typos are not hidden", () => {
+        expect(words("PAAF ASCUS TUMRO ISSSTE")).toEqual(["PAAF", "ASCUS", "TUMRO", "ISSSTE"]);
+        expect(words("CU011026 Ki67 PAS IHQ")).toEqual([]);
     });
 
     it("checks longer uppercase words and splits compounds joined by hyphens or slashes", () => {

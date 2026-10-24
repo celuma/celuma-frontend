@@ -263,14 +263,14 @@ describe("spelling session", () => {
 
     it("ignores a word case-insensitively for the session only, without touching text", async () => {
         const { client, session } = newSession();
-        const text = "Adenocarcinoma: adenocarcinoma y pacietne.";
+        const text = "Esplenomegalia: esplenomegalia y pacietne.";
         expect((await session.checkText(text)).marks.map((m) => m.word)).toEqual([
-            "Adenocarcinoma",
-            "adenocarcinoma",
+            "Esplenomegalia",
+            "esplenomegalia",
             "pacietne",
         ]);
         const before = session.ignoreRevision;
-        session.ignore("adenocarcinoma");
+        session.ignore("esplenomegalia");
         expect(session.ignoreRevision).toBe(before + 1);
         expect((await session.checkText(text)).marks.map((m) => m.word)).toEqual(["pacietne"]);
         // A different report gets a different session: nothing carries over.
@@ -281,7 +281,7 @@ describe("spelling session", () => {
     it("forgets everything and refuses work after dispose", async () => {
         const { session } = newSession();
         await session.checkText("pacietne");
-        session.ignore("adenocarcinoma");
+        session.ignore("esplenomegalia");
         session.dispose();
         expect(session.cachedLookups).toBe(0);
         expect(session.ignoredCount).toBe(0);

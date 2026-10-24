@@ -1,12 +1,13 @@
 /**
  * Céluma 1.4 (#29) — spelling worker entry point.
  *
- * Loads the vendored es-MX dictionary from the application's own build (Vite
- * emits both files as hashed same-origin assets) and answers lookups. It never
+ * Loads the vendored es-MX dictionary and the generated clinical supplement
+ * from the application's own build (Vite emits the files as hashed same-origin assets) and answers lookups. It never
  * contacts any other host, logs, persists or reports what it receives.
  */
 import affUrl from "./dictionaries/es-MX/es-MX.aff?url";
 import dicUrl from "./dictionaries/es-MX/es-MX.dic?url";
+import clinicalDicUrl from "./lexicon/clinical-es.dic?url";
 import { createSpellingWorkerHandler, type SpellingRequest, type SpellingResponse } from "./worker_protocol";
 
 // The app's TypeScript lib is DOM, not WebWorker; only these two members are used.
@@ -23,8 +24,8 @@ async function fetchAsset(url: string): Promise<string> {
 
 const handle = createSpellingWorkerHandler({
     loadDictionary: async () => {
-        const [aff, dic] = await Promise.all([fetchAsset(affUrl), fetchAsset(dicUrl)]);
-        return { aff, dic };
+        const [aff, dic, clinical] = await Promise.all([fetchAsset(affUrl), fetchAsset(dicUrl), fetchAsset(clinicalDicUrl)]);
+        return { aff, dic, extra: [clinical] };
     },
     post: (message) => scope.postMessage(message),
 });

@@ -13,9 +13,12 @@
  * never checked. Runs with letters from another script (`β-catenina`, `µm`),
  * URLs and e-mail addresses are skipped too. Within an ordinary run, hyphens,
  * slashes and dots separate words (`teórico-práctico`, `y/o`), and these
- * segments are skipped: single letters, short all-uppercase acronyms
- * (`PAAF`, `IHQ`), short unit-like words right after a number (`3 mm`), and
- * implausibly long tokens. A skipped token is "not checked", never "correct".
+ * segments are skipped: single letters, all-uppercase abbreviations of up to
+ * three letters (`IHQ`, `PAS`), short unit-like words right after a number
+ * (`3 mm`), and implausibly long tokens. Four- and five-letter ALL-CAPS tokens
+ * (`PAAF`, `ASCUS`, but also a typo such as `TUMRO`) are NOT skipped here: the
+ * engine accepts them as acronyms unless they are one edit away from a real
+ * word. A skipped token is "not checked", never "correct".
  */
 
 export interface CheckableWord {
@@ -43,8 +46,8 @@ const WORD_CHAR = /[\p{L}\p{M}\p{N}]/u;
 
 /** Words with fewer letters than this are not checked (single letters, initials). */
 export const MIN_WORD_LETTERS = 2;
-/** All-uppercase words up to this many letters are treated as acronyms. */
-export const MAX_ACRONYM_LETTERS = 5;
+/** All-uppercase words up to this many letters are treated as abbreviations (longer ones go to the engine's acronym rule). */
+export const MAX_ACRONYM_LETTERS = 3;
 /** Short words right after a number (`3 mm`, `10 cm`) are treated as units. */
 export const MAX_UNIT_LETTERS = 3;
 /** Longer tokens are treated as unusual input (pasted hashes, run-together text). */

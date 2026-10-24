@@ -37,6 +37,7 @@ advice.
 
 Replace both files from a newer pinned package version, update the table and
 the test's expected checksums, re-run the spelling unit tests and the browser
-suite, and record the change in the ADR. Never edit the word list by hand or
-add generated vocabulary: clinical terms the dictionary does not know are
-handled with the per-report "Ignorar" action.
+suite, and record the change in the ADR. Never edit these upstream files by
+hand. Clinical vocabulary the upstream data does not know lives in the separate,
+reviewed supplement `../../lexicon/` (see its PROVENANCE.md); a term outside both
+is handled with the per-report "Ignorar" action.

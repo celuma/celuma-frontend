@@ -17,6 +17,7 @@ import type { SpellingWorkerLike } from "../../lib/spelling/client";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DICTIONARY_DIR = path.resolve(here, "../../lib/spelling/dictionaries/es-MX");
+export const LEXICON_DIR = path.resolve(here, "../../lib/spelling/lexicon");
 
 let cachedSource: DictionarySource | null = null;
 let cachedEngine: SpellEngine | null = null;
@@ -26,6 +27,7 @@ export function readDictionary(): DictionarySource {
         cachedSource = {
             aff: readFileSync(path.join(DICTIONARY_DIR, "es-MX.aff"), "utf8"),
             dic: readFileSync(path.join(DICTIONARY_DIR, "es-MX.dic"), "utf8"),
+            extra: [readFileSync(path.join(LEXICON_DIR, "clinical-es.dic"), "utf8")],
         };
     }
     return cachedSource;
@@ -33,7 +35,7 @@ export function readDictionary(): DictionarySource {
 
 /** One real engine per test file (building it takes ~1 s). */
 export function realEngine(): SpellEngine {
-    if (!cachedEngine) cachedEngine = createSpellEngine(readDictionary().aff, readDictionary().dic);
+    if (!cachedEngine) cachedEngine = createSpellEngine(readDictionary().aff, readDictionary().dic, readDictionary().extra);
     return cachedEngine;
 }
 

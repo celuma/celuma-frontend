@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type Quill from "quill";
 import { isMarkCurrent, markId, minimalEdit } from "../../lib/spelling/marks";
 import type { SpellingMark } from "../../lib/spelling/session";
@@ -153,12 +153,14 @@ export function useQuillSpelling({
         const container = quill.container as HTMLElement;
         const base = container.getBoundingClientRect();
         const outer = wrapper.getBoundingClientRect();
-        setFrame({
+        // Same geometry → same state: no extra commit for a keystroke that moved nothing.
+        const nextFrame = {
             left: base.left - outer.left,
             top: base.top - outer.top,
             width: base.width,
             height: base.height,
-        });
+        };
+        setFrame((prev) => (prev && prev.left === nextFrame.left && prev.top === nextFrame.top && prev.width === nextFrame.width && prev.height === nextFrame.height ? prev : nextFrame));
         const next: Underline[] = [];
         for (const mark of marks) {
             const range = quillRange(quill, mark.start, mark.end);
@@ -182,11 +184,20 @@ export function useQuillSpelling({
                 next.push({ id: `${markId(mark)}#${i}`, left: l.left - base.left, top: l.bottom - base.top - 3, width: l.right - l.left });
             });
         }
-        setUnderlines(next);
+        setUnderlines((prev) => (
+            prev.length === next.length && prev.every((u, i) => u.id === next[i].id && u.left === next[i].left && u.top === next[i].top && u.width === next[i].width)
+                ? prev
+                : next
+        ));
     }, [quill, marks, wrapperRef]);
 
-    useLayoutEffect(() => {
-        layout();
+    // Underline geometry is read from the DOM (up to 300 marks, each a forced layout). Doing that
+    // synchronously on every keystroke put it on the typing path (measured ≈ 30 ms per key in a
+    // 20 000+ character section); one pass per frame keeps the layer in step without delaying the
+    // typed character. The first pass after mount also runs here.
+    useEffect(() => {
+        const raf = requestAnimationFrame(layout);
+        return () => cancelAnimationFrame(raf);
     }, [layout, text]);
 
     useEffect(() => {

@@ -23,6 +23,8 @@ export type SpellingResponse =
 export interface DictionarySource {
     aff: string;
     dic: string;
+    /** Generated supplements written against the same affix file (the clinical lexicon). */
+    extra?: string[];
 }
 
 /** Words looked up between cooperative yields, so `cancel` messages are seen. */
@@ -42,7 +44,7 @@ export function createSpellingWorkerHandler(deps: {
     createEngine?: (source: DictionarySource) => SpellEngine;
     yieldToEvents?: () => Promise<void>;
 }): (message: SpellingRequest) => void {
-    const makeEngine = deps.createEngine ?? ((s: DictionarySource) => createSpellEngine(s.aff, s.dic));
+    const makeEngine = deps.createEngine ?? ((s: DictionarySource) => createSpellEngine(s.aff, s.dic, s.extra));
     const pause = deps.yieldToEvents ?? yieldToEvents;
     let engine: Promise<SpellEngine | null> | null = null;
     const cancelled = new Set<number>();

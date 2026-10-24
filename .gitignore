@@ -31,3 +31,7 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Céluma 1.4 (#29 follow-up): typing-latency measurement output (npm run test:perf)
+.perf-dist
+.perf-results

@@ -52,9 +52,11 @@ describe("spell engine (nspell + es-MX)", () => {
         expect(engine.isCorrect(lookupKey(nfd))).toBe(true);
     });
 
-    it("documents known limits: valid medical vocabulary may be unknown, accentless forms may be valid", () => {
-        expect(engine.isCorrect("adenocarcinoma")).toBe(false);
-        expect(engine.suggest("adenocarcinoma")).toEqual([]);
+    it("documents known limits: vocabulary beyond the supplement may be unknown, accentless forms may be valid", () => {
+        // The clinical supplement (spelling_clinical_*.test.ts) covers adenocarcinoma; a term it lacks is still unknown.
+        expect(engine.isCorrect("adenocarcinoma")).toBe(true);
+        expect(engine.isCorrect("esplenomegalia")).toBe(false);
+        expect(engine.suggest("esplenomegalia")).toEqual([]);
         // A dictionary cannot judge accents by context: both are words.
         expect(engine.isCorrect("diagnostico")).toBe(true);
     });
