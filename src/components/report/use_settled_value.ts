@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 /** Quiet period after the last keystroke before the live report preview is recomposed. */
-export const PREVIEW_IDLE_MS = 350;
+export const PREVIEW_IDLE_MS = 200;
 /** Longest the preview may lag behind continuous typing. */
 export const PREVIEW_MAX_WAIT_MS = 1500;
 
@@ -16,7 +16,7 @@ export const PREVIEW_MAX_WAIT_MS = 1500;
 export function previewDelays(authoredChars: number): { idleMs: number; maxWaitMs: number } {
     const extra = Math.max(0, authoredChars - 5_000);
     return {
-        idleMs: PREVIEW_IDLE_MS + Math.min(650, Math.round(extra / 100)),
+        idleMs: PREVIEW_IDLE_MS + Math.min(300, Math.round(extra / 200)),
         maxWaitMs: PREVIEW_MAX_WAIT_MS + Math.min(8_500, Math.round(extra / 8)),
     };
 }

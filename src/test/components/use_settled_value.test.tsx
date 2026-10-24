@@ -90,6 +90,7 @@ describe("previewDelays", () => {
         expect(previewDelays(5_000)).toEqual({ idleMs: PREVIEW_IDLE_MS, maxWaitMs: PREVIEW_MAX_WAIT_MS });
         const long = previewDelays(83_000);
         expect(long.idleMs).toBeGreaterThan(PREVIEW_IDLE_MS);
+        expect(long.idleMs).toBeLessThanOrEqual(500);
         expect(long.maxWaitMs).toBeGreaterThan(9_000);
         expect(previewDelays(10_000_000).maxWaitMs).toBeLessThanOrEqual(10_000);
     });

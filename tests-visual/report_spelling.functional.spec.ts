@@ -168,6 +168,49 @@ async function textareaState(page: Page, placeholder: string) {
 }
 
 test.describe("Report spelling assistance (1.4 #29)", () => {
+    test("preview follows a pause promptly without recomposing on every typed character", async ({ page }) => {
+        const lab = newLab();
+        await openEditor(page, lab);
+        const preview = page.locator(".re-preview-col");
+        await expect(preview).toContainText(DEFAULT_SEED.text);
+        const box = page.getByPlaceholder("Escribe notas…");
+        await box.fill("");
+        await expect(preview).not.toContainText(DEFAULT_SEED.text);
+        await box.pressSequentially("Nota reciente", { delay: 80 });
+        await expect(box).toHaveValue("Nota reciente");
+        // The keyboard updates immediately; rendering is coalesced during a typing burst.
+        await expect(preview).toHaveAttribute("data-preview-stale", "true");
+        await expect(preview).not.toContainText("Nota reciente");
+        // Includes a browser/layout allowance above the 200 ms quiet period.
+        await expect(preview).toContainText("Nota reciente", { timeout: 750 });
+        await expect(preview).not.toHaveAttribute("data-preview-stale", "true");
+    });
+
+    test("immediate print and save use the newest authored text", async ({ page }) => {
+        const lab = newLab();
+        await openEditor(page, lab);
+        await expect(page.locator(".re-preview-col")).toContainText(DEFAULT_SEED.text);
+        const latest = "Texto actualizado sintético para impresión inmediata.";
+        const box = page.getByPlaceholder("Escribe notas…");
+        await box.fill(latest);
+        await expect(page.locator(".re-preview-col")).toHaveAttribute("data-preview-stale", "true");
+        await page.getByRole("button", { name: /Imprimir borrador/ }).click();
+        await expect.poll(() => page.evaluate(() => document.querySelector<HTMLIFrameElement>("iframe[data-celuma-local-print]")?.contentDocument?.body.textContent ?? "")).toContain(latest);
+        await page.getByTestId("report-save-bottom").click();
+        await expect.poll(() => lab.saves.length).toBe(1);
+        expect(JSON.parse(lab.saves[0].body).report.sections.notas.content).toBe(latest);
+    });
+
+    test("owner clinical words accepted and accent correction offered first", async ({ page }) => {
+        const lab = newLab({ reports: { [REPORT_A]: { ...DEFAULT_SEED, text: "inmunohistoquímicos histológicos negatividad celulas" } } });
+        await openEditor(page, lab);
+        await expect(summary(page, "section:notas")).toContainText("1 posible error ortográfico", {timeout: 30000});
+        await summary(page, "section:notas").getByRole("button", {name: /Revisar ortografía/}).click();
+        await expect(dialog(page)).toContainText("celulas");
+        await expect(dialog(page).getByRole("button", {name: /^Reemplazar por/}).first()).toHaveAccessibleName("Reemplazar por células");
+    });
+
+
     test("indicates synthetic typos in title, rich and plain sections, table cells and captions; codes are skipped", async ({ page }) => {
         const lab = newLab();
         await openEditor(page, lab);
