@@ -12,12 +12,14 @@
     "test:watch": "vitest",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",
-    "test:e2e": "playwright test --config=playwright.e2e.config.ts"
+    "test:e2e": "playwright test --config=playwright.e2e.config.ts",
+    "test:perf": "playwright test --config=playwright.perf.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
     "antd": "^5.27.1",
     "dayjs": "^1.11.18",
+    "nspell": "2.1.5",
     "quill": "^2.0.2",
     "react": "^19.1.1",
     "react-colorful": "^5.6.1",
@@ -36,6 +38,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.3.0",
+    "@types/nspell": "2.1.6",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",

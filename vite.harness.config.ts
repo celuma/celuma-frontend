@@ -12,6 +12,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
     root: path.resolve(__dirname, "tests-visual/harness"),
     plugins: [react()],
+    // See vite.config.ts: pre-bundle the spelling worker's CommonJS engine so the
+    // report_spelling harness does not reload mid-test on first use.
+    optimizeDeps: { include: ["nspell"] },
     server: {
         host: "127.0.0.1",
         port: 4174,

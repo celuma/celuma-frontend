@@ -1,5 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import ErrorText from "./error_text";
+import type { SpellingFieldOptions } from "../spelling/spelling_context";
+import { usePlainSpelling } from "../spelling/plain_spelling";
+import { SpellingSummary } from "../spelling/spelling_summary";
 
 type Props = {
     value: string;
@@ -27,6 +30,13 @@ type Props = {
     inputRef?: React.Ref<HTMLTextAreaElement>;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
     style?: React.CSSProperties;
+    /**
+     * Opt-in local spelling assistance (report authoring only, Céluma 1.4 #29).
+     * Requires an enclosing SpellingProvider; without it the textarea is
+     * exactly as before. Suggestions that would break `maxLength` or
+     * `normalize` are refused, never truncated.
+     */
+    spelling?: SpellingFieldOptions;
 };
 
 /**
@@ -51,9 +61,28 @@ export default function CelumaTextArea({
     inputRef,
     onKeyDown,
     style,
+    spelling,
 }: Props) {
     const [hovered, setHovered] = useState(false);
     const [focused, setFocused] = useState(false);
+    const ownRef = useRef<HTMLTextAreaElement | null>(null);
+    const setRefs = useCallback(
+        (el: HTMLTextAreaElement | null) => {
+            ownRef.current = el;
+            if (typeof inputRef === "function") inputRef(el);
+            else if (inputRef) (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+        },
+        [inputRef],
+    );
+    const assist = usePlainSpelling({
+        spelling,
+        elementRef: ownRef,
+        value: value ?? "",
+        disabled,
+        multiline: true,
+        maxLength,
+        normalize,
+    });
 
     const colors = {
         base: "#49b6ad",
@@ -73,6 +102,51 @@ export default function CelumaTextArea({
             ? `0 0 0 3px ${colors.ring}`
             : "none";
 
+    const textarea = (
+        <textarea
+            {...assist.controlProps}
+            ref={spelling ? setRefs : inputRef}
+            value={value ?? ""}
+            onChange={(e) => {
+                const el = e.target;
+                const raw = el.value;
+                const next = normalize ? normalize(raw) : raw;
+                if (next !== raw) {
+                    // Where the caret belongs: the normalized text that precedes it.
+                    const caret = Math.min(normalize!(raw.slice(0, el.selectionStart ?? raw.length)).length, next.length);
+                    // React re-syncs the DOM value after this handler; restore afterwards.
+                    queueMicrotask(() => {
+                        if (document.activeElement === el && el.value === next) el.setSelectionRange(caret, caret);
+                    });
+                }
+                onChange(next);
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onKeyDown={spelling ? (e) => { if (!assist.handleKeyDown(e)) onKeyDown?.(e); } : onKeyDown}
+            rows={rows}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            disabled={disabled}
+            autoFocus={autoFocus}
+            aria-label={ariaLabel}
+            style={{
+                flex: 1,
+                minWidth: 0,
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                resize: "none",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: colors.text,
+                fontFamily: "inherit",
+                display: "block",
+                ...(spelling ? { position: "relative" as const, zIndex: 1 } : null),
+            }}
+        />
+    );
+
     return (
         <div style={{ display: "grid", gap: 6, ...style }}>
             <div
@@ -91,50 +165,20 @@ export default function CelumaTextArea({
                     gap: 8,
                 }}
             >
-                <textarea
-                    ref={inputRef}
-                    value={value ?? ""}
-                    onChange={(e) => {
-                        const el = e.target;
-                        const raw = el.value;
-                        const next = normalize ? normalize(raw) : raw;
-                        if (next !== raw) {
-                            // Where the caret belongs: the normalized text that precedes it.
-                            const caret = Math.min(normalize!(raw.slice(0, el.selectionStart ?? raw.length)).length, next.length);
-                            // React re-syncs the DOM value after this handler; restore afterwards.
-                            queueMicrotask(() => {
-                                if (document.activeElement === el && el.value === next) el.setSelectionRange(caret, caret);
-                            });
-                        }
-                        onChange(next);
-                    }}
-                    onFocus={() => setFocused(true)}
-                    onBlur={() => setFocused(false)}
-                    onKeyDown={onKeyDown}
-                    rows={rows}
-                    placeholder={placeholder}
-                    maxLength={maxLength}
-                    disabled={disabled}
-                    autoFocus={autoFocus}
-                    aria-label={ariaLabel}
-                    style={{
-                        flex: 1,
-                        minWidth: 0,
-                        border: "none",
-                        outline: "none",
-                        background: "transparent",
-                        resize: "none",
-                        fontSize: 14,
-                        lineHeight: 1.6,
-                        color: colors.text,
-                        fontFamily: "inherit",
-                        display: "block",
-                    }}
-                />
+                {spelling ? (
+                    <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
+                        {textarea}
+                        {assist.layer}
+                        {assist.description}
+                    </div>
+                ) : textarea}
                 {action}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <div style={{ flex: 1 }}>{error && <ErrorText>{error}</ErrorText>}</div>
+                <div style={{ flex: 1 }}>
+                    {error && <ErrorText>{error}</ErrorText>}
+                    {spelling && <SpellingSummary groupId={spelling.groupId ?? spelling.fieldId} />}
+                </div>
                 {maxLength && showCount && (
                     <span style={{ fontSize: 11, color: colors.counter, flexShrink: 0 }}>
                         {(value ?? "").length}/{maxLength}

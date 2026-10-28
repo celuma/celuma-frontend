@@ -1,10 +1,13 @@
-import React, { useCallback, useRef, useState } from "react";
-import { Input } from "antd";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Input, type InputRef } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { tokens } from "../design/tokens";
 import CelumaButton from "../ui/button";
 import ActionButtonPanel from "../ui/action_button_panel";
 import { parseMarkdownTable, serializeMarkdownTable } from "./table_utils";
+import { usePlainSpelling } from "../spelling/plain_spelling";
+import { SpellingSummary } from "../spelling/spelling_summary";
+import type { SpellingFieldOptions } from "../spelling/spelling_context";
 
 export type { TableEditorProps };
 
@@ -12,9 +15,62 @@ interface TableEditorProps {
     value: string;
     onChange: (md: string) => void;
     readOnly?: boolean;
+    /**
+     * Opt-in local spelling assistance for header and cell text (report
+     * authoring only, Céluma 1.4 #29). Every cell is reviewed as one group;
+     * whole numeric/code cells are skipped by the tokenizer, and the markdown
+     * serialization is unchanged.
+     */
+    spelling?: { groupId: string; label: string };
 }
 
-export function TableEditor({ value, onChange, readOnly = false }: TableEditorProps) {
+/** One header/cell input; with spelling options it carries the editor-only mirror layer. */
+function CellInput({
+    value,
+    onChange,
+    disabled,
+    placeholder,
+    style,
+    spelling,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    disabled: boolean;
+    placeholder?: string;
+    style: React.CSSProperties;
+    spelling?: SpellingFieldOptions;
+}) {
+    const antInputRef = useRef<InputRef | null>(null);
+    const elementRef = useMemo(() => ({
+        get current() {
+            return antInputRef.current?.input ?? null;
+        },
+    }), []);
+    const assist = usePlainSpelling({ spelling, elementRef, value, disabled, multiline: false });
+    const input = (
+        <Input
+            {...assist.controlProps}
+            {...(spelling ? { ref: antInputRef } : null)}
+            size="small"
+            value={value}
+            disabled={disabled}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={spelling ? (e) => { assist.handleKeyDown(e); } : undefined}
+            placeholder={placeholder}
+            style={spelling ? { ...style, position: "relative", zIndex: 1 } : style}
+        />
+    );
+    if (!spelling) return input;
+    return (
+        <div style={{ position: "relative", flex: style.flex }}>
+            {input}
+            {assist.layer}
+            {assist.description}
+        </div>
+    );
+}
+
+export function TableEditor({ value, onChange, readOnly = false, spelling }: TableEditorProps) {
     const initial = useRef(parseMarkdownTable(value));
     const [headers, setHeaders] = useState<string[]>(initial.current.headers);
     const [rows, setRows] = useState<string[][]>(
@@ -80,13 +136,18 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
                         {headers.map((h, ci) => (
                             <th key={ci} style={headerCell}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                    <Input
-                                        size="small"
+                                    <CellInput
                                         value={h}
                                         disabled={readOnly}
-                                        onChange={(e) => setHeader(ci, e.target.value)}
+                                        onChange={(v) => setHeader(ci, v)}
                                         placeholder={`Col ${ci + 1}`}
                                         style={{ ...cellInput, fontWeight: 700, flex: 1, color: tokens.textPrimary }}
+                                        spelling={spelling && {
+                                            fieldId: `${spelling.groupId}:h${ci}`,
+                                            groupId: spelling.groupId,
+                                            order: ci,
+                                            label: `${spelling.label} — encabezado ${ci + 1}`,
+                                        }}
                                     />
                                     {!readOnly && headers.length > 1 && (
                                         <ActionButtonPanel
@@ -112,12 +173,17 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
                         <tr key={ri}>
                             {headers.map((_, ci) => (
                                 <td key={ci} style={borderCell}>
-                                    <Input
-                                        size="small"
+                                    <CellInput
                                         value={row[ci] ?? ""}
                                         disabled={readOnly}
-                                        onChange={(e) => setCell(ri, ci, e.target.value)}
+                                        onChange={(v) => setCell(ri, ci, v)}
                                         style={{ ...cellInput, color: tokens.textPrimary }}
+                                        spelling={spelling && {
+                                            fieldId: `${spelling.groupId}:r${ri}c${ci}`,
+                                            groupId: spelling.groupId,
+                                            order: (ri + 1) * 10_000 + ci,
+                                            label: `${spelling.label} — fila ${ri + 1}, columna ${ci + 1}`,
+                                        }}
                                     />
                                 </td>
                             ))}
@@ -149,6 +215,7 @@ export function TableEditor({ value, onChange, readOnly = false }: TableEditorPr
                     )}
                 </tbody>
             </table>
+            {spelling && <SpellingSummary groupId={spelling.groupId} style={{ margin: "8px 4px 2px" }} />}
         </div>
     );
 }

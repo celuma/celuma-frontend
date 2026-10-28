@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
     message, Typography, Card, Image, Modal, Avatar, Divider, Form,
 } from "antd";
@@ -48,7 +48,8 @@ import {
     type FigureRef,
 } from "./report_figures";
 import SampleImagesPicker from "./sample_images_picker";
-import ReportPreviewPages, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
+import ReportPreviewPagesRenderer, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
+import { previewDelays, useSettledValue } from "./use_settled_value";
 import { useLocalPrint, localPrintMarkForStatus } from "../../hooks/use_local_print";
 import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
@@ -85,6 +86,8 @@ import CelumaRichText from "../ui/celuma_rich_text";
 import CelumaSwitch from "../ui/celuma_switch";
 import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
+import SpellingProvider from "../spelling/spelling_provider";
+import { SpellingStatusNotice } from "../spelling/spelling_summary";
 import { markdownTableToHtml } from "./table_utils";
 import { tokens } from "../design/tokens";
 import { renderStatusChip, getSampleTypeConfig, sampleTypeLabel } from "../ui/table_helpers";
@@ -145,6 +148,17 @@ const SERVER_OWNED_PREVIEW_KEYS = SYSTEM_METADATA_BASE_FIELDS.filter(
 );
 
 const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ base: {}, sections: {} });
+
+/** What the author types. The live preview follows it after a short pause (see `previewEnvelope`). */
+interface AuthoredContent {
+    baseValues: Record<string, string>;
+    sectionContent: Record<string, string | TemplateImageItem[]>;
+    reportTitle: string;
+}
+
+// Memoized so an editor render that changes nothing the preview shows (typing, spelling marks) does
+// not even re-enter the renderer.
+const ReportPreviewPages = memo(ReportPreviewPagesRenderer);
 
 /** H-0c. The editor distinguishes MORE states than the backend reports:
  *  `V2BlockedReason` covers genuine CONFIGURATION gaps, and these two extra
@@ -1125,7 +1139,9 @@ const ReportEditor: React.FC = () => {
     // Build envelope for save/preview
     // ---------------------------------------------------------------------------
 
-    const buildEnvelope = useCallback((): ReportEnvelope => {
+    // Everything the author types. The preview is composed from a SETTLED copy of this (see
+    // `previewEnvelope`); save, submit and local print always read the live values.
+    const composeEnvelope = useCallback((content: AuthoredContent): ReportEnvelope => {
         const tmpl = template ?? EMPTY_TEMPLATE_JSON;
         // When a report has already been saved, preserve its stored order.
         const { baseOrder, sectionOrder } = resolveDisplayOrder(tmpl, envelope?.report);
@@ -1205,11 +1221,11 @@ const ReportEditor: React.FC = () => {
 
         // Fill custom base values
         customBaseFields.forEach(({ key }) => {
-            if (report.base[key]) report.base[key].value = baseValues[key] || "";
+            if (report.base[key]) report.base[key].value = content.baseValues[key] || "";
         });
 
         // Fill sections
-        Object.entries(sectionContent).forEach(([k, v]) => {
+        Object.entries(content.sectionContent).forEach(([k, v]) => {
             if (!report.sections[k]) return;
             if (Array.isArray(v)) {
                 (report.sections[k] as { content: TemplateImageItem[] }).content = v;
@@ -1291,7 +1307,7 @@ const ReportEditor: React.FC = () => {
             order_id: fullData?.order.id ?? envelope?.order_id ?? "",
             tenant_id: fullData?.order.tenant_id ?? session.tenantId,
             branch_id: fullData?.order.branch_id ?? session.branchId,
-            title: reportTitle || "Reporte sin título",
+            title: content.reportTitle || "Reporte sin título",
             published_at: envelope?.published_at ?? null,
             created_by: session.userId || envelope?.created_by || "",
             signed_by: envelope?.signed_by ?? null,
@@ -1344,30 +1360,52 @@ const ReportEditor: React.FC = () => {
                 : (envelope?.resolved_resources ?? selectedLetterheadResources ?? undefined),
         };
     }, [
-        template, fullData, customBaseFields, baseValues, sectionContent, envelope, session, isReadOnly,
-        reportTitle, studyTypeName, showSignatureSection, requireDigitalSignature,
+        template, fullData, customBaseFields, envelope, session, isReadOnly,
+        studyTypeName, showSignatureSection, requireDigitalSignature,
         v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
         selectedLetterheadPresentation,
         selectedLetterheadResources, letterheadDirty, amendmentNote,
     ]);
 
-    // Live preview envelope
+    const buildEnvelope = useCallback(
+        (): ReportEnvelope => composeEnvelope({ baseValues, sectionContent, reportTitle }),
+        [composeEnvelope, baseValues, sectionContent, reportTitle],
+    );
+
+    // Live preview envelope.
+    //
+    // Céluma 1.4 (#29 follow-up): the preview paginates the whole document and measures layout for
+    // every block, which is far too heavy to repeat on each keystroke. What the author types is
+    // therefore previewed after a short pause (`PREVIEW_IDLE_MS`, at most `PREVIEW_MAX_WAIT_MS` into
+    // a long burst of typing); every other input of the preview (letterhead, template, status,
+    // order data…) still applies at once, because `composeEnvelope` depends on them directly. The
+    // inputs, save, submit and local print never read this settled copy.
+    const liveContent = useMemo<AuthoredContent>(
+        () => ({ baseValues, sectionContent, reportTitle }),
+        [baseValues, sectionContent, reportTitle],
+    );
+    const previewTiming = useMemo(() => {
+        let chars = reportTitle.length;
+        for (const v of Object.values(sectionContent)) if (typeof v === "string") chars += v.length;
+        return previewDelays(chars);
+    }, [sectionContent, reportTitle]);
+    const { settled: settledContent, stale: previewStale, flush: flushPreviewContent } = useSettledValue(
+        liveContent,
+        previewTiming.idleMs,
+        previewTiming.maxWaitMs,
+        template, // another report/version was loaded: show it at once
+    );
+    // Without the memo above, a lookup rebuilt on every render would repaginate the preview each time.
+    const signerLookup = useMemo(
+        () => (fullData?.order.reviewers ?? []).map((r) => ({ id: r.id, name: r.name })),
+        [fullData?.order.reviewers],
+    );
     const previewEnvelope = useMemo(() => {
         if (!template) return null;
-        try { return buildEnvelope(); } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        template, baseValues, sectionContent, reportTitle, studyTypeName, fullData, envelope, isReadOnly,
-        showSignatureSection, requireDigitalSignature,
-        // Post-Phase-2 remediation: without these, switching the "Membrete"
-        // selector updated selectedLetterheadPresentation but this memo
-        // never recomputed, so the preview kept showing the old branding
-        // (a real bug caught during live verification, not just a fix on
-        // paper — see remediation-local-validation-report.md).
-        v2CreationTemplateId, v2CreationTemplateHash, selectedLetterheadVersionId,
-        selectedLetterheadPresentation,
-        selectedLetterheadResources, letterheadDirty, amendmentNote,
-    ]);
+        try { return composeEnvelope(settledContent); } catch { return null; }
+    // Post-Phase-2 remediation: `composeEnvelope` carries the letterhead selection (a change of the
+    // "Membrete" selector once left the preview showing the old branding), so it must stay a dependency.
+    }, [template, composeEnvelope, settledContent]);
 
     // Post-Phase 2 remediation (bug 3 fix): the "Letterhead" selector. Unlike
     // the old "Template version" selector it replaces, this NEVER touches
@@ -1790,6 +1828,8 @@ const ReportEditor: React.FC = () => {
      * status—this screen cannot print an unpublished report without a mark.
      */
     const handlePrintLocalCopy = async () => {
+        // The preview may still be catching up with the last keystrokes: print what is written now.
+        flushPreviewContent();
         await printLocalCopy(previewPagesRef, {
             // H-0c: the SAME canonical base as the official PDF, plus the
             // version and the LOCAL marker. Never the report's display title:
@@ -2058,8 +2098,13 @@ const ReportEditor: React.FC = () => {
     // Render
     // ---------------------------------------------------------------------------
 
+    // Céluma 1.4 (#29): local spelling assistance follows the CONTENT gate
+    // (`canSaveContent`: DRAFT, not legacy-blocked, and `reports:edit`).
+    // Presentation-only reviewer authority never enables it, and read-only,
+    // signed or published reports start no check and load no worker. Each
+    // report gets its own session: ignore decisions never carry over.
     return (
-        <>
+        <SpellingProvider enabled={canSaveContent} scopeKey={reportId ? `report:${reportId}` : `new:${prefilledOrderId}`}>
             <style>{letterStyles}</style>
             <style>{`
               .re-two-column { display: grid; gap: ${columnGapValue}; grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -2579,12 +2624,16 @@ const ReportEditor: React.FC = () => {
                                 <div>
                                     <SectionTitle style={{ marginBottom: 12 }}>Detalles del reporte</SectionTitle>
                                     <div style={{ display: "grid", gap: 16 }}>
+                                        <SpellingStatusNotice />
                                         <FloatingCaptionInput
                                             label="Nombre del reporte"
                                             value={reportTitle}
                                             disabled={isReadOnly}
                                             onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); }}
+                                            spelling={{ fieldId: "title", label: "Nombre del reporte" }}
                                         />
+                                        {/* #29: custom base fields get no spelling assistance — the template
+                                            `text` type does not tell prose from names, identifiers or codes. */}
                                         {hasCustomFields && (
                                             <div className="re-grid-2">
                                                 {customBaseFields.map(({ key, field }) => (
@@ -2620,6 +2669,7 @@ const ReportEditor: React.FC = () => {
                                                     }
                                                     readOnly={isReadOnly}
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
+                                                    spelling={{ fieldId: `section:${key}`, label: `Sección: ${section.label}` }}
                                                 />
                                             </div>
                                         );
@@ -2669,6 +2719,7 @@ const ReportEditor: React.FC = () => {
                                                         setSectionContent((prev) => ({ ...prev, [key]: v }))
                                                     }
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
+                                                    spelling={{ fieldId: `section:${key}`, label: `Sección: ${section.label}` }}
                                                 />
                                             </div>
                                         );
@@ -2770,6 +2821,7 @@ const ReportEditor: React.FC = () => {
                                                                         onChange={(v) => {
                                                                             if (imagesSectionKey) updateImageCaption(imagesSectionKey, ref, v);
                                                                         }}
+                                                                        spelling={{ fieldId: `caption:${ref}`, label: `Nota de ${figureLabel}` }}
                                                                     />
                                                                 </div>
                                                             </Panel>
@@ -2857,7 +2909,7 @@ const ReportEditor: React.FC = () => {
                     </div>
 
                     {/* --- Right column: Preview --- */}
-                    <div ref={previewColumnRef} className="re-preview-col">
+                    <div ref={previewColumnRef} className="re-preview-col" data-preview-stale={previewStale ? "true" : undefined}>
                         <Card
                             title={<span style={cardTitleStyle}>Vista previa</span>}
                             styles={{ body: { padding: 16 } }}
@@ -2867,10 +2919,7 @@ const ReportEditor: React.FC = () => {
                                 <ReportPreviewPages
                                     ref={previewPagesRef}
                                     report={previewEnvelope}
-                            signerLookup={(fullData?.order.reviewers ?? []).map((r) => ({
-                                id: r.id,
-                                name: r.name,
-                            }))}
+                                    signerLookup={signerLookup}
                                 />
                             ) : (
                                 <Typography.Text type="secondary">Cargando vista previa...</Typography.Text>
@@ -2895,7 +2944,11 @@ const ReportEditor: React.FC = () => {
                     }}>Guardar</CelumaButton>,
                 ]}
             >
-                <TableEditor value={tableDraft} onChange={setTableDraft} />
+                <TableEditor
+                    value={tableDraft}
+                    onChange={setTableDraft}
+                    spelling={tableModal ? { groupId: `table:${tableModal.key}`, label: tableModal.label } : undefined}
+                />
             </CelumaModal>
 
             {/* Approve modal */}
@@ -3022,7 +3075,7 @@ const ReportEditor: React.FC = () => {
                     setSignConfirmError(null);
                 }}
             />
-        </>
+        </SpellingProvider>
     );
 };
 

@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
 
     return {
         plugins: [react()],
+        // Céluma 1.4 (#29): nspell (CommonJS) is imported only by the spelling
+        // worker, which the dev server's dependency scan does not follow; without
+        // this the first report opened in `vite dev` triggers a full page reload
+        // while the dependency is optimized. Dev server only.
+        optimizeDeps: { include: ["nspell"] },
         define: {
             __CELUMA_APP_INFO__: JSON.stringify({
                 // RELEASE identity. `package.json` is the source of truth, so

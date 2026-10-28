@@ -1,0 +1,3 @@
+# Céluma 1.4 (#29): vendored dictionary bytes are checksum-verified (PROVENANCE.md);
+# never normalize line endings on checkout.
+* -text

@@ -19,6 +19,6 @@ export default defineConfig({
         // suite from the post-Phase-2 remediation) — run via `npm run
         // test:visual` / `npm run test:e2e`, never picked up here since
         // jsdom can't execute them.
-        exclude: ["**/node_modules/**", "**/dist/**", "tests-visual/**", "tests-e2e/**"],
+        exclude: ["**/node_modules/**", "**/dist/**", "tests-visual/**", "tests-e2e/**", "tests-perf/**", ".perf-dist/**"],
     },
 });

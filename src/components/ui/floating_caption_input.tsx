@@ -1,6 +1,9 @@
-import React, { useEffect, useId, useRef, useState } from "react";
-import { Input } from "antd";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Input, type InputRef } from "antd";
 import FieldMessage from "./field_message";
+import type { SpellingFieldOptions } from "../spelling/spelling_context";
+import { usePlainSpelling } from "../spelling/plain_spelling";
+import { SpellingSummary } from "../spelling/spelling_summary";
 
 /** How long a validation message stays on screen before auto-hiding. */
 const MESSAGE_AUTO_HIDE_MS = 5000;
@@ -15,6 +18,12 @@ type Props = Omit<React.ComponentProps<typeof Input>, "status" | "onChange" | "p
     requiredMark?: boolean;
     showClear?: boolean;
     onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    /**
+     * Opt-in local spelling assistance for a prose field (report authoring
+     * only, Céluma 1.4 #29). Requires an enclosing SpellingProvider; never pass
+     * it for names, identifiers, codes, dates or numbers.
+     */
+    spelling?: SpellingFieldOptions;
 };
 
 export default function FloatingCaptionInput({
@@ -28,9 +37,24 @@ export default function FloatingCaptionInput({
     onChange,
     disabled,
     style,
+    spelling,
     ...rest
 }: Props) {
     const uid = useId();
+    const antInputRef = useRef<InputRef | null>(null);
+    // antd exposes the DOM input through its ref object; a getter keeps it current.
+    const elementRef = useMemo(() => ({
+        get current() {
+            return antInputRef.current?.input ?? null;
+        },
+    }), []);
+    const assist = usePlainSpelling({
+        spelling,
+        elementRef,
+        value: typeof value === "string" ? value : "",
+        disabled,
+        multiline: false,
+    });
     const [hovered, setHovered] = useState(false);
     const [focused, setFocused] = useState(false);
     const [msgVisible, setMsgVisible] = useState(true);
@@ -181,12 +205,15 @@ export default function FloatingCaptionInput({
 
                 <Input
                     {...rest}
+                    {...assist.controlProps}
+                    {...(spelling ? { ref: antInputRef } : null)}
                     id={`input-${uid}`}
                     disabled={disabled}
                     value={typeof value === "string" || typeof value === "number" || typeof value === "undefined" ? value : ""}
                     onChange={onChange}
+                    onKeyDown={spelling ? (e) => { if (!assist.handleKeyDown(e)) rest.onKeyDown?.(e); } : rest.onKeyDown}
                     bordered={false}
-                    style={inputStyle}
+                    style={spelling ? { ...inputStyle, position: "relative", zIndex: 1 } : inputStyle}
                     onFocus={(e) => {
                         setFocused(true);
                         rest.onFocus?.(e);
@@ -212,6 +239,8 @@ export default function FloatingCaptionInput({
                         ×
                     </button>
                 )}
+                {assist.layer}
+                {assist.description}
             </div>
 
             {hasMessage && (
@@ -223,6 +252,7 @@ export default function FloatingCaptionInput({
                             : (rest["aria-describedby"] ?? "¡Todo correcto!")}
                 </FieldMessage>
             )}
+            {spelling && <SpellingSummary groupId={spelling.groupId ?? spelling.fieldId} style={{ marginTop: 6 }} />}
         </div>
     );
 }
