@@ -20,6 +20,7 @@ import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency
 import AutoCodeHint from "../components/numbering/auto_code_hint";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
+import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -84,8 +85,9 @@ const schema = z.object({
     // Céluma 1.4 (#17): an active type of the laboratory catalog, always required.
     sample_type_id: z.string().trim().nonempty("El tipo de muestra es requerido."),
     notes: z.string().trim().optional(),
-    collected_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
-    received_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
+    collected_date: collectionDateSchema,
+    // Céluma 1.4 (#33): required. The monthly code is numbered by the receipt date; collection stays optional.
+    received_date: receiptDateSchema,
 });
 
 type SampleFormData = z.infer<typeof schema>;
@@ -169,6 +171,7 @@ export default function SampleForm() {
 
     const watchedType = useWatch({ control, name: "sample_type_id" });
     const watchedBranch = useWatch({ control, name: "branch_id" });
+    const watchedReceived = useWatch({ control, name: "received_date" });
 
     useEffect(() => {
         (async () => {
@@ -212,11 +215,13 @@ export default function SampleForm() {
                 order_id: data.order_id,
                 sample_type_id: data.sample_type_id,
                 notes: data.notes || undefined,
-                collected_at: data.collected_date ? `${data.collected_date}T00:00:00Z` : undefined,
-                received_at: data.received_date ? `${data.received_date}T00:00:00Z` : undefined,
+                // Date-only values (YYYY-MM-DD), never `…T00:00:00Z`: the API reads them as the laboratory's
+                // local calendar date (#33). A UTC midnight is the previous evening in Mexico City.
+                collected_at: data.collected_date || undefined,
+                received_at: data.received_date,
             };
             const created = await postJSON<SampleFormData, CreateSampleResponse>(
-                "/v1/laboratory/samples/", payload as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
+                "/v1/laboratory/samples/", payload as unknown as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
             );
             idempotency.succeeded();
             reset();
@@ -320,7 +325,7 @@ export default function SampleForm() {
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código se asigna automáticamente al registrar.</p>
                                 <div className="sf-grid-3">
                                     <div style={{ alignContent: "center", display: "grid" }}>
-                                        <AutoCodeHint kind="sample" scopeId={watchedType || undefined} branchId={watchedBranch || undefined} />
+                                        <AutoCodeHint kind="sample" scopeId={watchedType || undefined} branchId={watchedBranch || undefined} referenceDate={watchedReceived || undefined} />
                                     </div>
                                     <FormField
                                         control={control}
@@ -368,6 +373,7 @@ export default function SampleForm() {
                                         render={(p) => (
                                             <FloatingCaptionDate
                                                 label="Fecha de recepción"
+                                                requiredMark
                                                 value={typeof p.value === "string" ? p.value : ""}
                                                 onChange={(v) => p.onChange(v)}
                                                 error={p.error}

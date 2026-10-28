@@ -77,9 +77,12 @@ async function physician(request: APIRequestContext, lab: Lab, first: string, la
         branch_id: lab.branchId, first_name: first, last_name: last } })).id;
 }
 
+/** Céluma 1.4 (#33): every NEW sample carries its receipt date (the numbering period of its code). */
+const RECEIVED_AT = "2026-10-15";
+
 const unified = (lab: Lab, extra: Record<string, unknown> = {}, samples = 1) => ({
     tenant_id: lab.tenantId, branch_id: lab.branchId, patient_id: lab.patientId, study_type_id: lab.studyTypeId,
-    samples: Array.from({ length: samples }, () => ({ sample_type_id: lab.sampleTypeId })), ...extra,
+    samples: Array.from({ length: samples }, () => ({ sample_type_id: lab.sampleTypeId, received_at: RECEIVED_AT })), ...extra,
 });
 
 async function login(page: Page, lab: { email: string; password: string }) {
@@ -94,6 +97,16 @@ async function pick(page: Page, caption: string, option: string | RegExp) {
     const field = page.locator("label", { hasText: caption }).first().locator("xpath=ancestor::div[.//div[contains(@class,'ant-select')]][1]");
     await field.locator(".ant-select-selector").click();
     await page.locator(".ant-select-item-option", { hasText: option }).filter({ visible: true }).first().click();
+}
+
+/** Types a date into a masked `FloatingCaptionDate` (the receipt date is required since #33). */
+async function fillDate(page: Page, caption: string, value: string) {
+    const input = page.locator("label", { hasText: caption }).first().locator("xpath=ancestor::div[.//input][1]").locator("input").first();
+    await input.click();
+    // The masked picker (YYYY-MM-DD) takes keystrokes, not a bulk fill; the dashes are part of the mask.
+    await input.pressSequentially(value.replace(/-/g, ""), { delay: 20 });
+    await page.keyboard.press("Tab");   // commits on blur; Enter would SUBMIT the form
+    await expect(input).toHaveValue(value);
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -246,6 +259,7 @@ async function fillRegistration(page: Page, opts: { physicians?: string[]; exped
     await pick(page, "Paciente", /P-/);
     await pick(page, "Tipo de estudio", /Histopatología sintética/);
     await pick(page, "Tipo de muestra", "Biopsia sintética");
+    await fillDate(page, "Fecha de recepción", RECEIVED_AT);
     if (opts.physicians?.length) {
         const selector = page.locator("label", { hasText: "Médicos solicitantes (opcional)" }).first()
             .locator("xpath=ancestor::div[.//div[contains(@class,'ant-select')]][1]").locator(".ant-select-selector");
@@ -268,9 +282,9 @@ test.describe("registration", () => {
         // typed (and even empty) codes are refused explicitly on EVERY route
         for (const code of ["MAN-1", ""]) {
             await api(request, "POST", "/api/v1/laboratory/orders/", { ...h, status: 422, data: { tenant_id: lab.tenantId, branch_id: lab.branchId, patient_id: lab.patientId, study_type_id: study, order_code: code } });
-            await api(request, "POST", "/api/v1/laboratory/samples/", { ...h, status: 422, data: { tenant_id: lab.tenantId, branch_id: lab.branchId, order_id: order.id, sample_type_id: lab.sampleTypeId, sample_code: code } });
+            await api(request, "POST", "/api/v1/laboratory/samples/", { ...h, status: 422, data: { tenant_id: lab.tenantId, branch_id: lab.branchId, order_id: order.id, sample_type_id: lab.sampleTypeId, received_at: RECEIVED_AT, sample_code: code } });
             await api(request, "POST", "/api/v1/laboratory/orders/unified", { ...h, status: 422, data: { ...unified(lab), order_code: code } });
-            await api(request, "POST", "/api/v1/laboratory/orders/unified", { ...h, status: 422, data: { ...unified(lab), samples: [{ sample_type_id: lab.sampleTypeId, sample_code: code }] } });
+            await api(request, "POST", "/api/v1/laboratory/orders/unified", { ...h, status: 422, data: { ...unified(lab), samples: [{ sample_type_id: lab.sampleTypeId, received_at: RECEIVED_AT, sample_code: code }] } });
         }
         // inactive (never configured): compatibility generation for BOTH kinds, several samples of one type
         const inactive = await api<Json>(request, "POST", "/api/v1/laboratory/orders/unified", { ...h, data: unified(lab, {}, 2) });
