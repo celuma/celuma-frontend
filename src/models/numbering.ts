@@ -63,6 +63,11 @@ export interface NumberingPreviewRequest {
     /** Study type (orders) or sample type (samples) id. */
     scope_id?: string;
     branch_id?: string;
+    /**
+     * Samples only (#33): the receipt date typed in the form, as a date-only `YYYY-MM-DD`. It defines the
+     * period shown, exactly as the registration will. Never consumes a number.
+     */
+    reference_date?: string;
 }
 
 export interface NumberingPreview {
@@ -76,6 +81,8 @@ export interface NumberingPreview {
     timezone: string;
     period_year: number;
     period_month: number;
+    /** What defined the period: the receipt date, or the allocation instant (orders; samples without a date). */
+    date_basis?: "receipt_date" | "allocation_instant";
     base_code: string;
     examples: Array<{ sequence: number; code: string }>;
     /** Read-only estimate; `reserved` is always false. */

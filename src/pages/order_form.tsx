@@ -23,6 +23,7 @@ import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notic
 import { formatHttpError } from "../lib/api_error";
 import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
 import AutoCodeHint from "../components/numbering/auto_code_hint";
+import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -87,8 +88,9 @@ const sampleSchema = z.object({
     // Céluma 1.4 (#17): every sample of the order needs an active type of the laboratory catalog.
     sample_type_id: z.string().trim().nonempty("El tipo de muestra es requerido."),
     notes: z.string().trim().optional(),
-    collected_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
-    received_date: z.string().trim().optional().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Formato YYYY-MM-DD"),
+    collected_date: collectionDateSchema,
+    // Céluma 1.4 (#33): required per sample. Each sample is numbered by ITS OWN receipt date.
+    received_date: receiptDateSchema,
 });
 
 const schema = z.object({
@@ -284,8 +286,9 @@ export default function OrderForm() {
                 samples: data.samples.map((s) => ({
                     sample_type_id: s.sample_type_id,
                     notes: s.notes || undefined,
-                    collected_at: s.collected_date ? `${s.collected_date}T00:00:00Z` : undefined,
-                    received_at: s.received_date ? `${s.received_date}T00:00:00Z` : undefined,
+                    // Date-only values (YYYY-MM-DD), never `…T00:00:00Z` (see sample_form.tsx, #33).
+                    collected_at: s.collected_date || undefined,
+                    received_at: s.received_date,
                 })),
             };
             // One key per logical submission: a retry of the SAME payload (timeout, lost response) reuses it
@@ -459,13 +462,13 @@ export default function OrderForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Muestras</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una; el código de cada muestra se asigna automáticamente.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una (la fecha de recepción es obligatoria y define el mes del código); el código de cada muestra se asigna automáticamente.</p>
                                 <div style={{ display: "grid", gap: 16 }}>
                                     {fields.map((field, index) => (
                                         <Panel key={field.id} style={{ display: "grid", gap: 16 }}>
                                             <div className="of-grid-3">
                                                 <div style={{ alignContent: "center", display: "grid" }}>
-                                                    <AutoCodeHint kind="sample" scopeId={watchedSamples?.[index]?.sample_type_id || undefined} branchId={watchedBranch || undefined} />
+                                                    <AutoCodeHint kind="sample" scopeId={watchedSamples?.[index]?.sample_type_id || undefined} branchId={watchedBranch || undefined} referenceDate={watchedSamples?.[index]?.received_date || undefined} />
                                                 </div>
                                                 <FormField
                                                     control={control}
@@ -513,6 +516,7 @@ export default function OrderForm() {
                                                     render={(p) => (
                                                         <FloatingCaptionDate
                                                             label="Fecha de recepción"
+                                                            requiredMark
                                                             value={typeof p.value === "string" ? p.value : ""}
                                                             onChange={(v) => p.onChange(v)}
                                                             error={p.error}

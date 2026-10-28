@@ -75,11 +75,17 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }) {
         const url = String(input);
         // The non-consuming numbering preview is a POST too, but it is not the registration.
         if (url.includes("/v1/numbering/preview")) {
-            previews.push(JSON.parse(String(init?.body)));
+            const request = JSON.parse(String(init?.body)) as { reference_date?: string };
+            previews.push(request);
+            // Mirrors the API (#33): a sample preview given a receipt date reports THAT period.
+            const ref = request.reference_date;
+            const [year, month] = ref ? [Number(ref.slice(0, 4)), Number(ref.slice(5, 7))] : [2026, 10];
             return jsonResponse({
                 entity_kind: "sample", valid: true, errors: [], format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2,
-                period_year: 2026, period_month: 10, base_code: "BIO", examples: [],
-                estimate: { sequence: 1, code: "BIO011026", reserved: false, skipped_occupied: 0 }, notice: "n",
+                scheme: "monthly", timezone: "America/Mexico_City", period_year: year, period_month: month,
+                date_basis: ref ? "receipt_date" : "allocation_instant", base_code: "BIO", examples: [],
+                estimate: { sequence: 1, code: `BIO01${String(month).padStart(2, "0")}${String(year).slice(2)}`, reserved: false, skipped_occupied: 0 },
+                notice: "n",
             });
         }
         if (url.includes("/v1/numbering/config")) {
@@ -119,13 +125,13 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }) {
  * so this only resolves against the new components, never the old
  * placeholder-only `SelectField`.
  */
-function selectByCaption(container: HTMLElement, caption: string): Element {
-    const match = Array.from(container.querySelectorAll("div")).find((node) => {
-        const label = node.querySelector(":scope > div > label");
-        return label?.textContent?.trim().startsWith(caption) && node.querySelector(".ant-select");
-    });
-    expect(match, `select "${caption}" not found`).toBeTruthy();
-    return match!.querySelector(".ant-select")!;
+function selectByCaption(container: HTMLElement, caption: string, index = 0): Element {
+    const label = Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith(caption))[index];
+    let node: HTMLElement | null = label?.parentElement ?? null;
+    while (node && node !== container && !node.querySelector(".ant-select")) node = node.parentElement;
+    const select = node?.querySelector(".ant-select");
+    expect(select, `select "${caption}" not found`).toBeTruthy();
+    return select!;
 }
 
 function inputByCaption(container: HTMLElement, caption: string): HTMLInputElement {
@@ -141,15 +147,48 @@ function inputByCaption(container: HTMLElement, caption: string): HTMLInputEleme
 /** Opens an antd select and clicks the option whose label contains `text`. */
 async function pickOption(select: Element, text: string) {
     fireEvent.mouseDown(select.querySelector(".ant-select-selector")!);
+    // Only the OPEN dropdown: a select opened earlier keeps its (hidden) dropdown mounted, which matters on
+    // the sample repeater where several selects offer the same catalogue.
+    const options = () => {
+        const open = Array.from(document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden)"));
+        return Array.from(open.at(-1)?.querySelectorAll(".ant-select-item-option") ?? []);
+    };
     await waitFor(() => {
-        expect(document.querySelector(".ant-select-item-option")).toBeTruthy();
+        expect(options().length).toBeGreaterThan(0);
     });
-    const option = Array.from(document.querySelectorAll(".ant-select-item-option")).find((o) =>
-        o.textContent?.includes(text),
-    );
+    const option = options().find((o) => o.textContent?.includes(text));
     expect(option, `option "${text}" not found`).toBeTruthy();
     fireEvent.click(option!);
 }
+
+/**
+ * Céluma 1.4 (#33): the receipt date is required. The masked antd picker commits from the calendar, not from
+ * typing, so the helper freezes the clock on the wanted day (the calendar opens on that month) and clicks the
+ * cell whose `title` is that day.
+ */
+const RECEIVED = "2026-09-30";
+
+async function setDate(container: HTMLElement, caption: string, value: string, index = 0) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const [year, month, day] = value.split("-").map(Number);
+    vi.setSystemTime(new Date(year, month - 1, day, 12, 0, 0));
+    const labels = Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith(caption));
+    const input = labels[index].parentElement!.querySelector("input") as HTMLInputElement;
+    fireEvent.mouseDown(input);
+    fireEvent.click(input);
+    fireEvent.focus(input);
+    // The popup just opened is the LAST one mounted; earlier pickers keep theirs in the DOM (closed or fading).
+    const cell = () => {
+        const popup = Array.from(document.querySelectorAll(".ant-picker-dropdown")).at(-1);
+        return popup?.querySelector(`td[title="${value}"] .ant-picker-cell-inner`) ?? null;
+    };
+    await waitFor(() => expect(cell()).toBeTruthy());
+    fireEvent.click(cell()!);
+    await waitFor(() => expect(input.value).toBe(value));
+    vi.useRealTimers();
+}
+
+const setReceived = (container: HTMLElement, value = RECEIVED, index = 0) => setDate(container, "Fecha de recepción", value, index);
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
     const match = Array.from(container.querySelectorAll("button")).find((b) =>
@@ -286,6 +325,7 @@ describe("CEL-131-07 — catalogue selectors are captioned and searchable", () =
 
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -306,6 +346,7 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -317,12 +358,12 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
             patient_id: PATIENT_ID,
             study_type_id: STUDY_TYPE_ID,
             created_by: "usr-1",
-            samples: [{ sample_type_id: "stp-bio" }],
+            samples: [{ sample_type_id: "stp-bio", received_at: RECEIVED }],
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/new-order", { replace: true }));
     });
 
-    it("carries the optional sample dates through as UTC instants, exactly as before", async () => {
+    it("sends the sample dates as DATE-ONLY values, never as UTC instants (#33)", async () => {
         const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
         const { container } = renderOrderForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
@@ -331,23 +372,41 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        // `FloatingCaptionDate` wraps the same masked antd DatePicker the old
-        // `DateField` did, so the value is committed from the calendar rather
-        // than by typing. Pick a day, then assert the payload carries exactly
-        // that day as a UTC midnight instant — the pre-existing transform.
-        const collected = inputByCaption(container, "Fecha de recolección");
-        fireEvent.mouseDown(collected);
-        fireEvent.click(collected);
-        fireEvent.focus(collected);
-        await waitFor(() => expect(document.querySelector(".ant-picker-cell-today")).toBeTruthy());
-        fireEvent.click(document.querySelector(".ant-picker-cell-today .ant-picker-cell-inner")!);
-        await waitFor(() => expect(collected.value).toMatch(/^\d{4}-\d{2}-\d{2}$/));
-        const chosenDay = collected.value;
+        // A UTC-midnight instant (`2026-10-01T00:00:00Z`) is Sep 30, 18:00 in Mexico City, so the first day
+        // of a month would be numbered in the PREVIOUS month. The calendar date travels untouched instead.
+        await setDate(container, "Fecha de recolección", "2026-09-29");
+        await setReceived(container, "2026-10-01");
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
-        expect((posts[0].body as { samples: Array<{ collected_at?: string }> }).samples[0].collected_at)
-            .toBe(`${chosenDay}T00:00:00Z`);
+        const sent = (posts[0].body as { samples: Array<{ collected_at?: string; received_at?: string }> }).samples[0];
+        expect(sent.collected_at).toBe("2026-09-29");
+        expect(sent.received_at).toBe("2026-10-01");
+        expect(JSON.stringify(posts[0].body)).not.toMatch(/T\d{2}:\d{2}|Z"/);
+    });
+
+    it("numbers each sample by ITS OWN receipt date and refuses a missing one without calling the API (#33)", async () => {
+        const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
+        const { container } = renderOrderForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
+        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
+        fireEvent.click(buttonByText(container, "Agregar otra muestra"));
+        await waitFor(() => expect(Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith("Tipo de muestra"))).toHaveLength(2));
+        await pickOption(selectByCaption(container, "Tipo de muestra", 0), "Biopsia");
+        await pickOption(selectByCaption(container, "Tipo de muestra", 1), "Laminilla");
+        await setReceived(container, "2026-09-30", 0);
+
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(container.textContent).toContain("La fecha de recepción es requerida."));
+        expect(posts).toHaveLength(0);
+
+        await setReceived(container, "2026-10-01", 1);
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        const sent = (posts[0].body as { samples: Array<{ received_at?: string }> }).samples;
+        expect(sent.map((x) => x.received_at)).toEqual(["2026-09-30", "2026-10-01"]);
     });
 });
 
@@ -360,6 +419,7 @@ describe("CEL-131-07 — sample_form still creates a sample with the same payloa
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Laminilla");
+        await setReceived(container);
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -370,6 +430,7 @@ describe("CEL-131-07 — sample_form still creates a sample with the same payloa
             branch_id: BRANCH_ID,
             order_id: ORDER_ID,
             sample_type_id: "stp-lam",
+            received_at: RECEIVED,
         });
         await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/samples/new-sample", { replace: true }));
     });
@@ -389,6 +450,7 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
         });
         expect(container.textContent).toContain("El tipo de estudio es requerido.");
         expect(container.textContent).toContain("El tipo de muestra es requerido.");
+        expect(container.textContent).toContain("La fecha de recepción es requerida.");
         expect(container.textContent).not.toContain("El código de muestra es requerido.");
         expect(posts).toHaveLength(0);
     });
@@ -410,6 +472,7 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
 
         // Choosing only the physician satisfies it — the OR, not an AND.
         await pickOption(selectByCaption(container, "Médicos solicitantes (opcional)"), "MED-001");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
         expect((posts[0].body as { requesting_physician_ids: string[] }).requesting_physician_ids).toEqual([PHYSICIAN_ID]);
@@ -426,11 +489,12 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
             expect(container.textContent).toContain("La orden es requerida.");
         });
         expect(container.textContent).toContain("El tipo de muestra es requerido.");
+        expect(container.textContent).toContain("La fecha de recepción es requerida.");
         expect(container.textContent).not.toContain("El código de muestra es requerido.");
         expect(posts).toHaveLength(0);
     });
 
-    it("the optional fields really are optional — notes and both dates may stay empty", async () => {
+    it("the optional fields really are optional — notes and the collection date may stay empty", async () => {
         const { posts } = stubApi({ ok: true, body: { id: "new-sample" } });
         const { container } = renderSampleForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
@@ -438,13 +502,14 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Otro");
+        await setReceived(container);
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
         const body = posts[0].body as Record<string, unknown>;
         expect(body).not.toHaveProperty("notes");
         expect(body).not.toHaveProperty("collected_at");
-        expect(body).not.toHaveProperty("received_at");
+        expect(body.received_at).toBe(RECEIVED); // required since #33; collection stays optional
     });
 });
 
@@ -460,6 +525,7 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
 
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Tejido");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => expect(posts).toHaveLength(1));
@@ -481,6 +547,7 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Sangre");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => {
@@ -497,6 +564,7 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => {
@@ -572,6 +640,7 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
     }
     const codeLabels = (container: HTMLElement) =>
         Array.from(container.querySelectorAll("label")).filter((l) => /^Código de (la orden|Muestra)/.test(l.textContent?.trim() ?? ""));
@@ -636,9 +705,16 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         const { container } = renderSampleForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        await waitFor(() => expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).toContain("BIO011026"));
-        expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).toContain("no reservado");
-        expect(previews).toEqual([{ entity_kind: "sample", scope_id: "stp-bio" }]);
+        // #33: a sample is numbered by its receipt date, so no estimate is asked or shown until there is a valid one.
+        await new Promise((r) => setTimeout(r, 50));
+        expect(previews).toEqual([]);
+        expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).not.toContain("Ejemplo");
+        await setReceived(container, "2026-09-30");
+        await waitFor(() => expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).toContain("BIO010926"));
+        const hint = container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent ?? "";
+        expect(hint).toContain("no reservado");
+        expect(hint).toContain("septiembre 2026, según la fecha de recepción");
+        expect(previews).toEqual([{ entity_kind: "sample", scope_id: "stp-bio", reference_date: "2026-09-30" }]);
     });
 
     it("a structured API refusal {code, message} is shown as its message", async () => {
@@ -648,6 +724,7 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(container.textContent).toContain("Could not find a free code"));
     });
@@ -668,6 +745,7 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
         await pickOption(selectByCaption(container, "Orden"), "ORD-001");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
         void code; // sample codes are generated; nothing to type
     }
 
@@ -708,6 +786,7 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
         await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(creations(fetchMock)).toHaveLength(1));
         expect(keyOf(creations(fetchMock)[0])).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
