@@ -14,9 +14,11 @@ import {
     BankOutlined,
     BgColorsOutlined,
     PieChartOutlined,
+    ClearOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useUserProfile } from "../../hooks/use_user_profile";
+import { useLaboratoryCleanupAccess } from "../../hooks/use_laboratory_cleanup_access";
 
 const baseMenuItems: Required<MenuProps>["items"] = [
     { key: "/config/profile", icon: <UserOutlined />, label: "Mi Perfil" },
@@ -70,6 +72,16 @@ const usageMenuItem: Required<MenuProps>["items"][number] = {
     label: "Uso y límites",
 };
 
+/**
+ * Céluma 1.4 (#39). Shown only when the backend says THIS user is the registered operator of THEIR laboratory
+ * (`GET .../authorization`); never for ordinary admins, and never a clinical delete button.
+ */
+const maintenanceMenuItem: Required<MenuProps>["items"][number] = {
+    key: "/config/maintenance",
+    icon: <ClearOutlined />,
+    label: "Mantenimiento",
+};
+
 const aboutMenuItem: Required<MenuProps>["items"][number] = {
     key: "/config/about",
     icon: <InfoCircleOutlined />,
@@ -79,7 +91,8 @@ const aboutMenuItem: Required<MenuProps>["items"][number] = {
 const SidebarConfig: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
-    const { canManageUsers, canManageCatalog, canManageBranches, canManageTenant } = useUserProfile();
+    const { profile, canManageUsers, canManageCatalog, canManageBranches, canManageTenant } = useUserProfile();
+    const cleanupAccess = useLaboratoryCleanupAccess(profile?.tenant_id);
 
     const [isNarrow, setIsNarrow] = useState(
         () => typeof window !== "undefined" && window.matchMedia("(max-width: 1200px)").matches
@@ -98,6 +111,7 @@ const SidebarConfig: React.FC = () => {
         ...(canManageUsers ? [adminMenuItem, reviewersMenuItem] : []),
         ...(canManageBranches ? [branchesMenuItem] : []),
         ...(canManageTenant ? [tenantMenuItem, usageMenuItem] : []),
+        ...(cleanupAccess.authorized ? [maintenanceMenuItem] : []),
         aboutMenuItem,
     ];
 

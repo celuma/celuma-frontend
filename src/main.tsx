@@ -37,6 +37,7 @@ import PatientPortal from "./pages/patient_portal";
 import AcceptInvitation from "./pages/accept_invitation";
 import StudyTypes from "./pages/study_types";
 import SampleTypes from "./pages/sample_types";
+import LaboratoryCleanup from "./pages/laboratory_cleanup";
 import NumberingSettings from "./pages/numbering_settings";
 import ReportTemplates from "./pages/report_templates";
 import ReportTemplateVersions from "./pages/report_template_versions";
@@ -179,6 +180,10 @@ createRoot(document.getElementById("root")!).render(
                     route and the API agree by construction rather than by a
                     role-name check that would drift from the RBAC catalog. */}
                 <Route path="usage" element={<RequirePermission permission="admin:manage_tenant"><TenantUsage embedded /></RequirePermission>} />
+                {/* Céluma 1.4 (#39): privileged maintenance. Deliberately NOT behind a role/permission guard here: the page
+                    asks the backend whether this user is the registered operator of their laboratory and shows an
+                    access-denied screen otherwise; every API call is enforced server-side. */}
+                <Route path="maintenance" element={<LaboratoryCleanup />} />
                 <Route path="about" element={<ConfigAbout />} />
             </Route>
 
