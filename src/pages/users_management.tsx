@@ -159,7 +159,7 @@ interface Branch {
     code: string;
 }
 
-// Assignable system roles (superuser excluded — can only be assigned via RBAC admin endpoint)
+// Role catalog; Superadministrator is onboarding-only and is not assignable in any form.
 interface RoleOption {
     code: string;
     name: string;
@@ -172,7 +172,7 @@ interface UsersManagementProps {
 function UsersManagement({ embedded = false }: UsersManagementProps) {
     usePageTitle();
     const navigate = useNavigate();
-    const { profile, loading: profileLoading, canManageUsers, hasRole } = useUserProfile();
+    const { profile, loading: profileLoading, canManageUsers } = useUserProfile();
     const [loading, setLoading] = useState(false);
     const [users, setUsers] = useState<User[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -238,11 +238,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             ]);
             setUsers(usersData.users);
             setBranches(branchesData);
-            // Expose superuser option only if the current actor is a superuser themselves
-            const isSuperuser = hasRole("superuser");
-            setAvailableRoles(
-                rolesData.filter((r) => isSuperuser || r.code !== "superuser")
-            );
+            setAvailableRoles(rolesData);
         } catch {
             message.error("Error al cargar datos");
         } finally {
@@ -523,7 +519,10 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
     }
 
     // Common option lists for the form selects.
-    const roleOptions = availableRoles.map((r) => ({ value: r.code, label: r.name }));
+    const roleOptions = availableRoles.filter((r) => r.code !== "superuser").map((r) => ({ value: r.code, label: r.name }));
+    const editRoleOptions = editingUser?.roles.includes("superuser")
+        ? [{ value: "superuser", label: "Superadministrador (automático)", disabled: true }, ...roleOptions]
+        : roleOptions;
     const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.name} (${b.code})` }));
 
     const content = (
@@ -671,9 +670,9 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
                                 label="Roles"
                                 requiredMark
                                 value={Array.isArray(p.value) ? p.value : []}
-                                onChange={(v) => p.onChange(v)}
+                                onChange={(v) => p.onChange(editingUser?.roles.includes("superuser") ? Array.from(new Set(["superuser", ...v])) : v)}
                                 placeholder="Seleccionar roles"
-                                options={roleOptions}
+                                options={editRoleOptions}
                                 error={p.error}
                             />
                         )}

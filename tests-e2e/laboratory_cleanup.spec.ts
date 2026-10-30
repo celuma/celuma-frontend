@@ -2,14 +2,14 @@
  * Real end-to-end — Céluma 1.4 (#39): laboratory-content cleanup, in a real browser.
  *
  * Disposable PostgreSQL, a local S3-protocol emulator (moto) and the real API — nothing stubbed. The operator
- * is the person who CREATED the synthetic laboratory through `POST /auth/register/unified` (the creator binding
+ * is the person who CREATED the synthetic laboratory through `POST /auth/register/unified` (the onboarding role assignment
  * is recorded atomically there; no deployment setting is involved). Needs:
  *   CELUMA_E2E_API_BASE_URL            the API (default http://localhost:8121)
- *   CELUMA_E2E_CLEANUP_EMAIL / _PASSWORD   the laboratory's creator
- *   CELUMA_E2E_CLEANUP_TENANT          the creator's tenant id
+ *   CELUMA_E2E_CLEANUP_EMAIL / _PASSWORD   the laboratory's superadministrator
+ *   CELUMA_E2E_CLEANUP_TENANT          the Superadministrator's tenant id
  *   CELUMA_E2E_PSQL                    shell prefix running psql against the DISPOSABLE database
  *   CELUMA_E2E_S3_LIST_URL             bucket listing URL of the emulator (…/<bucket>?list-type=2)
- * Skipped (not failed) when the creator is not provided.
+ * Skipped (not failed) when the superadministrator is not provided.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -62,13 +62,13 @@ async function loginUi(page: import("@playwright/test").Page, email: string, pas
 }
 
 test.describe("Laboratory-content cleanup (1.4 #39)", () => {
-    test.skip(!EMAIL || !PASSWORD || !TENANT || PSQL.length === 0 || !S3_LIST_URL, "laboratory creator / disposable stack not provided");
+    test.skip(!EMAIL || !PASSWORD || !TENANT || PSQL.length === 0 || !S3_LIST_URL, "laboratory superadministrator / disposable stack not provided");
 
-    test("the laboratory's creator previews, confirms and completes; everyone else is refused; master data survives", async ({ page, browser, request }) => {
+    test("the laboratory's superadministrator previews, confirms and completes; everyone else is refused; master data survives", async ({ page, browser, request }) => {
         // ---- synthetic laboratory content, through the real API --------------------------------------
         const login = await api<{ access_token: string }>(request, "POST", "/api/v1/auth/login", { data: { username_or_email: EMAIL, password: PASSWORD } });
         const token = login.access_token;
-        const me = await api<{ id: string; tenant_id: string }>(request, "GET", "/api/v1/auth/me", { token });
+        const me = await api<{ id: string; tenant_id: string; roles: string[] }>(request, "GET", "/api/v1/auth/me", { token });
         expect(me.tenant_id).toBe(TENANT);
         const branches = await api<Json>(request, "GET", `/api/v1/tenants/${TENANT}/branches`, { token });
         const branchId = (branches.branches ?? branches)[0].id as string;
@@ -103,18 +103,15 @@ test.describe("Laboratory-content cleanup (1.4 #39)", () => {
         const adminEmail = `admin-${Date.now()}@example.com`;
         await api(request, "POST", "/api/v1/users/", { token, data: {
             email: adminEmail, password: "AdminOrdinary!2026", full_name: "Administrador Sintético", first_name: "Administrador", last_name: "Sintético", role: "admin" } });
-        const users = sql(`SELECT count(*) FROM app_user WHERE tenant_id = '${TENANT}'`);   // creator + ordinary admin
+        const users = sql(`SELECT count(*) FROM app_user WHERE tenant_id = '${TENANT}'`);   // Superadministrator + ordinary admin
         expect(users).toBe("2");
-        const creator = sql(`SELECT created_by_user_id FROM tenant WHERE id = '${TENANT}'`);
-        expect(creator).toBe(me.id);   // recorded by the registration itself
+        expect(me.roles).toContain("superuser");
         const adminToken = (await api<{ access_token: string }>(request, "POST", "/api/v1/auth/login", { data: { username_or_email: adminEmail, password: "AdminOrdinary!2026" } })).access_token;
         await api(request, "POST", `/api/v1/maintenance/tenants/${TENANT}/laboratory-cleanup/preview`, { token: adminToken, data: {}, status: 403 });
-        // the capability is not a role: the same ordinary administrator cannot become the creator through any API
-        await request.fetch(`${API_BASE}/api/v1/tenants/${TENANT}`, {
-            method: "PATCH", headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
-            data: { created_by_user_id: sql(`SELECT id FROM app_user WHERE email = '${adminEmail}'`) },
-        });   // whatever the answer, the binding cannot move
-        expect(sql(`SELECT created_by_user_id FROM tenant WHERE id = '${TENANT}'`)).toBe(creator);
+        // Neither user-management route may promote this ordinary administrator to the reserved role.
+        const adminId = sql(`SELECT id FROM app_user WHERE email = '${adminEmail}'`);
+        await api(request, "PUT", `/api/v1/users/${adminId}`, { token: adminToken, data: { role: "superuser" }, status: 403 });
+        await api(request, "PUT", `/api/v1/rbac/users/${adminId}/roles`, { token, data: { roles: ["admin", "superuser"] }, status: 403 });
         const adminCtx = await browser.newContext();
         const adminPage = await adminCtx.newPage();
         await loginUi(adminPage, adminEmail, "AdminOrdinary!2026");
@@ -125,7 +122,7 @@ test.describe("Laboratory-content cleanup (1.4 #39)", () => {
         await expect(adminPage.getByText("Acceso Denegado")).toBeVisible();
         await adminCtx.close();
 
-        // ---- the laboratory's creator, in the browser ------------------------------------------------
+        // ---- the laboratory's superadministrator, in the browser ------------------------------------------------
         await loginUi(page, EMAIL, PASSWORD);
         await page.goto("/config/profile");
         await page.getByText("Mantenimiento").first().click();

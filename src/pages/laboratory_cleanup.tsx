@@ -438,7 +438,7 @@ export default function LaboratoryCleanup() {
         <div style={{ display: "grid", gap: tokens.gap * 2 }} data-testid="laboratory-cleanup-page">
             <PageHeader
                 title="Limpieza de contenido del laboratorio"
-                subtitle="Mantenimiento privilegiado para quien creó el laboratorio: elimina por completo las órdenes, muestras, reportes, facturación y auditoría del contenido operativo y conserva la configuración del laboratorio."
+                subtitle="Mantenimiento exclusivo para superadministradores del laboratorio: elimina por completo las órdenes, muestras, reportes, facturación y auditoría del contenido operativo y conserva la configuración del laboratorio."
             />
 
             <CelumaAlert

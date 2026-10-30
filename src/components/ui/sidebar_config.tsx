@@ -73,7 +73,7 @@ const usageMenuItem: Required<MenuProps>["items"][number] = {
 };
 
 /**
- * Céluma 1.4 (#39). Shown only when the backend says THIS user is the registered operator of THEIR laboratory
+ * Céluma 1.4 (#39). Shown only when the backend says THIS user is an active Superadministrator of THEIR laboratory
  * (`GET .../authorization`); never for ordinary admins, and never a clinical delete button.
  */
 const maintenanceMenuItem: Required<MenuProps>["items"][number] = {
