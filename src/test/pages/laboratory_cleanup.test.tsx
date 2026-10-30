@@ -1,7 +1,7 @@
 /**
  * Céluma 1.4, issue #39 — Configuración → Mantenimiento → Limpieza de contenido.
  *
- * The API is the authority (the active creator of the laboratory, own tenant, signed preview, password throttle);
+ * The API is the authority (the active superadministrator of the laboratory, own tenant, signed preview, password throttle);
  * these tests pin what the screen asks for, what it shows and what it refuses to do. There are no options: billing
  * and audit are always part of the cleanup. Synthetic data only. The password is a
  * synthetic test value and must never appear anywhere in the DOM after it is typed or after a failure.
@@ -114,7 +114,7 @@ async function fillConfirmation(user: ReturnType<typeof userEvent.setup>, over: 
 }
 
 describe("access", () => {
-    it("shows access denied when the backend says the user is not the laboratory's creator", async () => {
+    it("shows access denied when the backend says the user is not an active superadministrator of the laboratory", async () => {
         serve({ authorized: false });
         renderPage();
         expect(await screen.findByText("Acceso Denegado")).toBeInTheDocument();
@@ -129,13 +129,13 @@ describe("access", () => {
         expect(posts(server, "/preview")).toHaveLength(0);
     });
 
-    it("the creator is recognised by the backend, whatever role names the profile carries", async () => {
+    it("the live backend capability remains authoritative when the cached profile is stale", async () => {
         serve({ roles: ["lab_tech"], authorized: true });
         renderPage();
         expect(await screen.findByTestId("laboratory-cleanup-page")).toBeInTheDocument();
     });
 
-    it("an authorized creator sees the irreversible warning and no confirmation yet", async () => {
+    it("an authorized superadministrator sees the irreversible warning and no confirmation yet", async () => {
         serve();
         renderPage();
         expect(await screen.findByTestId("laboratory-cleanup-page")).toBeInTheDocument();
@@ -369,7 +369,7 @@ describe("progress, failure and retry", () => {
 describe("sidebar entry", () => {
     const renderSidebar = () => render(<MemoryRouter initialEntries={["/config/profile"]}><SidebarConfig /></MemoryRouter>);
 
-    it("appears for the laboratory's creator, as the backend decides", async () => {
+    it("appears for an active superadministrator of the laboratory, as the backend decides", async () => {
         serve({ authorized: true });
         renderSidebar();
         expect(await screen.findByText("Mantenimiento")).toBeInTheDocument();

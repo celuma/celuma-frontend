@@ -4,10 +4,8 @@ import { getCleanupAuthorization } from "../services/laboratory_cleanup_service"
 /**
  * Whether to SHOW the laboratory-content cleanup entry point (Céluma 1.4, issue #39).
  *
- * Presentation only. The authority is the backend's: the signed-in user must be the active person who CREATED
- * this laboratory at its initial registration (a persisted, write-once binding), acting on their own laboratory.
- * No role in the profile decides it — a tenant administrator, a `superuser` role or a custom role never grants it —
- * so the screen asks the server for every authenticated user and any failure means "not authorized".
+ * Presentation only. The server checks the active user's live system `superuser` role and own-tenant scope.
+ * Profile role labels never replace that check. A request failure means "not authorized".
  */
 export function useLaboratoryCleanupAccess(tenantId?: string) {
     const [authorized, setAuthorized] = useState(false);

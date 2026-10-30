@@ -7,7 +7,7 @@
  *   GET  .../operations, .../operations/{id}
  *   POST .../operations/{id}/retry | cancel
  *
- * Hiding the screen is not authorization: every route enforces that the caller is the active creator of this
+ * Hiding the screen is not authorization: every route enforces that the caller is an active Superadministrator of this
  * laboratory (recorded at its initial registration) and that the tenant is their own.
  * The password is sent once in the confirmation body and is never stored, logged or kept in state longer
  * than the form.
