@@ -4,8 +4,10 @@ import { ExclamationCircleOutlined, FilePdfOutlined, HistoryOutlined } from "@an
 import CelumaButton from "../ui/button";
 import Panel from "../ui/panel";
 import { tokens } from "../design/tokens";
+import AmendmentIdentification from "./amendment_identification";
 import {
     AMENDMENT_CATEGORY_LABELS,
+    type ReportAmendmentBlock,
     type ReportAmendmentInfo,
     type ReportEmissionsResponse,
 } from "../../models/report";
@@ -24,7 +26,11 @@ import {
  *   delivered until this amendment is signed.
  * - The author's required change note (D2), saved with the content.
  * - Authorized history: every signed emission (original and amendments, with
- *   the delivered one marked) downloadable, and every amendment's outcome.
+ *   the delivered one marked) downloadable, and every amendment's reason and
+ *   outcome.
+ * - The identification of the current amended emission (D2). Since the owner
+ *   correction of 2026-10-30 (#48) the amendment's identification, reason and
+ *   change note are internal: they live here, never in the rendered report.
  *
  * Nothing here authorizes anything: the backend checks roles, assignment,
  * tenant, state and the password on every action.
@@ -55,6 +61,8 @@ type Props = {
     /** Bumps whenever the report's status or version changes, to refresh the history. */
     refreshKey: string;
     openAmendment: ReportAmendmentInfo | null | undefined;
+    /** Frozen identification block of the current version, when it is an amendment emission. */
+    currentAmendment?: ReportAmendmentBlock | null;
     /** Whether the report has ever been signed (only then is there history). */
     hasSignedEmission: boolean;
     changeNote: string;
@@ -69,6 +77,7 @@ export default function ReportAmendmentPanel({
     reportId,
     refreshKey,
     openAmendment,
+    currentAmendment,
     hasSignedEmission,
     changeNote,
     changeNoteEditable,
@@ -165,7 +174,7 @@ export default function ReportAmendmentPanel({
                             data-testid="amendment-change-note"
                         />
                         <div style={{ fontSize: 12, color: tokens.textSecondary, marginTop: 4 }}>
-                            Se imprime en el reporte enmendado. Es necesaria para enviarlo a revisión y firmarlo.
+                            Es información interna: no se imprime en el reporte. Es necesaria para enviarlo a revisión y firmarlo.
                         </div>
                     </div>
                 </Panel>
@@ -177,6 +186,7 @@ export default function ReportAmendmentPanel({
                         <HistoryOutlined /> Historial de emisiones
                     </div>
                     {historyError && <div style={{ color: "#b91c1c", fontSize: 13 }}>{historyError}</div>}
+                    {!openAmendment && currentAmendment && <AmendmentIdentification amendment={currentAmendment} />}
                     {(history?.emissions ?? []).map((emission) => (
                         <div
                             key={emission.report_version_id}
@@ -215,6 +225,7 @@ export default function ReportAmendmentPanel({
                                     {amendment.state === "PUBLISHED"
                                         ? ` (versión ${amendment.published_version_no ?? "—"}, sustituye a la versión ${amendment.source_version_no ?? "—"})`
                                         : ""}
+                                    {amendment.reason ? `. Motivo de la enmienda: ${amendment.reason}` : ""}
                                 </div>
                             ))}
                         </div>

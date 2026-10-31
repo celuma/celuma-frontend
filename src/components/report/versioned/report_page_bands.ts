@@ -7,7 +7,8 @@
  *
  * Dimensions were accepted in the owner visual review (2026-10-21; see
  * celuma-engineering/specs/reports/renderer.md, "Report composition"). They live in one place so a
- * later visual adjustment does not require changing layout logic.
+ * later visual adjustment does not require changing layout logic. The signature block is centered in
+ * the content width (owner correction 2026-10-30, #45; it was right-aligned before).
  */
 import { formatSignedDate } from "../signature_format";
 
@@ -33,7 +34,8 @@ export interface RepeatedBandStyle {
 /**
  * Compact identification band: `Label: value` pairs flowing left to right and wrapping onto further
  * lines, so a long patient name, several requesting physicians or many sample codes make the band
- * taller (and the body shorter) instead of being cropped.
+ * taller (and the body shorter) instead of being cropped. Rows carry printable values only: an empty
+ * field is left out before it gets here (#44, `resolveRepeatedFieldRows`).
  */
 export function buildRepeatedFieldsBand(rows: RepeatedFieldRow[], style: RepeatedBandStyle): HTMLElement {
     const band = document.createElement("div");
@@ -57,15 +59,7 @@ export function buildRepeatedFieldsBand(rows: RepeatedFieldRow[], style: Repeate
         const label = document.createElement("b");
         label.textContent = `${row.label}:`;
         item.appendChild(label);
-        item.appendChild(document.createTextNode(" "));
-        if (row.value) {
-            item.appendChild(document.createTextNode(row.value));
-        } else {
-            const empty = document.createElement("em");
-            empty.style.color = "#888";
-            empty.textContent = "Sin especificar";
-            item.appendChild(empty);
-        }
+        item.appendChild(document.createTextNode(` ${row.value}`));
         band.appendChild(item);
     });
     return band;
@@ -81,9 +75,10 @@ export interface CompactSignatureInput {
 }
 
 /**
- * Compact signature block, repeated on every page. It never invents a signature: an unsigned report
- * shows the signature line and "Pendiente de firma" only. When a digital signature is required the
- * image area keeps the same reserved height in every state, so pagination does not change at signing.
+ * Compact signature block, repeated on every page and centered horizontally in the content width
+ * (#45). It never invents a signature: an unsigned report shows the signature line and "Pendiente de
+ * firma" only. When a digital signature is required the image area keeps the same reserved height in
+ * every state, so pagination does not change at signing.
  */
 export function buildCompactSignature(input: CompactSignatureInput): HTMLElement {
     const isSigned = Boolean(input.signedAt);
@@ -95,11 +90,12 @@ export function buildCompactSignature(input: CompactSignatureInput): HTMLElement
     band.style.boxSizing = "border-box";
     band.style.display = "flex";
     band.style.flexDirection = "column";
-    band.style.alignItems = "flex-end";
+    band.style.alignItems = "center";
     band.style.fontFamily = "Arial, sans-serif";
     band.style.color = "#000";
 
     const block = document.createElement("div");
+    block.dataset.signatureBlock = "true";
     block.style.width = `${SIGNATURE_BLOCK_WIDTH_MM}mm`;
     block.style.maxWidth = "100%";
     block.style.display = "flex";

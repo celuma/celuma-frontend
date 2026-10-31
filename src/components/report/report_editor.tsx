@@ -2490,6 +2490,7 @@ const ReportEditor: React.FC = () => {
                                     reportId={envelope.id}
                                     refreshKey={`${envelope.status}-${envelope.version_no}-${reloadToken}`}
                                     openAmendment={openAmendment}
+                                    currentAmendment={envelope.report?.amendment ?? null}
                                     hasSignedEmission={Boolean(envelope.delivered_emission)}
                                     changeNote={amendmentNote}
                                     changeNoteEditable={!isReadOnly}

@@ -120,9 +120,15 @@ function asPersona(persona: Persona) {
 
 function payload(
     status: ReportStatus,
-    { amendmentOpen = false, changeNote = "", schemaVersion = 2 }: { amendmentOpen?: boolean; changeNote?: string; schemaVersion?: number } = {},
+    { amendmentOpen = false, amendedEmission = false, changeNote = "", schemaVersion = 2 }: {
+        amendmentOpen?: boolean;
+        /** The current version is a signed, published amendment emission (no amendment open). */
+        amendedEmission?: boolean;
+        changeNote?: string;
+        schemaVersion?: number;
+    } = {},
 ) {
-    const amendmentBlock = amendmentOpen
+    const amendmentBlock = amendmentOpen || amendedEmission
         ? {
             amendment: {
                 amendment_no: 1,
@@ -143,7 +149,7 @@ function payload(
         samples: [],
         report: {
             id: REPORT_ID, order_id: ORDER_ID, tenant_id: "t1", branch_id: "b1", created_by: "u1",
-            version_no: amendmentOpen ? 2 : 1,
+            version_no: amendmentOpen || amendedEmission ? 2 : 1,
             schema_version: schemaVersion,
             status,
             title: "Reporte de prueba",
@@ -165,11 +171,11 @@ function payload(
     };
 }
 
-function mockRest() {
+function mockRest(amendments: unknown[] = []) {
     vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
     vi.spyOn(reportService, "getReportEmissions").mockResolvedValue({
         emissions: [DELIVERED],
-        amendments: [],
+        amendments,
     } as never);
     vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
@@ -182,10 +188,10 @@ function mockRest() {
     });
 }
 
-async function renderLoaded(persona: Persona, data: ReturnType<typeof payload>) {
+async function renderLoaded(persona: Persona, data: ReturnType<typeof payload>, amendments: unknown[] = []) {
     asPersona(persona);
     const full = vi.spyOn(reportService, "getReportFull").mockResolvedValue(data as never);
-    mockRest();
+    mockRest(amendments);
     render(
         <MemoryRouter initialEntries={[`/reports/${REPORT_ID}`]}>
             <Routes>
@@ -287,6 +293,52 @@ describe("Opening an amendment", () => {
     });
 });
 
+/** Text of the document canvas: the rendered pages and the renderer's hidden source. */
+function renderedDocumentText(): string {
+    const pages = Array.from(document.querySelectorAll<HTMLElement>("div")).filter(
+        (d) => d.style.width === "8.5in" && d.style.position === "relative",
+    );
+    const source = document.getElementById("reporte-content-v2");
+    return [...pages.map((p) => p.textContent ?? ""), source?.textContent ?? ""].join("\n");
+}
+
+describe("A published amended emission (#48)", () => {
+    const PUBLISHED_AMENDMENT = {
+        ...OPEN_AMENDMENT,
+        state: "PUBLISHED",
+        published_version_id: "v2",
+        published_version_no: 2,
+        published_at: SIGNED_AT,
+    };
+
+    it("shows its identification, reason and change note in the internal panel, never in the document", async () => {
+        await renderLoaded(
+            "pathologist",
+            payload("PUBLISHED", { amendedEmission: true, changeNote: "Se agrega IHC." }),
+            [PUBLISHED_AMENDMENT],
+        );
+        const internal = await screen.findByTestId("amendment-identification-internal");
+        expect(internal.textContent).toMatch(/Emisión vigente: Enmienda 1/);
+        expect(internal.textContent).toMatch(/versión 1/);
+        expect(internal.textContent).toMatch(/Resultado de IHC posterior/);
+        expect(internal.textContent).toMatch(/Se agrega IHC\./);
+        expect(internal.textContent).toMatch(/no se imprime en el reporte/);
+        // The emission history keeps every amendment's reason next to its outcome.
+        await waitFor(() =>
+            expect(screen.getByTestId("amendment-history-1").textContent).toMatch(/Motivo de la enmienda: Resultado de IHC posterior/),
+        );
+        await waitFor(() => expect(renderedDocumentText()).toContain("Contenido sintético."));
+        expect(renderedDocumentText()).not.toMatch(/ENMENDADO|Enmienda 1|Resultado de IHC posterior|Se agrega IHC\./);
+        expect(screen.queryByTestId("amendment-in-progress")).toBeNull();
+    });
+
+    it("an emission that is not an amendment shows no identification", async () => {
+        await renderLoaded("pathologist", payload("PUBLISHED"));
+        await screen.findByTestId("emission-history");
+        expect(screen.queryByTestId("amendment-identification-internal")).toBeNull();
+    });
+});
+
 describe("An open amendment", () => {
     it("shows the internal indicator with the emission still delivered", async () => {
         await renderLoaded("assignedReviewer", payload("DRAFT", { amendmentOpen: true }));
@@ -297,14 +349,16 @@ describe("An open amendment", () => {
         expect(banner.textContent).toMatch(/sigue siendo la entregada/);
     });
 
-    it("is identified in the rendered document (D2)", async () => {
+    // Rafael's correction of 2026-10-30 (#48) supersedes the D2 presentation rule that printed the
+    // identification in the document: it is internal information, shown in the amendment panel only.
+    it("keeps its identification, reason and change note out of the rendered document (#48)", async () => {
         await renderLoaded("assignedReviewer", payload("DRAFT", { amendmentOpen: true, changeNote: "Se agrega IHC." }));
-        await waitFor(() => {
-            const block = document.querySelector('[data-testid="report-amendment-identification"]');
-            expect(block?.textContent).toMatch(/REPORTE ENMENDADO — Enmienda 1/);
-            expect(block?.textContent).toMatch(/versión 1/);
-            expect(block?.textContent).toMatch(/Se agrega IHC\./);
-        });
+        await waitFor(() => expect(renderedDocumentText()).toContain("Contenido sintético."));
+        expect(renderedDocumentText()).not.toMatch(/ENMENDADO|Enmienda 1|Sustituye a la emisión|Resultado de IHC posterior|Se agrega IHC\./);
+        // Internal users still see which amendment is open, why, and the note they are writing.
+        expect(screen.getByTestId("amendment-in-progress").textContent).toMatch(/Resultado de IHC posterior/);
+        expect((screen.getByTestId("amendment-change-note") as HTMLTextAreaElement).value).toBe("Se agrega IHC.");
+        expect(screen.getByTestId("amendment-in-progress").textContent).toMatch(/no se imprime en el reporte/);
     });
 
     it("can be cancelled with a reason and the user's password", async () => {

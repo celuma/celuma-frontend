@@ -22,7 +22,7 @@ import {
     buildCompactSignature,
     buildRepeatedFieldsBand,
 } from "../../../components/report/versioned/report_page_bands";
-import { resolveRepeatedFieldRows } from "../../../components/report/versioned/repeated_fields";
+import { baseFieldDisplayValue, resolveRepeatedFieldRows } from "../../../components/report/versioned/repeated_fields";
 import { formatSampleCodes } from "../../../lib/sample_codes";
 import { buildCompositionReport } from "../../fixtures/reports/composition_scenarios";
 import type { ReportEnvelope } from "../../../models/report";
@@ -220,6 +220,26 @@ describe("paginateSource", () => {
         expect(pages[1].textContent).toBe("Títuloprimer párrafo");
     });
 
+    it("a block moved whole onto a fresh page leaves its leading decorative rule behind (#49)", () => {
+        // The figure section opens with a rule (2) and a title (5) before three rows (10 each): 37 with the
+        // rule. It does not fit after the text, so it moves whole to a fresh page, which it now opens
+        // without the rule, exactly as when the same section has to be split (previous test).
+        const section = `<div data-h="0"><hr ${KEEP_WITH_NEXT_ATTR}="true" ${SEPARATOR_ATTR}="true" data-h="2"/>`
+            + `<h3 ${KEEP_WITH_NEXT_ATTR}="true" data-h="5">Imágenes</h3>${row(1, 2, 3)}${row(4, 5, 6)}${row(7, 8, 9)}</div>`;
+        const nine = "ImágenesFigura 1Figura 2Figura 3Figura 4Figura 5Figura 6Figura 7Figura 8Figura 9";
+        const fresh = paginate(`<p data-h="20">texto</p>${section}`, 40);
+        expect(fresh.result.overflowedUnits).toBe(0);
+        expect(fresh.pages.map((p) => p.textContent)).toEqual(["texto", nine]);
+        expect(fresh.pages[1].querySelector("hr")).toBeNull();
+        expect(heightOf(fresh.pages[1])).toBe(35);
+        // At the exact fit (35) the whole section still lands together on the fresh page.
+        expect(paginate(`<p data-h="20">texto</p>${section}`, 35).pages.map((p) => p.textContent)).toEqual(["texto", nine]);
+        // Placed on the page it starts on, the section keeps its rule: it does not head a page.
+        const together = paginate(`<p data-h="5">texto</p>${section}`, 50);
+        expect(together.pages).toHaveLength(1);
+        expect(together.pages[0].querySelector("hr")).not.toBeNull();
+    });
+
     it("paginates exactly like the previous loop while no block exceeds a page: whole blocks move together", () => {
         // 25 + 25 + 25 with capacity 60: the third block does not fit the remaining 10, so the WHOLE block
         // (a section with several children) starts page 2 rather than being split across the break.
@@ -289,24 +309,59 @@ describe("resolveRepeatedFieldRows", () => {
         expect(resolveRepeatedFieldRows(r, t).map((x) => x.key)).toEqual(["patient"]);
     });
 
-    it("keeps an empty value as an empty string so the band can say it is unspecified", () => {
-        const r = envelopeWith(["sample_codes"]);
-        (r.report.base as Record<string, { value: string }>).sample_codes.value = "";
-        expect(resolveRepeatedFieldRows(r, snapshotTemplate(r))[0].value).toBe("");
+    // #44 (owner correction 2026-10-30) supersedes the #15 rule that printed "Sin especificar".
+    it("leaves out a flagged field with no printable value, and draws no band when none remains", () => {
+        const r = envelopeWith(["patient", "sample_codes", "expediente"]);
+        const base = r.report.base as Record<string, { value: unknown }>;
+        base.sample_codes.value = "";
+        base.expediente.value = "   ";
+        expect(resolveRepeatedFieldRows(r, snapshotTemplate(r)).map((x) => x.key)).toEqual(["patient"]);
+        base.patient.value = null;
+        expect(resolveRepeatedFieldRows(r, snapshotTemplate(r))).toEqual([]);
+    });
+
+    it("keeps meaningful values such as 0 and false, in their place", () => {
+        const r = envelopeWith(["patient", "sample_codes", "expediente"]);
+        const base = r.report.base as Record<string, { value: unknown }>;
+        base.sample_codes.value = 0;
+        base.expediente.value = false;
+        expect(resolveRepeatedFieldRows(r, snapshotTemplate(r)).map((x) => [x.key, x.value])).toEqual([
+            ["patient", "Paciente Sintético Compuesto"],
+            ["expediente", "false"],
+            ["sample_codes", "0"],
+        ]);
+    });
+});
+
+describe("baseFieldDisplayValue (#44)", () => {
+    it("treats missing, null and blank or whitespace-only text as empty", () => {
+        for (const empty of [undefined, null, "", "   ", "\n\t", {}, [], Number.NaN]) {
+            expect(baseFieldDisplayValue(empty), JSON.stringify(empty)).toBeNull();
+        }
+    });
+
+    it("keeps text exactly as stored and prints numbers and booleans, 0 and false included", () => {
+        expect(baseFieldDisplayValue("  Valor con espacios ")).toBe("  Valor con espacios ");
+        expect(baseFieldDisplayValue("0")).toBe("0");
+        expect(baseFieldDisplayValue(0)).toBe("0");
+        expect(baseFieldDisplayValue(12.5)).toBe("12.5");
+        expect(baseFieldDisplayValue(false)).toBe("false");
+        expect(baseFieldDisplayValue(true)).toBe("true");
     });
 });
 
 describe("buildRepeatedFieldsBand", () => {
     const style = { fontFamily: "Arial", fontSizePt: 8, color: "#000" };
-    it("prints Label: value pairs, wrapping instead of cropping, and marks an empty value", () => {
+    it("prints Label: value pairs, wrapping instead of cropping, with no placeholder text", () => {
         const band = buildRepeatedFieldsBand([
             { key: "patient", label: "Paciente", value: "Nombre Muy Largo ".repeat(10).trim() },
-            { key: "sample_codes", label: "Códigos de muestra", value: "" },
+            { key: "sample_codes", label: "Códigos de muestra", value: "S-1, S-2" },
         ], style);
         expect(band.dataset.pageBand).toBe("repeated-fields");
         expect(band.style.flexWrap).toBe("wrap");
         expect(band.textContent).toContain("Paciente: Nombre Muy Largo");
-        expect(band.textContent).toContain("Códigos de muestra: Sin especificar");
+        expect(band.textContent).toContain("Códigos de muestra: S-1, S-2");
+        expect(band.textContent).not.toContain("Sin especificar");
         expect(band.querySelectorAll("[data-repeated-field]").length).toBe(2);
         // Text goes through textContent, never innerHTML.
         const hostile = buildRepeatedFieldsBand([{ key: "patient", label: "Paciente", value: "<img src=x onerror=alert(1)>" }], style);
@@ -330,6 +385,19 @@ describe("buildCompactSignature", () => {
         expect(el.textContent).toContain("Dra. Firmante");
         expect(el.textContent).toContain("Firmado digitalmente el");
         expect((el.firstElementChild as HTMLElement).style.width).toBe(`${SIGNATURE_BLOCK_WIDTH_MM}mm`);
+    });
+
+    it("centers the whole identity block horizontally in every state (#45)", () => {
+        // The measured centering (asymmetric margins, long names, autograph shapes) is asserted in
+        // real Chromium; here: the band centers its single 64 mm block instead of pushing it right.
+        for (const input of [signed, { ...signed, signedAt: null, signatureUrl: null }, { ...signed, requireDigitalSignature: false }]) {
+            const el = buildCompactSignature(input);
+            expect(el.style.alignItems).toBe("center");
+            expect(el.children).toHaveLength(1);
+            const block = el.firstElementChild as HTMLElement;
+            expect(block.dataset.signatureBlock).toBe("true");
+            expect(block.style.width).toBe(`${SIGNATURE_BLOCK_WIDTH_MM}mm`);
+        }
     });
 
     it("unsigned draft: never an image, never a signed date, says it is pending", () => {
