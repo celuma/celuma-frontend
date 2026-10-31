@@ -619,6 +619,23 @@ export async function getReportEmissions(reportId: string): Promise<ReportEmissi
     return await res.json();
 }
 
+/**
+ * Céluma 1.4 (#48, review R1): one stored version of a report (`reports:read`, tenant-scoped), whose
+ * body carries that emission's own frozen `amendment` block. Used to show an earlier amendment's
+ * identification and change note internally, now that new PDFs no longer print them.
+ */
+export async function getReportVersion(reportId: string, versionNo: number): Promise<ReportEnvelope> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/${versionNo}`, {
+        method: "GET",
+        headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(parseFastApiErrorDetail(errText) ?? `No se pudo cargar la versión ${versionNo} (${res.status})`);
+    }
+    return (await res.json()) as ReportEnvelope;
+}
+
 export async function retractReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/retract`, {
         method: "POST",

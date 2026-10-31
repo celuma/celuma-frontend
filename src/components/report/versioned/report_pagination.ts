@@ -19,7 +19,8 @@
  *   4. while splitting, consecutive children marked `data-keep-with-next` (a section rule and title)
  *      are placed together with the child that follows them, so a title is never stranded at the bottom
  *      of a page, and a decorative separator (`data-page-separator`) that would head a continuation page
- *      is left out;
+ *      is left out — also when it is the first child of a block moved whole onto a fresh page (#49), so
+ *      a block takes the same room on a fresh page whether it is placed whole or split;
  *   5. a text unit (a paragraph, list item, heading or any block holding only inline content) taller than
  *      a page is split between words, keeping its inline formatting (bold, links...) and its order; the
  *      continuation keeps the same element;
@@ -117,6 +118,20 @@ function isSplittable(el: HTMLElement): boolean {
     if (el.hasAttribute(ATOMIC_ATTR)) return false;
     if (!CONTAINER_TAGS.has(el.tagName)) return false;
     return Array.from(el.children).some((child) => BLOCK_TAGS.has(child.tagName));
+}
+
+/**
+ * A copy of `block` without its leading decorative separator, or `null` when it does not open with one
+ * (rule 4: such a rule never heads a continuation page).
+ */
+function withoutLeadingSeparator(block: HTMLElement): HTMLElement | null {
+    const first = block.firstElementChild;
+    if (!first?.hasAttribute(SEPARATOR_ATTR) || block.hasAttribute(ATOMIC_ATTR)) return null;
+    const nodes = Array.from(block.childNodes);
+    if (nodes.slice(0, nodes.indexOf(first)).some((n) => (n.textContent ?? "").trim() !== "")) return null;
+    const trimmed = block.cloneNode(true) as HTMLElement;
+    trimmed.firstElementChild!.remove();
+    return trimmed;
 }
 
 /** The nodes of `parent` as placeable elements: loose text becomes a span, layout whitespace is dropped. */
@@ -224,6 +239,9 @@ export function paginateSource(root: HTMLElement, hooks: PaginationHooks): Pagin
             startPage();
             if (dropLeadingSeparator && nodes.length > 1 && nodes[0].hasAttribute(SEPARATOR_ATTR)) {
                 nodes = nodes.slice(1);
+            } else if (nodes.length === 1) {
+                const trimmed = withoutLeadingSeparator(nodes[0]);
+                if (trimmed) nodes = [trimmed];
             }
         }
         if (tryPlace(nodes, chain)) return true;

@@ -213,20 +213,30 @@ describe.each(RENDERERS)(
             unmount();
         });
 
-        it("renders an empty value as blank rather than dropping the row", () => {
+        it("an empty value: Legacy names it as unspecified, V2 omits it (#44)", () => {
             // The pre-signature state: `delivery_date` is declared and visible
-            // but has no value yet. The field must still be NAMED — dropping
-            // it is the defect this module exists for, and a report that
-            // silently omits an official field it declares is wrong whether
-            // the value is missing or not.
+            // but has no value yet. R3's defect was dropping fields that HAVE
+            // values (they never reached the page); this case covers an empty
+            // one. Until 1.4 both renderers printed it as "Sin especificar".
+            // Rafael's correction of 2026-10-30 (#44) supersedes that for V2:
+            // an empty general field is omitted, label and placeholder. The
+            // frozen Legacy renderer keeps its historical behaviour.
             const c = content();
             c.base.delivery_date.value = "";
             const envelope = buildEnvelope();
-            const rebuilt =
-                envelope.schema_version === 2 ? v2Envelope(c) : legacyEnvelope(c);
+            const isV2 = envelope.schema_version === 2;
+            const rebuilt = isV2 ? v2Envelope(c) : legacyEnvelope(c);
             const { text, unmount } = doRender(rebuilt);
-            expect(text).toContain("Fecha de entrega:");
-            expect(text).toContain("Sin especificar");
+            if (isV2) {
+                expect(text).not.toContain("Fecha de entrega");
+                expect(text).not.toContain("Sin especificar");
+            } else {
+                expect(text).toContain("Fecha de entrega:");
+                expect(text).toContain("Sin especificar");
+            }
+            // The populated official fields are still printed either way.
+            expect(text).toContain("Fecha de recepción:");
+            expect(text).toContain("Dr. Solicitante R3");
             unmount();
         });
 
