@@ -8,6 +8,8 @@
  *   GET   /v1/laboratory/samples/{id}/management     (lab:read)
  *   POST  /v1/laboratory/samples/{id}/code-correction (lab:update_sample + lab:enter_manual_code)
  *   POST  /v1/laboratory/samples/{id}/removal        (lab:remove_capture)
+ *   PATCH /v1/laboratory/samples/{id}/notes          (lab:update_sample)
+ *   PATCH /v1/laboratory/samples/{id}/dates          (lab:update_sample; received_at only within its numbering month)
  */
 import { apiFetch } from "../lib/api_fetch";
 import { formatHttpError } from "../lib/api_error";
@@ -47,11 +49,16 @@ export interface SampleManagementState {
     order_id: string;
     order_code: string;
     correction: ActionState;
+    /** Receipt/collection date edit; absent on an API older than this change. */
+    dates?: ActionState;
+    /** Moving the receipt date into another month regenerates the code (issued by monthly numbering). */
+    code_follows_receipt_month?: boolean;
     removal: ActionState;
     removal_consequences: string[];
 }
 
 export interface OrderUpdateInput {
+    patient_id?: string | null;
     requesting_physician_ids?: string[];
     expediente?: string | null;
     notes?: string | null;
@@ -95,3 +102,12 @@ export const correctSampleCode = async (sampleId: string, sampleCode: string, re
 
 export const removeSample = async (sampleId: string, reason: string) =>
     json<RemovalResult>(await apiFetch(`${LAB}/samples/${sampleId}/removal`, { method: "POST", body: JSON.stringify({ reason }) }));
+
+export const updateSampleNotes = async (sampleId: string, notes: string | null) =>
+    json<unknown>(await apiFetch(`${LAB}/samples/${sampleId}/notes`, { method: "PATCH", body: JSON.stringify({ notes }) }));
+
+export const updateSampleDates = async (
+    sampleId: string, input: { received_at?: string; collected_at?: string | null; reason: string },
+) => json<{ sample_id: string; sample_code: string; old_code?: string | null; unchanged: boolean }>(
+    await apiFetch(`${LAB}/samples/${sampleId}/dates`, { method: "PATCH", body: JSON.stringify(input) }),
+);

@@ -283,6 +283,7 @@ describe("R5 — no role-name comparisons were introduced", () => {
         expect(orderDetailSource).toContain("disabled={!canManageReviewers}");
         expect(orderDetailSource).toContain("disabled={!canManageAssignees}");
         expect(orderDetailSource).toContain("disabled={!canManageLabels}");
-        expect(orderDetailSource).toContain("!editingNotes && canUpdateOrder");
+        expect(orderDetailSource).toContain("if (canUpdateOrder && management?.edit.allowed) {");
+        expect(orderDetailSource).toContain("if (canRemoveCapture && management?.removal.allowed) {");
     });
 });

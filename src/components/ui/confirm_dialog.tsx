@@ -14,6 +14,10 @@ type Props = {
     /** Red accent + solid red confirm button for destructive actions. */
     danger?: boolean;
     loading?: boolean;
+    /** Disables the confirm button (e.g. while a required field is empty). */
+    confirmDisabled?: boolean;
+    /** Extra content under the description (a reason field, an error, a list of consequences). */
+    children?: ReactNode;
     onConfirm: () => void;
     onCancel: () => void;
 };
@@ -31,6 +35,8 @@ export default function ConfirmDialog({
     cancelText = "Cancelar",
     danger = false,
     loading = false,
+    confirmDisabled = false,
+    children,
     onConfirm,
     onCancel,
 }: Props) {
@@ -104,11 +110,12 @@ export default function ConfirmDialog({
                                 {description}
                             </p>
                         )}
+                        {children && <div style={{ marginTop: 12 }}>{children}</div>}
                     </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
                     <Button size="xsmall" onClick={onCancel} disabled={loading}>{cancelText}</Button>
-                    <Button size="xsmall" type="primary" danger={danger} loading={loading} onClick={onConfirm}>{confirmText}</Button>
+                    <Button size="xsmall" type="primary" danger={danger} loading={loading} disabled={confirmDisabled} onClick={onConfirm}>{confirmText}</Button>
                 </div>
             </div>
         </div>,
