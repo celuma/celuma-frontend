@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type CSSProperties } from "react";
-import AmendmentIdentification from "../amendment_identification";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
 import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
@@ -21,7 +20,15 @@ import {
     NOMINAL_REPEATED_BAND_MM,
     nominalSignatureBandMm,
 } from "./report_page_bands";
-import { resolveRepeatedFieldRows } from "./repeated_fields";
+import { baseFieldDisplayValue, resolveRepeatedFieldRows } from "./repeated_fields";
+import {
+    FIGURE_IMAGE_ATTR,
+    FIGURE_ROW_ATTR,
+    FIGURE_SECTION_ATTR,
+    FIGURES_PER_ROW,
+    fitCompactFigureSections,
+    initialFigureImageHeightPx,
+} from "./figure_density";
 import {
     DEFAULT_FOOTER_TEXT,
     DEFAULT_INSTITUTION_NAME,
@@ -66,12 +73,6 @@ const FOOTER_BAND_MM = 16;
 const BAND_GAP_MM = 4;
 /** Font size of the repeated-fields band (Céluma 1.4, #15; see report_page_bands.ts). */
 const REPEATED_BAND_FONT_PT = 8;
-/** Figures per row of the images section. */
-const FIGURES_PER_ROW = 3;
-/** Keep one/two-row sections at their existing size; compact taller grids without cropping. */
-const FIGURE_IMAGE_HEIGHT_PX = 200;
-/** Leaves room for a 3 x 3 section at 5 mm margins; taller bands still paginate naturally. */
-const COMPACT_FIGURE_IMAGE_HEIGHT_PX = 180;
 
 // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this used to
 // be a hardcoded literal, "duplicated deliberately … to keep V2 fully
@@ -738,10 +739,19 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 return body;
             };
 
+            const fits = (body: HTMLElement) => body.scrollHeight <= body.clientHeight;
             const work = sourceInDOM.cloneNode(true) as HTMLElement;
+            // Céluma 1.4 (#49): a section of three or more figure rows sizes its image area on a real
+            // continuation page of THIS report (header, repeated band, signature, footer, fonts), so a
+            // complete 3 x 3 page fits whenever it physically can; see figure_density.ts.
+            fitCompactFigureSections(work, {
+                open: () => makePage(1),
+                fits,
+                close: () => host.lastElementChild?.remove(),
+            }, SEPARATOR_ATTR);
             const pagination = paginateSource(work, {
                 newPage: makePage,
-                fits: (body) => body.scrollHeight <= body.clientHeight,
+                fits,
                 discardLastPage: () => host.lastElementChild?.remove(),
             });
             if (pagination.overflowedUnits > 0) {
@@ -830,6 +840,10 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 if (!v?.is_visible) return null;
                 const isCustom = (v as { is_custom?: boolean }).is_custom === true;
                 if (!PREDEFINED_BASE_KEYS.has(k) && !isCustom) return null;
+                // Céluma 1.4 (#44, owner correction 2026-10-30): a field with nothing to print is
+                // omitted — label and placeholder — instead of reading "Sin especificar".
+                const value = baseFieldDisplayValue(contentData.base[k]?.value);
+                if (value === null) return null;
                 return {
                     key: k,
                     // R3: never print a raw snake_case key. The field's own
@@ -837,7 +851,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     // `DEFAULT_BASE_FIELDS` covers a predefined key whose
                     // stored label is missing or blank.
                     label: resolveBaseFieldLabel(k, v),
-                    value: (contentData.base[k]?.value as string) ?? "",
+                    value,
                 };
             })
             .filter((row): row is { key: string; label: string; value: string } => row !== null);
@@ -901,18 +915,22 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     aria-hidden
                 >
                     <div id="reporte-content-v2" style={{ fontFamily: "Arial, sans-serif", fontSize: "10pt", color: "#000" }}>
-                        {/* Céluma 1.4 (#13): an amended emission identifies itself first. */}
-                        {contentData.amendment && <AmendmentIdentification amendment={contentData.amendment} />}
-                        <div style={{ marginBottom: 12 }}>
-                            {orderedBaseRows.map(({ key, label, value }) => (
-                                <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
-                                    <b>{label}:</b>{" "}
-                                    {value || <em style={{ color: "#888" }}>Sin especificar</em>}
-                                </p>
-                            ))}
-                        </div>
+                        {/* Céluma 1.4 (#48, owner correction 2026-10-30): an amendment's identification,
+                            reason and change note are internal information. They stay in the version's
+                            frozen `amendment` block and the editor's amendment panel, never in the document. */}
+                        {orderedBaseRows.length > 0 && (
+                            <>
+                                <div style={{ marginBottom: 12 }}>
+                                    {orderedBaseRows.map(({ key, label, value }) => (
+                                        <p key={key} style={{ margin: "2px 0", fontSize: "10pt" }}>
+                                            <b>{label}:</b> {value}
+                                        </p>
+                                    ))}
+                                </div>
 
-                        <hr {...{ [KEEP_WITH_NEXT_ATTR]: "true", [SEPARATOR_ATTR]: "true" }} style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                                <hr {...{ [KEEP_WITH_NEXT_ATTR]: "true", [SEPARATOR_ATTR]: "true" }} style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
+                            </>
+                        )}
 
                         {sections.map(({ key, section, savedContent }) => {
                             const sectionHeader = (
@@ -935,9 +953,9 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                         : []
                                 ) as TemplateImageItem[];
                                 if (images.length === 0) return null;
-                                const figureImageHeightPx = images.length > FIGURES_PER_ROW * 2
-                                    ? COMPACT_FIGURE_IMAGE_HEIGHT_PX
-                                    : FIGURE_IMAGE_HEIGHT_PX;
+                                // Sections of three or more rows start compact and are fitted to a measured
+                                // page before pagination (#49, figure_density.ts).
+                                const figureImageHeightPx = initialFigureImageHeightPx(images.length);
                                 // Céluma 1.4 (#19): the figures are laid out as rows of
                                 // three. Each row is one unbreakable unit (a figure and its
                                 // caption always travel together, in stored order) and rows flow
@@ -949,14 +967,13 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                     rows[rows.length - 1].push({ img, idx });
                                 });
                                 return (
-                                    <div key={key} style={{ marginBottom: 14 }}>
+                                    <div key={key} {...{ [FIGURE_SECTION_ATTR]: "true" }} style={{ marginBottom: 14 }}>
                                         <hr {...{ [KEEP_WITH_NEXT_ATTR]: "true", [SEPARATOR_ATTR]: "true" }} style={{ border: "none", borderTop: "1px solid #ccc", margin: "12px 0" }} />
                                         {sectionHeader}
                                         {rows.map((row, rowIdx) => (
                                             <div
                                                 key={rowIdx}
-                                                {...{ [ATOMIC_ATTR]: "true" }}
-                                                data-figure-row={rowIdx + 1}
+                                                {...{ [ATOMIC_ATTR]: "true", [FIGURE_ROW_ATTR]: rowIdx + 1 }}
                                                 style={{
                                                     display: "grid",
                                                     gridTemplateColumns: `repeat(${FIGURES_PER_ROW}, minmax(0, 1fr))`,
@@ -972,6 +989,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                                         background: "#fff",
                                                     }}>
                                                         <img
+                                                            {...{ [FIGURE_IMAGE_ATTR]: "true" }}
                                                             src={img.url}
                                                             alt={img.caption || `Figura ${idx + 1}`}
                                                             style={{ width: "100%", height: figureImageHeightPx, objectFit: "contain", background: "#fafafa", display: "block" }}

@@ -36,16 +36,16 @@ export async function api<T = Json>(
 }
 
 /** A 640x480 PNG with one big distinguishing label on a distinct colour. */
-export function labelledPng(label: string, hue: number): Buffer {
-    const canvas = createCanvas(640, 480);
+export function labelledPng(label: string, hue: number, width = 640, height = 480): Buffer {
+    const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = `hsl(${hue}, 60%, 70%)`;
-    ctx.fillRect(0, 0, 640, 480);
+    ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = "#0d1b2a";
-    ctx.font = "bold 320px sans-serif";
+    ctx.font = `bold ${Math.round((Math.min(width, height) * 2) / 3)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, 320, 250);
+    ctx.fillText(label, width / 2, height / 2 + 10);
     return canvas.toBuffer("image/png");
 }
 
@@ -79,6 +79,8 @@ export interface FigureLabOptions {
     /** Letterhead band heights (mm), to leave a deliberately small usable body. */
     headerHeightMm?: number;
     footerHeightMm?: number;
+    /** Pixel sizes the uploaded figures cycle through (default 640 x 480), e.g. wide, tall and square. */
+    imageSizes?: Array<[number, number]>;
 }
 
 /** A 360x120 PNG "signature": a stroke on a transparent background. */
@@ -182,7 +184,7 @@ export async function figureLab(request: APIRequestContext, labels: string[], op
         const res = await request.fetch(`${API_BASE}/api/v1/laboratory/samples/${sampleId}/images`, {
             method: "POST",
             headers: { Authorization: `Bearer ${admin}` },
-            multipart: { file: { name: `${label}.png`, mimeType: "image/png", buffer: labelledPng(label, (i * 70) % 360) } },
+            multipart: { file: { name: `${label}.png`, mimeType: "image/png", buffer: labelledPng(label, (i * 70) % 360, ...(opts.imageSizes?.[i % opts.imageSizes.length] ?? [640, 480])) } },
         });
         expect(res.ok(), await res.text()).toBeTruthy();
         imageIds[label] = ((await res.json()) as { id: string }).id;

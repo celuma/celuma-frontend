@@ -242,4 +242,55 @@ test.describe("Amendments of signed reports (1.4 #13)", () => {
         await expect(page.getByText(/Se abrió por error/)).toBeVisible();
         await context.close();
     });
+
+    // Céluma 1.4 (#46). Real backend and browser DOM, but no password manager: the native
+    // fill was checked separately in Chrome with its own manager (see the #46 evidence).
+    test("the reason typed before the password is kept through a refused attempt and stored exactly", async ({ browser, request }) => {
+        test.setTimeout(180_000);
+        const lab = await publishedReport(request);
+        const reason = "Corrección de texto de prueba";
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await login(page, lab.reviewerEmail, REVIEWER_PASSWORD);
+        await page.goto(`/reports/${lab.reportId}`);
+        await expect(page.getByTestId("amend-report")).toBeVisible({ timeout: 30_000 });
+        await page.getByTestId("amend-report").click();
+        const dialog = page.getByRole("dialog");
+        await dialog.getByRole("combobox").click();
+        await page.getByText("Corrección", { exact: true }).click();
+        await dialog.getByTestId("password-confirmation-reason").fill(reason);
+
+        // The credential form holds only its own username slot and the password.
+        const credentialFields = await dialog.getByTestId("password-confirmation-input").evaluate((el: HTMLInputElement) =>
+            Array.from(el.form!.elements).filter((f) => f.matches("input, textarea")).map((f) => `${f.getAttribute("name")}:${f.getAttribute("autocomplete")}`));
+        expect(credentialFields).toEqual(["username:username", "password:current-password"]);
+
+        // Refused attempt (keyboard submit): nothing opens, the reason stays exactly as typed.
+        const password = dialog.getByTestId("password-confirmation-input");
+        await password.fill("E2eNotThePassword!2026");
+        await password.press("Enter");
+        await expect(dialog.getByTestId("password-confirmation-error")).toBeVisible({ timeout: 30_000 });
+        await expect(dialog.getByTestId("password-confirmation-reason")).toHaveValue(reason);
+        await expect(password).toHaveValue("");
+        expect((await events(request, lab)).filter((e) => e.metadata?.action === "REPORT_REOPENED_FOR_AMENDMENT")).toHaveLength(0);
+
+        await password.fill(REVIEWER_PASSWORD);
+        await password.press("Enter");
+        await expect(page.getByTestId("amendment-in-progress")).toContainText("Enmienda 1 en curso", { timeout: 30_000 });
+        const opened = (await events(request, lab)).filter((e) => e.metadata?.action === "REPORT_REOPENED_FOR_AMENDMENT");
+        expect(opened).toHaveLength(1);
+        expect(opened[0].metadata?.reason).toBe(reason);
+        expect(JSON.stringify(opened[0].metadata)).not.toContain(REVIEWER_PASSWORD);
+
+        // The cancellation dialog shares the structure: its reason is stored exactly too.
+        await page.getByTestId("cancel-amendment").click();
+        await dialog.getByTestId("password-confirmation-reason").fill("Se abrió para probar el motivo");
+        await dialog.getByTestId("password-confirmation-input").fill(REVIEWER_PASSWORD);
+        await dialog.getByTestId("password-confirmation-input").press("Enter");
+        await expect(page.getByTestId("amendment-in-progress")).toHaveCount(0, { timeout: 30_000 });
+        const cancelled = (await events(request, lab)).filter((e) => e.metadata?.action === "REPORT_AMENDMENT_CANCELLED");
+        expect(cancelled).toHaveLength(1);
+        expect(cancelled[0].metadata?.reason).toBe("Se abrió para probar el motivo");
+        await context.close();
+    });
 });

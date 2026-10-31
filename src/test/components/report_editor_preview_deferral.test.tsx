@@ -119,30 +119,50 @@ const column = () => document.querySelector(".re-preview-col") as HTMLElement;
 
 describe("ReportEditor — live preview follows typing after a pause", () => {
     it("shows the loaded content at once, without waiting for a pause", async () => {
-        renderEditor();
-        expect(await screen.findByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
-        expect(column().getAttribute("data-preview-stale")).toBeNull();
+        // Flush the mocked load and React effects without advancing the debounce clock. With real
+        // timers, findBy can observe the renderer between hydration and the reset-key effect on a
+        // busy CI worker; that transient frame does not establish whether loading waits 200 ms.
+        // A broken reset-key path must still fail: no idle/max-wait timer is allowed to fire here.
+        vi.useFakeTimers();
+        try {
+            await act(async () => { renderEditor(); });
+            expect(screen.getByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
+            expect(column().getAttribute("data-preview-stale")).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("keeps the inputs immediate, recomposes the preview once after a burst, and marks it stale meanwhile", async () => {
-        renderEditor();
-        await screen.findByTestId("stub-preview");
-        const before = seen.renders;
+        // Finish the mocked load without consuming any typing-delay time, then measure only the
+        // author's burst. findBy alone can observe a transient hydration render on a busy worker.
+        vi.useFakeTimers();
+        try {
+            await act(async () => { renderEditor(); });
+            expect(column().getAttribute("data-preview-stale")).toBeNull();
+            const before = seen.renders;
 
-        const box = notes();
-        for (const text of ["Escribiendo u", "Escribiendo un", "Escribiendo una", "Escribiendo una nota"]) {
-            fireEvent.change(box, { target: { value: text } });
-            // The control itself is never delayed.
-            expect(notes().value).toBe(text);
+            const box = notes();
+            for (const text of ["Escribiendo u", "Escribiendo un", "Escribiendo una", "Escribiendo una nota"]) {
+                fireEvent.change(box, { target: { value: text } });
+                // The control itself is never delayed.
+                expect(notes().value).toBe(text);
+            }
+            expect(screen.getByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
+            expect(column().getAttribute("data-preview-stale")).toBe("true");
+            expect(seen.renders).toBe(before);
+
+            await act(async () => { await vi.advanceTimersByTimeAsync(PREVIEW_IDLE_MS - 1); });
+            expect(screen.getByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
+            expect(seen.renders).toBe(before);
+            await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+            expect(screen.getByTestId("stub-preview")).toHaveTextContent("Escribiendo una nota");
+            expect(column().getAttribute("data-preview-stale")).toBeNull();
+            // One recomposition for the whole burst (not one per keystroke).
+            expect(seen.renders - before).toBe(1);
+        } finally {
+            vi.useRealTimers();
         }
-        expect(screen.getByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
-        expect(column().getAttribute("data-preview-stale")).toBe("true");
-        expect(seen.renders).toBe(before);
-
-        await waitFor(() => expect(screen.getByTestId("stub-preview")).toHaveTextContent("Escribiendo una nota"), { timeout: PREVIEW_IDLE_MS * 4 });
-        expect(column().getAttribute("data-preview-stale")).toBeNull();
-        // One recomposition for the whole burst (not one per keystroke).
-        expect(seen.renders - before).toBe(1);
     });
 
     it("local print reads the text typed a moment ago, not the delayed preview", async () => {

@@ -44,7 +44,21 @@ export interface CompositionScenario {
     header?: boolean;
     /** Extra visible base keys (e.g. sample_codes, expediente) with values. */
     extraBase?: Record<string, string>;
+    /** Captions at the 25-character limit with wide glyphs, so they wrap in a figure card (#49). */
+    longCaptions?: boolean;
+    /** Carry a synthetic amendment identification block, as an amended emission does (#48). */
+    amendment?: boolean;
 }
+
+/** Synthetic internal amendment information that must never reach the document (#48). */
+export const SYNTHETIC_AMENDMENT = {
+    amendment_no: 2,
+    category: "SUPPLEMENT" as const,
+    reason: "Motivo interno sintético de la enmienda",
+    amends_version_no: 3,
+    amends_signed_at: "2026-02-01T10:00:00",
+    change_note: "Nota interna sintética de cambios",
+};
 
 export function figureSvgDataUri(n: number, shape: "wide" | "tall" | "square" | "std"): string {
     const dims = { wide: [400, 200], tall: [200, 400], square: [300, 300], std: [400, 300] }[shape];
@@ -69,7 +83,13 @@ function autographUri(kind: NonNullable<CompositionScenario["autograph"]>): stri
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-const LONG_NAME = "Paciente Sintética Con Un Nombre Extraordinariamente Largo De Prueba Apellidoparalelo Segundoapellidoinventado";
+/** A caption of exactly 25 characters (the editor's limit) that keeps the `Corte n sint.` marker. */
+export function longCaption(n: number): string {
+    const head = `Corte ${n} sint. `;
+    return head + "MWMWMWMWMWMWMWMWMWMWMWMW".slice(0, 25 - head.length);
+}
+
+const LONG_NAME ="Paciente Sintética Con Un Nombre Extraordinariamente Largo De Prueba Apellidoparalelo Segundoapellidoinventado";
 const LONG_REQUESTERS = [
     "Dra. Solicitante Sintética Número Uno De Un Hospital Ficticio",
     "Dr. Solicitante Sintético Número Dos",
@@ -151,11 +171,13 @@ export function buildCompositionReport(s: CompositionScenario): ReportEnvelope {
     const figures: TemplateImageItem[] = Array.from({ length: s.figures ?? 0 }, (_, i) => ({
         id: `fig-${i + 1}`,
         url: figureSvgDataUri(i + 1, shapes[i % shapes.length]),
-        caption: `Corte ${i + 1} sint.`,
+        caption: s.longCaptions ? longCaption(i + 1) : `Corte ${i + 1} sint.`,
     }));
     sections.images = { ...sections.images, content: figures };
     // Keep the frozen template's section list in step with the content.
     snapshot.template.sections = { ...content.sections } as Record<string, unknown>;
+
+    if (s.amendment) content.amendment = { ...SYNTHETIC_AMENDMENT };
 
     // --- signature
     const sig = s.signature ?? "signed";
