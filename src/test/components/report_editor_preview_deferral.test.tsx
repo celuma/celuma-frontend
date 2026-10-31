@@ -119,9 +119,18 @@ const column = () => document.querySelector(".re-preview-col") as HTMLElement;
 
 describe("ReportEditor — live preview follows typing after a pause", () => {
     it("shows the loaded content at once, without waiting for a pause", async () => {
-        renderEditor();
-        expect(await screen.findByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
-        expect(column().getAttribute("data-preview-stale")).toBeNull();
+        // Flush the mocked load and React effects without advancing the debounce clock. With real
+        // timers, findBy can observe the renderer between hydration and the reset-key effect on a
+        // busy CI worker; that transient frame does not establish whether loading waits 200 ms.
+        // A broken reset-key path must still fail: no idle/max-wait timer is allowed to fire here.
+        vi.useFakeTimers();
+        try {
+            await act(async () => { renderEditor(); });
+            expect(screen.getByTestId("stub-preview")).toHaveTextContent("Texto inicial.");
+            expect(column().getAttribute("data-preview-stale")).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("keeps the inputs immediate, recomposes the preview once after a burst, and marks it stale meanwhile", async () => {
