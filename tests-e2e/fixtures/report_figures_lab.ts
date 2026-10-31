@@ -231,11 +231,32 @@ export async function figureLab(request: APIRequestContext, labels: string[], op
     };
 }
 
-/** Selects the first `count` synthetic images in the sample gallery (each card has one checkbox button). */
+/**
+ * Selects the first `count` synthetic images in the sample gallery (each card has one checkbox button).
+ * The gallery lists the oldest upload first, so these are the first `count` labels passed to `figureLab`.
+ */
 export async function selectAllGalleryImages(page: import("@playwright/test").Page, count: number) {
     const checkboxes = page.locator('div[role="button"]');
     await expect(checkboxes.first()).toBeVisible({ timeout: 30_000 });
     for (let i = 0; i < count; i++) {
         await checkboxes.nth(i).click();
+    }
+}
+
+/**
+ * Selects the synthetic images with these labels, in this order, identifying each gallery card by the
+ * label in its object key rather than by its position, so a spec about figure order never depends on
+ * the gallery's own order.
+ */
+export async function selectGalleryImages(page: import("@playwright/test").Page, labels: string[]) {
+    const checkboxes = page.locator('div[role="button"]');
+    await expect(checkboxes.first()).toBeVisible({ timeout: 30_000 });
+    for (const label of labels) {
+        const index = await checkboxes.evaluateAll(
+            (els, l) => els.findIndex((el) => new RegExp(`/${l}_[0-9a-f]+\\.jpg`).test(el.parentElement?.querySelector("img")?.getAttribute("src") ?? "")),
+            label,
+        );
+        expect(index, `gallery card for image ${label}`).toBeGreaterThanOrEqual(0);
+        await checkboxes.nth(index).click();
     }
 }

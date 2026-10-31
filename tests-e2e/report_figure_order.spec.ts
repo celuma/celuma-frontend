@@ -16,7 +16,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { ADMIN_PASSWORD, REVIEWER_PASSWORD, api, figureLab, selectAllGalleryImages, API_BASE, type FigureLab } from "./fixtures/report_figures_lab";
+import { ADMIN_PASSWORD, REVIEWER_PASSWORD, api, figureLab, selectGalleryImages, API_BASE, type FigureLab } from "./fixtures/report_figures_lab";
 
 const OUT_DIR = process.env.CELUMA_FIGURES_OUT;
 
@@ -82,8 +82,8 @@ test.describe("Reordering selected report figures (1.4 #18)", () => {
         await login(page, lab.adminEmail, ADMIN_PASSWORD);
         await page.goto(`/reports/${lab.reportId}`);
 
-        // Select A, B, C (the gallery order is not touched by anything below).
-        await selectAllGalleryImages(page, 3);
+        // Select A, B, C by identity (the gallery order is not touched by anything below).
+        await selectGalleryImages(page, ["A", "B", "C"]);
         await expect(page.locator('[data-testid^="report-figure-"]')).toHaveCount(3);
         const captions = page.getByPlaceholder("Nota para esta imagen");
         for (const [i, text] of ["Cap A", "Cap B", "Cap C"].entries()) {
@@ -128,7 +128,7 @@ test.describe("Reordering selected report figures (1.4 #18)", () => {
         await page.getByRole("button", { name: "Quitar Figura 2" }).click();
         expect(await cards(page)).toEqual([["C", "Cap C"], ["A", "Cap A"]]);
         // Add D: appended, the rest untouched.
-        await page.locator('div[role="button"]').nth(3).click();
+        await selectGalleryImages(page, ["D"]);
         expect((await cards(page)).map((c) => c[0])).toEqual(["C", "A", "D"]);
         await page.getByRole("button", { name: "Subir Figura 3" }).click();
         expect((await cards(page)).map((c) => c[0])).toEqual(["C", "D", "A"]);
