@@ -50,6 +50,7 @@ import {
 import SampleImagesPicker from "./sample_images_picker";
 import ReportPreviewPagesRenderer, { type ReportRendererRef as ReportPreviewPagesRef } from "./report_renderer_resolver";
 import { previewDelays, useSettledValue } from "./use_settled_value";
+import { usePreviewScrollAnchor } from "./use_preview_scroll_anchor";
 import { useLocalPrint, localPrintMarkForStatus } from "../../hooks/use_local_print";
 import type {
     ReportEnvelope, ReportFullResponse, ReportStatus,
@@ -432,6 +433,7 @@ const ReportEditor: React.FC = () => {
 
     // Preview ref
     const previewPagesRef = useRef<ReportPreviewPagesRef>(null);
+    const previewPagesContainerRef = useRef<HTMLDivElement>(null);
     const leftColumnRef = useRef<HTMLDivElement>(null);
     const previewColumnRef = useRef<HTMLDivElement>(null);
 
@@ -1406,6 +1408,8 @@ const ReportEditor: React.FC = () => {
     // Post-Phase-2 remediation: `composeEnvelope` carries the letterhead selection (a change of the
     // "Membrete" selector once left the preview showing the old branding), so it must stay a dependency.
     }, [template, composeEnvelope, settledContent]);
+    // Céluma 1.4 (#47): every refresh repaginates the preview; keep the reader on the same figure/page.
+    usePreviewScrollAnchor(previewPagesContainerRef, previewPagesRef, previewEnvelope, signerLookup, reportId);
 
     // Post-Phase 2 remediation (bug 3 fix): the "Letterhead" selector. Unlike
     // the old "Template version" selector it replaces, this NEVER touches
@@ -2916,15 +2920,17 @@ const ReportEditor: React.FC = () => {
                             styles={{ body: { padding: 16 } }}
                             style={{ borderRadius: tokens.radius, boxShadow: tokens.shadow }}
                         >
-                            {previewEnvelope ? (
-                                <ReportPreviewPages
-                                    ref={previewPagesRef}
-                                    report={previewEnvelope}
-                                    signerLookup={signerLookup}
-                                />
-                            ) : (
-                                <Typography.Text type="secondary">Cargando vista previa...</Typography.Text>
-                            )}
+                            <div ref={previewPagesContainerRef}>
+                                {previewEnvelope ? (
+                                    <ReportPreviewPages
+                                        ref={previewPagesRef}
+                                        report={previewEnvelope}
+                                        signerLookup={signerLookup}
+                                    />
+                                ) : (
+                                    <Typography.Text type="secondary">Cargando vista previa...</Typography.Text>
+                                )}
+                            </div>
                         </Card>
                     </div>
                 </div>
