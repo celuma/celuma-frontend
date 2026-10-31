@@ -20,7 +20,10 @@ import { usePageTitle } from "../hooks/use_page_title";
 import { useOrderManagement } from "../hooks/use_capture_management";
 import { apiFetch } from "../lib/api_fetch";
 import { getErrorMessage } from "../lib/api_error";
-import { updateOrder } from "../services/order_management_service";
+import { updateOrder, type OrderUpdateInput } from "../services/order_management_service";
+import ReportTemplateField from "../components/order/report_template_field";
+import { getReportTemplates } from "../services/report_service";
+import type { OrderReportTemplateSelection, ReportTemplateRef } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 export const MAX_REQUESTING_PHYSICIANS = 10;
@@ -41,6 +44,8 @@ type OrderResponse = {
         requesting_physicians?: Array<{ id: string }> | null;
         expediente?: string | null;
         notes?: string | null;
+        /** Céluma 1.4.1; absent on an older API. */
+        report_template?: OrderReportTemplateSelection | null;
     };
     patient?: { id: string } | null;
 };
@@ -51,7 +56,8 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     </h3>
 );
 
-/** Basic order edit (#9): requesting physicians, expediente and description. Same page pattern as the patient/requester forms. */
+/** Basic order edit (#9): patient, requesting physicians, expediente, description and (Céluma 1.4.1) the report
+ *  template. Same page pattern as the patient/requester forms. */
 export default function OrderEditForm() {
     usePageTitle();
     const navigate = useNavigate();
@@ -63,6 +69,12 @@ export default function OrderEditForm() {
     const [physicians, setPhysicians] = useState<Array<{ value: string; label: string }>>([]);
     const [patients, setPatients] = useState<Array<{ value: string; label: string }>>([]);
     const { state } = useOrderManagement(orderId);
+    // Céluma 1.4.1: the stored explicit choice and what the catalog alone resolves to. `templateId` is what the
+    // form holds (null = follow the default); it is sent only when it differs from the stored choice, and null
+    // then means "reset to the default", never "omitted".
+    const [templateSelection, setTemplateSelection] = useState<OrderReportTemplateSelection | null>(null);
+    const [templateId, setTemplateId] = useState<string | null>(null);
+    const [templates, setTemplates] = useState<ReportTemplateRef[]>([]);
 
     const { control, handleSubmit, reset } = useForm<OrderEditData>({
         resolver: zodResolver(schema),
@@ -74,10 +86,12 @@ export default function OrderEditForm() {
         if (!orderId) return;
         (async () => {
             try {
-                const [orderRes, physiciansRes, patientsRes] = await Promise.all([
+                const [orderRes, physiciansRes, patientsRes, templatesRes] = await Promise.all([
                     apiFetch(`${base}/v1/laboratory/orders/${orderId}/full`),
                     apiFetch(`${base}/v1/requesting-physicians/`),
                     apiFetch(`${base}/v1/patients/`),
+                    // Names only; without `reports:read` the choices are the defaults themselves.
+                    getReportTemplates(true).catch(() => null),
                 ]);
                 if (!orderRes.ok) throw new Error(`${orderRes.status} ${orderRes.statusText}`);
                 const detail = (await orderRes.json()) as OrderResponse;
@@ -88,6 +102,10 @@ export default function OrderEditForm() {
                     expediente: detail.order.expediente ?? "",
                     notes: detail.order.notes ?? "",
                 });
+                const selection = detail.order.report_template ?? null;
+                setTemplateSelection(selection);
+                setTemplateId(selection?.report_template_id ?? null);
+                setTemplates((templatesRes?.templates ?? []).map((t) => ({ id: t.id, name: t.name })));
                 if (patientsRes.ok) {
                     const rows = (await patientsRes.json()) as Array<{ id: string; patient_code: string; first_name?: string; last_name?: string }>;
                     setPatients(rows.map((p) => ({
@@ -108,18 +126,24 @@ export default function OrderEditForm() {
     }, [orderId, reset]);
 
     const closed = state ? !state.edit.allowed : false;
+    // The template also locks once a report exists (its template is frozen in its snapshot).
+    const templateLocked = closed || (state?.report_template ? !state.report_template.allowed : false);
+    const templateBlockers = state?.report_template && state.edit.allowed ? state.report_template.blockers : [];
+    const storedTemplateId = templateSelection?.report_template_id ?? null;
 
     const onSubmit = handleSubmit(async (data) => {
         if (!orderId) return;
         setServerError(null);
         setSaving(true);
         try {
-            await updateOrder(orderId, {
+            const input: OrderUpdateInput = {
                 patient_id: data.patient_id?.trim() || null,
                 requesting_physician_ids: data.requesting_physician_ids,
                 expediente: data.expediente?.trim() || null,
                 notes: data.notes?.trim() || null,
-            });
+            };
+            if (templateSelection && templateId !== storedTemplateId) input.report_template_id = templateId;
+            await updateOrder(orderId, input);
             navigate(`/orders/${orderId}`, { replace: true });
         } catch (err) {
             setServerError(getErrorMessage(err));
@@ -134,7 +158,7 @@ export default function OrderEditForm() {
                 <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <PageHeader
                         title={orderCode ? `Editar Orden ${orderCode}` : "Editar Orden"}
-                        subtitle="Corrige el paciente, los solicitantes, el expediente y la descripción. El tipo de estudio, la sucursal y el código no se editan aquí."
+                        subtitle="Corrige el paciente, los solicitantes, el expediente, la descripción y la plantilla del reporte. El tipo de estudio, la sucursal y el código no se editan aquí."
                     />
 
                     <Card style={cardStyle} styles={{ body: { padding: tokens.cardPadding } }} loading={loading}>
@@ -217,6 +241,34 @@ export default function OrderEditForm() {
                                     )}
                                 />
                             </section>
+
+                            {templateSelection && (
+                                <section style={{ display: "grid", gap: 16 }}>
+                                    <SectionTitle>Reporte</SectionTitle>
+                                    <BlockersNotice
+                                        testId="order-edit-template-blockers"
+                                        blockers={templateBlockers}
+                                        lead="La plantilla ya no se puede cambiar desde la orden."
+                                    />
+                                    <ReportTemplateField
+                                        mode="edit"
+                                        value={templateId}
+                                        onChange={setTemplateId}
+                                        options={templates}
+                                        fallback={{
+                                            status: templateSelection.default_status,
+                                            template: templateSelection.default_template,
+                                            source: templateSelection.default_source,
+                                            candidates: templateSelection.candidates,
+                                        }}
+                                        inactiveChoice={templateSelection.status === "INACTIVE" ? templateSelection.template : null}
+                                        disabled={templateLocked}
+                                    />
+                                    {templateSelection.status === "INACTIVE" && templateId === storedTemplateId && (
+                                        <ErrorText>La plantilla elegida para esta orden está desactivada: elige otra o restablece la predeterminada.</ErrorText>
+                                    )}
+                                </section>
+                            )}
 
                             {serverError && <ErrorText>{serverError}</ErrorText>}
 

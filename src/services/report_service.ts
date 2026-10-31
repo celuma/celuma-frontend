@@ -18,7 +18,7 @@ import type {
 } from "../models/report";
 import { sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import { buildReportPdfFilename } from "../lib/report_filename";
-import type { StudyTypeReportDefaults } from "../models/report_letterhead";
+import type { OrderReportDefaults, StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
@@ -293,6 +293,36 @@ export async function getStudyTypeReportDefaults(
         );
     }
     return (await res.json()) as StudyTypeReportDefaults;
+}
+
+/**
+ * Céluma 1.4.1: the bootstrap of a NEW report of an order. The editor reads the
+ * ORDER's effective template (explicit choice > sample-type default > study-type
+ * default) instead of the study type's, with the same letterhead resolution and
+ * the same H-0c failure classification as `getStudyTypeReportDefaults`.
+ */
+export async function getOrderReportDefaults(orderId: string): Promise<OrderReportDefaults> {
+    let res: Response;
+    try {
+        res = await fetch(`${base}/v1/laboratory/orders/${orderId}/report-defaults`, {
+            method: "GET",
+            headers: authHeaders({ Accept: "application/json" }),
+        });
+    } catch {
+        throw new ReportConfigRequestError(
+            null,
+            "Error de red: no se pudo contactar al servidor. Verifica tu conexión."
+        );
+    }
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new ReportConfigRequestError(
+            res.status,
+            parseFastApiErrorDetail(errText)
+                ?? `Error al resolver la configuración del reporte de la orden (${res.status})`
+        );
+    }
+    return (await res.json()) as OrderReportDefaults;
 }
 
 // ---------------------------------------------------------------------------

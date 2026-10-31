@@ -74,13 +74,15 @@ describe("sample-type administration page", () => {
         return calls;
     }
 
-    it("lists active AND inactive types with the study-type pattern (no template field)", async () => {
+    // Céluma 1.4.1 superseded "(no template field)": the owner asked for the sample type's report template to
+    // be configurable here, because it now drives the order's suggested template (order-report-template.md).
+    it("lists active AND inactive types with the study-type pattern and the template link column", async () => {
         const calls = stub();
         render(<MemoryRouter><SampleTypes embedded /></MemoryRouter>);
         expect(await screen.findByText("Biopsia")).toBeInTheDocument();
         expect(screen.getByText("Retirado")).toBeInTheDocument();
         expect(calls[0].url).toContain("/v1/sample-types/?active_only=false");
-        expect(screen.queryByText(/Plantilla/)).toBeNull();
+        expect(screen.getByRole("columnheader", { name: /Plantilla de reporte/ })).toBeInTheDocument();
     });
 
     it("creates a type through the API", async () => {

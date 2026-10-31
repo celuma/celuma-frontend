@@ -28,7 +28,7 @@ import * as reportService from "../../services/report_service";
 import * as letterheadService from "../../services/report_letterhead_service";
 import { ReportConfigRequestError } from "../../services/report_service";
 import { useUserProfile } from "../../hooks/use_user_profile";
-import type { StudyTypeReportDefaults } from "../../models/report_letterhead";
+import type { OrderReportDefaults } from "../../models/report_letterhead";
 
 vi.mock("../../hooks/use_user_profile");
 const mockedUseUserProfile = vi.mocked(useUserProfile);
@@ -143,8 +143,8 @@ function mockTemplateVersionOk() {
     } as never);
 }
 
-function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
-    return vi.spyOn(reportService, "getStudyTypeReportDefaults").mockResolvedValue({
+function mockDefaults(overrides: Partial<OrderReportDefaults> = {}) {
+    return vi.spyOn(reportService, "getOrderReportDefaults").mockResolvedValue({
         template_id: TEMPLATE_ID,
         active_template_version_id: "tv1",
         letterhead_version_id: "lhv1",
@@ -156,7 +156,7 @@ function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
         v2_blocked_reason: null,
         v2_blocked_detail: null,
         ...overrides,
-    } as StudyTypeReportDefaults);
+    } as OrderReportDefaults);
 }
 
 function renderEditor() {
@@ -266,7 +266,7 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockTemplateVersionOk();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new ReportConfigRequestError(403, "No tienes permiso para realizar esta acción.")
         );
 
@@ -286,7 +286,7 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockTemplateVersionOk();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new ReportConfigRequestError(401, "Tu sesión expiró. Vuelve a iniciar sesión.")
         );
 
@@ -335,7 +335,7 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockTemplateVersionOk();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new ReportConfigRequestError(500, "Error interno del servidor")
         );
 
@@ -353,7 +353,7 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockTemplateVersionOk();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new ReportConfigRequestError(
                 null,
                 "Error de red: no se pudo contactar al servidor. Verifica tu conexión."
@@ -374,7 +374,7 @@ describe("ReportEditor — configuration states are not conflated (H-0c)", () =>
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockTemplateVersionOk();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new ReportConfigRequestError(403, "No tienes permiso para realizar esta acción.")
         );
 

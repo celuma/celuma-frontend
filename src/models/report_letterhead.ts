@@ -142,7 +142,11 @@ export type LetterheadResolutionSource = "EXPLICIT" | "TEMPLATE_PREFERRED" | "TE
 export type V2BlockedReason =
     | "NO_TEMPLATE"
     | "NO_LETTERHEAD"
-    | "LETTERHEAD_MISCONFIGURED";
+    | "LETTERHEAD_MISCONFIGURED"
+    // Céluma 1.4.1, order bootstrap only: the order's samples suggest different
+    // templates and nobody chose one / the order's explicit choice was deactivated.
+    | "TEMPLATE_AMBIGUOUS"
+    | "TEMPLATE_INACTIVE";
 
 /** Response from GET /api/v1/study-types/{id}/report-defaults.
  *
@@ -165,6 +169,44 @@ export interface StudyTypeReportDefaults {
     letterhead_resolved_resources?: LetterheadResolvedResources | null;
     v2_blocked_reason?: V2BlockedReason | null;
     v2_blocked_detail?: string | null;
+}
+
+/** Response from GET /api/v1/laboratory/orders/{id}/report-defaults (Céluma 1.4.1).
+ *
+ *  Same shape as the study-type bootstrap, but `template_id` is the ORDER's
+ *  effective template: its explicit choice, else the sample type's default when
+ *  the samples agree, else the study type's. `template_id` is set only when that
+ *  template is usable; its structure and `template_hash` are then read from
+ *  GET /reports/templates/{id} and echoed on creation. */
+export interface OrderReportDefaults extends StudyTypeReportDefaults {
+    template_name?: string | null;
+    template_source?: ReportTemplateSource | null;
+    template_status?: ReportTemplateStatus;
+    template_candidates?: ReportTemplateRef[];
+}
+
+/** Where an order's report template comes from (Céluma 1.4.1). */
+export type ReportTemplateSource = "ORDER" | "SAMPLE_TYPE" | "STUDY_TYPE";
+export type ReportTemplateStatus = "RESOLVED" | "AMBIGUOUS" | "INACTIVE" | "NONE";
+
+export interface ReportTemplateRef {
+    id: string;
+    name: string;
+    is_active?: boolean;
+}
+
+/** `order.report_template` in the order detail (Céluma 1.4.1). */
+export interface OrderReportTemplateSelection {
+    /** The stored explicit choice; null = follow the catalog defaults. */
+    report_template_id: string | null;
+    status: ReportTemplateStatus;
+    source: ReportTemplateSource | null;
+    template: ReportTemplateRef | null;
+    candidates: ReportTemplateRef[];
+    /** What clearing the explicit choice restores. */
+    default_status: ReportTemplateStatus;
+    default_source: ReportTemplateSource | null;
+    default_template: ReportTemplateRef | null;
 }
 
 // ---------------------------------------------------------------------------

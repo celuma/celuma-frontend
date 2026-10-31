@@ -72,6 +72,8 @@ export interface SampleTypeInput {
     /** Omitted = unchanged; `null` (or blank) clears the stored description. */
     description?: string | null;
     is_active?: boolean;
+    /** Céluma 1.4.1. Omitted = unchanged; `null` (or blank) clears the link. */
+    default_report_template_id?: string | null;
 }
 
 export async function createSampleType(input: SampleTypeInput): Promise<SampleType> {
