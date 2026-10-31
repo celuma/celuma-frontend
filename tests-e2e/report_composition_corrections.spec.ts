@@ -13,7 +13,11 @@
  *      signer centered on the page;
  *   3. an amendment is opened, noted, reviewed and signed: the draft never replaces the delivered
  *      emission, the original PDF bytes never change, and neither the preview nor the amended official
- *      PDF shows the amendment's identification, reason or change note — the editor's internal panel does.
+ *      PDF shows the amendment's identification, reason or change note — the editor's internal panel does;
+ *   4. (review R1) a second amendment with a different note is published and a third is opened: from the
+ *      emission history an internal user reads each published amendment's own frozen note (A from its
+ *      version, B from its version), while no document — preview, either amended PDF — shows any of them
+ *      and no signed PDF's bytes change.
  *
  * Everything is synthetic; CELUMA_COMPOSITION_OUT receives the PDFs and the measured geometry.
  */
@@ -32,6 +36,13 @@ const REQUESTERS = [
 const REASON = "Motivo interno sintético E2E";
 const NOTE = "Nota interna sintética de cambios E2E";
 const INTERNAL = /ENMENDADO|Enmienda 1|Sustituye a la emisión|Motivo interno sintético|Nota interna sintética/;
+const REASON_2 = "Segundo motivo interno E2E";
+const NOTE_2 = "Segunda nota interna E2E";
+const REASON_3 = "Tercer motivo interno E2E";
+const NOTE_3 = "Tercera nota interna E2E";
+/** Any internal amendment text of the three amendments: none of it may reach a document. */
+const ANY_INTERNAL = [/ENMENDADO/, /Sustituye a la emisión/, ...[REASON, NOTE, REASON_2, NOTE_2, REASON_3, NOTE_3].map((t) => new RegExp(t))];
+const expectNoInternal = (text: string, where: string) => ANY_INTERNAL.forEach((re) => expect(text, `${where}: ${re}`).not.toMatch(re));
 
 const field = (label: string, extra: Record<string, unknown> = {}) => ({ is_visible: true, label, value: "", ...extra });
 const TEMPLATE_JSON = {
@@ -200,6 +211,8 @@ test.describe("Report composition corrections on the real stack (1.4 #44 #45 #48
     let lab: FigureLab;
     let livePages = 0;
     let originalSha = "";
+    let originalVersion = 0;
+    let firstAmendment = { version: 0, sha: "" };
 
     test.beforeAll(async ({ playwright }) => {
         const request = await playwright.request.newContext();
@@ -389,6 +402,95 @@ test.describe("Report composition corrections on the real stack (1.4 #44 #45 #48
         await expect.poll(async () => (await previewGeometry(reviewer)).length, { timeout: 30_000 }).toBeGreaterThan(1);
         (await previewGeometry(reviewer)).forEach((g) => expect(g.text).not.toMatch(INTERNAL));
         save("e2e-amendment.json", JSON.stringify({ originalSha, amendedSha: sha(amendedPdf), originalVersion: during.version_no, amendedVersion: amended.version_no }, null, 1));
+        originalVersion = during.version_no;
+        firstAmendment = { version: amended.version_no, sha: sha(amendedPdf) };
         await reviewerContext.close();
+    });
+
+    test("every published amendment's note stays readable internally, also while another is open (review R1)", async ({ browser, request }) => {
+        test.setTimeout(300_000);
+        expect(firstAmendment.version).toBeGreaterThan(0);
+        const saveNote = async (note: string) => {
+            const body = await fullBody(request, lab);
+            await api(request, "POST", `/api/v1/reports/${lab.reportId}/new_version`, {
+                token: lab.admin,
+                data: {
+                    tenant_id: lab.tenantId, branch_id: lab.branchId, order_id: lab.orderId, title: "Reporte sintético de composición",
+                    report: { ...body, amendment: { change_note: note } },
+                },
+            });
+        };
+
+        // Amendment 2: a different reason and note, reviewed and signed.
+        await api(request, "POST", `/api/v1/reports/${lab.reportId}/amendments`, {
+            data: { category: "CORRECTION", reason: REASON_2, password: REVIEWER_PASSWORD }, token: lab.reviewerToken,
+        });
+        await saveNote(NOTE_2);
+        await api(request, "POST", `/api/v1/reports/${lab.reportId}/submit`, { data: {}, token: lab.admin });
+        await api(request, "POST", `/api/v1/reports/${lab.reportId}/approve`, { data: {}, token: lab.reviewerToken });
+        await api(request, "POST", `/api/v1/reports/${lab.reportId}/sign-and-publish`, { data: { password: REVIEWER_PASSWORD }, token: lab.reviewerToken });
+        const second = await api<{ version_no: number; pdf_url: string }>(request, "GET", `/api/v1/reports/${lab.reportId}/pdf`, { token: lab.admin });
+        expect(second.version_no).toBeGreaterThan(firstAmendment.version);
+        const secondPdf = await download(request, second.pdf_url);
+        save("e2e-official-amended-2.pdf", secondPdf);
+        (await pdfPages(secondPdf)).forEach((p, i) => expectNoInternal(p.text, `second amended PDF page ${i + 1}`));
+
+        // Amendment 3 is opened and noted but not signed: the second amendment stays delivered.
+        await api(request, "POST", `/api/v1/reports/${lab.reportId}/amendments`, {
+            data: { category: "SUPPLEMENT", reason: REASON_3, password: REVIEWER_PASSWORD }, token: lab.reviewerToken,
+        });
+        await saveNote(NOTE_3);
+        const during = await api<{ version_no: number; pdf_url: string }>(request, "GET", `/api/v1/reports/${lab.reportId}/pdf`, { token: lab.admin });
+        expect(during.version_no).toBe(second.version_no);
+        expect(sha(await download(request, during.pdf_url))).toBe(sha(secondPdf));
+
+        // No signed emission's bytes changed: original, first and second amendment.
+        for (const [version, expected] of [[originalVersion, originalSha], [firstAmendment.version, firstAmendment.sha], [second.version_no, sha(secondPdf)]] as const) {
+            const v = await api<{ pdf_url: string }>(request, "GET", `/api/v1/reports/${lab.reportId}/versions/${version}/pdf`, { token: lab.admin });
+            expect(sha(await download(request, v.pdf_url)), `version ${version} bytes`).toBe(expected);
+        }
+        const firstPdf = await (async () => {
+            const v = await api<{ pdf_url: string }>(request, "GET", `/api/v1/reports/${lab.reportId}/versions/${firstAmendment.version}/pdf`, { token: lab.admin });
+            return download(request, v.pdf_url);
+        })();
+        (await pdfPages(firstPdf)).forEach((p, i) => expectNoInternal(p.text, `first amended PDF page ${i + 1}`));
+
+        // The reviewer reads each published amendment's own note from the history, on demand.
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await login(page, lab.reviewerEmail, REVIEWER_PASSWORD);
+        await page.goto(`/reports/${lab.reportId}`);
+        await expect(page.getByTestId("amendment-in-progress")).toContainText(REASON_3, { timeout: 30_000 });
+        await expect(page.getByTestId("amendment-change-note")).toHaveValue(NOTE_3);
+        const readNote = async (version: number) => {
+            const toggle = page.getByRole("button", { name: `Ver identificación interna de la versión ${version}` });
+            await expect(toggle).toBeVisible({ timeout: 30_000 });
+            await expect(toggle).toHaveAttribute("aria-expanded", "false");
+            await toggle.click();
+            await expect(toggle).toHaveAttribute("aria-expanded", "true");
+            const detail = page.getByTestId(`emission-identification-${version}`);
+            await expect(detail).toBeVisible({ timeout: 30_000 });
+            return detail;
+        };
+        const first = await readNote(firstAmendment.version);
+        await expect(first).toContainText("Enmienda 1");
+        await expect(first).toContainText(REASON);
+        await expect(first).toContainText(NOTE);
+        await expect(first).not.toContainText(NOTE_2);
+        const secondDetail = await readNote(second.version_no);
+        await expect(secondDetail).toContainText("Enmienda 2");
+        await expect(secondDetail).toContainText(REASON_2);
+        await expect(secondDetail).toContainText(NOTE_2);
+        await expect(secondDetail).not.toContainText(NOTE);
+        // The original emission has no amendment identification to read.
+        await expect(page.getByRole("button", { name: `Ver identificación interna de la versión ${originalVersion}` })).toHaveCount(0);
+
+        // The open draft's preview carries none of the internal texts.
+        await expect.poll(async () => (await previewGeometry(page)).length, { timeout: 30_000 }).toBeGreaterThan(1);
+        (await previewGeometry(page)).forEach((g, i) => expectNoInternal(g.text, `draft preview page ${i + 1}`));
+        save("e2e-amendments-r1.json", JSON.stringify({
+            originalVersion, firstAmendment, secondAmendment: { version: second.version_no, sha: sha(secondPdf) }, openDraftDeliveredVersion: during.version_no,
+        }, null, 1));
+        await context.close();
     });
 });

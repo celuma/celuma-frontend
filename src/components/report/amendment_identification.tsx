@@ -12,7 +12,9 @@ import { tokens } from "../design/tokens";
  * the laboratory, not part of the report. It is shown only in the editor's
  * amendment panel, outside the document canvas; the shared V2 renderer (editor
  * preview, local print and the official PDF) never draws it. Emissions issued
- * before the correction keep the PDF they were signed with.
+ * before the correction keep the PDF they were signed with. The panel shows it
+ * for the current amended emission and, on demand, for every earlier amended
+ * emission of the history (review R1), each from its own version's block.
  */
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-MX", {
@@ -29,7 +31,14 @@ function formatSignedDate(iso: string | null | undefined): string | null {
 
 const lineStyle: CSSProperties = { margin: "2px 0" };
 
-export default function AmendmentIdentification({ amendment }: { amendment: ReportAmendmentBlock }) {
+export default function AmendmentIdentification({
+    amendment,
+    current = true,
+}: {
+    amendment: ReportAmendmentBlock;
+    /** `true` for the emission currently delivered; `false` for one read from the history. */
+    current?: boolean;
+}) {
     const signedOn = formatSignedDate(amendment.amends_signed_at);
     const category = AMENDMENT_CATEGORY_LABELS[amendment.category] ?? amendment.category;
     const note = (amendment.change_note ?? "").trim();
@@ -39,7 +48,7 @@ export default function AmendmentIdentification({ amendment }: { amendment: Repo
             style={{ fontSize: 13, lineHeight: 1.45, color: tokens.textPrimary }}
         >
             <p style={{ ...lineStyle, fontWeight: 600 }}>
-                Emisión vigente: Enmienda {amendment.amendment_no} · {category}
+                {current ? "Emisión vigente: " : ""}Enmienda {amendment.amendment_no} · {category}
             </p>
             <p style={lineStyle}>
                 Sustituye a la emisión firmada{signedOn ? ` el ${signedOn}` : ""} (versión {amendment.amends_version_no}).
