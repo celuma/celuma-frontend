@@ -41,6 +41,8 @@ export interface OrderManagementState {
     sample_count: number;
     has_report: boolean;
     removal_consequences: string[];
+    /** Céluma 1.4.1: changing the report template (the edit window, plus no report yet). Absent on older APIs. */
+    report_template?: ActionState;
 }
 
 export interface SampleManagementState {
@@ -62,6 +64,8 @@ export interface OrderUpdateInput {
     requesting_physician_ids?: string[];
     expediente?: string | null;
     notes?: string | null;
+    /** Céluma 1.4.1: omitted = unchanged; an id = the explicit choice; `null` = reset to the catalog default. */
+    report_template_id?: string | null;
 }
 
 export interface RemovalResult {

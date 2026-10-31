@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import type { OrderReportTemplateSelection } from "../models/report_letterhead";
+import { TEMPLATE_SOURCE_LABEL } from "../lib/report_template_suggestion";
 import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
 import { useOrderManagement } from "../hooks/use_capture_management";
 import { removeOrder } from "../services/order_management_service";
@@ -92,6 +94,14 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     return parsed as TRes;
 }
 
+/** One line for the order header (Céluma 1.4.1). */
+function describeOrderTemplate(selection: OrderReportTemplateSelection): string {
+    if (selection.status === "AMBIGUOUS") return "por elegir (las muestras sugieren plantillas distintas)";
+    if (selection.status === "NONE" || !selection.template) return "sin plantilla";
+    const suffix = selection.status === "INACTIVE" ? " (desactivada)" : "";
+    return `${selection.template.name}${suffix} · ${selection.source ? TEMPLATE_SOURCE_LABEL[selection.source] : ""}`.replace(/ · $/, "");
+}
+
 type OrderFullResponse = {
     order: {
         id: string;
@@ -105,6 +115,8 @@ type OrderFullResponse = {
         requesting_physicians?: Array<{ id: string; full_name: string; physician_code: string }> | null;
         /** Optional request reference; a string so leading zeroes survive. */
         expediente?: string | null;
+        /** Céluma 1.4.1: the template a NEW report would use (absent on an older API). */
+        report_template?: OrderReportTemplateSelection | null;
         requested_by?: string | null;
         notes?: string | null;
         billed_lock?: boolean;
@@ -1127,6 +1139,15 @@ export default function OrderDetail() {
                                         <span style={{ fontWeight: 600, color: tokens.textPrimary }} data-testid="order-expediente">{data.order.expediente}</span>
                                     </MetaItem>
                                 )}
+                                {/* Céluma 1.4.1: only before a report exists; a report shows its own frozen template. */}
+                                {!data.order.report_id && data.order.report_template && (
+                                    <MetaItem icon={<FileTextOutlined />}>
+                                        <span style={{ marginRight: 4 }}>Plantilla del reporte:</span>
+                                        <span style={{ fontWeight: 600, color: tokens.textPrimary }} data-testid="order-report-template">
+                                            {describeOrderTemplate(data.order.report_template)}
+                                        </span>
+                                    </MetaItem>
+                                )}
                                 {data.order.created_at && (
                                     <MetaItem icon={<CalendarOutlined />}>
                                         {new Date(data.order.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
@@ -1780,8 +1801,14 @@ export default function OrderDetail() {
                                                     requesting_physician_ids: "los médicos solicitantes",
                                                     expediente: "el expediente",
                                                     notes: "la descripción",
+                                                    report_template_id: "la plantilla del reporte",
                                                 };
-                                                return `Actualizó ${changed.map((f) => labels[f] ?? f).join(", ") || "datos de la orden"}`;
+                                                // Céluma 1.4.1: names as they were at the time ("null" = the default).
+                                                const names = meta.report_template_names as { old?: string | null; new?: string | null } | undefined;
+                                                const templateChange = names
+                                                    ? ` (${names.old ?? "predeterminada"} → ${names.new ?? "predeterminada"})`
+                                                    : "";
+                                                return `Actualizó ${changed.map((f) => (labels[f] ?? f) + (f === "report_template_id" ? templateChange : "")).join(", ") || "datos de la orden"}`;
                                             }
                                             case "SAMPLE_CODE_CORRECTED":
                                                 return `Corrigió el código de una muestra: ${String(meta.old_code ?? "?")} → ${String(meta.new_code ?? "?")}`;

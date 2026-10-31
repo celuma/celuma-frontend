@@ -235,7 +235,9 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                 code: data.code,
                 name: data.name,
                 description: data.description || undefined,
-                default_report_template_id: data.default_report_template_id || undefined,
+                // Céluma 1.4.1: optional and clearable. `null`, not undefined: JSON drops undefined, and an omitted
+                // field means "unchanged" to the API, so an emptied selector would silently keep the template.
+                default_report_template_id: data.default_report_template_id || null,
                 is_active: data.is_active ?? true,
             };
             if (editingId) {
@@ -426,15 +428,22 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                         control={control}
                         name="default_report_template_id"
                         render={(p) => (
-                            <FloatingCaptionSelect
-                                label="Plantilla de reporte por defecto"
-                                value={typeof p.value === "string" ? p.value : undefined}
-                                onChange={(v) => p.onChange(v ?? "")}
-                                placeholder="Seleccionar plantilla"
-                                options={templates.map((t) => ({ value: t.id, label: t.name }))}
-                                showSearch
-                                error={p.error}
-                            />
+                            <div style={{ display: "grid", gap: 6 }}>
+                                <FloatingCaptionSelect
+                                    label="Plantilla de reporte predeterminada (opcional)"
+                                    value={typeof p.value === "string" && p.value ? p.value : undefined}
+                                    onChange={(v) => p.onChange(v ?? "")}
+                                    placeholder="Sin plantilla"
+                                    options={templates.map((t) => ({ value: t.id, label: t.name }))}
+                                    showSearch
+                                    allowClear
+                                    error={p.error}
+                                    data-testid="study-type-template-select"
+                                />
+                                <div style={{ fontSize: 13, color: tokens.textSecondary }}>
+                                    Se usa solo si las muestras de la orden no sugieren otra plantilla y nadie eligió una al registrar.
+                                </div>
+                            </div>
                         )}
                     />
                     <FormField

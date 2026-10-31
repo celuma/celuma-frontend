@@ -15,6 +15,7 @@ import CelumaButton from "../components/ui/button";
 import CelumaModal from "../components/ui/celuma_modal";
 import FormField from "../components/ui/form_field";
 import FloatingCaptionInput from "../components/ui/floating_caption_input";
+import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import CelumaTextArea from "../components/ui/textarea_field";
 import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
@@ -32,6 +33,7 @@ import {
     updateSampleType,
 } from "../services/sample_type_service";
 import type { SampleType } from "../models/sample_type";
+import { getReportTemplates } from "../services/report_service";
 
 const captionLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: tokens.primary, marginBottom: 6 };
 
@@ -40,6 +42,8 @@ const sampleTypeSchema = z.object({
     name: z.string().trim().nonempty("El nombre es requerido.").max(255, "Máximo 255 caracteres"),
     description: z.string().trim().max(2000, "Máximo 2000 caracteres").optional(),
     is_active: z.boolean().optional(),
+    // Céluma 1.4.1: optional; orders with samples of this type get it suggested as their report template.
+    default_report_template_id: z.string().optional(),
 });
 
 type SampleTypeFormData = z.infer<typeof sampleTypeSchema>;
@@ -68,10 +72,11 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
     const [submitting, setSubmitting] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
+    const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
 
     const { control, handleSubmit, reset } = useForm<SampleTypeFormData>({
         resolver: zodResolver(sampleTypeSchema),
-        defaultValues: { code: "", name: "", description: "", is_active: true },
+        defaultValues: { code: "", name: "", description: "", is_active: true, default_report_template_id: "" },
         mode: "onTouched",
     });
 
@@ -94,11 +99,15 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
 
     useEffect(() => {
         load();
+        // Active templates only: a deactivated one cannot be suggested for new reports anyway.
+        getReportTemplates(true)
+            .then(({ templates: rows }) => setTemplates((rows ?? []).map((t) => ({ id: t.id, name: t.name }))))
+            .catch(() => message.error("No se pudieron cargar las plantillas de reporte"));
     }, []);
 
     const handleCreate = () => {
         setEditingId(null);
-        reset({ code: "", name: "", description: "", is_active: true });
+        reset({ code: "", name: "", description: "", is_active: true, default_report_template_id: "" });
         setModalVisible(true);
     };
 
@@ -109,6 +118,7 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
             name: record.name,
             description: record.description || "",
             is_active: record.is_active,
+            default_report_template_id: record.default_report_template_id || "",
         });
         setModalVisible(true);
     };
@@ -123,6 +133,8 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                 // "unchanged" to the API, so a cleared field would silently keep the old text.
                 description: data.description?.trim() ? data.description : null,
                 is_active: data.is_active ?? true,
+                // Same rule: `null` clears the link (omitting it would keep the old template).
+                default_report_template_id: data.default_report_template_id || null,
             };
             if (editingId) {
                 await updateSampleType(editingId, payload);
@@ -184,6 +196,12 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
             key: "description",
             ellipsis: true,
             render: (text) => text || <span style={{ color: "#888" }}>—</span>,
+        },
+        {
+            title: "Plantilla de reporte",
+            key: "default_template",
+            ellipsis: true,
+            render: (_, record) => record.default_template?.name || <span style={{ color: "#888" }}>—</span>,
         },
         {
             title: "Estado",
@@ -271,6 +289,37 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                                 <CelumaTextArea value={String(p.value ?? "")} onChange={(v) => p.onChange(v)} rows={3} maxLength={2000} error={p.error} placeholder="Descripción opcional del tipo de muestra" />
                             </div>
                         )}
+                    />
+                    <FormField
+                        control={control}
+                        name="default_report_template_id"
+                        render={(p) => {
+                            const current = typeof p.value === "string" && p.value ? p.value : undefined;
+                            const record = sampleTypes.find((t) => t.id === editingId);
+                            // A linked template that is no longer active still shows by name until changed.
+                            const options = templates.map((t) => ({ value: t.id, label: t.name }));
+                            if (current && !templates.some((t) => t.id === current) && record?.default_template?.id === current) {
+                                options.push({ value: current, label: `${record.default_template.name} (desactivada)` });
+                            }
+                            return (
+                                <div style={{ display: "grid", gap: 6 }}>
+                                    <FloatingCaptionSelect
+                                        label="Plantilla de reporte (opcional)"
+                                        value={current}
+                                        onChange={(v) => p.onChange(v ?? "")}
+                                        placeholder="Sin plantilla"
+                                        options={options}
+                                        showSearch
+                                        allowClear
+                                        error={p.error}
+                                        data-testid="sample-type-template-select"
+                                    />
+                                    <div style={{ fontSize: 13, color: tokens.textSecondary }}>
+                                        Se sugiere al registrar órdenes con muestras de este tipo; quien registra puede elegir otra. Cambiarla no modifica reportes ya creados.
+                                    </div>
+                                </div>
+                            );
+                        }}
                     />
                     <FormField
                         control={control}

@@ -32,7 +32,7 @@ import ReportEditor from "../../components/report/report_editor";
 import * as reportService from "../../services/report_service";
 import * as letterheadService from "../../services/report_letterhead_service";
 import { useUserProfile } from "../../hooks/use_user_profile";
-import type { StudyTypeReportDefaults } from "../../models/report_letterhead";
+import type { OrderReportDefaults } from "../../models/report_letterhead";
 
 vi.mock("../../hooks/use_user_profile");
 const mockedUseUserProfile = vi.mocked(useUserProfile);
@@ -218,8 +218,8 @@ function spyOnTemplateVersionRead() {
 }
 
 /** The regression's configuration: everything resolved, no ACTIVE version. */
-function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
-    return vi.spyOn(reportService, "getStudyTypeReportDefaults").mockResolvedValue({
+function mockDefaults(overrides: Partial<OrderReportDefaults> = {}) {
+    return vi.spyOn(reportService, "getOrderReportDefaults").mockResolvedValue({
         template_id: TEMPLATE_ID,
         active_template_version_id: null,
         letterhead_version_id: "lhv1",
@@ -231,7 +231,7 @@ function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
         v2_blocked_reason: null,
         v2_blocked_detail: null,
         ...overrides,
-    } as StudyTypeReportDefaults);
+    } as OrderReportDefaults);
 }
 
 function existingV2Report(status: string, snapshotTemplate: Record<string, unknown>) {
@@ -527,7 +527,7 @@ describe("ReportEditor — existing V2 reports are unaffected (Block C)", () => 
 });
 
 describe("ReportEditor — genuine configuration problems still surface (Block C)", () => {
-    it("blocks when the study type has no template", async () => {
+    it("blocks when the order resolves no template", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
         mockDefaults({
@@ -540,7 +540,7 @@ describe("ReportEditor — genuine configuration problems still surface (Block C
 
         await waitFor(() => {
             expect(
-                screen.getByText(/Este tipo de estudio no tiene plantilla de reporte/i)
+                screen.getByText(/Esta orden no tiene plantilla de reporte/i)
             ).toBeTruthy();
         });
     });

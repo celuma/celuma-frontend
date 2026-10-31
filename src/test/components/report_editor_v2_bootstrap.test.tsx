@@ -21,7 +21,7 @@ import ReportEditor from "../../components/report/report_editor";
 import * as reportService from "../../services/report_service";
 import * as letterheadService from "../../services/report_letterhead_service";
 import { useUserProfile } from "../../hooks/use_user_profile";
-import type { StudyTypeReportDefaults } from "../../models/report_letterhead";
+import type { OrderReportDefaults } from "../../models/report_letterhead";
 
 vi.mock("../../hooks/use_user_profile");
 const mockedUseUserProfile = vi.mocked(useUserProfile);
@@ -104,8 +104,8 @@ function mockStudyTypeAndTemplate() {
     } as never);
 }
 
-function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
-    return vi.spyOn(reportService, "getStudyTypeReportDefaults").mockResolvedValue({
+function mockDefaults(overrides: Partial<OrderReportDefaults> = {}) {
+    return vi.spyOn(reportService, "getOrderReportDefaults").mockResolvedValue({
         template_id: TEMPLATE_ID,
         active_template_version_id: "tv1",
         letterhead_version_id: "lhv1",
@@ -117,7 +117,7 @@ function mockDefaults(overrides: Partial<StudyTypeReportDefaults> = {}) {
         v2_blocked_reason: null,
         v2_blocked_detail: null,
         ...overrides,
-    } as StudyTypeReportDefaults);
+    } as OrderReportDefaults);
 }
 
 function renderEditor() {
@@ -291,7 +291,7 @@ describe("ReportEditor — V2 startup (issue F)", () => {
     it("blocks, instead of falling to Legacy, if the configuration query fails", async () => {
         mockFetch({ v2Enabled: true });
         mockStudyTypeAndTemplate();
-        vi.spyOn(reportService, "getStudyTypeReportDefaults").mockRejectedValue(
+        vi.spyOn(reportService, "getOrderReportDefaults").mockRejectedValue(
             new Error("network down")
         );
 
@@ -327,21 +327,80 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         ).toBe(false);
     });
 
-    it("blocks (never an empty legacy form) when the study type has no report template", async () => {
+    // Céluma 1.4.1 replaced "blocks when the study type has no report template": the study type's template
+    // is an optional default, and the ORDER's effective template (explicit choice > sample type > study
+    // type) decides. The editor never reads the study type's template any more.
+    it("boots V2 from the order's template even when the study type has none", async () => {
         mockFetch({ v2Enabled: true });
         vi.spyOn(reportService, "getStudyType").mockResolvedValue({
             id: STUDY_TYPE_ID, code: "HP", name: "Histopatología",
             default_report_template_id: null, is_active: true, tenant_id: "t1",
         } as never);
-        const defaultsSpy = mockDefaults();
+        const templateSpy = vi.spyOn(reportService, "getReportTemplateById").mockResolvedValue({
+            id: TEMPLATE_ID, name: "Clínica", template_hash: "h-1",
+            template_json: { base: {}, sections: {}, base_order: [], section_order: [] },
+        } as never);
+        const defaultsSpy = mockDefaults({ template_source: "SAMPLE_TYPE", template_status: "RESOLVED" });
+        vi.spyOn(letterheadService, "listReportLetterheads").mockResolvedValue({ letterheads: [] });
 
         renderEditor();
 
         await waitFor(() => {
-            expect(screen.getByText(/no tiene plantilla de reporte/i)).toBeTruthy();
+            expect(screen.getByTestId("letterhead-resolution-source")).toBeTruthy();
         });
-        expect(defaultsSpy).not.toHaveBeenCalled();
+        expect(defaultsSpy).toHaveBeenCalledWith(ORDER_ID);
+        expect(templateSpy).toHaveBeenCalledWith(TEMPLATE_ID);
+        expect(screen.queryByText(/no tiene plantilla de reporte/i)).toBeNull();
+    });
+
+    it("blocks (never an empty legacy form) when the order resolves no template", async () => {
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        const templateSpy = vi.spyOn(reportService, "getReportTemplateById");
+        mockDefaults({ template_id: null, template_status: "NONE", v2_blocked_reason: "NO_TEMPLATE" });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(/Esta orden no tiene plantilla de reporte/i)).toBeTruthy();
+        });
+        expect(templateSpy).not.toHaveBeenCalled();
         expect(screen.queryByTestId("letterhead-resolution-source")).toBeNull();
+    });
+
+    it("asks for an explicit choice when the samples suggest different templates", async () => {
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        const templateSpy = vi.spyOn(reportService, "getReportTemplateById");
+        mockDefaults({
+            template_id: null, template_status: "AMBIGUOUS", v2_blocked_reason: "TEMPLATE_AMBIGUOUS",
+            template_candidates: [{ id: "a", name: "Biopsia" }, { id: "b", name: "Citología" }],
+        });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(/sugieren plantillas distintas/i)).toBeTruthy();
+        });
+        expect(document.body.textContent).toMatch(/Plantillas sugeridas: Biopsia, Citología\./);
+        // Nothing is picked by list order: no structure is loaded.
+        expect(templateSpy).not.toHaveBeenCalled();
+    });
+
+    it("blocks when the order's explicit choice was deactivated", async () => {
+        mockFetch({ v2Enabled: true });
+        mockStudyTypeAndTemplate();
+        mockDefaults({
+            template_id: null, template_status: "INACTIVE", template_name: "Antigua",
+            template_source: "ORDER", v2_blocked_reason: "TEMPLATE_INACTIVE",
+        });
+
+        renderEditor();
+
+        await waitFor(() => {
+            expect(screen.getByText(/La plantilla elegida para esta orden está desactivada/i)).toBeTruthy();
+        });
+        expect(document.body.textContent).toMatch(/Plantilla elegida: Antigua\./);
     });
 
     it("blocks with an availability state when the study type cannot be read", async () => {

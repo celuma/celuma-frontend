@@ -21,7 +21,7 @@ import {
     OfficialPdfDownloadError,
     triggerBrowserDownload,
     officialPdfFilename,
-    getStudyTypeReportDefaults,
+    getOrderReportDefaults,
     ReportConfigRequestError,
 } from "../../services/report_service";
 import {
@@ -175,10 +175,22 @@ type V2BlockedState = V2BlockedReason | "CONFIG_UNAUTHORIZED" | "CONFIG_UNAVAILA
  *  as a substitute (see deterministic-letterhead-resolution-contract.md,
  *  "Never Legacy"). */
 const V2_BLOCKED_COPY: Record<V2BlockedState, { title: string; admin: string; user: string }> = {
+    // Céluma 1.4.1: the template is the ORDER's (explicit choice > sample type > study type), so the
+    // remedy is choosing one on the order or linking one in the catalog, not only on the study type.
     NO_TEMPLATE: {
-        title: "Este tipo de estudio no tiene plantilla de reporte",
-        admin: "Asigna una plantilla de reporte al tipo de estudio antes de crear reportes.",
-        user: "Contacta a un administrador para asignar una plantilla de reporte a este tipo de estudio.",
+        title: "Esta orden no tiene plantilla de reporte",
+        admin: "Elige una plantilla en Editar orden, o asígnala al tipo de muestra (o al tipo de estudio) en Configuración.",
+        user: "Elige una plantilla en Editar orden, o pide a un administrador que la asigne al tipo de muestra.",
+    },
+    TEMPLATE_AMBIGUOUS: {
+        title: "Las muestras de esta orden sugieren plantillas distintas",
+        admin: "Elige en Editar orden cuál plantilla usará el reporte; no se toma ninguna por el orden de las muestras.",
+        user: "Elige en Editar orden cuál plantilla usará el reporte; no se toma ninguna por el orden de las muestras.",
+    },
+    TEMPLATE_INACTIVE: {
+        title: "La plantilla elegida para esta orden está desactivada",
+        admin: "Elige otra en Editar orden o restablece la predeterminada; también puedes reactivarla en Plantillas de Reporte.",
+        user: "Elige otra en Editar orden o restablece la predeterminada.",
     },
     NO_LETTERHEAD: {
         title: "Falta el membrete predeterminado del laboratorio",
@@ -331,13 +343,14 @@ const ReportEditor: React.FC = () => {
     const [studyTypeName, setStudyTypeName] = useState<string>("");
 
     // Céluma 1.3 Phase 2, Block D, Story D10 / post-Phase 2 remediation:
-    // the resolved (never user-selected) clinical template, for new V2 reports
+    // the resolved (never editor-selected) clinical template, for new V2 reports
     // only. Only ever populated when creating a new report (prefilledOrderId
     // branch) — never touched when editing an existing report, whose
-    // template_version_id (if any) is frozen on `envelope`. The clinical
-    // template is determined exclusively by
-    // StudyType.default_report_template_id — there is no user-facing control
-    // to change it here (see report-editor-letterhead-selection-contract.md).
+    // template_version_id (if any) is frozen on `envelope`. Céluma 1.4.1: it is
+    // the ORDER's effective template (the choice persisted on the order, else
+    // the sample type's, else the study type's), resolved by
+    // GET /laboratory/orders/{id}/report-defaults. It is chosen on the order
+    // forms; there is still no control to change it here.
     const [resolvedTemplateId, setResolvedTemplateId] = useState<string | null>(null);
     // Céluma 1.3.1 Block C (CEL-131-05): replaces `resolvedTemplateVersionId`.
     //
@@ -855,168 +868,98 @@ const ReportEditor: React.FC = () => {
                     };
                     setFullData(pseudoFull);
 
-                    // Load template via study type → template
+                    // The study type is no longer the template's source (1.4.1), but its name still fills the
+                    // title and the `study_type` field, so an unreadable study type is a blocked state rather
+                    // than a report saved with an empty field.
                     let tmplRaw: TemplateOrderInput | null = null;
+                    let studyTypeReadable = true;
                     if (orderFull.order.study_type_id) {
                         try {
                             const st = await getStudyType(orderFull.order.study_type_id);
                             setStudyTypeName(st.name);
-                            if (st.default_report_template_id) {
-                                const templateId = st.default_report_template_id;
-                                setResolvedTemplateId(templateId);
-                                const tpl = await getReportTemplateById(templateId);
-                                tmplRaw = tpl.template_json;
-                                // C-8: captured from the SAME response as the
-                                // structure it describes. Held even on the
-                                // Legacy path below, where it is simply never
-                                // sent, so there is one assignment rather than
-                                // two that could diverge.
-                                const bootstrapTemplateHash = tpl.template_hash;
-
-                                // Céluma 1.3.1 Block C (CEL-131-05): `tmplRaw` stays
-                                // the LIVE `ReportTemplate.template_json` fetched just
-                                // above.
-                                //
-                                // Block D's Story D10 used to overwrite it here with the
-                                // template's ACTIVE `ReportTemplateVersion`'s frozen
-                                // `configuration.template`, on the reasoning that the
-                                // frozen structure is what VersionedReportRendererV2
-                                // renders. That is true of an EXISTING report — and an
-                                // existing report is handled in the branch above, from
-                                // its own embedded snapshot. It was never true of a
-                                // report that does not exist yet: there is no frozen
-                                // structure to reflect, and the thing the author should
-                                // be offered is the template as it stands now. The
-                                // backend freezes exactly that into the new report at
-                                // creation, so the editor and the renderer still agree.
-                                //
-                                // The practical cost of the old reasoning was the
-                                // CEL-131-05 production regression: a laboratory that
-                                // saved its template before configuring its letterhead
-                                // had no ACTIVE version, could not get one without
-                                // re-saving the template, and was blocked out of
-                                // Reports V2 entirely.
-                                //
-                                // Post-Phase 2 remediation: also resolves the letterhead
-                                // (letterhead) to use for the live preview — this is
-                                // the actual fix for "preview shows Legacy initially"
-                                // (bug 2): previously nothing here ever set
-                                // `selectedLetterheadPresentation`, so buildEnvelope()
-                                // had no rendering_snapshot to seed before first save.
-                                //
-                                // Third post-Phase 2 remediation—issue F: two paths
-                                // rendered Legacy silently. (1) A `catch {}` swallowed
-                                // any network failure and "continued as Legacy". (2) The
-                                // list-letterheads -> list-versions -> read-version chain
-                                // reconstructed `presentation`: if the resolved letterhead
-                                // did not appear in `options` (for example, deactivated or
-                                // due to a failed N+1 request), selectedLetterheadPresentation
-                                // remained null, buildEnvelope() produced no
-                                // `rendering_snapshot`, and the resolver chose Legacy.
-                                //
-                                // `report-defaults` now returns the resolved
-                                // `presentation` in one call, and every failure leads to
-                                // an explicit BLOCKED state. Reports V2 is the only path (#22):
-                                // Legacy is never rendered.
-                                try {
-                                    const defaults = await getStudyTypeReportDefaults(
-                                        orderFull.order.study_type_id
-                                    );
-                                    // Block C: `active_template_version_id` is
-                                    // deliberately NOT part of this condition any
-                                    // more. The two things a V2 report genuinely
-                                    // needs are a clinical template (already
-                                    // fetched) and a resolved letterhead
-                                    // presentation; an administrative version row
-                                    // is not one of them.
-                                    if (
-                                        defaults.v2_blocked_reason ||
-                                        !defaults.letterhead_presentation
-                                    ) {
-                                        setV2BlockedReason(defaults.v2_blocked_reason ?? "NO_LETTERHEAD");
-                                        setV2BlockedDetail(defaults.v2_blocked_detail ?? null);
-                                        setV2ConfigBlocked(true);
-                                    } else {
-                                        // Block C: the obsolete third bootstrap
-                                        // request — GET .../versions/{id} — is gone.
-                                        // It is not swallowed or made conditional:
-                                        // the editor has no reason to make it, since
-                                        // `tmplRaw` already holds the live template
-                                        // and the backend resolves the structure
-                                        // itself at creation.
-                                        setV2CreationTemplateId(templateId);
-                                        setV2CreationTemplateHash(bootstrapTemplateHash);
-
-                                        // The resolved presentation arrives in the same
-                                        // response—without chaining calls that can
-                                        // partially fail.
-                                        setSelectedLetterheadVersionId(defaults.letterhead_version_id);
-                                        setSelectedLetterheadPresentation(defaults.letterhead_presentation);
-                                        setSelectedLetterheadName(defaults.letterhead_name ?? null);
-                                        setLetterheadResolutionSource(
-                                            defaults.letterhead_resolution_source ?? null
-                                        );
-                                        setSelectedLetterheadResources(
-                                            defaults.letterhead_resolved_resources ?? null
-                                        );
-
-                                        // The letterhead selector is secondary: if it
-                                        // fails to load, the user simply cannot change
-                                        // letterheads—V2 creation with the resolved one
-                                        // still works.
-                                        try {
-                                            const { letterheads } = await listReportLetterheads();
-                                            const options: LetterheadVersionOption[] = [];
-                                            for (const lh of letterheads) {
-                                                const { versions: lhVersions } =
-                                                    await listReportLetterheadVersions(lh.id);
-                                                const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
-                                                if (activeLh) {
-                                                    options.push({
-                                                        value: activeLh.id,
-                                                        label: lh.name,
-                                                        letterheadId: lh.id,
-                                                    });
-                                                }
-                                            }
-                                            setAvailableLetterheadVersions(options);
-                                        } catch { /* selector opcional */ }
-                                    }
-                                } catch (cfgErr) {
-                                    // With V2 enabled, a configuration-resolution
-                                    // failure is a blocked state, never an excuse to
-                                    // render Legacy.
-                                    //
-                                    // H-0c: but it is not a LETTERHEAD state either.
-                                    // This catch used to hard-code NO_LETTERHEAD, so
-                                    // a pathologist's 403 on the template-version read
-                                    // was reported as "Falta el membrete
-                                    // predeterminado del laboratorio" — pointing at
-                                    // configuration that was in fact correct. The
-                                    // failure is now classified by HTTP status.
-                                    setV2BlockedReason(classifyConfigFailure(cfgErr));
-                                    setV2BlockedDetail(
-                                        cfgErr instanceof Error ? cfgErr.message : null
-                                    );
-                                    setV2ConfigBlocked(true);
-                                }
-                            } else {
-                                // Céluma 1.4 (#22): a study type without a
-                                // default template cannot author a report. There
-                                // is no empty-template fallback any more.
-                                setV2BlockedReason("NO_TEMPLATE");
-                                setV2ConfigBlocked(true);
-                            }
-                        } catch (tplErr) {
-                            // The study type or its template could not be read:
-                            // a blocked state, never an empty legacy-shaped form.
-                            setV2BlockedReason(classifyConfigFailure(tplErr));
-                            setV2BlockedDetail(tplErr instanceof Error ? tplErr.message : null);
+                        } catch (stErr) {
+                            studyTypeReadable = false;
+                            setV2BlockedReason(classifyConfigFailure(stErr));
+                            setV2BlockedDetail(stErr instanceof Error ? stErr.message : null);
                             setV2ConfigBlocked(true);
                         }
-                    } else {
-                        setV2BlockedReason("NO_TEMPLATE");
-                        setV2ConfigBlocked(true);
+                    }
+                    // Céluma 1.4.1: the clinical template is the ORDER's effective one — the choice
+                    // persisted on the order, else the sample type's default when the samples agree,
+                    // else the study type's — and the letterhead is resolved for it, in one read.
+                    // Before 1.4.1 this read the study type's template, so a template chosen at
+                    // registration never reached the report.
+                    //
+                    // Third post-Phase 2 remediation—issue F still holds: every failure is an explicit
+                    // BLOCKED state, and Legacy is never rendered (#22). H-0c still holds: a failed READ
+                    // is classified by HTTP status, never reported as a missing letterhead.
+                    if (studyTypeReadable) {
+                        try {
+                            const defaults = await getOrderReportDefaults(prefilledOrderId);
+                            if (defaults.template_id) setResolvedTemplateId(defaults.template_id);
+                            // Block C: `active_template_version_id` is deliberately NOT part of this
+                            // condition. A V2 report needs a clinical template and a resolved letterhead
+                            // presentation; an administrative version row is not one of them.
+                            if (
+                                defaults.v2_blocked_reason ||
+                                !defaults.template_id ||
+                                !defaults.letterhead_presentation
+                            ) {
+                                const reason = defaults.v2_blocked_reason
+                                    ?? (defaults.template_id ? "NO_LETTERHEAD" : "NO_TEMPLATE");
+                                setV2BlockedReason(reason);
+                                const candidates = (defaults.template_candidates ?? []).map((c) => c.name);
+                                setV2BlockedDetail(
+                                    defaults.v2_blocked_detail
+                                    ?? (reason === "TEMPLATE_AMBIGUOUS" && candidates.length
+                                        ? `Plantillas sugeridas: ${candidates.join(", ")}.`
+                                        : reason === "TEMPLATE_INACTIVE" && defaults.template_name
+                                            ? `Plantilla elegida: ${defaults.template_name}.`
+                                            : null),
+                                );
+                                setV2ConfigBlocked(true);
+                            } else {
+                                const templateId = defaults.template_id;
+                                const tpl = await getReportTemplateById(templateId);
+                                tmplRaw = tpl.template_json;
+                                // Céluma 1.3.1 Block C (CEL-131-05): `tmplRaw` is the LIVE
+                                // `ReportTemplate.template_json` — what the backend freezes into the
+                                // new report at creation — never an ACTIVE version's frozen copy.
+                                // C-8: the token comes from the SAME response as the structure it
+                                // describes, and is echoed with `template_id` on create; the backend
+                                // also refuses (409) if the order's template changed meanwhile.
+                                setV2CreationTemplateId(templateId);
+                                setV2CreationTemplateHash(tpl.template_hash);
+
+                                // The resolved presentation arrives in the same response—without
+                                // chaining calls that can partially fail.
+                                setSelectedLetterheadVersionId(defaults.letterhead_version_id);
+                                setSelectedLetterheadPresentation(defaults.letterhead_presentation);
+                                setSelectedLetterheadName(defaults.letterhead_name ?? null);
+                                setLetterheadResolutionSource(defaults.letterhead_resolution_source ?? null);
+                                setSelectedLetterheadResources(defaults.letterhead_resolved_resources ?? null);
+
+                                // The letterhead selector is secondary: if it fails to load, the user
+                                // simply cannot change letterheads—V2 creation with the resolved one
+                                // still works.
+                                try {
+                                    const { letterheads } = await listReportLetterheads();
+                                    const options: LetterheadVersionOption[] = [];
+                                    for (const lh of letterheads) {
+                                        const { versions: lhVersions } = await listReportLetterheadVersions(lh.id);
+                                        const activeLh = lhVersions.find((v) => v.status === "ACTIVE");
+                                        if (activeLh) {
+                                            options.push({ value: activeLh.id, label: lh.name, letterheadId: lh.id });
+                                        }
+                                    }
+                                    setAvailableLetterheadVersions(options);
+                                } catch { /* selector opcional */ }
+                            }
+                        } catch (cfgErr) {
+                            setV2BlockedReason(classifyConfigFailure(cfgErr));
+                            setV2BlockedDetail(cfgErr instanceof Error ? cfgErr.message : null);
+                            setV2ConfigBlocked(true);
+                        }
                     }
                     const tmplNew = tmplRaw ? normalizeReportTemplateJSON(tmplRaw) : EMPTY_TEMPLATE_JSON;
                     setTemplate(tmplNew);
@@ -2045,6 +1988,10 @@ const ReportEditor: React.FC = () => {
             V2_BLOCKED_COPY.CONFIG_UNAVAILABLE;
         const isLetterheadProblem =
             v2BlockedReason === "NO_LETTERHEAD" || v2BlockedReason === "LETTERHEAD_MISCONFIGURED";
+        // Céluma 1.4.1: the remedy for a template problem is the order's own choice.
+        const isOrderTemplateProblem =
+            v2BlockedReason === "NO_TEMPLATE" || v2BlockedReason === "TEMPLATE_AMBIGUOUS" ||
+            v2BlockedReason === "TEMPLATE_INACTIVE";
         return (
             <EmptyState
                 icon={<ExclamationCircleOutlined />}
@@ -2059,6 +2006,14 @@ const ReportEditor: React.FC = () => {
                 }
                 action={
                     <div style={{ display: "flex", gap: 12 }}>
+                        {isOrderTemplateProblem && prefilledOrderId && userHasPermission(PERMS.UPDATE_ORDER) && (
+                            <CelumaButton
+                                type="primary"
+                                onClick={() => navigate(`/orders/${prefilledOrderId}/edit`)}
+                            >
+                                Elegir plantilla en la orden
+                            </CelumaButton>
+                        )}
                         {canManageTemplates && isLetterheadProblem && (
                             <CelumaButton
                                 type="primary"

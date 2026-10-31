@@ -24,6 +24,10 @@ import { formatHttpError } from "../lib/api_error";
 import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
 import AutoCodeHint from "../components/numbering/auto_code_hint";
 import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
+import ReportTemplateField from "../components/order/report_template_field";
+import { suggestReportTemplate } from "../lib/report_template_suggestion";
+import { getReportTemplates } from "../services/report_service";
+import type { ReportTemplateRef } from "../models/report_letterhead";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -112,6 +116,12 @@ const schema = z.object({
 
 type OrderFormData = z.infer<typeof schema>;
 
+type StudyTypeOption = {
+    id: string; code: string; name: string; is_active: boolean;
+    /** Céluma 1.4.1: an optional default; the sample types' template outranks it. */
+    default_template?: { id: string; name: string } | null;
+};
+
 type UnifiedResponse = {
     order: { id: string; order_code: string; status: string; patient_id?: string | null; tenant_id: string; branch_id: string };
     samples: Array<{ id: string; sample_code: string; sample_type: { id: string; code: string; name: string; is_active: boolean } | null; state: string; order_id: string; tenant_id: string; branch_id: string }>;
@@ -159,9 +169,15 @@ export default function OrderForm() {
     const [loadingRequestingPhysicians, setLoadingRequestingPhysicians] = useState(false);
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
-    const [studyTypes, setStudyTypes] = useState<Array<{ id: string; code: string; name: string; is_active: boolean }>>([]);
+    const [studyTypes, setStudyTypes] = useState<StudyTypeOption[]>([]);
     const [loadingStudyTypes, setLoadingStudyTypes] = useState(false);
     const sampleTypes = useActiveSampleTypes();
+    // Céluma 1.4.1: the report template. `manualTemplateId` is the user's explicit choice (null = follow the
+    // suggestion); only an explicit choice is sent, and changing samples or the study type never overwrites it.
+    const [templates, setTemplates] = useState<ReportTemplateRef[] | null>(null);
+    const [loadingTemplates, setLoadingTemplates] = useState(true);
+    const [manualTemplateId, setManualTemplateId] = useState<string | null>(null);
+    const [templateError, setTemplateError] = useState<string | undefined>(undefined);
     const [currentUserId] = useState<string>(() => localStorage.getItem("user_id") || sessionStorage.getItem("user_id") || "");
 
     const prefilledPatientId = useMemo(() => {
@@ -253,7 +269,7 @@ export default function OrderForm() {
         (async () => {
             try {
                 setLoadingStudyTypes(true);
-                const data = await getJSON<{ study_types: Array<{ id: string; code: string; name: string; is_active: boolean }> }>("/v1/study-types/");
+                const data = await getJSON<{ study_types: StudyTypeOption[] }>("/v1/study-types/");
                 setStudyTypes(data.study_types.filter(st => st.is_active));
             } catch (err) {
                 console.error("Error loading study types:", err);
@@ -263,8 +279,41 @@ export default function OrderForm() {
         })();
     }, []);
 
+    useEffect(() => {
+        let alive = true;
+        // The lightweight catalog (names only; structures are read when a report is authored). It needs
+        // `reports:read`; without it the choices are the suggestions themselves, and the API still decides.
+        getReportTemplates(true)
+            .then(({ templates: rows }) => alive && setTemplates(rows ? rows.map((t) => ({ id: t.id, name: t.name })) : null))
+            .catch(() => alive && setTemplates(null))
+            .finally(() => alive && setLoadingTemplates(false));
+        return () => {
+            alive = false;
+        };
+    }, []);
+
+    const templateSuggestion = useMemo(
+        () => suggestReportTemplate(
+            (watchedSamples ?? []).map((s) => s?.sample_type_id),
+            sampleTypes.types,
+            studyTypes.find((st) => st.id === watchedStudyType),
+            templates ? new Set(templates.map((t) => t.id)) : null,
+        ),
+        [watchedSamples, sampleTypes.types, studyTypes, watchedStudyType, templates],
+    );
+
+    const chooseTemplate = (templateId: string | null) => {
+        setManualTemplateId(templateId);
+        setTemplateError(undefined);
+    };
+
     const onSubmit = handleSubmit(async (data) => {
         setServerError(null);
+        // Samples that suggest different templates need a deliberate choice: none is taken by list order.
+        if (!manualTemplateId && templateSuggestion.status === "AMBIGUOUS") {
+            setTemplateError("Elige la plantilla del reporte: las muestras sugieren plantillas distintas.");
+            return;
+        }
         setLoading(true);
         try {
             const finalTenant = session.tenantId || data.tenant_id || "";
@@ -283,6 +332,8 @@ export default function OrderForm() {
                 study_type_id: data.study_type_id,
                 notes: data.notes || undefined,
                 created_by: (currentUserId || undefined),
+                // Only an explicit choice; a followed suggestion stays a live catalog default on the server.
+                report_template_id: manualTemplateId || undefined,
                 samples: data.samples.map((s) => ({
                     sample_type_id: s.sample_type_id,
                     notes: s.notes || undefined,
@@ -299,6 +350,7 @@ export default function OrderForm() {
             );
             idempotency.succeeded();
             reset();
+            setManualTemplateId(null);
             navigate(`/orders/${created.order.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
@@ -544,6 +596,22 @@ export default function OrderForm() {
                                             Agregar otra muestra
                                         </Button>
                                     </div>
+                                </div>
+                            </section>
+
+                            <section style={{ display: "grid", gap: 16 }}>
+                                <SectionTitle>Reporte</SectionTitle>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>La plantilla clínica con la que se creará el reporte. Se sugiere la del tipo de muestra (o, si no tiene, la del tipo de estudio); puedes elegir otra.</p>
+                                <div className="of-grid-2">
+                                    <ReportTemplateField
+                                        mode="create"
+                                        value={manualTemplateId}
+                                        onChange={chooseTemplate}
+                                        options={templates ?? []}
+                                        fallback={templateSuggestion}
+                                        loading={loadingTemplates}
+                                        error={templateError}
+                                    />
                                 </div>
                             </section>
 
