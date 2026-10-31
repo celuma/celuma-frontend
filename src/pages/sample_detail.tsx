@@ -1,4 +1,7 @@
-import SampleManagementPanel from "../components/management/sample_management_panel";
+import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
+import { useSampleManagement } from "../hooks/use_capture_management";
+import { removeSample } from "../services/order_management_service";
+import { getErrorMessage } from "../lib/api_error";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Badge, Empty } from "antd";
 import type { UploadProps } from "antd";
@@ -6,7 +9,7 @@ import type { UploadRequestOption as RcCustomRequestOptions } from "rc-upload/li
 import {
     ExperimentOutlined, CheckCircleOutlined,
     CalendarOutlined, SettingOutlined, FileImageOutlined,
-    InboxOutlined, ContainerOutlined, EditOutlined,
+    InboxOutlined, ContainerOutlined, EditOutlined, DeleteOutlined,
     ClockCircleOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -15,10 +18,8 @@ import type { CelumaKey } from "../components/ui/sidebar_menu";
 import { ACCEPT_ANY_IMAGE, sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import CelumaButton from "../components/ui/button";
 import Panel from "../components/ui/panel";
 import ActionButtonPanel from "../components/ui/action_button_panel";
-import CelumaTextArea from "../components/ui/textarea_field";
 import UploadDropzone from "../components/ui/upload_dropzone";
 import { useNotice } from "../hooks/use_notice";
 import ImageGalleryCard from "../components/ui/image_gallery_card";
@@ -136,7 +137,6 @@ export default function SampleDetailPage() {
     const { hasPermission } = useUserProfile();
     const canUpdateSample = hasPermission(PERMS.UPDATE_SAMPLE);
     // Céluma 1.4 (#10/#11): hints only; the API enforces both (and the lifecycle window).
-    const canCorrectSampleCode = canUpdateSample && hasPermission(PERMS.ENTER_MANUAL_CODE);
     const canRemoveCapture = hasPermission(PERMS.REMOVE_CAPTURE);
     const canManageAssignees = hasPermission(PERMS.MANAGE_ASSIGNEES);
     const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
@@ -153,10 +153,11 @@ export default function SampleDetailPage() {
     const [activeTab, setActiveTab] = useState<string>("timeline");
     // Image pending delete confirmation (null = dialog closed)
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-    // Notes editing state
-    const [editingNotes, setEditingNotes] = useState(false);
-    const [notesValue, setNotesValue] = useState("");
-    const [savingNotes, setSavingNotes] = useState(false);
+    // Erroneous-capture removal (#11): same alert as the patients/requesters actions
+    const [removeOpen, setRemoveOpen] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const [removeError, setRemoveError] = useState<string | null>(null);
+    const { state: management } = useSampleManagement(sampleId, detail?.sample_code);
     // Upload progress state
     const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
     // Deleting image state
@@ -271,38 +272,19 @@ export default function SampleDetailPage() {
         }
     }, [sampleId, updatingState, refresh]);
 
-    // Update sample notes
-    const updateNotes = useCallback(async () => {
-        if (!sampleId || savingNotes) return;
-        setSavingNotes(true);
+    const handleRemoveSample = useCallback(async (reason: string) => {
+        if (!sampleId || !detail) return;
+        setRemoving(true);
+        setRemoveError(null);
         try {
-            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-            const res = await fetch(`${getApiBase()}/v1/laboratory/samples/${sampleId}/notes`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: token } : {}),
-                },
-                body: JSON.stringify({ notes: notesValue || null }),
-                credentials: "include",
-            });
-            if (!res.ok) {
-                const text = await res.text();
-                let parsed: unknown = undefined;
-                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-                throw new Error(msg);
-            }
-            message.success("Descripción actualizada");
-            setEditingNotes(false);
-            await refresh();
-        } catch (e) {
-            const errMsg = e instanceof Error ? e.message : "Error al actualizar la descripción";
-            message.error(errMsg);
-        } finally {
-            setSavingNotes(false);
+            await removeSample(sampleId, reason);
+            message.success("Muestra retirada. Su código no se reutilizará.");
+            navigate(`/orders/${detail.order.id}`, { replace: true });
+        } catch (err) {
+            setRemoveError(getErrorMessage(err));
+            setRemoving(false);
         }
-    }, [sampleId, savingNotes, notesValue, refresh]);
+    }, [sampleId, detail, navigate]);
 
     // Delete sample image
     const deleteImage = useCallback(async (imageId: string) => {
@@ -969,93 +951,62 @@ export default function SampleDetailPage() {
                                     <ActionButtonPanel
                                         actions={[
                                             { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`) },
+                                            ...(canUpdateSample ? [{
+                                                icon: <EditOutlined />,
+                                                tooltip: "Editar muestra",
+                                                ariaLabel: "Editar",
+                                                onClick: () => navigate(`/samples/${detail.id}/edit`),
+                                            }] : []),
+                                            // Shown only while removal is possible; the API re-checks it.
+                                            ...(canRemoveCapture && management?.removal.allowed ? [{
+                                                icon: <DeleteOutlined />,
+                                                tooltip: "Retirar muestra por captura errónea",
+                                                ariaLabel: "Retirar muestra",
+                                                danger: true,
+                                                onClick: () => { setRemoveError(null); setRemoveOpen(true); },
+                                            }] : []),
                                         ]}
                                     />
                                 )}
                             >
                                 {detail && (
                                     <>
-                                        {/* Description - at the bottom (Céluma panel) */}
+                                        {/* Description - at the bottom (Céluma panel); edited from the rail's edit action */}
                                         <Panel style={{ marginTop: 20 }}>
                                             <div style={{
                                                 fontSize: 12,
                                                 fontWeight: 600,
                                                 color: tokens.textSecondary,
-                                                marginBottom: editingNotes ? 10 : 8,
+                                                marginBottom: 8,
                                                 textTransform: "uppercase",
                                                 letterSpacing: "0.5px",
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center",
                                             }}>
-                                                <span>Descripción</span>
-                                                {/* CEL-131-08: `PATCH /samples/{id}/notes`
-                                                    requires `lab:update_sample`. */}
-                                                {!editingNotes && canUpdateSample && (
-                                                    <EditOutlined
-                                                        style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
-                                                        onClick={() => {
-                                                            setNotesValue(detail.notes || "");
-                                                            setEditingNotes(true);
-                                                        }}
-                                                    />
-                                                )}
+                                                Descripción
                                             </div>
-                                            {editingNotes && canUpdateSample ? (
-                                                <div style={{ display: "grid", gap: 8 }}>
-                                                    <CelumaTextArea
-                                                        value={notesValue}
-                                                        onChange={setNotesValue}
-                                                        placeholder="Escribe una descripción para esta muestra..."
-                                                        rows={4}
-                                                        maxLength={500}
-                                                        autoFocus
-                                                    />
-                                                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                                        <CelumaButton
-                                                            size="xsmall"
-                                                            danger
-                                                            onClick={() => {
-                                                                setEditingNotes(false);
-                                                                setNotesValue(detail.notes || "");
-                                                            }}
-                                                            disabled={savingNotes}
-                                                        >
-                                                            Cancelar
-                                                        </CelumaButton>
-                                                        <CelumaButton
-                                                            type="primary"
-                                                            size="xsmall"
-                                                            onClick={updateNotes}
-                                                            loading={savingNotes}
-                                                        >
-                                                            Guardar
-                                                        </CelumaButton>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div style={{
-                                                    color: detail.notes ? tokens.textPrimary : tokens.textSecondary,
-                                                    fontSize: 14,
-                                                    lineHeight: 1.6,
-                                                    whiteSpace: "pre-wrap",
-                                                    fontStyle: detail.notes ? "normal" : "italic",
-                                                }}>
-                                                    {detail.notes || "Sin descripción"}
-                                                </div>
-                                            )}
+                                            <div style={{
+                                                color: detail.notes ? tokens.textPrimary : tokens.textSecondary,
+                                                fontSize: 14,
+                                                lineHeight: 1.6,
+                                                whiteSpace: "pre-wrap",
+                                                fontStyle: detail.notes ? "normal" : "italic",
+                                            }}>
+                                                {detail.notes || "Sin descripción"}
+                                            </div>
                                         </Panel>
-                                        <SampleManagementPanel
-                                            sampleId={detail.id}
-                                            sampleCode={detail.sample_code}
-                                            orderId={detail.order?.id ?? ""}
-                                            canCorrect={canCorrectSampleCode}
-                                            canRemove={canRemoveCapture}
-                                            onChanged={refresh}
-                                        />
                                     </>
                                 )}
                                 <ErrorText>{error}</ErrorText>
+                                <RemoveCaptureDialog
+                                    open={removeOpen}
+                                    title="Retirar muestra"
+                                    consequences={management?.removal_consequences ?? []}
+                                    confirmText="Retirar muestra"
+                                    loading={removing}
+                                    error={removeError}
+                                    testId="sample-remove-dialog"
+                                    onConfirm={handleRemoveSample}
+                                    onCancel={() => setRemoveOpen(false)}
+                                />
                             </RecordCard>
 
                             {/* Tabs Card — "Línea de Tiempo" is the default tab */}

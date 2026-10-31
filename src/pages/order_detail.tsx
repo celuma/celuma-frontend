@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import OrderManagementPanel from "../components/management/order_management_panel";
+import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
+import { useOrderManagement } from "../hooks/use_capture_management";
+import { removeOrder } from "../services/order_management_service";
+import { getErrorMessage } from "../lib/api_error";
 import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import {
     ReloadOutlined, FilePdfOutlined,
     FileTextOutlined, InboxOutlined,
     ExperimentOutlined, SolutionOutlined, AuditOutlined, SendOutlined,
     LockOutlined, CloseCircleOutlined, UserOutlined, CalendarOutlined,
-    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, EditOutlined,
+    MessageOutlined, PlusOutlined, ExclamationCircleOutlined, EditOutlined, DeleteOutlined,
     DollarOutlined, ClockCircleOutlined, PrinterOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,7 +21,6 @@ import ActionButtonPanel, { type ActionButtonItem } from "../components/ui/actio
 import CelumaButton from "../components/ui/button";
 import Panel from "../components/ui/panel";
 import CelumaSteps, { type CelumaStep } from "../components/ui/celuma_steps";
-import CelumaTextArea from "../components/ui/textarea_field";
 import CelumaTabs from "../components/ui/celuma_tabs";
 import RecordCard, { codeChipStyle, statusChipStyle, MetaItem, Stat, StatDivider } from "../components/ui/record_card";
 import { tokens, cardStyle } from "../components/design/tokens";
@@ -186,10 +188,11 @@ export default function OrderDetail() {
         sample_id?: string;
     }>>([]);
     
-    // Notes editing state
-    const [editingNotes, setEditingNotes] = useState(false);
-    const [notesValue, setNotesValue] = useState("");
-    const [savingNotes, setSavingNotes] = useState(false);
+    // Erroneous-capture removal (#11): same alert as the patients/requesters actions
+    const [removeOpen, setRemoveOpen] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const [removeError, setRemoveError] = useState<string | null>(null);
+    const { state: management } = useOrderManagement(orderId, `${data?.order.status}|${data?.samples.length}`);
     
     // Conversation state
     const [conversation, setConversation] = useState<Array<{
@@ -562,38 +565,19 @@ export default function OrderDetail() {
         return () => clearInterval(interval);
     }, [activeTab, refreshConversationAndTimeline]);
     
-    // Update order notes
-    const updateNotes = useCallback(async () => {
-        if (!orderId || savingNotes) return;
-        setSavingNotes(true);
+    const handleRemoveOrder = useCallback(async (reason: string) => {
+        if (!orderId) return;
+        setRemoving(true);
+        setRemoveError(null);
         try {
-            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-            const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/notes`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: token } : {}),
-                },
-                body: JSON.stringify({ notes: notesValue || null }),
-                credentials: "include",
-            });
-            if (!res.ok) {
-                const text = await res.text();
-                let parsed: unknown = undefined;
-                try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
-                throw new Error(msg);
-            }
-            message.success("Descripción actualizada");
-            setEditingNotes(false);
-            await refresh();
-        } catch (e) {
-            const errMsg = e instanceof Error ? e.message : "Error al actualizar la descripción";
-            message.error(errMsg);
-        } finally {
-            setSavingNotes(false);
+            const res = await removeOrder(orderId, reason);
+            message.success(`Orden ${res.code} retirada. El código no se reutilizará.`);
+            navigate("/orders", { replace: true });
+        } catch (err) {
+            setRemoveError(getErrorMessage(err));
+            setRemoving(false);
         }
-    }, [orderId, savingNotes, notesValue, refresh]);
+    }, [orderId, navigate]);
 
     // Handle navigation to samples tab
     const handleGoToSamples = useCallback(() => {
@@ -1177,6 +1161,25 @@ export default function OrderDetail() {
                                     } else if (reportId && hasPermission("reports:read")) {
                                         actions.push({ icon: <FileTextOutlined />, tooltip: "Ver reporte", ariaLabel: "Ver reporte", onClick: () => navigate(`/reports/${reportId}`) });
                                     }
+                                    // Offered only while the action is possible (window + evidence + dependencies);
+                                    // outside it the button is not shown at all. The API re-checks every write.
+                                    if (canUpdateOrder && management?.edit.allowed) {
+                                        actions.push({
+                                            icon: <EditOutlined />,
+                                            tooltip: "Editar orden",
+                                            ariaLabel: "Editar",
+                                            onClick: () => navigate(`/orders/${data.order.id}/edit`),
+                                        });
+                                    }
+                                    if (canRemoveCapture && management?.removal.allowed) {
+                                        actions.push({
+                                            icon: <DeleteOutlined />,
+                                            tooltip: "Retirar orden por captura errónea",
+                                            ariaLabel: "Retirar orden",
+                                            danger: true,
+                                            onClick: () => { setRemoveError(null); setRemoveOpen(true); },
+                                        });
+                                    }
                                     return actions.length > 0 ? <ActionButtonPanel actions={actions} /> : null;
                                 })()}
                                 {data.order.billed_lock && hasPermission("billing:read") && (
@@ -1204,83 +1207,42 @@ export default function OrderDetail() {
                     >
                         {data && (
                             <>
-                                {/* Description - at the bottom (Céluma panel) */}
-                                        <Panel style={{ marginTop: 20 }}>
-                                            <div style={{
-                                                fontSize: 12,
-                                                fontWeight: 600,
-                                                color: tokens.textSecondary,
-                                                marginBottom: editingNotes ? 10 : 8,
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.5px",
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center",
-                                            }}>
-                                                <span>Descripción</span>
-                                                {!editingNotes && canUpdateOrder && (
-                                                    <EditOutlined
-                                                        style={{ fontSize: 14, color: tokens.primary, cursor: "pointer" }}
-                                                        onClick={() => {
-                                                            setNotesValue(data.order.notes || "");
-                                                            setEditingNotes(true);
-                                                        }}
-                                                    />
-                                                )}
-                                            </div>
-                                            {editingNotes ? (
-                                                <div style={{ display: "grid", gap: 8 }}>
-                                                    <CelumaTextArea
-                                                        value={notesValue}
-                                                        onChange={setNotesValue}
-                                                        placeholder="Agregar descripción o notas de la orden..."
-                                                        rows={4}
-                                                        maxLength={500}
-                                                        autoFocus
-                                                    />
-                                                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                                        <CelumaButton
-                                                            size="xsmall"
-                                                            danger
-                                                            onClick={() => setEditingNotes(false)}
-                                                            disabled={savingNotes}
-                                                        >
-                                                            Cancelar
-                                                        </CelumaButton>
-                                                        <CelumaButton
-                                                            type="primary"
-                                                            size="xsmall"
-                                                            onClick={updateNotes}
-                                                            loading={savingNotes}
-                                                        >
-                                                            Guardar
-                                                        </CelumaButton>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div style={{
-                                                    color: data.order.notes ? tokens.textPrimary : tokens.textSecondary,
-                                                    fontSize: 14,
-                                                    lineHeight: 1.6,
-                                                    whiteSpace: "pre-wrap",
-                                                    fontStyle: data.order.notes ? "normal" : "italic",
-                                                }}>
-                                                    {data.order.notes || "Sin descripción"}
-                                                </div>
-                                            )}
-                                        </Panel>
-                                <OrderManagementPanel
-                                    orderId={data.order.id}
-                                    physicianIds={(data.order.requesting_physicians ?? []).map((p) => p.id)}
-                                    expediente={data.order.expediente ?? null}
-                                    notes={data.order.notes ?? null}
-                                    canEdit={canUpdateOrder}
-                                    canRemove={canRemoveCapture}
-                                    onChanged={refresh}
-                                />
+                                {/* Description - at the bottom (Céluma panel); edited from the rail's edit action */}
+                                <Panel style={{ marginTop: 20 }}>
+                                    <div style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: tokens.textSecondary,
+                                        marginBottom: 8,
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.5px",
+                                    }}>
+                                        Descripción
+                                    </div>
+                                    <div style={{
+                                        color: data.order.notes ? tokens.textPrimary : tokens.textSecondary,
+                                        fontSize: 14,
+                                        lineHeight: 1.6,
+                                        whiteSpace: "pre-wrap",
+                                        fontStyle: data.order.notes ? "normal" : "italic",
+                                    }}>
+                                        {data.order.notes || "Sin descripción"}
+                                    </div>
+                                </Panel>
                             </>
                         )}
                         <ErrorText>{error}</ErrorText>
+                        <RemoveCaptureDialog
+                            open={removeOpen}
+                            title="Retirar orden"
+                            consequences={management?.removal_consequences ?? []}
+                            confirmText="Retirar orden"
+                            loading={removing}
+                            error={removeError}
+                            testId="order-remove-dialog"
+                            onConfirm={handleRemoveOrder}
+                            onCancel={() => setRemoveOpen(false)}
+                        />
                     </RecordCard>
 
                             {/* Tabs Card — "Línea de Tiempo" is the default tab so users don't have to scroll to find it */}
