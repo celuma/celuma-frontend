@@ -61,6 +61,7 @@ import type {
 import {
     AMENDMENT_CATEGORY_LABELS,
     buildEmptyReportContent,
+    DESCRIPTION_SECTION_KEYS,
     normalizeReportTemplateJSON,
     mergePersistedContentIntoTemplateSnapshot,
     resolveBaseOrder,
@@ -802,12 +803,27 @@ const ReportEditor: React.FC = () => {
                         normalized,
                         savedReport ?? undefined,
                     );
+                    // An amendment has its own labels and shares Report.template
+                    // with the delivered original. Only use the persisted V2 labels here.
+                    const snapshot = savedReport?.rendering_snapshot as {
+                        template?: Pick<ReportTemplateJSON, "sections">;
+                    } | undefined;
+                    const sections = { ...baseTmpl.sections };
+                    if (full.report?.schema_version === 2) {
+                        for (const key of DESCRIPTION_SECTION_KEYS) {
+                            const label = snapshot?.template?.sections?.[key]?.label;
+                            if (sections[key] && typeof label === "string") {
+                                sections[key] = { ...sections[key], label };
+                            }
+                        }
+                    }
 
                     // Fuse the saved report's order arrays into the template state so the
                     // editor panel and buildEnvelope both use the same effective order.
                     const { baseOrder: savedBO, sectionOrder: savedSO } = resolveDisplayOrder(baseTmpl, savedReport);
                     const effectiveTmpl: ReportTemplateJSON = {
                         ...baseTmpl,
+                        sections,
                         base_order: savedBO,
                         section_order: savedSO,
                     };

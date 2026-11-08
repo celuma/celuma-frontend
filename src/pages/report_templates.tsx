@@ -65,12 +65,6 @@ const SECTION_TYPE_OPTIONS: { value: TemplateFieldType; label: string }[] = [
     { value: "table",    label: "Tabla" },
 ];
 
-const SECTION_LABELS: Record<string, string> = {
-    section_macroscopic: "Macroscópica",
-    section_microscopic: "Microscópica",
-    images:              "Imágenes",
-};
-
 interface DraggableItem {
     key: string;
     cfg: ReportBaseFieldConfig | ReportSectionConfig;
@@ -353,7 +347,7 @@ function DraggableList({
                 const predefined = isPredefined(item.key);
                 const label = predefined
                     ? (isSection
-                        ? (SECTION_LABELS[item.key] ?? item.key)
+                        ? (DEFAULT_SECTIONS[item.key]?.label ?? item.key)
                         : resolveBaseFieldLabel(item.key, cfg as { label?: string }))
                     : custom.label;
                 const cfgType = (cfg as { type?: TemplateFieldType }).type;

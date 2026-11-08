@@ -10,6 +10,7 @@
  * do — see report-template-editor-contract.md, "Live preview".
  */
 import type { ReportContent, ReportEnvelope, ReportTemplateJSON } from "../../../models/report";
+import { DEFAULT_SECTIONS } from "../../../models/report";
 import type { ReportPresentationSnapshotV2, ReportRenderingSnapshotV2 } from "./versioned_report_types";
 
 const PREVIEW_CLINICAL_TEMPLATE: ReportTemplateJSON = {
@@ -23,7 +24,7 @@ const PREVIEW_CLINICAL_TEMPLATE: ReportTemplateJSON = {
     sections: {
         section_macroscopic: {
             is_visible: true,
-            label: "Macroscópica",
+            label: DEFAULT_SECTIONS.section_macroscopic.label,
             type: "richtext",
             content:
                 "<p>Descripción macroscópica de ejemplo para previsualizar el diseño de la plantilla. " +
@@ -31,7 +32,7 @@ const PREVIEW_CLINICAL_TEMPLATE: ReportTemplateJSON = {
         },
         section_microscopic: {
             is_visible: true,
-            label: "Microscópica",
+            label: DEFAULT_SECTIONS.section_microscopic.label,
             type: "richtext",
             content:
                 "<p>Descripción microscópica de ejemplo, únicamente para fines de previsualización " +

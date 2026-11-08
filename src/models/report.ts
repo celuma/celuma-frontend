@@ -560,9 +560,11 @@ export const LEGACY_PREDEFINED_BASE_HIDDEN = new Set<string>([]);
 
 /** Predefined sections with empty content (template skeleton).
  *  images is the 3rd section by default. */
+export const DESCRIPTION_SECTION_KEYS = ["section_macroscopic", "section_microscopic"] as const;
+
 export const DEFAULT_SECTIONS: Record<string, ReportSectionConfig> = {
-    section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: "" },
-    section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
+    section_macroscopic: { is_visible: true, label: "Descripción macroscópica", type: "richtext", content: "" },
+    section_microscopic: { is_visible: true, label: "Descripción microscópica", type: "richtext", content: "" },
     images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
 };
 
@@ -761,9 +763,9 @@ export function buildDefaultTemplateJSON(): ReportTemplateJSON {
             Object.entries(DEFAULT_BASE_FIELDS).map(([k, v]) => [k, { ...v }])
         ) as Record<string, ReportBaseFieldConfig>,
         sections: {
-            section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: "" },
-            section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: "" },
-            images:              { is_visible: true, label: "Imágenes",     type: "images",   content: [] },
+            section_macroscopic: { ...DEFAULT_SECTIONS.section_macroscopic },
+            section_microscopic: { ...DEFAULT_SECTIONS.section_microscopic },
+            images: { ...DEFAULT_SECTIONS.images, type: "images", content: [] },
         },
         base_order: [...DEFAULT_BASE_ORDER],
         section_order: [...DEFAULT_SECTION_ORDER],
