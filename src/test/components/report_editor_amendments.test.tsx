@@ -26,6 +26,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { message } from "antd";
 import ReportEditor from "../../components/report/report_editor";
+import type { ReportRenderingSnapshotV2 } from "../../components/report/versioned/versioned_report_types";
 import * as reportService from "../../services/report_service";
 import * as letterheadService from "../../services/report_letterhead_service";
 import { useUserProfile } from "../../hooks/use_user_profile";
@@ -492,6 +493,30 @@ describe("Every amended emission keeps its note readable internally (#48, review
 });
 
 describe("An open amendment", () => {
+    it("uses the draft's updated heading while the delivered template retains its original heading", async () => {
+        const data = payload("DRAFT", { amendmentOpen: true, changeNote: "Cambio sintético." });
+        const snapshot = data.report.report.rendering_snapshot as ReportRenderingSnapshotV2;
+        data.report.report.rendering_snapshot = {
+            ...snapshot,
+            template: {
+                ...snapshot.template,
+                sections: {
+                    section_macroscopic: {
+                        ...CONTENT.sections.section_macroscopic,
+                        label: "Descripción macroscópica",
+                    },
+                },
+            },
+        };
+        await renderLoaded("pathologist", data);
+        await waitFor(() => expect(renderedDocumentText()).toContain("Descripción macroscópica"));
+        const save = vi.spyOn(reportService, "saveReportVersion").mockResolvedValue(undefined);
+        await userEvent.click(screen.getByTestId("report-save-top"));
+        await waitFor(() => expect(save).toHaveBeenCalled());
+        expect(save.mock.calls[0][0].report?.sections.section_macroscopic.label).toBe("Descripción macroscópica");
+        expect(data.report.template.sections.section_macroscopic.label).toBe("Macroscópica");
+    });
+
     it("shows the internal indicator with the emission still delivered", async () => {
         await renderLoaded("assignedReviewer", payload("DRAFT", { amendmentOpen: true }));
         const banner = screen.getByTestId("amendment-in-progress");
