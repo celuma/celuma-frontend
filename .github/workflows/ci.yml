@@ -51,7 +51,7 @@ jobs:
             echo "version=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
