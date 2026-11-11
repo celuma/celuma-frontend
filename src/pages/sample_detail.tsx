@@ -278,7 +278,7 @@ export default function SampleDetailPage() {
         setRemoveError(null);
         try {
             await removeSample(sampleId, reason);
-            message.success("Muestra retirada. Su código no se reutilizará.");
+            message.success("Muestra retirada. Su código queda fuera de la numeración automática.");
             navigate(`/orders/${detail.order.id}`, { replace: true });
         } catch (err) {
             setRemoveError(getErrorMessage(err));

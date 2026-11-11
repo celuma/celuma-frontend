@@ -225,7 +225,7 @@ function OperationProgress({ op, busy, onRetry, onCancel }: {
                 <CelumaAlert
                     type="success"
                     message="Limpieza completada"
-                    description="El contenido operativo se eliminó y los datos maestros se conservaron. Los códigos emitidos no se reutilizarán."
+                    description="El contenido operativo se eliminó y los datos maestros se conservaron. El numerador no volverá a asignar los códigos emitidos."
                     style={{ marginTop: 12 }}
                 />
             )}

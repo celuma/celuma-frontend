@@ -27,7 +27,7 @@ export default function RemoveCaptureDialog({ open, title, consequences, confirm
             open={open}
             danger
             title={title}
-            description="Esto es para una captura errónea, no para cancelar un caso. El código no se reutilizará."
+            description="Esto es para una captura errónea, no para cancelar un caso. El numerador no volverá a asignar este código."
             confirmText={confirmText}
             loading={loading}
             confirmDisabled={reason.trim().length < 3}

@@ -135,7 +135,7 @@ export default function SampleEditForm() {
                     ...(newCollected !== original.collected ? { collected_at: newCollected || null } : {}),
                     reason: (data.reason ?? "").trim(),
                 });
-                if (res.old_code) message.success(`Código regenerado: ${res.old_code} → ${res.sample_code}. El código anterior no se reutilizará.`);
+                if (res.old_code) message.success(`Código regenerado: ${res.old_code} → ${res.sample_code}. El numerador no volverá a asignar el código anterior.`);
             }
             if (newNotes !== original.notes) await updateSampleNotes(sampleId, newNotes || null);
             navigate(`/samples/${sampleId}`, { replace: true });
@@ -179,7 +179,7 @@ export default function SampleEditForm() {
                                     />
                                     <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
                                         {canCorrectCode
-                                            ? "El código anterior queda retirado y la numeración automática no se modifica. Letras, números, «.», «_» y «-»."
+                                            ? "Puedes reutilizar un código al corregirlo manualmente. Usa letras, números, «.», «_» o «-»."
                                             : "Corregir el código a mano requiere el permiso de captura manual de códigos."}
                                     </div>
                                 </section>
@@ -220,7 +220,7 @@ export default function SampleEditForm() {
                                             type="warning"
                                             showIcon
                                             data-testid="sample-code-regenerates"
-                                            message={`La nueva fecha de recepción cae en otro mes: al guardar se generará un código nuevo en ese mes y ${original?.code} quedará retirado (no se reutilizará).`}
+                                            message={`La nueva fecha de recepción cae en otro mes: al guardar se generará un código nuevo en ese mes y ${original?.code} quedará fuera de la numeración automática.`}
                                         />
                                     ) : (
                                         <div style={{ color: tokens.textSecondary, fontSize: 13 }}>
