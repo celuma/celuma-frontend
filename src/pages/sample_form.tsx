@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout, Card } from "antd";
+import { Layout, Card, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import PageHeader from "../components/ui/page_header";
@@ -17,7 +17,18 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
-import AutoCodeHint from "../components/numbering/auto_code_hint";
+import SampleCodeField from "../components/numbering/sample_code_field";
+import { useSampleCodeSuggestions } from "../hooks/use_sample_code_suggestions";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
+import {
+    describeSavedCodes,
+    isManualCodeValid,
+    MANUAL_SAMPLE_CODE_MESSAGE,
+    payloadCode,
+    resolveRowCode,
+    type SampleCodeRow,
+} from "../lib/sample_code_rows";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
 import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
@@ -88,6 +99,13 @@ const schema = z.object({
     collected_date: collectionDateSchema,
     // Céluma 1.4 (#33): required. The monthly code is numbered by the receipt date; collection stays optional.
     received_date: receiptDateSchema,
+    // Hotfix 1.4.3: what the user typed in "Código de muestra"; it only counts while `code_manual` is set.
+    sample_code: z.string().optional(),
+    code_manual: z.boolean().optional(),
+}).superRefine((row, ctx) => {
+    if (row.code_manual && (row.sample_code ?? "").trim() !== "" && !isManualCodeValid(row.sample_code ?? "")) {
+        ctx.addIssue({ code: "custom", path: ["sample_code"], message: MANUAL_SAMPLE_CODE_MESSAGE });
+    }
 });
 
 type SampleFormData = z.infer<typeof schema>;
@@ -155,7 +173,10 @@ export default function SampleForm() {
         return qs.get("orderId") || "";
     }, [search]);
 
-    const { control, handleSubmit, reset } = useForm<SampleFormData>({
+    const { hasPermission } = useUserProfile();
+    const canEnterManual = hasPermission(PERMS.ENTER_MANUAL_CODE);
+
+    const { control, handleSubmit, reset, setValue } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -165,6 +186,8 @@ export default function SampleForm() {
             notes: "",
             collected_date: "",
             received_date: "",
+            sample_code: "",
+            code_manual: false,
         },
         mode: "onTouched",
     });
@@ -172,6 +195,14 @@ export default function SampleForm() {
     const watchedType = useWatch({ control, name: "sample_type_id" });
     const watchedBranch = useWatch({ control, name: "branch_id" });
     const watchedReceived = useWatch({ control, name: "received_date" });
+    const watchedCode = useWatch({ control, name: "sample_code" });
+    const watchedManual = useWatch({ control, name: "code_manual" });
+    const codeRows: SampleCodeRow[] = [{
+        key: "sample", sampleTypeId: watchedType ?? "", receivedDate: watchedReceived ?? "",
+        manual: Boolean(watchedManual), typedCode: watchedCode ?? "",
+    }];
+    const codeSuggestions = useSampleCodeSuggestions(codeRows, watchedBranch || undefined);
+    const codeState = resolveRowCode(codeRows[0], codeSuggestions.byKey.sample, codeSuggestions.failed);
 
     useEffect(() => {
         (async () => {
@@ -208,7 +239,7 @@ export default function SampleForm() {
             if (!finalTenant || !finalBranch) {
                 throw new Error("Faltan tenant_id o branch_id en el contexto de sesión.");
             }
-            // The sample code is never sent: the server always generates it (Céluma 1.4).
+            // Only a code the user typed (and may type) is sent; otherwise the server generates it on save.
             const payload = {
                 tenant_id: finalTenant,
                 branch_id: finalBranch,
@@ -219,11 +250,14 @@ export default function SampleForm() {
                 // local calendar date (#33). A UTC midnight is the previous evening in Mexico City.
                 collected_at: data.collected_date || undefined,
                 received_at: data.received_date,
+                sample_code: payloadCode(codeRows[0], canEnterManual),
             };
             const created = await postJSON<SampleFormData, CreateSampleResponse>(
                 "/v1/laboratory/samples/", payload as unknown as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
             );
             idempotency.succeeded();
+            // The real result, not the suggestion: the definitive code the API returned.
+            message.success({ content: describeSavedCodes([codeState], [created]).text, duration: 8 });
             reset();
             navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
@@ -322,11 +356,33 @@ export default function SampleForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Muestra</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código se asigna automáticamente al registrar.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Complete los datos de la muestra. El código se sugiere según el numerador y se asigna al guardar, salvo que se escriba uno propio.</p>
                                 <div className="sf-grid-3">
-                                    <div style={{ alignContent: "center", display: "grid" }}>
-                                        <AutoCodeHint kind="sample" scopeId={watchedType || undefined} branchId={watchedBranch || undefined} referenceDate={watchedReceived || undefined} />
-                                    </div>
+                                    <FormField
+                                        control={control}
+                                        name="sample_code"
+                                        render={(p) => (
+                                            <SampleCodeField
+                                                state={codeState}
+                                                manual={codeRows[0].manual}
+                                                typedCode={watchedCode ?? ""}
+                                                canEdit={canEnterManual}
+                                                error={p.error}
+                                                onType={(value) => {
+                                                    setValue("sample_code", value, { shouldDirty: true, shouldValidate: true });
+                                                    setValue("code_manual", true, { shouldDirty: true });
+                                                }}
+                                                onBlurEmpty={() => {
+                                                    setValue("sample_code", "");
+                                                    setValue("code_manual", false);
+                                                }}
+                                                onUseSuggestion={() => {
+                                                    setValue("sample_code", "", { shouldValidate: true });
+                                                    setValue("code_manual", false, { shouldDirty: true });
+                                                }}
+                                            />
+                                        )}
+                                    />
                                     <FormField
                                         control={control}
                                         name="sample_type_id"

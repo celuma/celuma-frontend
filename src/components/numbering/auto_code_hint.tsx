@@ -17,7 +17,7 @@ interface Props {
 }
 
 /**
- * Explains that the code is assigned automatically and shows an ESTIMATE of it.
+ * Explains that the ORDER code is assigned automatically and shows an ESTIMATE of it. (Sample rows use `SampleCodeField` since hotfix 1.4.3.)
  *
  * Registration never accepts a typed code (Céluma 1.4, issue #8 follow-up). The estimate comes from
  * `POST /numbering/preview`, which reads only: it reserves nothing and consumes no number. The real

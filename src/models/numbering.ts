@@ -1,7 +1,9 @@
 /**
  * Numbering of orders and samples (Céluma 1.4, issue #8; automatic registration).
  *
- * Registration is AUTOMATIC: no form types an order or sample code and the API accepts none.
+ * Registration is AUTOMATIC for orders: no form types an order code and the API accepts none. A SAMPLE row may
+ * carry a typed code (hotfix 1.4.3, `lab:enter_manual_code`); otherwise it is generated on save, and the form
+ * shows a read-only suggestion (`POST /numbering/sample-code-suggestions`) that reserves nothing.
  * Contract: `celuma-engineering/specs/laboratory/monthly-numbering.md`.
  */
 
@@ -111,4 +113,39 @@ export function timezoneOptions(): string[] {
     const zones = intl.supportedValuesOf ? intl.supportedValuesOf("timeZone") : [];
     const base = zones.length ? zones : ["America/Mexico_City", "America/Bogota", "America/Lima", "America/Santiago", "Europe/Madrid"];
     return Array.from(new Set(["UTC", DEFAULT_NUMBERING_TIMEZONE, ...base]));
+}
+
+// ── Sample-code suggestions (hotfix 1.4.3) ───────────────────────────────────────────────────────────────
+
+/** One sample row asking what code it would get. `key` is echoed back (the form uses the row's field id). */
+export interface SampleCodeSuggestionItem {
+    key: string;
+    sample_type_id: string;
+    /** `YYYY-MM-DD` as typed; null while the row has no valid receipt date. */
+    received_at: string | null;
+}
+
+export interface SampleCodeSuggestionRequest {
+    branch_id?: string;
+    /** In row order, only rows still on the automatic code (a typed code consumes no number). */
+    items: SampleCodeSuggestionItem[];
+    /** Codes typed by hand in the same lot: the API never suggests them. */
+    reserved_codes: string[];
+}
+
+export interface SampleCodeSuggestion {
+    key: string;
+    code: string | null;
+    /** Why there is no code yet: `receipt_date_required`, `receipt_date_invalid`, `branch_required`, ... */
+    reason: string | null;
+    period_year: number | null;
+    period_month: number | null;
+    /** Always false: a suggestion never reserves or consumes a number. */
+    reserved: boolean;
+}
+
+export interface SampleCodeSuggestionResponse {
+    scheme: "monthly" | "legacy";
+    suggestions: SampleCodeSuggestion[];
+    notice: string;
 }

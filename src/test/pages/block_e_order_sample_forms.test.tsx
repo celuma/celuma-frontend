@@ -18,6 +18,7 @@
  * by the selectors — and that no edit workflow was introduced along the way.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { message } from "antd";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import OrderForm from "../../pages/order_form";
@@ -67,12 +68,57 @@ function numberingConfigs() {
     return { order: cfg("order"), sample: cfg("sample") };
 }
 
+type StubOptions = {
+    /** Permissions of the signed-in user (`/v1/auth/me`). Default: none. */
+    permissions?: string[];
+    /** Counter already reached per `<sample type id>-<year>-<month>` (the next suggestion is last + 1). */
+    counters?: Record<string, number>;
+    /** Hold every suggestion response until `release()` (races between a late answer and the user's typing). */
+    holdSuggestions?: boolean;
+};
+
+type SuggestRequest = {
+    branch_id?: string;
+    items: Array<{ key: string; sample_type_id: string; received_at: string | null }>;
+    reserved_codes: string[];
+};
+
 /** Routes every catalogue GET both forms make, and captures the POST. */
-function stubApi(post: PostOutcome = { ok: true, body: {} }) {
+function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions = {}) {
     const posts: Array<{ url: string; body: unknown }> = [];
     const previews: unknown[] = [];
+    const suggestionRequests: SuggestRequest[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        if (url.includes("/v1/auth/me")) {
+            return jsonResponse({ id: "usr-1", email: "u@example.test", full_name: "U", roles: [], permissions: opts.permissions ?? [], tenant_id: TENANT_ID, branch_ids: [] });
+        }
+        // Hotfix 1.4.3: the read-only suggestion. Mirrors the API: monthly `<TYPE><seq 2><MM><YY>` per type and
+        // receipt month, in row order, skipping the codes typed in the same lot; a row without a date has none.
+        if (url.includes("/v1/numbering/sample-code-suggestions")) {
+            const request = JSON.parse(String(init?.body)) as SuggestRequest;
+            suggestionRequests.push(request);
+            if (opts.holdSuggestions) await gate;
+            const used: Record<string, number> = {};
+            const reserved = new Set(request.reserved_codes);
+            const suggestions = request.items.map((item) => {
+                if (!item.received_at) return { key: item.key, code: null, reason: "receipt_date_required", period_year: null, period_month: null, reserved: false };
+                const type = CATALOG.find((t) => t.id === item.sample_type_id)!;
+                const [year, month] = item.received_at.split("-");
+                const counter = `${type.id}-${year}-${month}`;
+                let n = used[counter] ?? opts.counters?.[counter] ?? 0;
+                let code: string;
+                do {
+                    n += 1;
+                    code = `${type.code}${String(n).padStart(2, "0")}${month}${year.slice(2)}`;
+                } while (reserved.has(code));
+                used[counter] = n;
+                return { key: item.key, code, reason: null, period_year: Number(year), period_month: Number(month), reserved: false };
+            });
+            return jsonResponse({ scheme: "monthly", suggestions, notice: "n" });
+        }
         // The non-consuming numbering preview is a POST too, but it is not the registration.
         if (url.includes("/v1/numbering/preview")) {
             const request = JSON.parse(String(init?.body)) as { reference_date?: string };
@@ -116,7 +162,7 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }) {
         return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
-    return { fetchMock, posts, previews };
+    return { fetchMock, posts, previews, suggestionRequests, release };
 }
 
 /**
@@ -645,22 +691,24 @@ describe("#8 — registration forms have no code inputs (codes are always genera
     const codeLabels = (container: HTMLElement) =>
         Array.from(container.querySelectorAll("label")).filter((l) => /^Código de (la orden|Muestra)/.test(l.textContent?.trim() ?? ""));
 
-    it("neither form renders an editable order or sample code field", async () => {
+    it("the order code is still generated (hint only); each sample row has the «Código de muestra» field", async () => {
         stubApi();
         const order = renderOrderForm();
         await waitFor(() => expect(order.container.querySelector("[data-testid=auto-code-hint-order]")?.textContent).toContain("automáticamente"));
-        expect(codeLabels(order.container)).toHaveLength(0);
+        expect(codeLabels(order.container).filter((l) => /orden/i.test(l.textContent ?? ""))).toHaveLength(0);
+        expect(order.container.querySelectorAll("[data-testid^=sample-code-][data-testid$=-field]")).toHaveLength(1);
         fireEvent.click(buttonByText(order.container, "Agregar otra muestra"));
-        await waitFor(() => expect(order.container.querySelectorAll("[data-testid=auto-code-hint-sample]")).toHaveLength(2));
-        expect(codeLabels(order.container)).toHaveLength(0);
+        await waitFor(() => expect(order.container.querySelectorAll("[data-testid^=sample-code-][data-testid$=-field]")).toHaveLength(2));
+        // the old per-row legend is gone
+        expect(order.container.textContent).not.toContain("El mes del código sale de la fecha de recepción");
+        expect(order.container.querySelectorAll("[data-testid=auto-code-hint-sample]")).toHaveLength(0);
         order.unmount();
         const sample = renderSampleForm();
-        await waitFor(() => expect(sample.container.querySelector("[data-testid=auto-code-hint-sample]")).toBeTruthy());
-        expect(codeLabels(sample.container)).toHaveLength(0);
-        expect(sample.container.querySelectorAll("input[name*=code]")).toHaveLength(0);
+        await waitFor(() => expect(sample.container.querySelector("[data-testid=sample-code]")).toBeTruthy());
+        expect(sample.container.textContent).not.toContain("El mes del código sale de la fecha de recepción");
     });
 
-    it("no code is ever in the unified or standalone payload", async () => {
+    it("an automatic registration sends no code at all", async () => {
         const { posts } = stubApi({ ok: true, body: { order: { id: "new-order" }, samples: [] } });
         const { container } = renderOrderForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
@@ -700,23 +748,6 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         expect(body).not.toHaveProperty("requesting_physician_ids");
     });
 
-    it("the hint shows an estimate asked from the READ-ONLY preview, labelled as not reserved", async () => {
-        const { previews } = stubApi();
-        const { container } = renderSampleForm();
-        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
-        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
-        // #33: a sample is numbered by its receipt date, so no estimate is asked or shown until there is a valid one.
-        await new Promise((r) => setTimeout(r, 50));
-        expect(previews).toEqual([]);
-        expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).not.toContain("Ejemplo");
-        await setReceived(container, "2026-09-30");
-        await waitFor(() => expect(container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent).toContain("BIO010926"));
-        const hint = container.querySelector("[data-testid=auto-code-hint-sample]")?.textContent ?? "";
-        expect(hint).toContain("no reservado");
-        expect(hint).toContain("septiembre 2026, según la fecha de recepción");
-        expect(previews).toEqual([{ entity_kind: "sample", scope_id: "stp-bio", reference_date: "2026-09-30" }]);
-    });
-
     it("a structured API refusal {code, message} is shown as its message", async () => {
         stubApi({ ok: false, body: { detail: { code: "numbering_exhausted", message: "Could not find a free code after 10000 attempts" } } });
         const { container } = renderSampleForm();
@@ -727,6 +758,177 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(container.textContent).toContain("Could not find a free code"));
+    });
+});
+
+// ── Hotfix 1.4.3: «Código de muestra» ───────────────────────────────────────
+
+describe("Hotfix 1.4.3 — «Código de muestra» in each sample row", () => {
+    const MANUAL = ["lab:enter_manual_code"];
+    const codeInput = (container: HTMLElement, row = 0) =>
+        container.querySelector(`[data-testid=sample-code-${row}]`) as HTMLInputElement;
+    const help = (container: HTMLElement, row = 0) => container.querySelector(`[data-testid=sample-code-${row}-help]`)?.textContent ?? "";
+
+    async function fillBase(container: HTMLElement) {
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
+        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
+    }
+    async function setRow(container: HTMLElement, row: number, type?: string, date?: string) {
+        if (type) await pickOption(selectByCaption(container, "Tipo de muestra", row), type);
+        if (date) await setReceived(container, date, row);
+    }
+    async function addRow(container: HTMLElement, expected: number) {
+        fireEvent.click(buttonByText(container, "Agregar otra muestra"));
+        await waitFor(() => expect(container.querySelectorAll("[data-testid^=sample-code-][data-testid$=-field]")).toHaveLength(expected));
+    }
+    const typeCode = (container: HTMLElement, row: number, value: string) =>
+        fireEvent.change(codeInput(container, row), { target: { value } });
+
+    it("suggests only once the type is chosen, and with the receipt date the monthly scheme needs", async () => {
+        const { suggestionRequests } = stubApi();
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        expect(help(container)).toContain("Seleccione el tipo de muestra");
+        expect(codeInput(container).value).toBe("");
+        await setRow(container, 0, "Biopsia");
+        await waitFor(() => expect(help(container)).toContain("Indique la fecha de recepción"));
+        expect(codeInput(container).value).toBe("");
+        await setRow(container, 0, undefined, "2026-09-30");
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        expect(help(container)).toContain("no reservado");
+        const last = suggestionRequests.at(-1)!;
+        expect(last).toMatchObject({ branch_id: BRANCH_ID, reserved_codes: [] });
+        expect(last.items).toEqual([{ key: expect.any(String), sample_type_id: "stp-bio", received_at: "2026-09-30" }]);
+    });
+
+    it("the suggestions of one lot follow the sequence and refresh when a row's type or date changes", async () => {
+        stubApi();
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await addRow(container, 2);
+        await setRow(container, 1, "Biopsia", "2026-09-05");
+        await addRow(container, 3);
+        await setRow(container, 2, "Laminilla", "2026-09-05");
+        await waitFor(() => expect([0, 1, 2].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO020926", "LAM010926"]));
+        // the LAST row moves to another type: the sequence of the lot is recomputed
+        await setRow(container, 2, "Biopsia");
+        await waitFor(() => expect([0, 1, 2].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO020926", "BIO030926"]));
+        // and to another month: that row leaves the September sequence
+        await setRow(container, 2, undefined, "2026-10-02");
+        await waitFor(() => expect([0, 1, 2].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO020926", "BIO011026"]));
+    });
+
+    it("a user without the capability sees the suggestion but cannot edit it, and no code is ever sent", async () => {
+        const { posts } = stubApi({ ok: true, body: { order: { id: "o" }, samples: [{ sample_code: "BIO010926" }] } });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        expect(codeInput(container).disabled).toBe(true);
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect((posts[0].body as { samples: Array<Record<string, unknown>> }).samples[0]).not.toHaveProperty("sample_code");
+    });
+
+    it("a user with the capability can type a code: it is sent as typed and takes no part in the sequence", async () => {
+        const saved = vi.spyOn(message, "success").mockImplementation((() => undefined) as never);
+        const { posts, suggestionRequests } = stubApi(
+            { ok: true, body: { order: { id: "o" }, samples: [{ sample_code: "MAN-1" }, { sample_code: "BIO050926" }] } },
+            { permissions: MANUAL },
+        );
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await addRow(container, 2);
+        await setRow(container, 1, "Biopsia", "2026-09-30");
+        await waitFor(() => expect([0, 1].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO020926"]));
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+
+        typeCode(container, 0, " MAN-1 ");
+        expect(codeInput(container).value).toBe(" MAN-1 ");
+        expect(help(container)).toContain("Código manual");
+        // the other row now leads the sequence, and the typed code is reserved so it is never suggested
+        await waitFor(() => expect(codeInput(container, 1).value).toBe("BIO010926"));
+        expect(suggestionRequests.at(-1)!.reserved_codes).toEqual(["MAN-1"]);
+        expect(suggestionRequests.at(-1)!.items.map((i) => i.sample_type_id)).toEqual(["stp-bio"]); // only the automatic row is asked
+
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        const samples = (posts[0].body as { samples: Array<Record<string, unknown>> }).samples;
+        expect(samples[0].sample_code).toBe("MAN-1");
+        expect(samples[1]).not.toHaveProperty("sample_code");
+        // the REAL result is shown after saving, not the suggestion
+        await waitFor(() => expect(saved).toHaveBeenCalled());
+        const content = (saved.mock.calls[0][0] as { content: string }).content;
+        expect(content).toContain("MAN-1 (manual), BIO050926 (se sugirió BIO010926)");
+        expect(content).toContain("El código automático definitivo se asignó al guardar.");
+    });
+
+    it("a typed code survives changes of type and date and answers that arrive late", async () => {
+        const { suggestionRequests, release } = stubApi({ ok: true, body: {} }, { permissions: MANUAL, holdSuggestions: true });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await waitFor(() => expect(suggestionRequests.length).toBeGreaterThan(0)); // asked, not answered yet
+        typeCode(container, 0, "MIO-9");
+        release(); // the answers for the automatic code arrive now
+        await new Promise((r) => setTimeout(r, 400));
+        expect(codeInput(container).value).toBe("MIO-9");
+        await setRow(container, 0, "Laminilla", "2026-10-03");
+        await new Promise((r) => setTimeout(r, 400));
+        expect(codeInput(container).value).toBe("MIO-9");
+    });
+
+    it("emptying the field and leaving it, or choosing the automatic suggestion, goes back to automatic", async () => {
+        const { posts } = stubApi({ ok: true, body: { order: { id: "o" }, samples: [] } }, { permissions: MANUAL });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+        typeCode(container, 0, "X-1");
+        fireEvent.click(container.querySelector("[data-testid=sample-code-0-reset]")!);
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        typeCode(container, 0, "");
+        expect(codeInput(container).value).toBe("");
+        fireEvent.blur(codeInput(container));
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect((posts[0].body as { samples: Array<Record<string, unknown>> }).samples[0]).not.toHaveProperty("sample_code");
+    });
+
+    it("a malformed typed code is refused before anything is sent", async () => {
+        const { posts } = stubApi({ ok: true, body: {} }, { permissions: MANUAL });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia", "2026-09-30");
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+        typeCode(container, 0, "no valido!");
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(container.textContent).toContain("Use de 1 a 100 caracteres"));
+        expect(posts).toHaveLength(0);
+    });
+
+    it("the standalone sample form has the same field, suggestion and manual capture", async () => {
+        const { posts } = stubApi({ ok: true, body: { id: "s-1", sample_code: "MAN-3" } }, { permissions: MANUAL });
+        const { container } = renderSampleForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Orden"), "ORD-001");
+        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await setReceived(container, "2026-09-30");
+        const input = () => container.querySelector("[data-testid=sample-code]") as HTMLInputElement;
+        await waitFor(() => expect(input().value).toBe("BIO010926"));
+        await waitFor(() => expect(input().disabled).toBe(false));
+        fireEvent.change(input(), { target: { value: "MAN-3" } });
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect((posts[0].body as Record<string, unknown>).sample_code).toBe("MAN-3");
     });
 });
 
