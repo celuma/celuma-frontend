@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Layout, Card } from "antd";
+import { Layout, Card, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import PageHeader from "../components/ui/page_header";
@@ -22,8 +22,22 @@ import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
 import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
-import AutoCodeHint from "../components/numbering/auto_code_hint";
-import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
+import OrderCodeField from "../components/numbering/order_code_field";
+import SampleCodeField from "../components/numbering/sample_code_field";
+import { useSampleCodeSuggestions } from "../hooks/use_sample_code_suggestions";
+import { useUserProfile } from "../hooks/use_user_profile";
+import { PERMS } from "../lib/rbac";
+import {
+    describeSavedCodes,
+    isManualCodeValid,
+    MANUAL_SAMPLE_CODE_MESSAGE,
+    payloadCode,
+    resolveRowCode,
+    type SampleCodeRow,
+} from "../lib/sample_code_rows";
+import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../lib/receipt_date";
+import { DEFAULT_NUMBERING_ZONE, receiptZone, todayInZone } from "../lib/receipt_today";
+import { useSampleNumberingZone } from "../hooks/use_sample_numbering_zone";
 import ReportTemplateField from "../components/order/report_template_field";
 import { suggestReportTemplate } from "../lib/report_template_suggestion";
 import { getReportTemplates } from "../services/report_service";
@@ -95,7 +109,18 @@ const sampleSchema = z.object({
     collected_date: collectionDateSchema,
     // Céluma 1.4 (#33): required per sample. Each sample is numbered by ITS OWN receipt date.
     received_date: receiptDateSchema,
+    // Hotfix 1.4.3: the "Código de muestra" field. `sample_code` is what the user typed and only counts while
+    // `code_manual` is set; an automatic row sends none and its code is assigned on save.
+    sample_code: z.string().optional(),
+    code_manual: z.boolean().optional(),
+}).superRefine((row, ctx) => {
+    if (row.code_manual && (row.sample_code ?? "").trim() !== "" && !isManualCodeValid(row.sample_code ?? "")) {
+        ctx.addIssue({ code: "custom", path: ["sample_code"], message: MANUAL_SAMPLE_CODE_MESSAGE });
+    }
 });
+
+/** A new row starts with today's receipt date (hotfix 1.4.3); the user can change it. */
+const emptySample = (today: string) => ({ sample_type_id: "", notes: "", collected_date: "", received_date: today, sample_code: "", code_manual: false });
 
 const schema = z.object({
     tenant_id: z.string().trim().nonempty("El tenant es requerido."),
@@ -167,7 +192,7 @@ export default function OrderForm() {
     const [loadingPatients, setLoadingPatients] = useState(false);
     const [requestingPhysicians, setRequestingPhysicians] = useState<Array<{ id: string; label: string }>>([]);
     const [loadingRequestingPhysicians, setLoadingRequestingPhysicians] = useState(false);
-    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string; timezone?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [studyTypes, setStudyTypes] = useState<StudyTypeOption[]>([]);
     const [loadingStudyTypes, setLoadingStudyTypes] = useState(false);
@@ -190,7 +215,11 @@ export default function OrderForm() {
         return qs.get("requestingPhysicianId") || "";
     }, [search]);
 
-    const { control, handleSubmit, reset } = useForm<OrderFormData>({
+    const { hasPermission } = useUserProfile();
+    // Typing a code is a privileged capture (`lab:enter_manual_code`); the API enforces it too.
+    const canEnterManual = hasPermission(PERMS.ENTER_MANUAL_CODE);
+
+    const { control, handleSubmit, reset, setValue, getValues } = useForm<OrderFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -202,7 +231,7 @@ export default function OrderForm() {
             requested_by: "",
             notes: "",
             samples: [
-                { sample_type_id: "", notes: "", collected_date: "", received_date: "" },
+                emptySample(todayInZone(DEFAULT_NUMBERING_ZONE)),
             ],
         },
         mode: "onTouched",
@@ -213,6 +242,36 @@ export default function OrderForm() {
     const watchedStudyType = useWatch({ control, name: "study_type_id" });
     const watchedBranch = useWatch({ control, name: "branch_id" });
     const watchedSamples = useWatch({ control, name: "samples" });
+    // Hotfix 1.4.3: every row's receipt date starts on today's date in the zone the numbering uses (the branch's
+    // for a branch-scoped numbering). It is the SAME visible date that is suggested for and saved. A date the user
+    // changed is never touched again; the others follow the zone when the branch or the configuration is known.
+    const numberingZone = useSampleNumberingZone();
+    const branchTimezone = branches.find((b) => b.id === watchedBranch)?.timezone;
+    const today = todayInZone(receiptZone(numberingZone, branchTimezone));
+    const touchedDates = useRef(new Set<string>());
+    const previousToday = useRef(today);
+    useEffect(() => {
+        const previous = previousToday.current;
+        previousToday.current = today;
+        fields.forEach((f, i) => {
+            const current = getValues(`samples.${i}.received_date`) ?? "";
+            if (!touchedDates.current.has(f.id) && (current === "" || current === previous)) {
+                setValue(`samples.${i}.received_date`, today);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only a change of "today" re-dates the untouched rows
+    }, [today]);
+
+    // Hotfix 1.4.3: one row per sample, keyed by the field id so a removed row never hands its state to another.
+    const codeRows: SampleCodeRow[] = fields.map((f, i) => ({
+        key: f.id,
+        sampleTypeId: watchedSamples?.[i]?.sample_type_id ?? "",
+        receivedDate: watchedSamples?.[i]?.received_date ?? "",
+        manual: Boolean(watchedSamples?.[i]?.code_manual),
+        typedCode: watchedSamples?.[i]?.sample_code ?? "",
+    }));
+    const codeSuggestions = useSampleCodeSuggestions(codeRows, watchedBranch || undefined);
+    const codeStates = codeRows.map((row) => resolveRowCode(row, codeSuggestions.byKey[row.key], codeSuggestions.failed));
 
     useEffect(() => {
         (async () => {
@@ -334,12 +393,14 @@ export default function OrderForm() {
                 created_by: (currentUserId || undefined),
                 // Only an explicit choice; a followed suggestion stays a live catalog default on the server.
                 report_template_id: manualTemplateId || undefined,
-                samples: data.samples.map((s) => ({
+                samples: data.samples.map((s, i) => ({
                     sample_type_id: s.sample_type_id,
                     notes: s.notes || undefined,
                     // Date-only values (YYYY-MM-DD), never `…T00:00:00Z` (see sample_form.tsx, #33).
                     collected_at: s.collected_date || undefined,
                     received_at: s.received_date,
+                    // Only a code the user typed (and may type); an automatic row sends none.
+                    sample_code: payloadCode(codeRows[i], canEnterManual),
                 })),
             };
             // One key per logical submission: a retry of the SAME payload (timeout, lost response) reuses it
@@ -349,6 +410,8 @@ export default function OrderForm() {
                 { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
             );
             idempotency.succeeded();
+            // The real result, not the suggestion: the definitive codes the API returned.
+            message.success({ content: describeSavedCodes(codeStates, created.samples).text, duration: 8 });
             reset();
             setManualTemplateId(null);
             navigate(`/orders/${created.order.id}`, { replace: true });
@@ -470,6 +533,7 @@ export default function OrderForm() {
                                             />
                                         )}
                                     />
+                                    <OrderCodeField studyTypeId={watchedStudyType || undefined} branchId={watchedBranch || undefined} />
                                 </div>
 
                                 <div className="of-grid-2">
@@ -499,8 +563,6 @@ export default function OrderForm() {
                                     El expediente es una referencia de la solicitud (por ejemplo, ISSSTE): puede capturarse solo o junto con los médicos y se conserva tal cual, con sus ceros a la izquierda.
                                 </span>
 
-                                <AutoCodeHint kind="order" scopeId={watchedStudyType || undefined} branchId={watchedBranch || undefined} />
-
                                 <div className="of-grid-2">
                                     <FormField
                                         control={control}
@@ -514,14 +576,38 @@ export default function OrderForm() {
 
                             <section style={{ display: "grid", gap: 16 }}>
                                 <SectionTitle>Muestras</SectionTitle>
-                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una (la fecha de recepción es obligatoria y define el mes del código); el código de cada muestra se asigna automáticamente.</p>
+                                <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una (la fecha de recepción es obligatoria y define el mes del código); el código de cada muestra se sugiere según el numerador y se asigna al guardar, salvo que se escriba uno propio.</p>
                                 <div style={{ display: "grid", gap: 16 }}>
                                     {fields.map((field, index) => (
                                         <Panel key={field.id} style={{ display: "grid", gap: 16 }}>
                                             <div className="of-grid-3">
-                                                <div style={{ alignContent: "center", display: "grid" }}>
-                                                    <AutoCodeHint kind="sample" scopeId={watchedSamples?.[index]?.sample_type_id || undefined} branchId={watchedBranch || undefined} referenceDate={watchedSamples?.[index]?.received_date || undefined} />
-                                                </div>
+                                                <FormField
+                                                    control={control}
+                                                    name={`samples.${index}.sample_code`}
+                                                    render={(p) => (
+                                                        <SampleCodeField
+                                                            state={codeStates[index] ?? { kind: "need_type" }}
+                                                            manual={codeRows[index]?.manual ?? false}
+                                                            typedCode={watchedSamples?.[index]?.sample_code ?? ""}
+                                                            permitted={canEnterManual}
+                                                            ready={Boolean(codeRows[index]?.sampleTypeId) && isValidReceiptDate(codeRows[index]?.receivedDate)}
+                                                            testId={`sample-code-${index}`}
+                                                            error={p.error}
+                                                            onType={(value) => {
+                                                                setValue(`samples.${index}.sample_code`, value, { shouldDirty: true, shouldValidate: true });
+                                                                setValue(`samples.${index}.code_manual`, true, { shouldDirty: true });
+                                                            }}
+                                                            onBlurEmpty={() => {
+                                                                setValue(`samples.${index}.sample_code`, "");
+                                                                setValue(`samples.${index}.code_manual`, false);
+                                                            }}
+                                                            onUseSuggestion={() => {
+                                                                setValue(`samples.${index}.sample_code`, "", { shouldValidate: true });
+                                                                setValue(`samples.${index}.code_manual`, false, { shouldDirty: true });
+                                                            }}
+                                                        />
+                                                    )}
+                                                />
                                                 <FormField
                                                     control={control}
                                                     name={`samples.${index}.sample_type_id`}
@@ -570,7 +656,7 @@ export default function OrderForm() {
                                                             label="Fecha de recepción"
                                                             requiredMark
                                                             value={typeof p.value === "string" ? p.value : ""}
-                                                            onChange={(v) => p.onChange(v)}
+                                                            onChange={(v) => { touchedDates.current.add(field.id); p.onChange(v); }}
                                                             error={p.error}
                                                         />
                                                     )}
@@ -590,7 +676,7 @@ export default function OrderForm() {
                                             htmlType="button"
                                             type="default"
                                             onClick={() =>
-                                                append({ sample_type_id: "", notes: "", collected_date: "", received_date: "" })
+                                                append(emptySample(today))
                                             }
                                         >
                                             Agregar otra muestra
