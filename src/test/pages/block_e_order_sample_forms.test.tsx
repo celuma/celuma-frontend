@@ -59,10 +59,10 @@ function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number }) {
 type PostOutcome = { ok: boolean; body: unknown };
 
 /** Céluma 1.4 (#8): numbering configuration of the synthetic laboratory. Registration is always automatic. */
-function numberingConfigs() {
+function numberingConfigs(sample: { scope?: string; timezone?: string } = {}) {
     const cfg = (kind: string) => ({
         entity_kind: kind, active: true, manual_policy: "allowed", format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2,
-        start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: false,
+        start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: false, ...(kind === "sample" ? sample : {}),
         registration: "automatic", legacy_manual_policy: false,
     });
     return { order: cfg("order"), sample: cfg("sample") };
@@ -75,6 +75,12 @@ type StubOptions = {
     counters?: Record<string, number>;
     /** Hold every suggestion response until `release()` (races between a late answer and the user's typing). */
     holdSuggestions?: boolean;
+    /** Scope/timezone of the SAMPLE numbering (default: tenant-wide, America/Mexico_City). */
+    sampleNumbering?: { scope: "tenant" | "branch"; timezone: string };
+    /** The ORDER code the read-only preview estimates (default "HIS011026"); null = the API gives no estimate. */
+    orderEstimate?: string | null;
+    /** Timezone of the synthetic branch (default America/Mexico_City). */
+    branchTimezone?: string;
 };
 
 type SuggestRequest = {
@@ -121,8 +127,17 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions =
         }
         // The non-consuming numbering preview is a POST too, but it is not the registration.
         if (url.includes("/v1/numbering/preview")) {
-            const request = JSON.parse(String(init?.body)) as { reference_date?: string };
+            const request = JSON.parse(String(init?.body)) as { reference_date?: string; entity_kind?: string };
             previews.push(request);
+            if (request.entity_kind === "order") {
+                const code = opts.orderEstimate === undefined ? "HIS011026" : opts.orderEstimate;
+                return jsonResponse({
+                    entity_kind: "order", valid: true, errors: [], format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2,
+                    scheme: "monthly", timezone: "America/Mexico_City", period_year: 2026, period_month: 9,
+                    date_basis: "allocation_instant", base_code: "HIS", examples: [],
+                    estimate: code ? { sequence: 1, code, reserved: false, skipped_occupied: 0 } : null, notice: "n",
+                });
+            }
             // Mirrors the API (#33): a sample preview given a receipt date reports THAT period.
             const ref = request.reference_date;
             const [year, month] = ref ? [Number(ref.slice(0, 4)), Number(ref.slice(5, 7))] : [2026, 10];
@@ -135,7 +150,7 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions =
             });
         }
         if (url.includes("/v1/numbering/config")) {
-            return jsonResponse(numberingConfigs());
+            return jsonResponse(numberingConfigs(opts.sampleNumbering));
         }
         if (init?.method === "POST") {
             posts.push({ url, body: JSON.parse(String(init.body)) });
@@ -157,7 +172,7 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions =
             return jsonResponse({ orders: [{ id: ORDER_ID, order_code: "ORD-001", status: "RECEIVED" }] });
         }
         if (url.includes("/branches")) {
-            return jsonResponse([{ id: BRANCH_ID, name: "Sede Central", code: "MAIN" }]);
+            return jsonResponse([{ id: BRANCH_ID, name: "Sede Central", code: "MAIN", timezone: opts.branchTimezone ?? "America/Mexico_City" }]);
         }
         return jsonResponse({});
     });
@@ -214,27 +229,56 @@ async function pickOption(select: Element, text: string) {
  */
 const RECEIVED = "2026-09-30";
 
+/**
+ * Hotfix 1.4.3: a new sample row starts on TODAY (in the numbering zone), so every test runs on a frozen clock:
+ * 2026-09-30 12:00 in Mexico City, which is also `RECEIVED`. Only `Date` is faked; timers stay real.
+ */
+const FROZEN_NOW = new Date("2026-09-30T18:00:00Z");
+
 async function setDate(container: HTMLElement, caption: string, value: string, index = 0) {
-    vi.useFakeTimers({ toFake: ["Date"] });
     const [year, month, day] = value.split("-").map(Number);
-    vi.setSystemTime(new Date(year, month - 1, day, 12, 0, 0));
     const labels = Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith(caption));
     const input = labels[index].parentElement!.querySelector("input") as HTMLInputElement;
+    const shown = /^\d{4}-\d{2}-\d{2}$/.test(input.value) ? input.value : null;
+    // An EMPTY picker opens on the current month: move the clock there. A picker that shows a date opens on that
+    // month and is stepped instead, so the clock (and every row that still follows "today") stays put.
+    if (!shown) vi.setSystemTime(new Date(year, month - 1, day, 12, 0, 0));
     fireEvent.mouseDown(input);
     fireEvent.click(input);
     fireEvent.focus(input);
     // The popup just opened is the LAST one mounted; earlier pickers keep theirs in the DOM (closed or fading).
-    const cell = () => {
-        const popup = Array.from(document.querySelectorAll(".ant-picker-dropdown")).at(-1);
-        return popup?.querySelector(`td[title="${value}"] .ant-picker-cell-inner`) ?? null;
-    };
+    const popup = () => Array.from(document.querySelectorAll(".ant-picker-dropdown")).at(-1);
+    const cell = () => popup()?.querySelector(`td[title="${value}"] .ant-picker-cell-inner`) ?? null;
+    // A picker that already shows a date opens on THAT month: step to the wanted one first.
+    if (shown) {
+        await waitFor(() => expect(popup()).toBeTruthy());
+        const diff = (year * 12 + month) - (Number(shown.slice(0, 4)) * 12 + Number(shown.slice(5, 7)));
+        for (let i = 0; i < Math.abs(diff); i++) {
+            fireEvent.click(popup()!.querySelector(diff > 0 ? ".ant-picker-header-next-btn" : ".ant-picker-header-prev-btn")!);
+        }
+    }
     await waitFor(() => expect(cell()).toBeTruthy());
     fireEvent.click(cell()!);
     await waitFor(() => expect(input.value).toBe(value));
-    vi.useRealTimers();
+    vi.setSystemTime(FROZEN_NOW);
 }
 
 const setReceived = (container: HTMLElement, value = RECEIVED, index = 0) => setDate(container, "Fecha de recepción", value, index);
+
+/** The value shown by a row's receipt-date picker. */
+const receivedValue = (container: HTMLElement, index = 0): string => {
+    const labels = Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith("Fecha de recepción"));
+    return (labels[index].parentElement!.querySelector("input") as HTMLInputElement).value;
+};
+
+/** Empties a row's receipt date with the picker's own clear control. */
+function clearReceived(container: HTMLElement, index = 0) {
+    const labels = Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith("Fecha de recepción"));
+    const picker = labels[index].parentElement!.querySelector(".ant-picker")!;
+    const clear = picker.querySelector(".ant-picker-clear")!;
+    fireEvent.mouseDown(clear);
+    fireEvent.click(clear);
+}
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
     const match = Array.from(container.querySelectorAll("button")).find((b) =>
@@ -276,6 +320,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FROZEN_NOW);
     localStorage.setItem("auth_token", "Bearer test-token");
     localStorage.setItem("tenant_id", TENANT_ID);
     localStorage.setItem("branch_id", BRANCH_ID);
@@ -284,6 +330,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     localStorage.clear();
@@ -442,7 +489,11 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         await waitFor(() => expect(Array.from(container.querySelectorAll("label")).filter((l) => l.textContent?.trim().startsWith("Tipo de muestra"))).toHaveLength(2));
         await pickOption(selectByCaption(container, "Tipo de muestra", 0), "Biopsia");
         await pickOption(selectByCaption(container, "Tipo de muestra", 1), "Laminilla");
-        await setReceived(container, "2026-09-30", 0);
+        // Hotfix 1.4.3: each row starts on today's date (frozen at 2026-09-30); emptying one makes it missing again.
+        expect([receivedValue(container, 0), receivedValue(container, 1)]).toEqual(["2026-09-30", "2026-09-30"]);
+        await setReceived(container, "2026-09-29", 0); // the user picks the first one (the picker moves the frozen clock)
+        clearReceived(container, 1);
+        await waitFor(() => expect(receivedValue(container, 1)).toBe(""));
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(container.textContent).toContain("La fecha de recepción es requerida."));
@@ -452,7 +503,7 @@ describe("CEL-131-07 — order_form still creates an order with the same payload
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(posts).toHaveLength(1));
         const sent = (posts[0].body as { samples: Array<{ received_at?: string }> }).samples;
-        expect(sent.map((x) => x.received_at)).toEqual(["2026-09-30", "2026-10-01"]);
+        expect(sent.map((x) => x.received_at)).toEqual(["2026-09-29", "2026-10-01"]);
     });
 });
 
@@ -496,7 +547,7 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
         });
         expect(container.textContent).toContain("El tipo de estudio es requerido.");
         expect(container.textContent).toContain("El tipo de muestra es requerido.");
-        expect(container.textContent).toContain("La fecha de recepción es requerida.");
+        expect(receivedValue(container)).toBe("2026-09-30"); // starts on today (hotfix 1.4.3): not a missing field
         expect(container.textContent).not.toContain("El código de muestra es requerido.");
         expect(posts).toHaveLength(0);
     });
@@ -535,7 +586,7 @@ describe("CEL-131-07 — required stays required, optional stays optional", () =
             expect(container.textContent).toContain("La orden es requerida.");
         });
         expect(container.textContent).toContain("El tipo de muestra es requerido.");
-        expect(container.textContent).toContain("La fecha de recepción es requerida.");
+        expect(receivedValue(container)).toBe("2026-09-30"); // starts on today (hotfix 1.4.3): not a missing field
         expect(container.textContent).not.toContain("El código de muestra es requerido.");
         expect(posts).toHaveLength(0);
     });
@@ -688,24 +739,58 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
         await setReceived(container);
     }
-    const codeLabels = (container: HTMLElement) =>
-        Array.from(container.querySelectorAll("label")).filter((l) => /^Código de (la orden|Muestra)/.test(l.textContent?.trim() ?? ""));
 
-    it("the order code is still generated (hint only); each sample row has the «Código de muestra» field", async () => {
+    it("the order code is a disabled field; each sample row has the «Código de muestra» field", async () => {
         stubApi();
         const order = renderOrderForm();
-        await waitFor(() => expect(order.container.querySelector("[data-testid=auto-code-hint-order]")?.textContent).toContain("automáticamente"));
-        expect(codeLabels(order.container).filter((l) => /orden/i.test(l.textContent ?? ""))).toHaveLength(0);
+        await waitFor(() => expect(order.container.querySelector("[data-testid=order-code]")).toBeTruthy());
+        expect((order.container.querySelector("[data-testid=order-code]") as HTMLInputElement).disabled).toBe(true);
         expect(order.container.querySelectorAll("[data-testid^=sample-code-][data-testid$=-field]")).toHaveLength(1);
         fireEvent.click(buttonByText(order.container, "Agregar otra muestra"));
         await waitFor(() => expect(order.container.querySelectorAll("[data-testid^=sample-code-][data-testid$=-field]")).toHaveLength(2));
         // the old per-row legend is gone
         expect(order.container.textContent).not.toContain("El mes del código sale de la fecha de recepción");
-        expect(order.container.querySelectorAll("[data-testid=auto-code-hint-sample]")).toHaveLength(0);
         order.unmount();
         const sample = renderSampleForm();
         await waitFor(() => expect(sample.container.querySelector("[data-testid=sample-code]")).toBeTruthy());
         expect(sample.container.textContent).not.toContain("El mes del código sale de la fecha de recepción");
+    });
+
+    it("«Código de la orden» is always disabled, empty without a suggestion, and follows the study type", async () => {
+        const { posts } = stubApi({ ok: true, body: { order: { id: "o" }, samples: [] } });
+        const { container } = renderOrderForm();
+        const field = () => container.querySelector("[data-testid=order-code]") as HTMLInputElement;
+        await waitFor(() => expect(field()).toBeTruthy());
+        expect(field().disabled).toBe(true);
+        expect(field().value).toBe("");
+        expect(container.textContent).not.toContain("El código de la orden se asigna automáticamente");
+        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
+        await waitFor(() => expect(field().value).toBe("HIS011026"));
+        expect(field().disabled).toBe(true);
+        // no legend of any kind: only the caption (and the study type's own field sits right before it)
+        expect(container.querySelector("[data-testid=order-code-help]")).toBeNull();
+        const grid = field().closest(".of-grid-2")!;
+        expect(grid.querySelector("[data-testid=order-code]")).toBe(field());
+        expect(Array.from(grid.querySelectorAll("label")).map((l) => l.textContent?.trim().replace(/\s*\*$/, ""))).toEqual(["Tipo de estudio", "Código de la orden"]);
+        // typing is impossible and nothing about it is ever sent
+        fireEvent.change(field(), { target: { value: "HAND-1" } });
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
+        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect(posts[0].body).not.toHaveProperty("order_code");
+    });
+
+    it("«Código de la orden» stays empty (and disabled) when there is no suggestion", async () => {
+        stubApi({ ok: true, body: {} }, { orderEstimate: null });
+        const { container } = renderOrderForm();
+        const field = () => container.querySelector("[data-testid=order-code]") as HTMLInputElement;
+        await waitFor(() => expect(field()).toBeTruthy());
+        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
+        await new Promise((r) => setTimeout(r, 200));
+        expect(field().value).toBe("");
+        expect(field().disabled).toBe(true);
     });
 
     it("an automatic registration sends no code at all", async () => {
@@ -786,21 +871,95 @@ describe("Hotfix 1.4.3 — «Código de muestra» in each sample row", () => {
     const typeCode = (container: HTMLElement, row: number, value: string) =>
         fireEvent.change(codeInput(container, row), { target: { value } });
 
-    it("suggests only once the type is chosen, and with the receipt date the monthly scheme needs", async () => {
+    it("every row starts on today's date, so choosing the type is enough to get the suggestion", async () => {
         const { suggestionRequests } = stubApi();
         const { container } = renderOrderForm();
         await fillBase(container);
+        expect(receivedValue(container)).toBe("2026-09-30");
         expect(help(container)).toContain("Seleccione el tipo de muestra");
         expect(codeInput(container).value).toBe("");
-        await setRow(container, 0, "Biopsia");
-        await waitFor(() => expect(help(container)).toContain("Indique la fecha de recepción"));
-        expect(codeInput(container).value).toBe("");
-        await setRow(container, 0, undefined, "2026-09-30");
+        await setRow(container, 0, "Biopsia"); // no date captured by hand
         await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
         expect(help(container)).toContain("no reservado");
         const last = suggestionRequests.at(-1)!;
         expect(last).toMatchObject({ branch_id: BRANCH_ID, reserved_codes: [] });
         expect(last.items).toEqual([{ key: expect.any(String), sample_type_id: "stp-bio", received_at: "2026-09-30" }]);
+    });
+
+    it("a row added later also starts on today, and a date the user changes is respected and recalculates the suggestion", async () => {
+        const { suggestionRequests, posts } = stubApi({ ok: true, body: { order: { id: "o" }, samples: [] } });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await addRow(container, 2);
+        expect([receivedValue(container, 0), receivedValue(container, 1)]).toEqual(["2026-09-30", "2026-09-30"]);
+        await setRow(container, 0, "Biopsia");
+        await setRow(container, 1, "Biopsia");
+        await waitFor(() => expect([0, 1].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO020926"]));
+        await setRow(container, 1, undefined, "2026-10-02");
+        await waitFor(() => expect([0, 1].map((i) => codeInput(container, i).value)).toEqual(["BIO010926", "BIO011026"]));
+        expect(receivedValue(container, 1)).toBe("2026-10-02");
+        expect(suggestionRequests.at(-1)!.items.map((i) => i.received_at)).toEqual(["2026-09-30", "2026-10-02"]);
+        // the date that is visible is the one saved
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect((posts[0].body as { samples: Array<{ received_at: string }> }).samples.map((x) => x.received_at)).toEqual(["2026-09-30", "2026-10-02"]);
+    });
+
+    it("«today» follows the zone the numbering uses: the branch's for a branch-scoped numbering", async () => {
+        // 2026-09-30 18:00 UTC is already October 1 in Auckland, still September 30 in Mexico City.
+        stubApi({ ok: true, body: {} }, { sampleNumbering: { scope: "branch", timezone: "America/Mexico_City" }, branchTimezone: "Pacific/Auckland" });
+        const { container } = renderOrderForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        expect(receivedValue(container)).toBe("2026-09-30");
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await waitFor(() => expect(receivedValue(container)).toBe("2026-10-01"));
+        await addRow(container, 2);
+        expect(receivedValue(container, 1)).toBe("2026-10-01");
+    });
+
+    it("a date the user picked is not re-dated when the zone becomes known", async () => {
+        stubApi({ ok: true, body: {} }, { sampleNumbering: { scope: "branch", timezone: "America/Mexico_City" }, branchTimezone: "Pacific/Auckland" });
+        const { container } = renderOrderForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        await setReceived(container, "2026-09-15");
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await new Promise((r) => setTimeout(r, 300));
+        expect(receivedValue(container)).toBe("2026-09-15");
+    });
+
+    it("the code is editable only when the type and a valid date are both there, and a typed code is kept meanwhile", async () => {
+        stubApi({ ok: true, body: {} }, { permissions: MANUAL });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await waitFor(() => expect(help(container)).toContain("Seleccione el tipo"));
+        expect(codeInput(container).disabled).toBe(true); // permission alone is not enough: no type yet
+        await setRow(container, 0, "Biopsia");
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+        typeCode(container, 0, "KEEP-1");
+        expect(codeInput(container).value).toBe("KEEP-1");
+
+        clearReceived(container, 0); // the date becomes empty: blocked again, the typed code stays
+        await waitFor(() => expect(codeInput(container).disabled).toBe(true));
+        expect(codeInput(container).value).toBe("KEEP-1");
+        expect(help(container)).toContain("complete el tipo de muestra y la fecha de recepción");
+        await setRow(container, 0, undefined, "2026-10-04"); // completed again: editable, same code
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
+        expect(codeInput(container).value).toBe("KEEP-1");
+    });
+
+    it("an automatic row is blocked while its date is missing and offers the suggestion again once it is back", async () => {
+        stubApi({ ok: true, body: {} }, { permissions: MANUAL });
+        const { container } = renderOrderForm();
+        await fillBase(container);
+        await setRow(container, 0, "Biopsia");
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        clearReceived(container, 0);
+        await waitFor(() => expect(help(container)).toContain("Indique la fecha de recepción"));
+        expect(codeInput(container).value).toBe("");
+        expect(codeInput(container).disabled).toBe(true);
+        await setRow(container, 0, undefined, "2026-09-30");
+        await waitFor(() => expect(codeInput(container).value).toBe("BIO010926"));
+        expect(codeInput(container).disabled).toBe(false);
     });
 
     it("the suggestions of one lot follow the sequence and refresh when a row's type or date changes", async () => {
@@ -871,8 +1030,8 @@ describe("Hotfix 1.4.3 — «Código de muestra» in each sample row", () => {
         const { suggestionRequests, release } = stubApi({ ok: true, body: {} }, { permissions: MANUAL, holdSuggestions: true });
         const { container } = renderOrderForm();
         await fillBase(container);
-        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
         await setRow(container, 0, "Biopsia", "2026-09-30");
+        await waitFor(() => expect(codeInput(container).disabled).toBe(false));
         await waitFor(() => expect(suggestionRequests.length).toBeGreaterThan(0)); // asked, not answered yet
         typeCode(container, 0, "MIO-9");
         release(); // the answers for the automatic code arrive now
@@ -912,6 +1071,26 @@ describe("Hotfix 1.4.3 — «Código de muestra» in each sample row", () => {
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(container.textContent).toContain("Use de 1 a 100 caracteres"));
         expect(posts).toHaveLength(0);
+    });
+
+    it("the standalone form starts on today's date and blocks the code until type and date are both valid", async () => {
+        stubApi({ ok: true, body: {} }, { permissions: MANUAL });
+        const { container } = renderSampleForm();
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
+        const input = () => container.querySelector("[data-testid=sample-code]") as HTMLInputElement;
+        expect(receivedValue(container)).toBe("2026-09-30");
+        expect(input().disabled).toBe(true); // no type yet
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
+        await waitFor(() => expect(input().value).toBe("BIO010926")); // no date captured by hand
+        await waitFor(() => expect(input().disabled).toBe(false));
+        fireEvent.change(input(), { target: { value: "KEEP-2" } });
+        clearReceived(container);
+        await waitFor(() => expect(input().disabled).toBe(true));
+        expect(input().value).toBe("KEEP-2");
+        await setReceived(container, "2026-10-04");
+        await waitFor(() => expect(input().disabled).toBe(false));
+        expect(input().value).toBe("KEEP-2");
     });
 
     it("the standalone sample form has the same field, suggestion and manual capture", async () => {

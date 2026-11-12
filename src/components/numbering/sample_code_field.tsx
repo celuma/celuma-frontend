@@ -9,7 +9,9 @@ interface Props {
     /** What the user typed (meaningful while the row is manual). */
     typedCode: string;
     /** The user holds the privileged manual-capture capability (`lab:enter_manual_code`). */
-    canEdit: boolean;
+    permitted: boolean;
+    /** The row's «Tipo de muestra» and «Fecha de recepción» are both valid: only then can the code be edited. */
+    ready: boolean;
     onType: (value: string) => void;
     /** Leaves the field empty after typing: back to the automatic code. */
     onBlurEmpty: () => void;
@@ -33,7 +35,8 @@ const HELP: Record<string, string> = {
  * Without the capability the field shows the suggestion and cannot be edited (the API refuses a typed code
  * from anyone who lacks it, so the field never offers it).
  */
-export default function SampleCodeField({ state, manual, typedCode, canEdit, onType, onBlurEmpty, onUseSuggestion, error, testId = "sample-code" }: Props) {
+export default function SampleCodeField({ state, manual, typedCode, permitted, ready, onType, onBlurEmpty, onUseSuggestion, error, testId = "sample-code" }: Props) {
+    const canEdit = permitted && ready;
     const value = manual ? typedCode : state.kind === "suggested" ? state.code : "";
     const invalid = manual && typedCode.trim() !== "" && !MANUAL_SAMPLE_CODE_RE.test(typedCode.trim());
 
@@ -44,7 +47,8 @@ export default function SampleCodeField({ state, manual, typedCode, canEdit, onT
         ? "Sugerido, no reservado: el código definitivo se asigna al guardar y puede cambiar. Escriba uno para usar un código propio."
         : "Sugerido, no reservado: el código definitivo se asigna al guardar y puede cambiar.";
     else help = HELP[state.kind] ?? "";
-    if (!canEdit && !manual && state.kind !== "suggested") help = `${help} Escribir un código propio requiere el permiso de captura manual.`.trim();
+    if (manual && permitted && !ready) help = "Código manual conservado: complete el tipo de muestra y la fecha de recepción para editarlo.";
+    if (!permitted && !manual && state.kind !== "suggested") help = `${help} Escribir un código propio requiere el permiso de captura manual.`.trim();
 
     return (
         <div style={{ display: "grid", gap: 4, alignContent: "start" }} data-testid={`${testId}-field`}>

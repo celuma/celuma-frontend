@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,7 +31,9 @@ import {
 } from "../lib/sample_code_rows";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { formatHttpError } from "../lib/api_error";
-import { collectionDateSchema, receiptDateSchema } from "../lib/receipt_date";
+import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../lib/receipt_date";
+import { DEFAULT_NUMBERING_ZONE, receiptZone, todayInZone } from "../lib/receipt_today";
+import { useSampleNumberingZone } from "../hooks/use_sample_numbering_zone";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -163,7 +165,7 @@ export default function SampleForm() {
     const session = useMemo(() => getSessionContext(), []);
     const [orders, setOrders] = useState<Array<{ id: string; label: string }>>([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
-    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string }>>([]);
+    const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string; timezone?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const sampleTypes = useActiveSampleTypes();
     const idempotency = useMemo(() => createIdempotencySession(), []);
@@ -176,7 +178,7 @@ export default function SampleForm() {
     const { hasPermission } = useUserProfile();
     const canEnterManual = hasPermission(PERMS.ENTER_MANUAL_CODE);
 
-    const { control, handleSubmit, reset, setValue } = useForm<SampleFormData>({
+    const { control, handleSubmit, reset, setValue, getValues } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -185,7 +187,8 @@ export default function SampleForm() {
             sample_type_id: "",
             notes: "",
             collected_date: "",
-            received_date: "",
+            // Hotfix 1.4.3: starts on today's date in the numbering zone (refined once the zone is known).
+            received_date: todayInZone(DEFAULT_NUMBERING_ZONE),
             sample_code: "",
             code_manual: false,
         },
@@ -195,6 +198,20 @@ export default function SampleForm() {
     const watchedType = useWatch({ control, name: "sample_type_id" });
     const watchedBranch = useWatch({ control, name: "branch_id" });
     const watchedReceived = useWatch({ control, name: "received_date" });
+    // The receipt date starts on today in the zone the numbering uses (the branch's for a branch-scoped one) and
+    // follows that zone until the user picks a date, which is then never touched again.
+    const numberingZone = useSampleNumberingZone();
+    const branchTimezone = branches.find((b) => b.id === watchedBranch)?.timezone;
+    const today = todayInZone(receiptZone(numberingZone, branchTimezone));
+    const dateTouched = useRef(false);
+    const previousToday = useRef(today);
+    useEffect(() => {
+        const previous = previousToday.current;
+        previousToday.current = today;
+        const current = getValues("received_date") ?? "";
+        if (!dateTouched.current && (current === "" || current === previous)) setValue("received_date", today);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only a change of "today" re-dates an untouched date
+    }, [today]);
     const watchedCode = useWatch({ control, name: "sample_code" });
     const watchedManual = useWatch({ control, name: "code_manual" });
     const codeRows: SampleCodeRow[] = [{
@@ -366,7 +383,8 @@ export default function SampleForm() {
                                                 state={codeState}
                                                 manual={codeRows[0].manual}
                                                 typedCode={watchedCode ?? ""}
-                                                canEdit={canEnterManual}
+                                                permitted={canEnterManual}
+                                                ready={Boolean(watchedType) && isValidReceiptDate(watchedReceived)}
                                                 error={p.error}
                                                 onType={(value) => {
                                                     setValue("sample_code", value, { shouldDirty: true, shouldValidate: true });
@@ -431,7 +449,7 @@ export default function SampleForm() {
                                                 label="Fecha de recepción"
                                                 requiredMark
                                                 value={typeof p.value === "string" ? p.value : ""}
-                                                onChange={(v) => p.onChange(v)}
+                                                onChange={(v) => { dateTouched.current = true; p.onChange(v); }}
                                                 error={p.error}
                                             />
                                         )}
