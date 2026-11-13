@@ -18,6 +18,7 @@ import type {
 } from "../models/report";
 import { sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import { buildReportPdfFilename } from "../lib/report_filename";
+import { parseFastApiDetail } from "../lib/api_error";
 import type { OrderReportDefaults, StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -447,6 +448,35 @@ export async function submitReport(reportId: string, changelog?: string): Promis
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Error al enviar reporte: ${res.status} - ${errText}`);
+    }
+    return await res.json();
+}
+
+/** Céluma 1.4.4: a refused withdrawal; `code` is the API's reason (e.g. `review_submission_stale`). */
+export class ReviewWithdrawalError extends Error {
+    status: number;
+    code: string | null;
+    constructor(message: string, status: number, code: string | null) {
+        super(message);
+        this.name = "ReviewWithdrawalError";
+        this.status = status;
+        this.code = code;
+    }
+}
+
+/** "Retirar de revisión": the author of the current submission returns an undecided review to DRAFT. */
+export async function withdrawReportFromReview(reportId: string, submissionId: string): Promise<ReportActionResponse> {
+    const res = await fetch(`${base}/v1/reports/${reportId}/withdraw-review`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ submission_id: submissionId }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        let code: string | null = null;
+        try { code = (JSON.parse(text) as { detail?: { code?: string } }).detail?.code ?? null; } catch { /* plain text */ }
+        throw new ReviewWithdrawalError(
+            parseFastApiDetail(text) ?? `Error al retirar el reporte de revisión (${res.status}).`, res.status, code);
     }
     return await res.json();
 }

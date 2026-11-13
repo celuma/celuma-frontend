@@ -128,7 +128,9 @@ describe("ReportEditor — figure cards (#18)", () => {
         await waitFor(() => expect(cards()).toHaveLength(3));
         const user = userEvent.setup();
         await user.click(screen.getByRole("button", { name: "Subir Figura 3" }));
-        await user.click(screen.getByRole("button", { name: "Quitar Figura 1" }));
+        const remove = screen.getByRole("button", { name: "Quitar Figura 1" });
+        expect(within(remove).getByText("Quitar")).toBeTruthy();
+        await user.click(remove);
         expect(cards()).toEqual([["c", "Cap C"], ["b", "Cap B"]]);
         expect(screen.queryByRole("button", { name: "Subir Figura 3" })).toBeNull();
     });

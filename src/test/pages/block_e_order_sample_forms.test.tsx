@@ -81,6 +81,8 @@ type StubOptions = {
     orderEstimate?: string | null;
     /** Timezone of the synthetic branch (default America/Mexico_City). */
     branchTimezone?: string;
+    /** Céluma 1.4.4: the server's `sample_creation` availability for the order (default: allowed). */
+    sampleCreation?: { allowed: boolean; blockers: Array<{ code: string; message: string }> };
 };
 
 type SuggestRequest = {
@@ -151,6 +153,10 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions =
         }
         if (url.includes("/v1/numbering/config")) {
             return jsonResponse(numberingConfigs(opts.sampleNumbering));
+        }
+        if (url.endsWith(`/v1/laboratory/orders/${ORDER_ID}/management`)) {
+            const sc = opts.sampleCreation ?? { allowed: true, blockers: [] };
+            return jsonResponse({ order_id: ORDER_ID, sample_creation: { permitted: true, ...sc } });
         }
         if (init?.method === "POST") {
             posts.push({ url, body: JSON.parse(String(init.body)) });
@@ -627,6 +633,17 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
 
         await waitFor(() => expect(posts).toHaveLength(1));
         expect((posts[0].body as { order_id: string }).order_id).toBe(ORDER_ID);
+    });
+
+    it("Céluma 1.4.4: an order in review explains why and cannot register a sample", async () => {
+        const { posts } = stubApi({ ok: true, body: { id: "new-sample" } }, {
+            sampleCreation: { allowed: false, blockers: [{ code: "order_in_review", message: "The order is in review; samples cannot be added until the review ends" }] },
+        });
+        const { container, findByTestId } = renderSampleForm(`/samples/register?orderId=${ORDER_ID}`);
+        expect((await findByTestId("sample-creation-blockers")).textContent).toContain("samples cannot be added");
+        const submit = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Registrar")) as HTMLButtonElement;
+        expect(submit.disabled).toBe(true);
+        expect(posts).toHaveLength(0);
     });
 
     it("a prefilled ?patientId locks the patient selector on the order form", async () => {

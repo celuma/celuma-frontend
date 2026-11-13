@@ -32,7 +32,7 @@
  * one from someone whose capabilities allow it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import SamplesList from "../../pages/samples_list";
 import SampleDetailPage from "../../pages/sample_detail";
@@ -160,6 +160,26 @@ function stubApi() {
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
 }
+
+it("shows a read-only withdrawal summary at the existing sample URL", async () => {
+    asPersona({ roles: ["admin"], permissions: ["lab:read"] });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith(`/samples/${SAMPLE_ID}?include_withdrawal=true`)) {
+            return jsonResponse({
+                sample_code: "SYN-001", order_id: "order-1", order_code: "ORD-001",
+                removed_at: "2026-11-13T12:30:00", removal_reason: "Captura duplicada",
+            });
+        }
+        return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderSampleDetail();
+    expect(await screen.findByRole("heading", { name: "Muestra retirada · SYN-001" })).toBeTruthy();
+    expect(screen.getByText("Captura duplicada")).toBeTruthy();
+    expect(screen.getByText("Fecha del retiro").nextElementSibling?.textContent).toMatch(/^13\/11\/2026, \d{2}:\d{2}$/);
+    expect(screen.getByRole("link", { name: "Volver a la orden ORD-001" }).getAttribute("href")).toBe("/orders/order-1");
+    expect(fetchMock.mock.calls.some(([url]) => /\/(images|events|management)$/.test(String(url)))).toBe(false);
+});
 
 function renderSamplesList() {
     return render(

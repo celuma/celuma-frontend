@@ -16,6 +16,8 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
+import { useOrderManagement } from "../hooks/use_capture_management";
+import BlockersNotice from "../components/management/blockers_notice";
 import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
 import SampleCodeField from "../components/numbering/sample_code_field";
 import { useSampleCodeSuggestions } from "../hooks/use_sample_code_suggestions";
@@ -196,6 +198,10 @@ export default function SampleForm() {
     });
 
     const watchedType = useWatch({ control, name: "sample_type_id" });
+    // Céluma 1.4.4: the server decides whether this order can take another sample (not while it is in review).
+    const watchedOrderId = useWatch({ control, name: "order_id" });
+    const { state: orderManagement, reload: reloadOrderManagement } = useOrderManagement(watchedOrderId || undefined);
+    const creationBlocked = orderManagement?.sample_creation?.allowed === false;
     const watchedBranch = useWatch({ control, name: "branch_id" });
     const watchedReceived = useWatch({ control, name: "received_date" });
     // The receipt date starts on today in the zone the numbering uses (the branch's for a branch-scoped one) and
@@ -279,6 +285,7 @@ export default function SampleForm() {
             navigate(`/samples/${created.id}`, { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            reloadOrderManagement(); // a refused (stale) request refreshes what the form offers
         } finally {
             setLoading(false);
         }
@@ -457,6 +464,13 @@ export default function SampleForm() {
                                 </div>
                             </section>
 
+                            {creationBlocked && (
+                                <BlockersNotice
+                                    testId="sample-creation-blockers"
+                                    blockers={orderManagement?.sample_creation?.blockers ?? []}
+                                    lead="No se pueden agregar muestras a esta orden ahora"
+                                />
+                            )}
                             {sampleTypes.empty && <SampleTypeSetupNotice />}
                             {sampleTypes.error && <ErrorText>{sampleTypes.error}</ErrorText>}
                             {serverError && <ErrorText>{serverError}</ErrorText>}
@@ -469,7 +483,7 @@ export default function SampleForm() {
                                     <Button htmlType="button" danger onClick={() => navigate(-1)} disabled={loading}>
                                         Cancelar
                                     </Button>
-                                    <Button htmlType="submit" type="primary" loading={loading} disabled={sampleTypes.empty}>
+                                    <Button htmlType="submit" type="primary" loading={loading} disabled={sampleTypes.empty || creationBlocked}>
                                         Registrar
                                     </Button>
                                 </div>

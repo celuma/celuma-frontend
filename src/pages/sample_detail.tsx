@@ -12,7 +12,7 @@ import {
     InboxOutlined, ContainerOutlined, EditOutlined, DeleteOutlined,
     ClockCircleOutlined
 } from "@ant-design/icons";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import { ACCEPT_ANY_IMAGE, sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
@@ -97,6 +97,14 @@ type SampleDetail = {
     labels?: LabelWithInheritance[] | null;
 };
 
+type RemovedSampleDetail = {
+    sample_code: string;
+    order_id: string;
+    order_code: string;
+    removed_at: string;
+    removal_reason?: string | null;
+};
+
 type SampleImages = {
     sample_id: string;
     images: Array<{
@@ -145,6 +153,7 @@ export default function SampleDetailPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [detail, setDetail] = useState<SampleDetail | null>(null);
+    const [withdrawal, setWithdrawal] = useState<(RemovedSampleDetail & { sampleId: string }) | null>(null);
     const [images, setImages] = useState<SampleImages | null>(null);
     const [uploading, setUploading] = useState(false);
     const [updatingState, setUpdatingState] = useState(false);
@@ -157,7 +166,7 @@ export default function SampleDetailPage() {
     const [removeOpen, setRemoveOpen] = useState(false);
     const [removing, setRemoving] = useState(false);
     const [removeError, setRemoveError] = useState<string | null>(null);
-    const { state: management } = useSampleManagement(sampleId, detail?.sample_code);
+    const { state: management } = useSampleManagement(detail?.id === sampleId ? sampleId : undefined, detail?.sample_code);
     // Upload progress state
     const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
     // Deleting image state
@@ -175,8 +184,16 @@ export default function SampleDetailPage() {
         setLoading(true);
         setError(null);
         try {
-            const [d, imgs, evts] = await Promise.all([
-                getJSON<SampleDetail>(`/v1/laboratory/samples/${sampleId}`),
+            const d = await getJSON<SampleDetail | RemovedSampleDetail>(
+                `/v1/laboratory/samples/${sampleId}?include_withdrawal=true`,
+            );
+            if ("removed_at" in d) {
+                setDetail(null);
+                setWithdrawal({ ...d, sampleId });
+                return;
+            }
+            setWithdrawal(null);
+            const [imgs, evts] = await Promise.all([
                 getJSON<SampleImages>(`/v1/laboratory/samples/${sampleId}/images`),
                 getJSON<EventsResponse>(`/v1/laboratory/samples/${sampleId}/events`),
             ]);
@@ -815,6 +832,36 @@ export default function SampleDetailPage() {
             />
         </div>
     );
+
+    if (withdrawal && withdrawal.sampleId === sampleId) {
+        return (
+            <Layout style={{ minHeight: "100vh" }}>
+                <SidebarCeluma selectedKey="/samples" onNavigate={(key) => navigate(key)} logoSrc={logo} />
+                <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
+                    <Card style={{ ...cardStyle, maxWidth: 760, margin: "0 auto" }}>
+                        <h1 style={{
+                            margin: 0,
+                            padding: "10px 14px",
+                            borderRadius: tokens.radius,
+                            color: tokens.errorText,
+                            background: tokens.errorBg,
+                            fontFamily: tokens.titleFont,
+                            fontSize: tokens.titleSize,
+                        }}>
+                            Muestra retirada · {withdrawal.sample_code}
+                        </h1>
+                        <dl>
+                            <dt>Fecha del retiro</dt>
+                            <dd>{formatLocalDateTime(withdrawal.removed_at)}</dd>
+                            <dt>Motivo</dt>
+                            <dd style={{ overflowWrap: "anywhere" }}>{withdrawal.removal_reason || "Sin motivo registrado"}</dd>
+                        </dl>
+                        <Link to={`/orders/${withdrawal.order_id}`}>Volver a la orden {withdrawal.order_code}</Link>
+                    </Card>
+                </Layout.Content>
+            </Layout>
+        );
+    }
 
     return (
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
