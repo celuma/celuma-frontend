@@ -6,14 +6,14 @@ import {
     UserOutlined, FileTextOutlined,
     DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, FilePdfOutlined, SaveOutlined, EditOutlined, SafetyCertificateOutlined,
     ExclamationCircleOutlined, CalendarOutlined, ContainerOutlined,
-    AuditOutlined, CheckCircleOutlined, SendOutlined, PrinterOutlined,
+    AuditOutlined, CheckCircleOutlined, SendOutlined, PrinterOutlined, UndoOutlined,
 } from "@ant-design/icons";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import {
     getReportFull, getStudyType, getReportTemplateById,
     saveReport, saveReportVersion, StaleReportTemplateError,
-    submitReport, approveReport, requestChanges, signAndPublishReport,
+    submitReport, withdrawReportFromReview, ReviewWithdrawalError, approveReport, requestChanges, signAndPublishReport,
     reopenReport, isPasswordConfirmationError,
     openReportAmendment, cancelReportAmendment,
     updateReportPresentation,
@@ -311,6 +311,7 @@ const ReportEditor: React.FC = () => {
 
     // Full API response
     const [fullData, setFullData] = useState<ReportFullResponse | null>(null);
+    const [isWithdrawingReview, setIsWithdrawingReview] = useState(false);
     const [loadingData, setLoadingData] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -1573,6 +1574,47 @@ const ReportEditor: React.FC = () => {
         }
     };
 
+    /**
+     * Céluma 1.4.4 — "Retirar de revisión". The author of the current, still undecided submission returns the report
+     * to DRAFT to correct and resubmit it. Availability comes from the server (`review_withdrawal`), never from
+     * the role or from this component's own guess. On any refusal (a decision won the race, a newer submission,
+     * someone else's request) the editor re-reads the report so the stale action disappears.
+     */
+    const handleWithdrawReview = async () => {
+        const submissionId = fullData?.review_withdrawal?.submission_id;
+        if (!envelope?.id || !submissionId || isWithdrawingReview) return;
+        setIsWithdrawingReview(true);
+        try {
+            const result = await withdrawReportFromReview(envelope.id, submissionId);
+            const newStatus = (result.status as ReportStatus) ?? "DRAFT";
+            setEnvelope((e) => e ? { ...e, status: newStatus } : e);
+            message.success("Reporte retirado de revisión. Ya puedes corregirlo y volver a enviarlo.");
+            try {
+                const full = await getReportFull(envelope.id);
+                setFullData(full);
+                setEnvelope({ ...full.report, status: newStatus });
+            } catch {
+                // The report IS back in draft; a refresh failure must not look like a failed withdrawal.
+            }
+        } catch (err) {
+            showCelumaWarning(
+                "No se pudo retirar de revisión",
+                err instanceof ReviewWithdrawalError ? err.message : "Ocurrió un error inesperado.",
+            );
+            if (err instanceof ReviewWithdrawalError) {
+                try {
+                    const full = await getReportFull(envelope.id);
+                    setFullData(full);
+                    setEnvelope(full.report);
+                } catch {
+                    // keep what is on screen; the next load shows the server's truth
+                }
+            }
+        } finally {
+            setIsWithdrawingReview(false);
+        }
+    };
+
     const handleApprove = async () => {
         if (!envelope?.id) return;
         try {
@@ -2174,6 +2216,18 @@ const ReportEditor: React.FC = () => {
                         {envelope?.status === "DRAFT" && !legacyAuthoringBlocked && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
                                 Enviar a Revisión
+                            </CelumaButton>
+                        )}
+                        {envelope?.status === "IN_REVIEW" && fullData?.review_withdrawal?.allowed && (
+                            <CelumaButton
+                                size="small"
+                                icon={<UndoOutlined />}
+                                loading={isWithdrawingReview}
+                                disabled={isWithdrawingReview}
+                                onClick={handleWithdrawReview}
+                                data-testid="report-withdraw-review"
+                            >
+                                Retirar de revisión
                             </CelumaButton>
                         )}
                         {canApprove && (

@@ -43,6 +43,8 @@ export interface OrderManagementState {
     removal_consequences: string[];
     /** Céluma 1.4.1: changing the report template (the edit window, plus no report yet). Absent on older APIs. */
     report_template?: ActionState;
+    /** Céluma 1.4.4: adding a sample to this order (refused while the order or its report is in review). Absent on older APIs. */
+    sample_creation?: ActionState;
 }
 
 export interface SampleManagementState {

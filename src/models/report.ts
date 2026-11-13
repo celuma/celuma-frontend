@@ -395,8 +395,19 @@ export interface InternalRenderData extends ReportEnvelope {
     signer_lookup: { id: string; name: string }[];
 }
 
+/** Céluma 1.4.4: server-computed availability of "Retirar de revisión" for the CALLER. */
+export interface ReviewWithdrawalState {
+    allowed: boolean;
+    /** The current submission; sent back so a stale request is refused. */
+    submission_id?: string | null;
+    reason_code?: string | null;
+    reason?: string | null;
+}
+
 /** Full report response from GET /api/v1/reports/{id}/full */
 export interface ReportFullResponse {
+    /** Absent on an API older than 1.4.4: the action is then not offered. */
+    review_withdrawal?: ReviewWithdrawalState | null;
     order: {
         id: string;
         order_code: string;

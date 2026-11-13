@@ -646,11 +646,18 @@ export default function OrderDetail() {
                 {/* CEL-131-08: the same capability the destination route and the
                     backend require (`lab:create_sample`). A pathologist no longer
                     sees an action that can only end at the access-denied screen. */}
+                {/* Céluma 1.4.4: the server decides (`sample_creation`); while the order or its report is in review
+                    the action stays visible but disabled with the reason. The API refuses a stale click anyway. */}
                 {canCreateSample && (
                     <CelumaButton
                         type="primary"
                         size="small"
                         icon={<PlusOutlined />}
+                        disabled={management?.sample_creation?.allowed === false}
+                        title={management?.sample_creation?.allowed === false
+                            ? (management.sample_creation.blockers[0]?.message ?? "No se pueden agregar muestras ahora.")
+                            : undefined}
+                        data-testid="add-sample"
                         onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}
                     >
                         Agregar Muestra
@@ -1722,6 +1729,27 @@ export default function OrderDetail() {
                                                 if (meta.action === "REPORT_REOPENED_FOR_AMENDMENT" || meta.action === "REPORT_AMENDMENT_CANCELLED") {
                                                     return renderAmendmentStatusChange(meta);
                                                 }
+                                                // Céluma 1.4.4: the author withdrew an undecided review (same generic type, no new enum value).
+                                                if (meta.action === "REPORT_REVIEW_WITHDRAWN") {
+                                                    const withdrawnId = meta.report_id as string;
+                                                    return (
+                                                        <span>
+                                                            Retiró de revisión el{" "}
+                                                            {withdrawnId ? (
+                                                                <a
+                                                                    href={`/reports/${withdrawnId}`}
+                                                                    onClick={(e) => { e.preventDefault(); navigate(`/reports/${withdrawnId}`); }}
+                                                                    style={{ color: "#49b6ad", fontWeight: 600, textDecoration: "none", borderBottom: "1px dashed #49b6ad" }}
+                                                                >
+                                                                    reporte
+                                                                </a>
+                                                            ) : "reporte"}
+                                                            <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
+                                                                — vuelve a borrador
+                                                            </span>
+                                                        </span>
+                                                    );
+                                                }
                                                 if (meta.action !== "REPORT_REOPENED") {
                                                     return event.description || event.event_type;
                                                 }
@@ -2186,7 +2214,7 @@ export default function OrderDetail() {
                                     const showsAmendment = eventMeta.amendment_no != null && [
                                         "REPORT_VERSION_CREATED", "REPORT_SUBMITTED", "REPORT_APPROVED",
                                         "REPORT_CHANGES_REQUESTED",
-                                    ].concat(eventMeta.action === "REPORT_REOPENED" ? ["STATUS_CHANGED"] : [])
+                                    ].concat(eventMeta.action === "REPORT_REOPENED" || eventMeta.action === "REPORT_REVIEW_WITHDRAWN" ? ["STATUS_CHANGED"] : [])
                                         .includes(event.event_type);
                                     const actionText = showsAmendment ? (
                                         <span>

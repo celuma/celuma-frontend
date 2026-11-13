@@ -165,7 +165,7 @@ export default function SampleEditForm() {
                                 <BlockersNotice
                                     testId="sample-blockers"
                                     blockers={state.correction.blockers}
-                                    lead="Esta muestra ya no admite cambios de su código ni de sus fechas (solo de Recepción a Diagnóstico y sin historial de revisión). La descripción sigue siendo editable."
+                                    lead="Por ahora, esta muestra tiene restricciones para cambiar su código o sus fechas. La descripción sigue siendo editable."
                                 />
                             )}
 
