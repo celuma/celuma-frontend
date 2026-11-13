@@ -1570,6 +1570,13 @@ const ReportEditor: React.FC = () => {
                 );
                 return;
             }
+            if (err instanceof Error && err.message.includes("report_sample_images_stale")) {
+                showCelumaWarning(
+                    "Se retiraron imágenes de la orden",
+                    "Guarda el borrador para aplicar el cambio y vuelve a enviarlo a revisión.",
+                );
+                return;
+            }
             showCelumaApiError(err, "Error al enviar el reporte.");
         }
     };
@@ -2781,7 +2788,7 @@ const ReportEditor: React.FC = () => {
                                             {template?.sections[imagesSectionKey]?.label ?? "Imágenes"}
                                         </SectionTitle>
                                         <div style={{ fontSize: 12.5, color: tokens.textSecondary, marginBottom: 12 }}>
-                                            Selecciona imágenes desde las muestras. Eliminar aquí las desasocia del reporte.
+                                            Selecciona imágenes desde las muestras. Usa «Quitar» en cada figura para retirarla del reporte.
                                         </div>
 
                                         {reportImages.length > 0 ? (
@@ -2805,7 +2812,7 @@ const ReportEditor: React.FC = () => {
                                                                     />
                                                                 </div>
                                                                 <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
                                                                         <span style={{ fontWeight: 700, color: tokens.textPrimary, fontFamily: tokens.titleFont }}>{`Figura ${idx + 1}`}</span>
                                                                         {!isReadOnly && (
                                                                             <ActionButtonPanel
@@ -2827,6 +2834,7 @@ const ReportEditor: React.FC = () => {
                                                                                     },
                                                                                     {
                                                                                         icon: <DeleteOutlined />,
+                                                                                        label: "Quitar",
                                                                                         tooltip: "Quitar del reporte",
                                                                                         ariaLabel: `Quitar ${figureLabel}`,
                                                                                         danger: true,
