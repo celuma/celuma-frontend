@@ -87,6 +87,27 @@ describe("Agregar Muestra follows the server", () => {
 });
 
 describe("timeline", () => {
+    it("links a removed sample to its existing sample URL", async () => {
+        stubApi(undefined, [{
+            id: "removed-1", event_type: "SAMPLE_REMOVED", description: "",
+            metadata: { sample_id: "sample-1", sample_code: "SYN-001", reason: "Captura duplicada" },
+            sample_id: "sample-1", created_at: "2026-11-13T12:00:00Z",
+        }]);
+        renderPage();
+        const link = await screen.findByRole("link", { name: "SYN-001" });
+        expect(link.getAttribute("href")).toBe("/samples/sample-1");
+        expect(screen.queryByText("SAMPLE_REMOVED")).toBeNull();
+    });
+
+    it("shows readable text for a withdrawal without a sample code", async () => {
+        stubApi(undefined, [{
+            id: "removed-1", event_type: "SAMPLE_REMOVED", description: "",
+            sample_id: "sample-1", created_at: "2026-11-13T12:00:00Z",
+        }]);
+        renderPage();
+        expect(await screen.findByText("Retiró una muestra")).toBeTruthy();
+    });
+
     it("shows a review withdrawal as such, not as a raw status change", async () => {
         stubApi({ permitted: true, allowed: true, blockers: [] }, [{
             id: "e1", event_type: "STATUS_CHANGED", description: "Reporte retirado de revisión",

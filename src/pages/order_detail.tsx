@@ -14,7 +14,7 @@ import {
     MessageOutlined, PlusOutlined, ExclamationCircleOutlined, EditOutlined, DeleteOutlined,
     DollarOutlined, ClockCircleOutlined, PrinterOutlined
 } from "@ant-design/icons";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
@@ -1523,6 +1523,19 @@ export default function OrderDetail() {
                                                                 </a>
                                                             </span>
                                                         )}
+                                                    </span>
+                                                );
+                                            }
+                                            case "SAMPLE_REMOVED": {
+                                                const removedCode = typeof meta.sample_code === "string" ? meta.sample_code.trim() : "";
+                                                return (
+                                                    <span style={{ color: tokens.errorText, background: tokens.errorBg, borderRadius: 6, padding: "2px 6px" }}>
+                                                        {removedCode ? "Retiró la muestra " : "Retiró una muestra"}
+                                                        {removedCode && (sampleId ? (
+                                                            <Link to={`/samples/${sampleId}`} style={{ color: "inherit", fontWeight: 600, textDecoration: "underline" }}>
+                                                                {removedCode}
+                                                            </Link>
+                                                        ) : removedCode)}
                                                     </span>
                                                 );
                                             }
