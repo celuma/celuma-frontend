@@ -8,14 +8,13 @@ export const FRONTEND_DEPENDENCIES = `\
 @hookform/resolvers
 antd
 dayjs
+nspell
 quill
 react
-react-colorful
 react-dom
 react-hook-form
 react-quill-new
 react-router-dom
-tailwindcss
 zod`;
 
 export const BACKEND_DEPENDENCIES = `\
