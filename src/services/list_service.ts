@@ -41,11 +41,22 @@ export interface ListQuery {
     sort: ListSort | null;
     /** API filter name → selected values (OR within a filter, AND across filters). */
     filters: Record<string, string[]>;
+    /** Record id whose position in this result the API should report (Céluma 1.5, #66). */
+    locate?: string;
+}
+
+/** The API's answer to `locate`: whether the record still matches, and where. */
+export interface ListLocation {
+    id: string;
+    matches: boolean;
+    position?: number | null;
+    page?: number | null;
 }
 
 export interface ListPage<T> {
     items: T[];
     total: number;
+    located?: ListLocation | null;
 }
 
 export function listQueryParams(query: ListQuery): URLSearchParams {
@@ -61,6 +72,7 @@ export function listQueryParams(query: ListQuery): URLSearchParams {
     for (const [name, values] of Object.entries(query.filters)) {
         for (const value of values) params.append(name, value);
     }
+    if (query.locate) params.set("locate", query.locate);
     return params;
 }
 
@@ -77,7 +89,8 @@ export async function fetchListPage<T>(
     const body = await getJSON<Record<string, unknown>>(`${path}?${listQueryParams(query).toString()}`, signal);
     const items = (body?.[key] as T[] | undefined) ?? [];
     const total = typeof body?.total === "number" ? body.total : items.length;
-    return { items, total };
+    const located = (body?.located as ListLocation | null | undefined) ?? null;
+    return { items, total, located };
 }
 
 /** One choice of a column filter, as the `filter-options` endpoints return it. */
@@ -118,4 +131,27 @@ export function columnQueryToList(
         filters[param] = values;
     }
     return { sort: sortField && next.sort ? { field: sortField, order: next.sort.order } : null, filters };
+}
+
+/**
+ * Controlled header state for a server-mode `CelumaTable` (Céluma 1.5, #66): the column's
+ * filter selection and sort arrow are derived from the list's API view, so a view restored
+ * from the URL is also what the headers show.
+ */
+export function columnViewState(
+    map: ColumnQueryMap,
+    view: { sort: ListSort | null; filters: Record<string, string[]> },
+) {
+    return {
+        filteredValue(columnKey: string): string[] | null {
+            const param = map.filters[columnKey];
+            const values = param ? view.filters[param] : undefined;
+            return values && values.length ? values : null;
+        },
+        sortOrder(columnKey: string): "ascend" | "descend" | null {
+            const field = map.sort[columnKey];
+            if (!field || view.sort?.field !== field) return null;
+            return view.sort.order === "desc" ? "descend" : "ascend";
+        },
+    };
 }

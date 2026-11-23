@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,12 +24,17 @@ import { PERMS } from "../lib/rbac";
 import { useServerList } from "../hooks/use_server_list";
 import {
     columnQueryToList,
+    columnViewState,
     fetchListPage,
     getJSON,
     type ColumnQueryMap,
     type FilterOption,
     type ListQuery,
 } from "../services/list_service";
+import { useListView } from "../hooks/use_list_view";
+import { activeFilters, type ListViewSpec, type ListViewState } from "../lib/list_view_state";
+import ReturnedRecordNotice from "../components/lists/returned_record_notice";
+import { placementOf } from "../lib/list_return";
 import { UNTYPED_FILTER_VALUE, UNTYPED_LABEL, type SampleTypeRef } from "../models/sample_type";
 
 type SampleRow = {
@@ -71,6 +76,12 @@ const QUERY_MAP: ColumnQueryMap = {
     filters: { order: "order_id", patient: "patient_id", type: "sample_type_id", state: "state", labels: "label_id", assignees: "assignee_id" },
 };
 
+// Céluma 1.5 (#66): the view kept in the URL, with the API's parameter names.
+const SAMPLES_VIEW: ListViewSpec = {
+    sortFields: ["sample_code", "order_code", "patient"],
+    defaultSort: { field: "sample_code", order: "asc" },
+    filterNames: Object.values(QUERY_MAP.filters),
+};
 const fetchSamples = (query: ListQuery, signal: AbortSignal) =>
     fetchListPage<SampleRow>("/v1/laboratory/samples/", "samples", query, signal);
 
@@ -86,11 +97,31 @@ export default function SamplesList() {
     // and the total run over the tenant's whole collection on the API; the
     // orders list is no longer downloaded just to repeat the patient and
     // requester the samples response already carries.
+    // Céluma 1.5 (#66): search, filters, sort and page live in the URL, so Back and
+    // "Volver a Muestras" reopen the same view.
+    const replaceViewRef = useRef<(view: ListViewState) => void>(() => undefined);
+    const view = useListView("samples", SAMPLES_VIEW, (next) => replaceViewRef.current(next));
     const list = useServerList<SampleRow>({
         fetchPage: fetchSamples,
         pageSize: 10,
-        initialSort: { field: "sample_code", order: "asc" },
+        initialSort: view.initialView.sort,
+        initialFilters: activeFilters(view.initialView.filters),
+        initialSearch: view.initialView.q,
+        initialPage: view.initialView.page,
+        locate: view.returned?.id,
     });
+    replaceViewRef.current = (next) =>
+        list.replaceView({ search: next.q, page: next.page, sort: next.sort, filters: activeFilters(next.filters) });
+    const { syncUrl, markReady } = view;
+    useEffect(() => {
+        syncUrl({ q: list.search, page: list.page, sort: list.sort, filters: list.filters });
+    }, [syncUrl, list.search, list.page, list.sort, list.filters]);
+    useEffect(() => {
+        if (!list.loading) markReady();
+    }, [list.loading, markReady]);
+    const [noticeOpen, setNoticeOpen] = useState(view.returned !== null);
+    const returnedPlacement = placementOf(view.returned, list.located, list.page);
+    const header = columnViewState(QUERY_MAP, list);
     const [options, setOptions] = useState<SampleFilterOptions | null>(null);
     const [optionsError, setOptionsError] = useState<string | null>(null);
     useEffect(() => {
@@ -103,11 +134,18 @@ export default function SamplesList() {
         return () => controller.abort();
     }, []);
     const error = list.error ?? optionsError;
-    const { setQuery } = list;
+    const { setQuery, setSearch } = list;
     const onQueryChange = useCallback(
-        (next: Parameters<typeof columnQueryToList>[0]) => setQuery(columnQueryToList(next, QUERY_MAP)),
+        (next: Parameters<typeof columnQueryToList>[0]) => {
+            setNoticeOpen(false);
+            setQuery(columnQueryToList(next, QUERY_MAP));
+        },
         [setQuery],
     );
+    const onSearchChange = useCallback((q: string) => {
+        setNoticeOpen(false);
+        setSearch(q);
+    }, [setSearch]);
 
     const stateFilters = useMemo(() => (options?.states ?? []).map((state) => ({
         text: renderStatusChip(state, "sample").props.children,
@@ -129,21 +167,23 @@ export default function SamplesList() {
             key: "sample_code", 
             width: 120,
             sorter: true,
-            defaultSortOrder: "ascend",
+            sortOrder: header.sortOrder("sample_code"),
         },
         { 
             title: "Orden", 
             key: "order", 
             width: 120,
             sorter: true,
+            sortOrder: header.sortOrder("order"),
             filters: orderFilters,
+            filteredValue: header.filteredValue("order"),
             render: (_, r) => (
                 <a
                     href={`/orders/${r.order.id}`}
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        navigate(`/orders/${r.order.id}`);
+                        view.openRecord(`/orders/${r.order.id}`);
                     }}
                     style={{ 
                         color: "#0f8b8d", 
@@ -161,7 +201,9 @@ export default function SamplesList() {
             title: "Paciente", 
             key: "patient",
             sorter: true,
+            sortOrder: header.sortOrder("patient"),
             filters: patientFilters,
+            filteredValue: header.filteredValue("patient"),
             render: (_, r) => {
                 const name = patientName(r);
                 if (!name || !r.order.patient) return "—";
@@ -180,6 +222,7 @@ export default function SamplesList() {
             key: "type", 
             width: 160,
             filters: typeFilters,
+            filteredValue: header.filteredValue("type"),
             render: (sampleType: SampleTypeRef | null) => <SampleTypeBadge sampleType={sampleType} />,
         },
         { 
@@ -189,6 +232,7 @@ export default function SamplesList() {
             width: 120,
             render: (state: string) => renderStatusChip(state, "sample"),
             filters: stateFilters,
+            filteredValue: header.filteredValue("state"),
         },
         // Shown when any sample of the tenant has labels — not just this page.
         ...(labelFilters.length > 0 ? [{
@@ -196,6 +240,7 @@ export default function SamplesList() {
             key: "labels",
             width: 200,
             filters: labelFilters,
+            filteredValue: header.filteredValue("labels"),
             render: (_: unknown, r: SampleRow) =>
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
@@ -204,6 +249,7 @@ export default function SamplesList() {
             key: "assignees",
             width: 80,
             filters: assigneeFilters,
+            filteredValue: header.filteredValue("assignees"),
             render: (_: unknown, r: SampleRow) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
@@ -254,12 +300,27 @@ export default function SamplesList() {
                         }
                     />
                     <Card style={cardStyle}>
+                        {noticeOpen && view.returned && returnedPlacement && (
+                            <ReturnedRecordNotice
+                                subject={`La muestra ${view.returned.label ?? ""}`.trim()}
+                                placement={returnedPlacement}
+                                onGoToPage={list.setPage}
+                                onOpen={() => view.returned && view.openRecord(`/samples/${view.returned.id}`, view.returned)}
+                                onClearFilters={() => {
+                                    setNoticeOpen(false);
+                                    list.replaceView({ search: "", page: 1, sort: list.sort, filters: {} });
+                                }}
+                                onDismiss={() => setNoticeOpen(false)}
+                                filtered={list.search.trim() !== "" || Object.keys(list.filters).length > 0}
+                            />
+                        )}
                         <CelumaTable
                             dataSource={list.rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={list.loading}
-                            onRowClick={(record) => navigate(`/samples/${record.id}`)}
+                            rowClassName={(r) => (view.returned && r.id === view.returned.id ? "celuma-row-returned" : "")}
+                            onRowClick={(record) => view.openRecord(`/samples/${record.id}`, { id: record.id, label: record.sample_code })}
                             emptyText="Sin muestras"
                             searchable
                             searchPlaceholder="Buscar en muestras"
@@ -270,7 +331,7 @@ export default function SamplesList() {
                                 pageSize: list.pageSize,
                                 onPageChange: list.setPage,
                                 search: list.search,
-                                onSearchChange: list.setSearch,
+                                onSearchChange,
                                 onQueryChange,
                             }}
                             locale={{

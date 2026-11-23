@@ -1,4 +1,7 @@
 import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
+import ListReturnLink from "../components/lists/list_return_link";
+import RegistrationNotice from "../components/order/registration_notice";
+import { useCarriedReturnState } from "../hooks/use_carried_return_state";
 import { useSampleManagement } from "../hooks/use_capture_management";
 import { removeSample } from "../services/order_management_service";
 import { getErrorMessage } from "../lib/api_error";
@@ -135,6 +138,8 @@ export default function SampleDetailPage() {
     const notice = useNotice();
     const { sampleId } = useParams();
     const navigate = useNavigate();
+    // Céluma 1.5 (#66): opened from a list → "Volver a …" and related records keep that return.
+    const carriedReturn = useCarriedReturnState();
     const { pathname } = useLocation();
     // CEL-131-08 — every mutating action on this screen is offered only to a
     // user whose effective capabilities allow it, using the same permission
@@ -296,12 +301,12 @@ export default function SampleDetailPage() {
         try {
             await removeSample(sampleId, reason);
             message.success("Muestra retirada. Su código queda fuera de la numeración automática.");
-            navigate(`/orders/${detail.order.id}`, { replace: true });
+            navigate(`/orders/${detail.order.id}`, { replace: true, state: carriedReturn });
         } catch (err) {
             setRemoveError(getErrorMessage(err));
             setRemoving(false);
         }
-    }, [sampleId, detail, navigate]);
+    }, [sampleId, detail, navigate, carriedReturn]);
 
     // Delete sample image
     const deleteImage = useCallback(async (imageId: string) => {
@@ -913,6 +918,9 @@ export default function SampleDetailPage() {
                         .sd-timeline .ant-timeline-item-head { background: transparent; }
                     `}</style>
 
+                    <ListReturnLink />
+                    <RegistrationNotice />
+
                     {/* Main Grid Layout */}
                     <div className="sample-detail-grid">
                         {/* Left Column - Main Content */}
@@ -968,7 +976,7 @@ export default function SampleDetailPage() {
                                                 href={`/orders/${detail.order.id}`}
                                                 onClick={(event) => {
                                                     event.preventDefault();
-                                                    navigate(`/orders/${detail.order.id}`);
+                                                    navigate(`/orders/${detail.order.id}`, { state: carriedReturn });
                                                 }}
                                                 style={{ fontWeight: 600, color: tokens.primary }}
                                             >
@@ -997,7 +1005,7 @@ export default function SampleDetailPage() {
                                 rail={detail && (
                                     <ActionButtonPanel
                                         actions={[
-                                            { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`) },
+                                            { icon: <ContainerOutlined />, tooltip: "Ver orden", ariaLabel: "Ver orden", onClick: () => navigate(`/orders/${detail.order.id}`, { state: carriedReturn }) },
                                             ...(canUpdateSample ? [{
                                                 icon: <EditOutlined />,
                                                 tooltip: "Editar muestra",
