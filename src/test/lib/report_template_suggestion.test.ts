@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestReportTemplate } from "../../lib/report_template_suggestion";
+import { describeTemplateOrigin, joinNames, suggestReportTemplate } from "../../lib/report_template_suggestion";
 
 const BIO = { id: "t-bio", name: "Biopsia" };
 const CIT = { id: "t-cit", name: "Citología" };
@@ -45,5 +45,29 @@ describe("suggestReportTemplate (mirror of app/services/order_report_template.py
         expect(suggestReportTemplate(["st-bx"], TYPES, STUDY, active)).toMatchObject({ template: EST, source: "STUDY_TYPE" });
         // Unknown catalog (no `reports:read`): the defaults are shown as they are.
         expect(suggestReportTemplate(["st-bx"], TYPES, STUDY, null).template).toEqual(BIO);
+    });
+});
+
+describe("describeTemplateOrigin (#70, display only)", () => {
+    const NAMED = [
+        { id: "st-bx", name: "Bloque", default_template: BIO },
+        { id: "st-bx2", name: "Laminilla", default_template: BIO },
+        { id: "st-ct", name: "Citología líquida", default_template: CIT },
+        { id: "st-none", name: "Tubo", default_template: null },
+    ];
+
+    it("groups the order's sample types by the template they suggest, sorted and without repeats", () => {
+        expect(describeTemplateOrigin(["st-bx2", "st-ct", "st-bx", "st-bx", "st-none", "", null], NAMED, { name: "Histología" })).toEqual({
+            sampleTypesByTemplate: { "t-bio": ["Bloque", "Laminilla"], "t-cit": ["Citología líquida"] },
+            studyTypeName: "Histología",
+        });
+    });
+
+    it("ignores unknown sample types and works without a study type", () => {
+        expect(describeTemplateOrigin(["missing"], NAMED, undefined)).toEqual({ sampleTypesByTemplate: {}, studyTypeName: null });
+    });
+
+    it("joins names the Spanish way", () => {
+        expect([joinNames([]), joinNames(["A"]), joinNames(["A", "B"]), joinNames(["A", "B", "C"])]).toEqual(["", "A", "A y B", "A, B y C"]);
     });
 });
