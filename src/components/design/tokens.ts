@@ -35,6 +35,22 @@ export const tokens = {
     cardTitleSize: 20,      // Card section titles
 };
 
+/**
+ * The centred column of a list page (page header + table card). Céluma 1.5 (#69 review):
+ * a grid track's minimum is its content's width, and `CelumaTable` lays a wide table out at
+ * `max-content`, so a long row used to widen the whole column and push the page header and
+ * its main action past the viewport. `minmax(0, 1fr)` and `minWidth: 0` keep the column at
+ * the available width; the table then scrolls inside its own region.
+ */
+export const listPageColumnStyle: React.CSSProperties = {
+    maxWidth: tokens.maxWidth,
+    margin: "0 auto",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    minWidth: 0,
+    gap: tokens.gap,
+};
+
 // Consistent card title style for use with Ant Design Card
 export const cardTitleStyle: React.CSSProperties = {
     fontFamily: tokens.titleFont,

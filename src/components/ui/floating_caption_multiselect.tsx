@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Select } from "antd";
+import type { SelectProps } from "antd";
 import FieldMessage from "./field_message";
 
 /** How long a validation message stays on screen before auto-hiding. */
@@ -21,6 +22,8 @@ type Props = {
     disabled?: boolean;
     allowClear?: boolean;
     style?: React.CSSProperties;
+    /** Céluma 1.5 (#69 review): option and popup presentation (see `personSelectProps`). */
+    selectProps?: Pick<SelectProps, "optionRender" | "popupMatchSelectWidth" | "classNames">;
 };
 
 /**
@@ -42,6 +45,7 @@ export default function FloatingCaptionMultiSelect({
     disabled,
     allowClear = true,
     style,
+    selectProps,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
     const [hovered, setHovered] = useState(false);
@@ -147,7 +151,9 @@ export default function FloatingCaptionMultiSelect({
 
     return (
         <div
-            style={{ position: "relative", zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
+            // Céluma 1.5 (#69 review): `minWidth: 0` lets the field shrink inside the forms' `1fr` grids, as in
+            // FloatingCaptionSelect; long chips no longer widen their column.
+            style={{ position: "relative", minWidth: 0, zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
@@ -158,7 +164,9 @@ export default function FloatingCaptionMultiSelect({
                 border: none !important;
                 box-shadow: none !important;
                 border-radius: 12px !important;
-                padding: 0 6px !important;
+                /* Céluma 1.5 (#69 review): the end padding keeps chips (and their remove ×) clear of the
+                   clear/arrow icon, which otherwise sat over a full-width chip and took its clicks. */
+                padding: 0 28px 0 6px !important;
                 min-height: 38px !important;
                 display: flex !important;
                 align-items: center !important;
@@ -185,6 +193,7 @@ export default function FloatingCaptionMultiSelect({
                     {requiredMark && <span style={{ color: colors.error }}> *</span>}
                 </label>
                 <Select
+                    {...selectProps}
                     mode="multiple"
                     className={`fcms-${uid}`}
                     value={value ?? []}

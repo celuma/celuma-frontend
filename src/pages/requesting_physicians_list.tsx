@@ -7,7 +7,7 @@ import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
 import ErrorText from "../components/ui/error_text";
-import { tokens, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, listPageColumnStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import { matchesQuery } from "../lib/search";
@@ -145,7 +145,7 @@ export default function RequestingPhysiciansList() {
         <Layout style={{ minHeight: "100vh", padding: 0, margin: 0 }}>
             <SidebarCeluma selectedKey={(pathname as CelumaKey) ?? "/home"} onNavigate={(key) => navigate(key)} logoSrc={logo} />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                <div style={listPageColumnStyle}>
                     <PageHeader
                         title="Médicos Solicitantes"
                         subtitle="Consulta y gestiona los médicos solicitantes"

@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Select } from "antd";
+import type { SelectProps } from "antd";
 import FieldMessage from "./field_message";
 
 /** How long a validation message stays on screen before auto-hiding. */
@@ -27,6 +28,10 @@ type Props = {
      *  this the field remained silent in the meantime. */
     loading?: boolean;
     "data-testid"?: string;
+    /** Céluma 1.5 (#69): search, option and popup behaviour of a specific
+     *  catalog (see `catalogTypeSelectProps`). `filterOption` replaces the
+     *  default match on the label. */
+    selectProps?: Pick<SelectProps, "filterOption" | "optionRender" | "labelRender" | "popupMatchSelectWidth" | "classNames">;
 };
 
 /**
@@ -50,6 +55,7 @@ export default function FloatingCaptionSelect({
     style,
     loading = false,
     "data-testid": dataTestId,
+    selectProps,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
     const [hovered, setHovered] = useState(false);
@@ -155,7 +161,10 @@ export default function FloatingCaptionSelect({
 
     return (
         <div
-            style={{ position: "relative", zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
+            // Céluma 1.5 (#69): the selected item's end padding keeps long text clear of the arrow/clear icon.
+            // `minWidth: 0` lets the field shrink inside the forms' `1fr` grids; without it a
+            // long selected label widened its column and pushed the form past a narrow viewport.
+            style={{ position: "relative", minWidth: 0, zIndex: active ? 30 : elevated ? 20 : 1, ...style }}
             data-testid={dataTestId}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
@@ -174,7 +183,7 @@ export default function FloatingCaptionSelect({
               }
               .fcs-${uid}.ant-select-focused .ant-select-selector,
               .fcs-${uid}.ant-select-open .ant-select-selector { border: none !important; box-shadow: none !important; }
-              .fcs-${uid} .ant-select-selection-item { font-size: 15px !important; line-height: 52px !important; color: ${colors.text}; padding: 0 !important; }
+              .fcs-${uid} .ant-select-selection-item { font-size: 15px !important; line-height: 52px !important; color: ${colors.text}; padding: 0 22px 0 0 !important; }
               .fcs-${uid} .ant-select-selection-search { inset-inline-start: 12px !important; inset-inline-end: 12px !important; }
               .fcs-${uid} .ant-select-selection-search-input { font-size: 15px !important; line-height: 52px !important; height: 52px !important; color: ${colors.text}; }
               .fcs-${uid} .ant-select-selection-placeholder { font-size: 15px !important; line-height: 52px !important; color: transparent !important; }
@@ -188,6 +197,7 @@ export default function FloatingCaptionSelect({
                     {requiredMark && <span style={{ color: colors.error }}> *</span>}
                 </label>
                 <Select
+                    {...selectProps}
                     className={`fcs-${uid}`}
                     value={value === "" ? undefined : value}
                     onChange={(v) => onChange?.(v)}

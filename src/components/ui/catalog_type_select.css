@@ -1,0 +1,104 @@
+/* Céluma 1.5 (#69): study-type and sample-type selectors. See catalog_type_select.tsx. */
+
+/* With popupMatchSelectWidth=false the popup is at least as wide as the field;
+   it may grow for long names, but never past the viewport. */
+.ct-popup {
+    max-width: min(560px, calc(100vw - 24px));
+}
+
+/* Complete names: wrap instead of the default single-line ellipsis. */
+.ct-popup .ant-select-item-option-content {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.ct-option {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ct-option__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
+.ct-option__code,
+.ct-selected__code {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: #4b5563;
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 0 6px;
+    line-height: 20px;
+    white-space: nowrap;
+}
+
+.ct-option__state {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: #6b7280;
+    font-style: italic;
+}
+
+/* Closed field: the name truncates, the code stays visible. FloatingCaptionSelect reserves room
+   for the arrow/clear icon; plain antd selects (Numeración) reserve their own. */
+.ct-selected {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ct-selected__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Visually hidden, still read and copied (see CodeChip). */
+.ct-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: pre;
+    border: 0;
+}
+
+/* Patient / Requesting-physician rows (person_select.tsx): name and details stacked, code chip at the end.
+   The chip comes first in the DOM so the row's text stays the original "CODE - Nombre" label. */
+.ct-option--person {
+    align-items: flex-start;
+}
+
+.ct-option__body {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ct-option__code--end {
+    order: 2;
+    margin-top: 1px;
+}
+
+.ct-option__detail {
+    font-size: 12px;
+    line-height: 1.35;
+    color: #6b7280;
+    overflow-wrap: anywhere;
+}

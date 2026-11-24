@@ -7,6 +7,8 @@ import { getErrorMessage } from "../lib/api_error";
 import { apiGet } from "../lib/api_fetch";
 import { getNumberingConfigs, previewNumbering, saveNumberingConfig } from "../services/numbering_service";
 import { listSampleTypes } from "../services/sample_type_service";
+import { catalogTypeOptions } from "../lib/catalog_type_options";
+import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
 import {
     DEFAULT_NUMBERING_FORMAT,
     composeFormat,
@@ -67,7 +69,11 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     const [separator, setSeparator] = useState<Separator>(detectSeparator(config.format, config.scope));
     const [width, setWidth] = useState<number>(config.sequence_min_width);
     const [timezone, setTimezone] = useState(config.timezone);
-    const [scopeId, setScopeId] = useState<string | undefined>(options[0]?.id);
+    // Céluma 1.5 (#69): the preview's study/sample type, in the shared stable alphabetical
+    // order and searchable by name or code. The first option is the default, as before.
+    const scopeOptions = useMemo(() => catalogTypeOptions(options), [options]);
+    const scopeSelect = useMemo(() => catalogTypeSelectProps(scopeOptions), [scopeOptions]);
+    const [scopeId, setScopeId] = useState<string | undefined>(scopeOptions[0]?.value);
     const [preview, setPreview] = useState<NumberingPreview | null>(null);
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -83,8 +89,8 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
     }, [config]);
 
     useEffect(() => {
-        if (!scopeId && options[0]) setScopeId(options[0].id);
-    }, [options, scopeId]);
+        if (!scopeId && scopeOptions[0]) setScopeId(scopeOptions[0].value);
+    }, [scopeOptions, scopeId]);
 
     const chooseSeparator = (next: Separator, nextScope: NumberingScope = scope) => {
         setSeparator(next);
@@ -236,11 +242,14 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                     <strong>Vista previa</strong>
                     {options.length > 0 && (
                         <Select
+                            {...scopeSelect}
                             value={scopeId}
                             onChange={setScopeId}
                             aria-label={text.scopeLabel}
-                            options={options.map((o) => ({ value: o.id, label: `${o.code} — ${o.name}` }))}
-                            style={{ maxWidth: 360 }}
+                            options={scopeOptions}
+                            showSearch
+                            style={{ width: "100%", maxWidth: 360 }}
+                            data-testid={`preview-type-${kind}`}
                         />
                     )}
                     {previewError && <Alert type="error" showIcon message={previewError} />}

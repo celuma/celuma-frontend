@@ -22,6 +22,8 @@ import { apiFetch } from "../lib/api_fetch";
 import { getErrorMessage } from "../lib/api_error";
 import { updateOrder, type OrderUpdateInput } from "../services/order_management_service";
 import ReportTemplateField from "../components/order/report_template_field";
+import { personSelectProps } from "../components/ui/person_select";
+import { patientOption, physicianOptionCompact, type PersonOption, type PhysicianRow } from "../lib/person_options";
 import { getReportTemplates } from "../services/report_service";
 import type { OrderReportTemplateSelection, ReportTemplateRef } from "../models/report_letterhead";
 
@@ -66,8 +68,10 @@ export default function OrderEditForm() {
     const [saving, setSaving] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const [orderCode, setOrderCode] = useState("");
-    const [physicians, setPhysicians] = useState<Array<{ value: string; label: string }>>([]);
-    const [patients, setPatients] = useState<Array<{ value: string; label: string }>>([]);
+    const [physicians, setPhysicians] = useState<PersonOption[]>([]);
+    const [patients, setPatients] = useState<PersonOption[]>([]);
+    // Céluma 1.5 (#69 review): presentation of the Patient / Physician rows only (labels, search, order unchanged).
+    const [personSelect] = useState(personSelectProps);
     const { state } = useOrderManagement(orderId);
     // Céluma 1.4.1: the stored explicit choice and what the catalog alone resolves to. `templateId` is what the
     // form holds (null = follow the default); it is sent only when it differs from the stored choice, and null
@@ -108,14 +112,11 @@ export default function OrderEditForm() {
                 setTemplates((templatesRes?.templates ?? []).map((t) => ({ id: t.id, name: t.name })));
                 if (patientsRes.ok) {
                     const rows = (await patientsRes.json()) as Array<{ id: string; patient_code: string; first_name?: string; last_name?: string }>;
-                    setPatients(rows.map((p) => ({
-                        value: p.id,
-                        label: `${p.patient_code}${p.first_name ? ` - ${p.first_name} ${p.last_name ?? ""}` : ""}`.trim(),
-                    })));
+                    setPatients(rows.map(patientOption));
                 }
                 if (physiciansRes.ok) {
-                    const rows = (await physiciansRes.json()) as Array<{ id: string; physician_code: string; full_name: string }>;
-                    setPhysicians(rows.map((p) => ({ value: p.id, label: `${p.physician_code} - ${p.full_name}` })));
+                    const rows = (await physiciansRes.json()) as PhysicianRow[];
+                    setPhysicians(rows.map(physicianOptionCompact));
                 }
             } catch (err) {
                 setServerError(getErrorMessage(err));
@@ -182,6 +183,7 @@ export default function OrderEditForm() {
                                             value={typeof props.value === "string" && props.value ? props.value : undefined}
                                             onChange={(value) => props.onChange(value ?? "")}
                                             options={patients}
+                                            selectProps={personSelect}
                                             placeholder="Seleccione el paciente"
                                             showSearch
                                             allowClear
@@ -206,6 +208,7 @@ export default function OrderEditForm() {
                                             value={Array.isArray(props.value) ? props.value : []}
                                             onChange={(value) => props.onChange(value)}
                                             options={physicians}
+                                            selectProps={personSelect}
                                             placeholder="Seleccione uno o más médicos solicitantes"
                                             disabled={closed}
                                             error={props.error}

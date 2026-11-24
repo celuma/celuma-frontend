@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, listPageColumnStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
@@ -162,7 +162,7 @@ function BillingList() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                <div style={listPageColumnStyle}>
                     <PageHeader title="Facturación" subtitle="Consulta y gestiona las facturas del laboratorio" />
                     <Card style={cardStyle}>
                         <CelumaTable

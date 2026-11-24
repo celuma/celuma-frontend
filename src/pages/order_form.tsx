@@ -17,7 +17,10 @@ import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
-import { sortByLabel } from "../lib/sort";
+import { catalogTypeOptions } from "../lib/catalog_type_options";
+import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
+import { personSelectProps } from "../components/ui/person_select";
+import { patientOption, physicianOption, type PersonOption } from "../lib/person_options";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
 import { createRegistrationSubmission, postForAnswer } from "../lib/registration_submission";
@@ -171,9 +174,9 @@ export default function OrderForm() {
     const [loading, setLoading] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
     const session = useMemo(() => getSessionContext(), []);
-    const [patients, setPatients] = useState<Array<{ id: string; label: string }>>([]);
+    const [patients, setPatients] = useState<PersonOption[]>([]);
     const [loadingPatients, setLoadingPatients] = useState(false);
-    const [requestingPhysicians, setRequestingPhysicians] = useState<Array<{ id: string; label: string }>>([]);
+    const [requestingPhysicians, setRequestingPhysicians] = useState<PersonOption[]>([]);
     const [loadingRequestingPhysicians, setLoadingRequestingPhysicians] = useState(false);
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string; timezone?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
@@ -264,11 +267,8 @@ export default function OrderForm() {
             try {
                 setLoadingPatients(true);
                 const data = await getJSON<Array<{ id: string; patient_code: string; first_name?: string; last_name?: string }>>("/v1/patients/");
-                const mapped = (data || []).map((p) => ({
-                    id: p.id,
-                    label: `${p.patient_code}${p.first_name ? ` - ${p.first_name} ${p.last_name ?? ""}` : ""}`.trim(),
-                }));
-                setPatients(mapped);
+                // Céluma 1.5 (#69 review): same label and API order; the row only presents it differently.
+                setPatients((data || []).map(patientOption));
             } finally {
                 setLoadingPatients(false);
             }
@@ -286,11 +286,7 @@ export default function OrderForm() {
                     specialty?: string | null;
                     institution?: string | null;
                 }>>("/v1/requesting-physicians/");
-                const mapped = (data || []).map((physician) => ({
-                    id: physician.id,
-                    label: `${physician.physician_code} - ${physician.full_name}${physician.specialty ? ` · ${physician.specialty}` : ""}${physician.institution ? ` · ${physician.institution}` : ""}`.trim(),
-                }));
-                setRequestingPhysicians(mapped);
+                setRequestingPhysicians((data || []).map(physicianOption));
             } finally {
                 setLoadingRequestingPhysicians(false);
             }
@@ -337,6 +333,13 @@ export default function OrderForm() {
         };
     }, []);
 
+    // Céluma 1.5 (#69): stable alphabetical order, search by name or code, complete names.
+    // Eligibility is unchanged: only active study types and active sample types are offered.
+    const studyTypeOptions = useMemo(() => catalogTypeOptions(studyTypes), [studyTypes]);
+    const studyTypeSelect = useMemo(() => catalogTypeSelectProps(studyTypeOptions), [studyTypeOptions]);
+    const sampleTypeOptions = useMemo(() => catalogTypeOptions(sampleTypes.types), [sampleTypes.types]);
+    const sampleTypeSelect = useMemo(() => catalogTypeSelectProps(sampleTypeOptions), [sampleTypeOptions]);
+    const personSelect = useMemo(() => personSelectProps(), []);
     const templateSuggestion = useMemo(
         () => suggestReportTemplate(
             (watchedSamples ?? []).map((s) => s?.sample_type_id),
@@ -512,7 +515,8 @@ export default function OrderForm() {
                                                 value={typeof p.value === "string" ? p.value : undefined}
                                                 onChange={(val) => p.onChange(val ?? "")}
                                                 placeholder="Seleccione un paciente"
-                                                options={patients.map((pt) => ({ value: pt.id, label: pt.label }))}
+                                                options={patients}
+                                                selectProps={personSelect}
                                                 showSearch
                                                 loading={loadingPatients}
                                                 disabled={Boolean(prefilledPatientId)}
@@ -537,12 +541,9 @@ export default function OrderForm() {
                                                 value={typeof p.value === "string" ? p.value : undefined}
                                                 onChange={(val) => p.onChange(val ?? "")}
                                                 placeholder="Seleccionar tipo de estudio"
-                                                // C-003: alphabetical by the label the user actually
-                                                // scans — here "{name} ({code})" — not by API order.
-                                                options={sortByLabel(
-                                                    studyTypes.map((st) => ({ value: st.id, label: `${st.name} (${st.code})` })),
-                                                    (option) => option.label,
-                                                )}
+                                                // C-003 / #69: alphabetical by name, then code — not by API order.
+                                                options={studyTypeOptions}
+                                                selectProps={studyTypeSelect}
                                                 showSearch
                                                 loading={loadingStudyTypes}
                                                 error={p.error}
@@ -562,7 +563,8 @@ export default function OrderForm() {
                                                 value={Array.isArray(p.value) ? (p.value as string[]) : []}
                                                 onChange={(vals) => p.onChange(vals)}
                                                 placeholder={loadingRequestingPhysicians ? "Cargando médicos…" : "Seleccione uno o más médicos solicitantes"}
-                                                options={requestingPhysicians.map((physician) => ({ value: physician.id, label: physician.label }))}
+                                                options={requestingPhysicians}
+                                                selectProps={personSelect}
                                                 error={p.error}
                                             />
                                         )}
@@ -646,7 +648,8 @@ export default function OrderForm() {
                                                             value={typeof p.value === "string" && p.value ? p.value : undefined}
                                                             onChange={(val) => p.onChange(val ?? "")}
                                                             placeholder="Seleccione el tipo de muestra"
-                                                            options={sampleTypes.types.map((t) => ({ value: t.id, label: t.name }))}
+                                                            options={sampleTypeOptions}
+                                                            selectProps={sampleTypeSelect}
                                                             showSearch
                                                             loading={sampleTypes.loading}
                                                             disabled={sampleTypes.empty}
