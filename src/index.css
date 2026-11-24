@@ -197,6 +197,13 @@ html, body {
 .celuma-table .ant-table-tbody > tr.ant-table-row:hover > td {
   background: #f1f9f8;
 }
+/* Céluma 1.5 (#66): the row of the record the user just returned from. */
+.celuma-table .ant-table-tbody > tr.celuma-row-returned > td {
+  background: #eaf7f5;
+}
+.celuma-table .ant-table-tbody > tr.celuma-row-returned > td:first-child {
+  box-shadow: inset 3px 0 0 #49b6ad;
+}
 
 /* Pagination — antd stays the paging engine but its default control is hidden;
    the visible pagination is rendered by our own <CelumaPagination /> component

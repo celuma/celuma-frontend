@@ -5,7 +5,7 @@
  * - Pending assignments (items assigned to the user)
  * - Pending reviews (reports the user needs to approve or reject)
  */
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Layout, Card, Tooltip } from "antd";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
@@ -18,20 +18,74 @@ import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
-import { matchesQuery } from "../lib/search";
+import { matchesQuery, validateSearchQuery } from "../lib/search";
 import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { PatientCell, renderDateCell, renderStatusChip, ItemTypeBadge } from "../components/ui/table_helpers";
+import { useListView } from "../hooks/use_list_view";
+import type { ListViewSpec, ListViewState } from "../lib/list_view_state";
+import type { ReturnedPlacement } from "../lib/list_return";
+import ReturnedRecordNotice from "../components/lists/returned_record_notice";
 
 /** The API's maximum page size, to fetch the whole worklist in few requests. */
 const WORKLIST_PAGE_SIZE = 100;
+/** Rows per table page (unchanged from 1.4). */
+const TABLE_PAGE_SIZE = 20;
+
+/**
+ * Céluma 1.5 (#66): the worklist still searches, filters and sorts in the browser over the
+ * whole per-user list, but its view is now controlled and kept in the URL (column keys as
+ * parameter names), so Back and "Volver a Lista de trabajo" reopen the same view. A present
+ * but empty `item_status=` means the user cleared the default status filter.
+ */
+const WORKLIST_VIEW: ListViewSpec = {
+    sortFields: ["assigned_at", "patient"],
+    defaultSort: null,
+    filterNames: ["patient", "item_type", "kind", "item_status"],
+};
+
+const COMPLETED_STATUSES = ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"];
+
+const patientSortName = (item: WorklistItem) => item.patient_name || item.patient_code || "";
+const assignedTime = (item: WorklistItem) => (item.assigned_at ? new Date(item.assigned_at).getTime() : 0);
+const ITEM_FIELDS: Record<string, (item: WorklistItem) => string | null | undefined> = {
+    patient: (i) => i.patient_id,
+    item_type: (i) => i.item_type,
+    kind: (i) => i.kind,
+    item_status: (i) => i.item_status,
+};
+
+/** The rows of `view` over `items`, with the same predicates the table applied before 1.5. */
+function worklistRows(items: WorklistItem[], view: ListViewState): WorklistItem[] {
+    let rows = items.filter((item) => Object.entries(view.filters).every(([name, values]) => {
+        const field = ITEM_FIELDS[name];
+        return !field || values.length === 0 || values.includes(String(field(item) ?? ""));
+    }));
+    const q = view.q.trim();
+    if (q && !validateSearchQuery(q)) {
+        rows = rows.filter((item) => matchesQuery([item.display_id, item.patient_name, item.patient_code, item.order_code, item.tags], q));
+    }
+    const sort = view.sort;
+    if (sort) {
+        const compare = sort.field === "patient"
+            ? (a: WorklistItem, b: WorklistItem) => patientSortName(a).localeCompare(patientSortName(b))
+            : (a: WorklistItem, b: WorklistItem) => assignedTime(a) - assignedTime(b);
+        rows = [...rows].sort((a, b) => (sort.order === "desc" ? -compare(a, b) : compare(a, b)));
+    }
+    return rows;
+}
 
 function Worklist() {
     usePageTitle();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
     const [items, setItems] = useState<WorklistItem[]>([]);
-    const [statusFilteredValue, setStatusFilteredValue] = useState<React.Key[] | null>(null);
+    const setViewRef = useRef<(view: ListViewState) => void>(() => undefined);
+    const listView = useListView("worklist", WORKLIST_VIEW, (next) => setViewRef.current(next));
+    const [view, setView] = useState<ListViewState>(listView.initialView);
+    setViewRef.current = setView;
+    const [noticeOpen, setNoticeOpen] = useState(listView.returned !== null);
 
     const loadWorklist = useCallback(async () => {
         setLoading(true);
@@ -51,6 +105,7 @@ function Worklist() {
             console.error("Error cargando lista de trabajo:", error);
         } finally {
             setLoading(false);
+            setLoaded(true);
         }
     }, []);
 
@@ -151,16 +206,6 @@ function Worklist() {
         return statusMap[status.toUpperCase()] || status;
     };
 
-    // Helper to check if a status represents completion
-    const isCompletedStatus = useCallback((status: string) => {
-        const completedStatuses = ["APPROVED", "READY", "RELEASED", "CLOSED", "PUBLISHED"];
-        return completedStatuses.includes(status);
-    }, []);
-
-    // Search predicate — normalized, separator-insensitive and typo-tolerant via matchesQuery.
-    const searchFilter = (item: WorklistItem, q: string) =>
-        matchesQuery([item.display_id, item.patient_name, item.patient_code, item.order_code, item.tags], q);
-
     // Get unique kinds and types for filters (from all items, not filtered)
     const kindFilters = useMemo(() => {
         const kinds = new Set(items.map(i => i.kind));
@@ -186,18 +231,45 @@ function Worklist() {
         }));
     }, [items]);
 
-    // Default filtered values - exclude completed statuses (only on first load)
-    const defaultStatusFilteredValue = useMemo(() => {
-        const allStatuses = new Set(items.map(i => i.item_status));
-        return Array.from(allStatuses).filter(status => !isCompletedStatus(status));
-    }, [items, isCompletedStatus]);
+    // Default status filter — every present status except the completed ones — once the first
+    // load has items, unless the view (URL) already carries a status choice, even an empty one.
+    // Applied in the same render as the items, so no unfiltered list is ever shown or left.
+    if (loaded && items.length > 0 && view.filters.item_status === undefined) {
+        const statuses = Array.from(new Set(items.map(i => i.item_status)));
+        setView({ ...view, filters: { ...view.filters, item_status: statuses.filter((st) => !COMPLETED_STATUSES.includes(st)) } });
+    }
 
-    // Set default filter on first load
+    const rows = useMemo(() => worklistRows(items, view), [items, view]);
+    const lastPage = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+    const page = Math.min(view.page, lastPage);
+    const pageRows = useMemo(() => rows.slice((page - 1) * TABLE_PAGE_SIZE, page * TABLE_PAGE_SIZE), [rows, page]);
+
+    // A page past the end (fewer items now) is clamped, as on the server lists.
     useEffect(() => {
-        if (items.length > 0 && statusFilteredValue === null) {
-            setStatusFilteredValue(defaultStatusFilteredValue);
-        }
-    }, [items, defaultStatusFilteredValue, statusFilteredValue]);
+        if (loaded && view.page > lastPage) setView((v) => ({ ...v, page: lastPage }));
+    }, [loaded, view.page, lastPage]);
+
+    const { syncUrl, markReady } = listView;
+    useEffect(() => {
+        if (loaded) syncUrl(view);
+    }, [loaded, view, syncUrl]);
+    useEffect(() => {
+        if (loaded && !loading) markReady();
+    }, [loaded, loading, markReady]);
+
+    const returnedPlacement = useMemo((): ReturnedPlacement | null => {
+        const returned = listView.returned;
+        if (!returned || !loaded) return null;
+        if (!items.some((i) => i.id === returned.id)) return { kind: "not_listed" };
+        const index = rows.findIndex((i) => i.id === returned.id);
+        if (index < 0) return { kind: "no_match" };
+        const at = Math.floor(index / TABLE_PAGE_SIZE) + 1;
+        return at === page ? { kind: "here" } : { kind: "other_page", page: at };
+    }, [listView.returned, loaded, items, rows, page]);
+
+    const setPage = (next: number) => setView((v) => ({ ...v, page: Math.max(1, next) }));
+    const sortOrderOf = (key: string) => (view.sort?.field === key ? (view.sort.order === "desc" ? "descend" as const : "ascend" as const) : null);
+    const filteredValueOf = (key: string) => (view.filters[key]?.length ? view.filters[key] : null);
 
     // Get unique patients for filters
     const patientFilters = useMemo(() => {
@@ -233,11 +305,8 @@ function Worklist() {
                     </Tooltip>
                 );
             },
-            sorter: (a, b) => {
-                const dateA = a.assigned_at ? new Date(a.assigned_at).getTime() : 0;
-                const dateB = b.assigned_at ? new Date(b.assigned_at).getTime() : 0;
-                return dateA - dateB;
-            },
+            sorter: true,
+            sortOrder: sortOrderOf("assigned_at"),
         },
         {
             title: "Código",
@@ -248,13 +317,10 @@ function Worklist() {
         {
             title: "Paciente",
             key: "patient",
-            sorter: (a, b) => {
-                const nameA = a.patient_name || a.patient_code || "";
-                const nameB = b.patient_name || b.patient_code || "";
-                return nameA.localeCompare(nameB);
-            },
+            sorter: true,
+            sortOrder: sortOrderOf("patient"),
             filters: patientFilters,
-            onFilter: (value, record) => record.patient_id === value,
+            filteredValue: filteredValueOf("patient"),
             render: (_, record) => {
                 if (!record.patient_name) return "—";
                 return (
@@ -272,7 +338,7 @@ function Worklist() {
             width: 120,
             render: (_, record) => <ItemTypeBadge type={record.item_type} />,
             filters: typeFilters,
-            onFilter: (value, record) => record.item_type === value,
+            filteredValue: filteredValueOf("item_type"),
         },
         {
             title: "Tarea",
@@ -280,7 +346,7 @@ function Worklist() {
             width: 120,
             render: (_, record) => renderKindChip(record.kind),
             filters: kindFilters,
-            onFilter: (value, record) => record.kind === value,
+            filteredValue: filteredValueOf("kind"),
         },
         {
             title: "Estado",
@@ -289,8 +355,7 @@ function Worklist() {
             width: 120,
             render: (status, record) => renderWorklistStatusChip(status, record.item_type),
             filters: statusFilters,
-            onFilter: (value, record) => record.item_status === value,
-            filteredValue: statusFilteredValue as React.Key[] | undefined,
+            filteredValue: filteredValueOf("item_status"),
         },
     ];
 
@@ -305,24 +370,53 @@ function Worklist() {
                 <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
                     <PageHeader title="Mi Lista de Trabajo" subtitle="Tus asignaciones y revisiones pendientes" />
                     <Card style={cardStyle}>
+                        {noticeOpen && listView.returned && returnedPlacement && (
+                            <ReturnedRecordNotice
+                                subject={`El elemento ${listView.returned.label ?? ""}`.trim()}
+                                placement={returnedPlacement}
+                                onGoToPage={setPage}
+                                onOpen={() => {
+                                    const returned = items.find((i) => i.id === listView.returned?.id);
+                                    if (returned) listView.openRecord(returned.link, { id: returned.id, label: listView.returned?.label });
+                                }}
+                                onClearFilters={() => {
+                                    setNoticeOpen(false);
+                                    setView((v) => ({ ...v, q: "", page: 1, filters: { item_status: [] } }));
+                                }}
+                                onDismiss={() => setNoticeOpen(false)}
+                                filtered={view.q.trim() !== "" || Object.values(view.filters).some((v) => v.length > 0)}
+                            />
+                        )}
                         <CelumaTable
-                            dataSource={items}
+                            dataSource={pageRows}
                             columns={columns}
                             rowKey="id"
                             loading={loading}
-                            onRowClick={(record) => navigate(record.link as string)}
+                            rowClassName={(r) => (listView.returned && r.id === listView.returned.id ? "celuma-row-returned" : "")}
+                            onRowClick={(record) => listView.openRecord(record.link as string, { id: record.id, label: record.order_code || record.display_id })}
                             searchable
                             searchPlaceholder="Buscar en lista de trabajo"
-                            searchFilter={searchFilter}
-                            onChange={(_pagination, filters) => {
-                                // Handle filter changes
-                                if (filters.item_status !== undefined) {
-                                    setStatusFilteredValue(filters.item_status as React.Key[] | null);
-                                }
-                            }}
-                            pagination={{
-                                pageSize: 20,
-                                showTotal: (t) => `Total: ${t} elementos`,
+                            pagination={{ pageSize: TABLE_PAGE_SIZE }}
+                            server={{
+                                total: rows.length,
+                                page,
+                                pageSize: TABLE_PAGE_SIZE,
+                                onPageChange: setPage,
+                                search: view.q,
+                                onSearchChange: (q) => {
+                                    setNoticeOpen(false);
+                                    setView((v) => ({ ...v, q, page: 1 }));
+                                },
+                                onQueryChange: (next) => {
+                                    setNoticeOpen(false);
+                                    const filters: Record<string, string[]> = {};
+                                    for (const name of WORKLIST_VIEW.filterNames) {
+                                        const values = next.filters[name] ?? [];
+                                        // A cleared status filter stays explicit, so the default does not come back.
+                                        if (values.length || name === "item_status") filters[name] = values;
+                                    }
+                                    setView((v) => ({ ...v, sort: next.sort, filters, page: 1 }));
+                                },
                             }}
                             emptyText="No tienes elementos pendientes"
                             locale={{

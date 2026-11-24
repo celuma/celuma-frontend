@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layout, Card, Avatar, Tooltip } from "antd";
 import CelumaButton from "../components/ui/button";
 import { CheckCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import type { CelumaKey } from "../components/ui/sidebar_menu";
@@ -18,12 +18,17 @@ import { PERMS } from "../lib/rbac";
 import { useServerList } from "../hooks/use_server_list";
 import {
     columnQueryToList,
+    columnViewState,
     fetchListPage,
     getJSON,
     type ColumnQueryMap,
     type FilterOption,
     type ListQuery,
 } from "../services/list_service";
+import { useListView } from "../hooks/use_list_view";
+import { activeFilters, type ListViewSpec, type ListViewState } from "../lib/list_view_state";
+import ReturnedRecordNotice from "../components/lists/returned_record_notice";
+import { placementOf } from "../lib/list_return";
 
 type OrdersListResponse = {
     orders: Array<{
@@ -77,6 +82,12 @@ const QUERY_MAP: ColumnQueryMap = {
     booleanFilters: ["has_report", "has_invoice"],
 };
 
+// Céluma 1.5 (#66): the view kept in the URL, with the API's parameter names.
+const ORDERS_VIEW: ListViewSpec = {
+    sortFields: ["order_code", "patient", "requester", "status"],
+    defaultSort: { field: "order_code", order: "asc" },
+    filterNames: Object.values(QUERY_MAP.filters),
+};
 const fetchOrders = (query: ListQuery, signal: AbortSignal) =>
     fetchListPage<OrderRow>("/v1/laboratory/orders/", "orders", query, signal);
 
@@ -84,23 +95,35 @@ export default function OrdersList() {
     usePageTitle();
     const navigate = useNavigate();
     const { pathname } = useLocation();
-    const [searchParams] = useSearchParams();
     const { hasPermission } = useUserProfile();
     const canCreateOrder = hasPermission(PERMS.CREATE_ORDER);
-    // Status filter, optionally seeded from the URL (?status=RECEIVED,PROCESSING) e.g. when arriving from the dashboard cards
-    const [initialStatus] = useState<string[] | null>(() => {
-        const s = searchParams.get("status");
-        return s ? s.split(",") : null;
-    });
+    // Céluma 1.5 (#66): search, filters, sort and page live in the URL (dashboard links such as
+    // ?status=RECEIVED,PROCESSING included), so Back and "Volver a Órdenes" reopen the same view.
+    const replaceViewRef = useRef<(view: ListViewState) => void>(() => undefined);
+    const view = useListView("orders", ORDERS_VIEW, (next) => replaceViewRef.current(next));
     // Céluma 1.4 (#5/#6): one server page at a time; search, filters, sorting
     // and the total run over the tenant's whole collection on the API.
     const list = useServerList<OrderRow>({
         fetchPage: fetchOrders,
         pageSize: 10,
-        initialSort: { field: "order_code", order: "asc" },
-        initialFilters: initialStatus ? { status: initialStatus } : {},
+        initialSort: view.initialView.sort,
+        initialFilters: activeFilters(view.initialView.filters),
+        initialSearch: view.initialView.q,
+        initialPage: view.initialView.page,
+        locate: view.returned?.id,
     });
-    const statusFilter = list.filters.status ?? null;
+    replaceViewRef.current = (next) =>
+        list.replaceView({ search: next.q, page: next.page, sort: next.sort, filters: activeFilters(next.filters) });
+    const { syncUrl, markReady } = view;
+    useEffect(() => {
+        syncUrl({ q: list.search, page: list.page, sort: list.sort, filters: list.filters });
+    }, [syncUrl, list.search, list.page, list.sort, list.filters]);
+    useEffect(() => {
+        if (!list.loading) markReady();
+    }, [list.loading, markReady]);
+    const [noticeOpen, setNoticeOpen] = useState(view.returned !== null);
+    const returnedPlacement = placementOf(view.returned, list.located, list.page);
+    const header = columnViewState(QUERY_MAP, list);
     const [options, setOptions] = useState<OrderFilterOptions | null>(null);
     const [optionsError, setOptionsError] = useState<string | null>(null);
     useEffect(() => {
@@ -113,11 +136,18 @@ export default function OrdersList() {
         return () => controller.abort();
     }, []);
     const error = list.error ?? optionsError;
-    const { setQuery } = list;
+    const { setQuery, setSearch } = list;
     const onQueryChange = useCallback(
-        (next: Parameters<typeof columnQueryToList>[0]) => setQuery(columnQueryToList(next, QUERY_MAP)),
+        (next: Parameters<typeof columnQueryToList>[0]) => {
+            setNoticeOpen(false);
+            setQuery(columnQueryToList(next, QUERY_MAP));
+        },
         [setQuery],
     );
+    const onSearchChange = useCallback((q: string) => {
+        setNoticeOpen(false);
+        setSearch(q);
+    }, [setSearch]);
 
     const statusFilters = useMemo(() => (options?.statuses ?? []).map((status) => ({
         text: renderStatusChip(status, "order").props.children,
@@ -138,13 +168,15 @@ export default function OrdersList() {
             key: "order_code", 
             width: 120,
             sorter: true,
-            defaultSortOrder: "ascend",
+            sortOrder: header.sortOrder("order_code"),
         },
         { 
             title: "Paciente", 
             key: "patient",
             sorter: true,
+            sortOrder: header.sortOrder("patient"),
             filters: patientFilters,
+            filteredValue: header.filteredValue("patient"),
             render: (_, r) => {
                 if (!r.patient?.full_name || !r.patient?.id) return <span style={{ color: "#888" }}>—</span>;
                 return (
@@ -162,7 +194,9 @@ export default function OrdersList() {
             key: "requesting_physician",
             width: 220,
             filters: requestingPhysicianFilters.length > 0 ? requestingPhysicianFilters : undefined,
+            filteredValue: header.filteredValue("requesting_physician"),
             sorter: true,
+            sortOrder: header.sortOrder("requesting_physician"),
             render: (_: unknown, r: OrderRow) => {
                 const physicians = r.requesting_physicians ?? [];
                 if (physicians.length > 0) {
@@ -207,6 +241,7 @@ export default function OrdersList() {
                 { text: "Con Reporte", value: "true" },
                 { text: "Sin Reporte", value: "false" },
             ],
+            filteredValue: header.filteredValue("has_report"),
         },
         { 
             title: "Factura", 
@@ -241,6 +276,7 @@ export default function OrdersList() {
                 { text: "Con Factura", value: "true" },
                 { text: "Sin Factura", value: "false" },
             ],
+            filteredValue: header.filteredValue("has_invoice"),
         },
         { 
             title: "Estado", 
@@ -249,14 +285,16 @@ export default function OrdersList() {
             width: 120,
             render: (status: string) => renderStatusChip(status, "order"),
             filters: statusFilters,
-            filteredValue: statusFilter,
+            filteredValue: header.filteredValue("status"),
             sorter: true,
+            sortOrder: header.sortOrder("status"),
         },
         ...(labelFilters.length > 0 ? [{
             title: "Etiquetas",
             key: "labels",
             width: 200,
             filters: labelFilters,
+            filteredValue: header.filteredValue("labels"),
             render: (_: unknown, r: OrderRow) =>
                 r.labels && r.labels.length > 0 ? renderLabels(r.labels) : <span style={{ color: "#888", fontSize: 12 }}>—</span>,
         }] : []),
@@ -265,6 +303,7 @@ export default function OrdersList() {
             key: "assignees",
             width: 80,
             filters: assigneeFilters,
+            filteredValue: header.filteredValue("assignees"),
             render: (_: unknown, r: OrderRow) => {
                 if (!r.assignees || r.assignees.length === 0) return <span style={{ color: "#888" }}>—</span>;
                 return (
@@ -314,12 +353,27 @@ export default function OrdersList() {
                         }
                     />
                     <Card style={cardStyle}>
+                        {noticeOpen && view.returned && returnedPlacement && (
+                            <ReturnedRecordNotice
+                                subject={`La orden ${view.returned.label ?? ""}`.trim()}
+                                placement={returnedPlacement}
+                                onGoToPage={list.setPage}
+                                onOpen={() => view.returned && view.openRecord(`/orders/${view.returned.id}`, view.returned)}
+                                onClearFilters={() => {
+                                    setNoticeOpen(false);
+                                    list.replaceView({ search: "", page: 1, sort: list.sort, filters: {} });
+                                }}
+                                onDismiss={() => setNoticeOpen(false)}
+                                filtered={list.search.trim() !== "" || Object.keys(list.filters).length > 0}
+                            />
+                        )}
                         <CelumaTable
                             dataSource={list.rows}
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={list.loading}
-                            onRowClick={(record) => navigate(`/orders/${record.id}`)}
+                            rowClassName={(r) => (view.returned && r.id === view.returned.id ? "celuma-row-returned" : "")}
+                            onRowClick={(record) => view.openRecord(`/orders/${record.id}`, { id: record.id, label: record.order_code })}
                             emptyText="Sin casos"
                             searchable
                             searchPlaceholder="Buscar en órdenes"
@@ -330,7 +384,7 @@ export default function OrdersList() {
                                 pageSize: list.pageSize,
                                 onPageChange: list.setPage,
                                 search: list.search,
-                                onSearchChange: list.setSearch,
+                                onSearchChange,
                                 onQueryChange,
                             }}
                             locale={{

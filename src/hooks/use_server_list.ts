@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { validateSearchQuery } from "../lib/search";
-import type { ListPage, ListQuery, ListSort } from "../services/list_service";
+import type { ListLocation, ListPage, ListQuery, ListSort } from "../services/list_service";
 
 /**
  * State for a server-paginated `CelumaTable` (Céluma 1.4, issue #6).
@@ -15,14 +15,32 @@ import type { ListPage, ListQuery, ListSort } from "../services/list_service";
  *  - A search over the shared limits (`validateSearchQuery`) is not sent and
  *    not applied — the list shows no search, and `CelumaTable` says why —
  *    instead of being shortened or rejected by the API with a 422.
+ *
+ * Céluma 1.5 (#66): the list can START from a restored view (search, page,
+ * sort, filters — e.g. read from its URL) without resetting to page 1, can ask
+ * the API once where a returned record now is (`locate`), and can be moved to
+ * another whole view at once (`replaceView`, when the URL changes under it).
  */
 export interface UseServerListOptions<T> {
     fetchPage: (query: ListQuery, signal: AbortSignal) => Promise<ListPage<T>>;
     pageSize?: number;
     initialSort?: ListSort | null;
     initialFilters?: Record<string, string[]>;
+    /** Restored search text; applied by the first request without a debounce (Céluma 1.5). */
+    initialSearch?: string;
+    /** Restored page; kept by the first request (clamped like any page past the end). */
+    initialPage?: number;
+    /** Record id the FIRST request asks the API to locate (`locate`); its answer is `located`. */
+    locate?: string;
     /** Delay between the last keystroke and the request, in ms (default 300). */
     debounceMs?: number;
+}
+
+export interface ServerListView {
+    search: string;
+    page: number;
+    sort: ListSort | null;
+    filters: Record<string, string[]>;
 }
 
 export interface ServerListState<T> {
@@ -40,7 +58,11 @@ export interface ServerListState<T> {
     setPage: (page: number) => void;
     /** Apply a new sort and/or filter set; resets to page 1 when anything changed. */
     setQuery: (next: { sort?: ListSort | null; filters?: Record<string, string[]> }) => void;
+    /** Move to another whole view at once (no debounce, page kept as given). */
+    replaceView: (view: ServerListView) => void;
     reload: () => void;
+    /** The API's answer to `locate` (first request only); null when not asked or not answered yet. */
+    located: ListLocation | null;
 }
 
 function normalizeFilters(filters: Record<string, string[] | null | undefined>): Record<string, string[]> {
@@ -59,14 +81,17 @@ export function useServerList<T>({
     pageSize = 20,
     initialSort = null,
     initialFilters = {},
+    initialSearch = "",
+    initialPage = 1,
+    locate,
     debounceMs = 300,
 }: UseServerListOptions<T>): ServerListState<T> {
     const fetchRef = useRef(fetchPage);
     fetchRef.current = fetchPage;
 
-    const [search, setSearch] = useState("");
-    const [appliedSearch, setAppliedSearch] = useState("");
-    const [page, setPageState] = useState(1);
+    const [search, setSearch] = useState(initialSearch);
+    const [appliedSearch, setAppliedSearch] = useState(() => (validateSearchQuery(initialSearch) ? "" : initialSearch));
+    const [page, setPageState] = useState(() => Math.max(1, Math.floor(initialPage) || 1));
     const [sort, setSort] = useState<ListSort | null>(initialSort);
     const [filters, setFilters] = useState<Record<string, string[]>>(() => normalizeFilters(initialFilters));
     const [reloadToken, setReloadToken] = useState(0);
@@ -75,6 +100,9 @@ export function useServerList<T>({
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [located, setLocated] = useState<ListLocation | null>(null);
+    // Only the first request carries `locate`; later ones (user changes) do not ask again.
+    const pendingLocate = useRef<string | undefined>(locate);
 
     const current = useRef({ sort, filters });
     current.current = { sort, filters };
@@ -96,9 +124,14 @@ export function useServerList<T>({
         const requestId = ++latestRequest.current;
         const controller = new AbortController();
         setLoading(true);
-        fetchRef.current({ page, pageSize, q: appliedSearch, sort, filters }, controller.signal)
+        const askLocate = pendingLocate.current;
+        fetchRef.current({ page, pageSize, q: appliedSearch, sort, filters, ...(askLocate ? { locate: askLocate } : {}) }, controller.signal)
             .then((result) => {
                 if (requestId !== latestRequest.current) return; // superseded by a newer request
+                if (askLocate && pendingLocate.current === askLocate) {
+                    pendingLocate.current = undefined;
+                    setLocated(result.located ?? null);
+                }
                 const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
                 if (page > lastPage) {
                     setPageState(lastPage);
@@ -135,9 +168,16 @@ export function useServerList<T>({
 
     const setPage = useCallback((next: number) => setPageState(Math.max(1, next)), []);
     const reload = useCallback(() => setReloadToken((t) => t + 1), []);
+    const replaceView = useCallback((view: ServerListView) => {
+        setSearch(view.search);
+        setAppliedSearch(validateSearchQuery(view.search) ? "" : view.search);
+        setSort(view.sort);
+        setFilters(normalizeFilters(view.filters));
+        setPageState(Math.max(1, Math.floor(view.page) || 1));
+    }, []);
 
     return {
         rows, total, loading, error, page, pageSize, search, sort, filters,
-        setSearch, setPage, setQuery, reload,
+        setSearch, setPage, setQuery, replaceView, reload, located,
     };
 }

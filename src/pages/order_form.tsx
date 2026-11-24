@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useForm, useFieldArray, useWatch } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, type Path } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, Card, message } from "antd";
@@ -20,8 +20,10 @@ import { usePageTitle } from "../hooks/use_page_title";
 import { sortByLabel } from "../lib/sort";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
-import { formatHttpError } from "../lib/api_error";
-import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
+import { createRegistrationSubmission, postForAnswer } from "../lib/registration_submission";
+import { registrationProblem } from "../lib/registration_errors";
+import CelumaAlert from "../components/ui/celuma_alert";
+import { registrationNotice, type RegistrationNoticeState } from "../lib/registration_notice";
 import OrderCodeField from "../components/numbering/order_code_field";
 import SampleCodeField from "../components/numbering/sample_code_field";
 import { useSampleCodeSuggestions } from "../hooks/use_sample_code_suggestions";
@@ -33,6 +35,7 @@ import {
     MANUAL_SAMPLE_CODE_MESSAGE,
     payloadCode,
     resolveRowCode,
+    type RowCodeState,
     type SampleCodeRow,
 } from "../lib/sample_code_rows";
 import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../lib/receipt_date";
@@ -52,30 +55,6 @@ function getSessionContext() {
     const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
     const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
     return { token, tenantId, branchId };
-}
-
-async function postJSON<TReq extends object, TRes>(path: string, body: TReq, extraHeaders: Record<string, string> = {}): Promise<TRes> {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        accept: "application/json",
-        ...extraHeaders,
-    };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        credentials: "include",
-    });
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
-    if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? formatHttpError(res.status, text);
-        throw new Error(message);
-    }
-    return parsed as TRes;
 }
 
 async function getJSON<TRes>(path: string): Promise<TRes> {
@@ -98,6 +77,10 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     }
     return parsed as TRes;
 }
+
+/** Order-level fields the API may name in a refusal (Céluma 1.5, #67); sample fields are `samples.N.<field>`. */
+const ORDER_FIELDS = new Set(["branch_id", "patient_id", "requesting_physician_ids", "expediente", "study_type_id", "requested_by", "notes", "report_template_id"]);
+const SAMPLE_FIELDS = new Set(["sample_type_id", "notes", "collected_date", "received_date", "sample_code"]);
 
 /** Engineering bound shared with the API (`MAX_REQUESTING_PHYSICIANS`); not an owner decision. */
 const MAX_REQUESTING_PHYSICIANS = 10;
@@ -219,7 +202,7 @@ export default function OrderForm() {
     // Typing a code is a privileged capture (`lab:enter_manual_code`); the API enforces it too.
     const canEnterManual = hasPermission(PERMS.ENTER_MANUAL_CODE);
 
-    const { control, handleSubmit, reset, setValue, getValues } = useForm<OrderFormData>({
+    const { control, handleSubmit, reset, setValue, getValues, setError, formState: { errors } } = useForm<OrderFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -238,7 +221,10 @@ export default function OrderForm() {
     });
 
     const { fields, append, remove } = useFieldArray({ control, name: "samples" });
-    const idempotency = useMemo(() => createIdempotencySession(), []);
+    // Céluma 1.5 (#67): one idempotency key for this form until a registration succeeds, kept across
+    // corrections; an unanswered attempt is remembered so a retry never creates a second order.
+    const submission = useMemo(() => createRegistrationSubmission<UnifiedResponse, RowCodeState[]>(), []);
+    const [outcomeUnknown, setOutcomeUnknown] = useState(false);
     const watchedStudyType = useWatch({ control, name: "study_type_id" });
     const watchedBranch = useWatch({ control, name: "branch_id" });
     const watchedSamples = useWatch({ control, name: "samples" });
@@ -403,18 +389,48 @@ export default function OrderForm() {
                     sample_code: payloadCode(codeRows[i], canEnterManual),
                 })),
             };
-            // One key per logical submission: a retry of the SAME payload (timeout, lost response) reuses it
-            // and is replayed by the server; a changed payload or a success starts a new one.
-            const created = await postJSON<OrderFormData, UnifiedResponse>(
-                "/v1/laboratory/orders/unified", payload as unknown as OrderFormData,
-                { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const outcome = await submission.submit(
+                payload, postForAnswer(`${getApiBase()}/v1/laboratory/orders/unified`, token), codeStates,
             );
-            idempotency.succeeded();
-            // The real result, not the suggestion: the definitive codes the API returned.
-            message.success({ content: describeSavedCodes(codeStates, created.samples).text, duration: 8 });
+            if (outcome.kind === "unknown") {
+                setOutcomeUnknown(true);
+                return;
+            }
+            setOutcomeUnknown(false);
+            if (outcome.kind === "gone") {
+                setServerError("La orden que se registró en un intento anterior fue retirada después. Puede registrarla de nuevo con estos datos.");
+                return;
+            }
+            if (outcome.kind === "refused") {
+                const problem = registrationProblem(outcome.status, outcome.body, (field) => {
+                    const parts = field.split(".");
+                    if (parts.length === 1) return ORDER_FIELDS.has(field);
+                    return parts[0] === "samples" && Number(parts[1]) < data.samples.length && SAMPLE_FIELDS.has(parts[2] ?? "");
+                });
+                for (const f of problem.fields) {
+                    if (f.field === "report_template_id") setTemplateError(f.message);
+                    else setError(f.field as Path<OrderFormData>, { type: "server", message: f.message });
+                }
+                setServerError(problem.summary);
+                const firstRow = problem.fields.find((f) => f.row !== undefined)?.row;
+                if (firstRow !== undefined) {
+                    document.querySelector(`[data-testid="sample-row-${firstRow}"]`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                }
+                return;
+            }
+            const created = outcome.result;
+            // The real result, not the suggestion: the definitive codes the API returned, compared with what
+            // the form showed for the attempt that was saved.
+            const saved = describeSavedCodes(outcome.meta, created.samples).text;
+            // A registration resolved from an earlier attempt is said on the order itself, persistently
+            // (Céluma 1.5, #67): above all when the later corrections were not applied.
+            const notice = registrationNotice("La orden", created.order.order_code, outcome, saved);
+            if (!notice) message.success({ content: saved, duration: 8 });
             reset();
             setManualTemplateId(null);
-            navigate(`/orders/${created.order.id}`, { replace: true });
+            const state: RegistrationNoticeState | undefined = notice ? { registrationNotice: notice } : undefined;
+            navigate(`/orders/${created.order.id}`, state ? { replace: true, state } : { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
         } finally {
@@ -579,7 +595,19 @@ export default function OrderForm() {
                                 <p style={{ margin: 0, color: tokens.textSecondary, fontSize: 14 }}>Registre una o más muestras asociadas a esta orden. Elija el tipo y las fechas de recolección y recepción de cada una (la fecha de recepción es obligatoria y define el mes del código); el código de cada muestra se sugiere según el numerador y se asigna al guardar, salvo que se escriba uno propio.</p>
                                 <div style={{ display: "grid", gap: 16 }}>
                                     {fields.map((field, index) => (
-                                        <Panel key={field.id} style={{ display: "grid", gap: 16 }}>
+                                        <Panel
+                                            key={field.id}
+                                            data-testid={`sample-row-${index}`}
+                                            style={{
+                                                display: "grid",
+                                                gap: 16,
+                                                // Céluma 1.5 (#67): the row to correct stands out; its fields say what.
+                                                ...(errors.samples?.[index] ? { borderColor: "#e5484d", background: "#fff8f8" } : {}),
+                                            }}
+                                        >
+                                            <div style={{ fontWeight: 700, fontSize: 14, color: errors.samples?.[index] ? "#e5484d" : tokens.textPrimary }}>
+                                                Muestra {index + 1}{errors.samples?.[index] ? " · revise los campos marcados" : ""}
+                                            </div>
                                             <div className="of-grid-3">
                                                 <FormField
                                                     control={control}
@@ -703,6 +731,13 @@ export default function OrderForm() {
 
                             {sampleTypes.empty && <SampleTypeSetupNotice />}
                             {sampleTypes.error && <ErrorText>{sampleTypes.error}</ErrorText>}
+                            {outcomeUnknown && (
+                                <CelumaAlert
+                                    type="warning"
+                                    message="No se pudo confirmar si la orden se registró"
+                                    description="Se interrumpió la conexión o el servidor no respondió. Todos los datos capturados se conservaron. Pulse «Reintentar registro»: si la orden ya se había guardado, Céluma la mostrará sin duplicarla; si no, la registrará una sola vez. Si corrige algún dato antes, Céluma también comprobará primero el intento anterior."
+                                />
+                            )}
                             {serverError && <ErrorText>{serverError}</ErrorText>}
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -714,7 +749,7 @@ export default function OrderForm() {
                                         Cancelar
                                     </Button>
                                     <Button htmlType="submit" type="primary" loading={loading} disabled={sampleTypes.empty}>
-                                        Registrar
+                                        {outcomeUnknown ? "Reintentar registro" : "Registrar"}
                                     </Button>
                                 </div>
                             </div>

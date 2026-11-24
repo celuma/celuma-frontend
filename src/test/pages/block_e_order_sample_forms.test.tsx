@@ -46,17 +46,20 @@ vi.mock("react-router-dom", async () => {
     return { ...actual, useNavigate: () => navigateMock };
 });
 
-function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number }) {
+function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number; headers?: Record<string, string> }) {
     return {
         ok: init?.ok ?? true,
         status: init?.status ?? 200,
+        headers: new Headers(init?.headers),
         statusText: init?.ok === false ? "Bad Request" : "OK",
         json: async () => body,
         text: async () => JSON.stringify(body),
     } as unknown as Response;
 }
 
-type PostOutcome = { ok: boolean; body: unknown };
+type PostOutcome = { ok: boolean; body: unknown; status?: number; headers?: Record<string, string> };
+/** Céluma 1.5 (#67): a scripted creation — the n-th POST (1-based) gets an answer, or "drop" (no answer). */
+type PostScript = (n: number, body: unknown) => PostOutcome | "drop";
 
 /** Céluma 1.4 (#8): numbering configuration of the synthetic laboratory. Registration is always automatic. */
 function numberingConfigs(sample: { scope?: string; timezone?: string } = {}) {
@@ -92,8 +95,8 @@ type SuggestRequest = {
 };
 
 /** Routes every catalogue GET both forms make, and captures the POST. */
-function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions = {}) {
-    const posts: Array<{ url: string; body: unknown }> = [];
+function stubApi(post: PostOutcome | PostScript = { ok: true, body: {} }, opts: StubOptions = {}) {
+    const posts: Array<{ url: string; body: unknown; key?: string }> = [];
     const previews: unknown[] = [];
     const suggestionRequests: SuggestRequest[] = [];
     let release: () => void = () => undefined;
@@ -159,8 +162,11 @@ function stubApi(post: PostOutcome = { ok: true, body: {} }, opts: StubOptions =
             return jsonResponse({ order_id: ORDER_ID, sample_creation: { permitted: true, ...sc } });
         }
         if (init?.method === "POST") {
-            posts.push({ url, body: JSON.parse(String(init.body)) });
-            return jsonResponse(post.body, { ok: post.ok, status: post.ok ? 200 : 400 });
+            const body = JSON.parse(String(init.body));
+            posts.push({ url, body, key: (init.headers as Record<string, string> | undefined)?.["Idempotency-Key"] });
+            const outcome = typeof post === "function" ? post(posts.length, body) : post;
+            if (outcome === "drop") throw new TypeError("Failed to fetch");
+            return jsonResponse(outcome.body, { ok: outcome.ok, status: outcome.status ?? (outcome.ok ? 200 : 400), headers: outcome.headers });
         }
         if (url.includes("/v1/sample-types/")) {
             return jsonResponse({ sample_types: CATALOG });
@@ -1162,7 +1168,10 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         expect(second).toBe(first);
     });
 
-    it("a changed payload gets a NEW key", async () => {
+    // Céluma 1.5 (#67, ADR 0014 Amendment 1): this used to require a NEW key for a changed payload. A refused
+    // request leaves no receipt, so its correction is the same logical submission and keeps the key — which is
+    // also what lets the API detect (409) a correction made after a lost response that had in fact been saved.
+    it("a payload corrected after a refusal keeps the key of the form's submission", async () => {
         const { fetchMock } = stubApi({ ok: false, body: { detail: "x" } });
         const { container } = renderSampleForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
@@ -1173,7 +1182,8 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(creations(fetchMock)).toHaveLength(2));
         const [first, second] = creations(fetchMock).map(keyOf);
-        expect(second).not.toBe(first);
+        expect(first).toBeTruthy();
+        expect(second).toBe(first);
     });
 
     it("the unified order form sends a key too, and a success ends that logical submission", async () => {
@@ -1189,4 +1199,132 @@ describe("#8 — every creation carries an Idempotency-Key with the right lifecy
         await waitFor(() => expect(creations(fetchMock)).toHaveLength(1));
         expect(keyOf(creations(fetchMock)[0])).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
     });
+});
+
+// ── Céluma 1.5 (#67): correcting and retrying a registration without retyping ──
+
+/** These drive three sample rows of antd selects; a loaded CI machine needs more than the 5 s default. */
+const SLOW_TEST_MS = 20_000;
+
+describe("#67 — a refused or unanswered registration keeps every value and retries safely", () => {
+    const created = { order: { id: "ord-new", order_code: "HIS011026" }, samples: [
+        { sample_code: "BIO010926" }, { sample_code: "LAM010926" }, { sample_code: "BIO020926" },
+    ] };
+
+    /** A synthetic three-sample order: Biopsia, Laminilla, Biopsia. */
+    async function fillThreeSampleOrder(container: HTMLElement) {
+        await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(3));
+        await pickOption(selectByCaption(container, "Sucursal"), "MAIN");
+        await pickOption(selectByCaption(container, "Paciente"), "PAC-001");
+        await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología");
+        fireEvent.click(buttonByText(container, "Agregar otra muestra"));
+        fireEvent.click(buttonByText(container, "Agregar otra muestra"));
+        await waitFor(() => expect(container.querySelector("[data-testid=sample-row-2]")).toBeTruthy());
+        await pickOption(selectByCaption(container, "Tipo de muestra", 0), "Biopsia");
+        await pickOption(selectByCaption(container, "Tipo de muestra", 1), "Laminilla");
+        await pickOption(selectByCaption(container, "Tipo de muestra", 2), "Biopsia");
+        fireEvent.change(inputByCaption(container, "Expediente (opcional)"), { target: { value: "000123" } });
+    }
+
+    const row = (container: HTMLElement, i: number) => container.querySelector(`[data-testid=sample-row-${i}]`) as HTMLElement;
+
+    it("marks the rows and field the API names, keeps every value and retries the correction with the same key", async () => {
+        const { posts } = stubApi((n) => (n === 1
+            ? { ok: false, status: 400, body: { detail: {
+                code: "sample_type_inactive", message: "Sample type 'BIO' is inactive and cannot be used for new samples",
+                fields: ["samples.2.sample_type_id"],
+            } } }
+            : { ok: true, body: created }));
+        const { container } = renderOrderForm();
+        await fillThreeSampleOrder(container);
+
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        await waitFor(() => expect(row(container, 2).textContent).toContain("Muestra 3 · revise los campos marcados"));
+        expect(row(container, 2).textContent).toContain("Este tipo de muestra fue desactivado. Elija otro.");
+        expect(row(container, 0).textContent).not.toContain("revise");
+        expect(row(container, 1).textContent).not.toContain("revise");
+        expect(container.textContent).toContain("No se registró nada. Corrija los campos marcados (muestra 3); los demás datos se conservaron.");
+        expect(navigateMock).not.toHaveBeenCalled();
+        // Nothing was lost: the other values are still in the form.
+        expect(inputByCaption(container, "Expediente (opcional)").value).toBe("000123");
+        expect(row(container, 0).textContent).toContain("Biopsia");
+        expect(row(container, 1).textContent).toContain("Laminilla");
+
+        // (The test helper picks from the most recently opened dropdown: the refused row is the last one opened.)
+        await pickOption(selectByCaption(container, "Tipo de muestra", 2), "Tejido");
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(2));
+        const [first, second] = posts.map((p) => p.body as { samples: Array<{ sample_type_id: string }>; expediente: string });
+        expect(second.samples.map((x) => x.sample_type_id)).toEqual(["stp-bio", "stp-lam", "stp-tej"]);
+        expect({ ...second, samples: undefined }).toEqual({ ...first, samples: undefined });
+        expect(posts[1].key).toBe(posts[0].key);
+        await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/ord-new", { replace: true }));
+    }, SLOW_TEST_MS);
+
+    it("maps request-validation errors to the sample row's date", async () => {
+        const { posts } = stubApi({ ok: false, status: 422, body: { detail: [
+            { loc: ["body", "samples", 2, "received_at"], msg: "Value error, received_at is required" },
+        ] } });
+        const { container } = renderOrderForm();
+        await fillThreeSampleOrder(container);
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        await waitFor(() => expect(row(container, 2).textContent).toContain("Revise la fecha de recepción"));
+        expect(row(container, 0).textContent).not.toContain("Revise la fecha");
+    }, SLOW_TEST_MS);
+
+    it("after a network interruption it says the outcome is unknown and the retry resends the same payload and key", async () => {
+        const { posts } = stubApi((n) => (n === 1 ? "drop" : { ok: true, body: created, headers: { "Idempotent-Replayed": "true" } }));
+        const { container } = renderOrderForm();
+        await fillThreeSampleOrder(container);
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(1));
+        await waitFor(() => expect(container.textContent).toContain("No se pudo confirmar si la orden se registró"));
+        expect(buttonByText(container, "Reintentar registro")).toBeTruthy();
+        expect(inputByCaption(container, "Expediente (opcional)").value).toBe("000123");
+
+        fireEvent.click(buttonByText(container, "Reintentar registro"));
+        await waitFor(() => expect(posts).toHaveLength(2));
+        expect(posts[1].body).toEqual(posts[0].body);
+        expect(posts[1].key).toBe(posts[0].key);
+        // The order page says it was not duplicated (a persistent notice, not a toast).
+        await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/ord-new", {
+            replace: true,
+            state: { registrationNotice: expect.objectContaining({ kind: "replayed", title: expect.stringContaining("no se duplicó") }) },
+        }));
+    }, SLOW_TEST_MS);
+
+    it("a correction after a lost response is detected and the order already saved is shown, never a second one", async () => {
+        let saved: unknown = null;
+        const { posts } = stubApi((n, body) => {
+            if (n === 1) {
+                saved = body; // the server committed, but the response was lost on the way back
+                return "drop";
+            }
+            if (JSON.stringify(body) !== JSON.stringify(saved)) {
+                return { ok: false, status: 409, body: { detail: { code: "idempotency_key_reused", message: "reused" } } };
+            }
+            return { ok: true, body: created, headers: { "Idempotent-Replayed": "true" } };
+        });
+        const { container } = renderOrderForm();
+        await fillThreeSampleOrder(container);
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(container.textContent).toContain("No se pudo confirmar si la orden se registró"));
+
+        fireEvent.change(inputByCaption(container, "Expediente (opcional)"), { target: { value: "000124" } });
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(posts).toHaveLength(3));
+        expect((posts[1].body as { expediente: string }).expediente).toBe("000124");
+        expect(posts[2].body).toEqual(posts[0].body); // the saved attempt, replayed
+        expect(new Set(posts.map((p) => p.key)).size).toBe(1);
+        await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/orders/ord-new", {
+            replace: true,
+            state: { registrationNotice: expect.objectContaining({
+                kind: "recovered",
+                title: expect.stringContaining("ya se había registrado en un intento anterior"),
+                text: expect.stringContaining("no se aplicaron"),
+            }) },
+        }));
+    }, SLOW_TEST_MS);
 });

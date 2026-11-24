@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import ListReturnLink from "../components/lists/list_return_link";
+import RegistrationNotice from "../components/order/registration_notice";
+import { useCarriedReturnState } from "../hooks/use_carried_return_state";
 import type { OrderReportTemplateSelection } from "../models/report_letterhead";
 import { TEMPLATE_SOURCE_LABEL } from "../lib/report_template_suggestion";
 import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
@@ -177,6 +180,8 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; 
 
 export default function OrderDetail() {
     const navigate = useNavigate();
+    // Céluma 1.5 (#66): opened from a list → "Volver a …" and related records keep that return.
+    const carriedReturn = useCarriedReturnState();
     const { pathname } = useLocation();
     const { orderId } = useParams();
 
@@ -584,12 +589,15 @@ export default function OrderDetail() {
         try {
             const res = await removeOrder(orderId, reason);
             message.success(`Orden ${res.code} retirada. El código no se reutilizará.`);
-            navigate("/orders", { replace: true });
+            // Céluma 1.5 (#66): back to the list it was opened from, as it was (it then says the order is gone).
+            const ret = carriedReturn?.celumaReturn;
+            if (ret) navigate(ret.url, { replace: true, state: { celumaRestore: ret.listKey } });
+            else navigate("/orders", { replace: true });
         } catch (err) {
             setRemoveError(getErrorMessage(err));
             setRemoving(false);
         }
-    }, [orderId, navigate]);
+    }, [orderId, navigate, carriedReturn]);
 
     // Handle navigation to samples tab
     const handleGoToSamples = useCallback(() => {
@@ -672,7 +680,7 @@ export default function OrderDetail() {
                         return (
                             <div
                                 key={sample.id}
-                                onClick={() => navigate(`/samples/${sample.id}`)}
+                                onClick={() => navigate(`/samples/${sample.id}`, { state: carriedReturn })}
                                 style={{
                                     padding: "14px 16px",
                                     cursor: "pointer",
@@ -1061,6 +1069,9 @@ export default function OrderDetail() {
                         .od-timeline .ant-timeline-item-head { background: transparent; }
                     `}</style>
 
+                    <ListReturnLink />
+                    <RegistrationNotice />
+
                     {/* Main Grid Layout */}
                     <div className="order-detail-grid">
                         {/* Left Column - Main Content */}
@@ -1354,7 +1365,7 @@ export default function OrderDetail() {
                                                         href={`/samples/${sampleId}`}
                                                         onClick={(e) => {
                                                             e.preventDefault();
-                                                            navigate(`/samples/${sampleId}`);
+                                                            navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                         }}
                                                         style={{
                                                             color: "#49b6ad",
@@ -1510,7 +1521,7 @@ export default function OrderDetail() {
                                                                     href={`/samples/${sampleId}`}
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
-                                                                        navigate(`/samples/${sampleId}`);
+                                                                        navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                     }}
                                                                     style={{
                                                                         color: "#49b6ad",
@@ -1547,7 +1558,7 @@ export default function OrderDetail() {
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
                                                                 e.preventDefault();
-                                                                navigate(`/samples/${sampleId}`);
+                                                                navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                             }}
                                                             style={{
                                                                 color: "#49b6ad",
@@ -1568,7 +1579,7 @@ export default function OrderDetail() {
                                                             href={`/samples/${sampleId}`}
                                                             onClick={(e) => {
                                                                 e.preventDefault();
-                                                                navigate(`/samples/${sampleId}`);
+                                                                navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                             }}
                                                             style={{
                                                                 color: "#49b6ad",
@@ -1940,7 +1951,7 @@ export default function OrderDetail() {
                                                                             href={`/samples/${sampleId}`}
                                                                             onClick={(e) => {
                                                                                 e.preventDefault();
-                                                                                navigate(`/samples/${sampleId}`);
+                                                                                navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                             }}
                                                                             style={{
                                                                                 color: "#49b6ad",
@@ -1975,7 +1986,7 @@ export default function OrderDetail() {
                                                                             href={`/samples/${sampleId}`}
                                                                             onClick={(e) => {
                                                                                 e.preventDefault();
-                                                                                navigate(`/samples/${sampleId}`);
+                                                                                navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                             }}
                                                                             style={{
                                                                                 color: "#49b6ad",
@@ -2009,7 +2020,7 @@ export default function OrderDetail() {
                                                                             href={`/samples/${sampleId}`}
                                                                             onClick={(e) => {
                                                                                 e.preventDefault();
-                                                                                navigate(`/samples/${sampleId}`);
+                                                                                navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                             }}
                                                                             style={{
                                                                                 color: "#49b6ad",
@@ -2141,7 +2152,7 @@ export default function OrderDetail() {
                                                                         href={`/samples/${sampleId}`}
                                                                         onClick={(e) => {
                                                                             e.preventDefault();
-                                                                            navigate(`/samples/${sampleId}`);
+                                                                            navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                         }}
                                                                         style={{
                                                                             color: "#49b6ad",
@@ -2196,7 +2207,7 @@ export default function OrderDetail() {
                                                                         href={`/samples/${sampleId}`}
                                                                         onClick={(e) => {
                                                                             e.preventDefault();
-                                                                            navigate(`/samples/${sampleId}`);
+                                                                            navigate(`/samples/${sampleId}`, { state: carriedReturn });
                                                                         }}
                                                                         style={{
                                                                             color: "#49b6ad",

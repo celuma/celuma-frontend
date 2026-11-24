@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, type Path } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, Card, message } from "antd";
@@ -18,7 +18,10 @@ import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import { useOrderManagement } from "../hooks/use_capture_management";
 import BlockersNotice from "../components/management/blockers_notice";
-import { createIdempotencySession, IDEMPOTENCY_HEADER } from "../lib/idempotency";
+import { createRegistrationSubmission, postForAnswer } from "../lib/registration_submission";
+import { registrationProblem } from "../lib/registration_errors";
+import CelumaAlert from "../components/ui/celuma_alert";
+import { registrationNotice, type RegistrationNoticeState } from "../lib/registration_notice";
 import SampleCodeField from "../components/numbering/sample_code_field";
 import { useSampleCodeSuggestions } from "../hooks/use_sample_code_suggestions";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -29,10 +32,10 @@ import {
     MANUAL_SAMPLE_CODE_MESSAGE,
     payloadCode,
     resolveRowCode,
+    type RowCodeState,
     type SampleCodeRow,
 } from "../lib/sample_code_rows";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
-import { formatHttpError } from "../lib/api_error";
 import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../lib/receipt_date";
 import { DEFAULT_NUMBERING_ZONE, receiptZone, todayInZone } from "../lib/receipt_today";
 import { useSampleNumberingZone } from "../hooks/use_sample_numbering_zone";
@@ -46,30 +49,6 @@ function getSessionContext() {
     const tenantId = localStorage.getItem("tenant_id") || sessionStorage.getItem("tenant_id") || "";
     const branchId = localStorage.getItem("branch_id") || sessionStorage.getItem("branch_id") || "";
     return { token, tenantId, branchId };
-}
-
-async function postJSON<TReq extends object, TRes>(path: string, body: TReq, extraHeaders: Record<string, string> = {}): Promise<TRes> {
-    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        accept: "application/json",
-        ...extraHeaders,
-    };
-    if (token) headers["Authorization"] = token;
-    const res = await fetch(`${getApiBase()}${path}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        credentials: "include",
-    });
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
-    if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? formatHttpError(res.status, text);
-        throw new Error(message);
-    }
-    return parsed as TRes;
 }
 
 async function getJSON<TRes>(path: string): Promise<TRes> {
@@ -145,6 +124,9 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     </h3>
 );
 
+/** Fields the API may name in a refusal of a standalone sample (Céluma 1.5, #67). */
+const SAMPLE_FORM_FIELDS = new Set(["branch_id", "order_id", "sample_type_id", "notes", "collected_date", "received_date", "sample_code"]);
+
 /**
  * SampleForm — registers a single sample against an existing order
  * (`POST /v1/laboratory/samples/`).
@@ -170,7 +152,9 @@ export default function SampleForm() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string; timezone?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const sampleTypes = useActiveSampleTypes();
-    const idempotency = useMemo(() => createIdempotencySession(), []);
+    // Céluma 1.5 (#67): one key for this form until a registration succeeds (see order_form.tsx).
+    const submission = useMemo(() => createRegistrationSubmission<CreateSampleResponse, RowCodeState[]>(), []);
+    const [outcomeUnknown, setOutcomeUnknown] = useState(false);
 
     const prefilledOrderId = useMemo(() => {
         const qs = new URLSearchParams(search);
@@ -180,7 +164,7 @@ export default function SampleForm() {
     const { hasPermission } = useUserProfile();
     const canEnterManual = hasPermission(PERMS.ENTER_MANUAL_CODE);
 
-    const { control, handleSubmit, reset, setValue, getValues } = useForm<SampleFormData>({
+    const { control, handleSubmit, reset, setValue, getValues, setError } = useForm<SampleFormData>({
         resolver: zodResolver(schema),
         defaultValues: {
             tenant_id: session.tenantId,
@@ -275,14 +259,32 @@ export default function SampleForm() {
                 received_at: data.received_date,
                 sample_code: payloadCode(codeRows[0], canEnterManual),
             };
-            const created = await postJSON<SampleFormData, CreateSampleResponse>(
-                "/v1/laboratory/samples/", payload as unknown as SampleFormData, { [IDEMPOTENCY_HEADER]: idempotency.keyFor(payload) },
-            );
-            idempotency.succeeded();
+            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+            const outcome = await submission.submit(payload, postForAnswer(`${getApiBase()}/v1/laboratory/samples/`, token), [codeState]);
+            if (outcome.kind === "unknown") {
+                setOutcomeUnknown(true);
+                return;
+            }
+            setOutcomeUnknown(false);
+            if (outcome.kind === "gone") {
+                setServerError("La muestra que se registró en un intento anterior fue retirada después. Puede registrarla de nuevo con estos datos.");
+                return;
+            }
+            if (outcome.kind === "refused") {
+                const problem = registrationProblem(outcome.status, outcome.body, (field) => SAMPLE_FORM_FIELDS.has(field));
+                for (const f of problem.fields) setError(f.field as Path<SampleFormData>, { type: "server", message: f.message });
+                setServerError(problem.summary);
+                reloadOrderManagement(); // a refused (stale) request refreshes what the form offers
+                return;
+            }
+            const created = outcome.result;
             // The real result, not the suggestion: the definitive code the API returned.
-            message.success({ content: describeSavedCodes([codeState], [created]).text, duration: 8 });
+            const saved = describeSavedCodes(outcome.meta, [created]).text;
+            const notice = registrationNotice("La muestra", created.sample_code ?? "", outcome, saved);
+            if (!notice) message.success({ content: saved, duration: 8 });
             reset();
-            navigate(`/samples/${created.id}`, { replace: true });
+            const state: RegistrationNoticeState | undefined = notice ? { registrationNotice: notice } : undefined;
+            navigate(`/samples/${created.id}`, state ? { replace: true, state } : { replace: true });
         } catch (err) {
             setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
             reloadOrderManagement(); // a refused (stale) request refreshes what the form offers
@@ -473,6 +475,13 @@ export default function SampleForm() {
                             )}
                             {sampleTypes.empty && <SampleTypeSetupNotice />}
                             {sampleTypes.error && <ErrorText>{sampleTypes.error}</ErrorText>}
+                            {outcomeUnknown && (
+                                <CelumaAlert
+                                    type="warning"
+                                    message="No se pudo confirmar si la muestra se registró"
+                                    description="Se interrumpió la conexión o el servidor no respondió. Los datos capturados se conservaron. Pulse «Reintentar registro»: si la muestra ya se había guardado, Céluma la mostrará sin duplicarla."
+                                />
+                            )}
                             {serverError && <ErrorText>{serverError}</ErrorText>}
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -484,7 +493,7 @@ export default function SampleForm() {
                                         Cancelar
                                     </Button>
                                     <Button htmlType="submit" type="primary" loading={loading} disabled={sampleTypes.empty || creationBlocked}>
-                                        Registrar
+                                        {outcomeUnknown ? "Reintentar registro" : "Registrar"}
                                     </Button>
                                 </div>
                             </div>
