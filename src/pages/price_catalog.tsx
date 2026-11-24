@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useForm } from "react-hook-form";
@@ -21,7 +21,8 @@ import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
 import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
-import { sortByLabel } from "../lib/sort";
+import { catalogTypeOptions, withCurrentValue } from "../lib/catalog_type_options";
+import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
 import type { ColumnsType } from "antd/es/table";
 
 const priceSchema = z.object({
@@ -146,6 +147,16 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+
+    // Céluma 1.5 (#69): stable alphabetical order, search by name or code, complete names.
+    // Only active study types are offered, as before; a price being edited whose study type
+    // is no longer active keeps it readable as a disabled option instead of a raw id.
+    const editingStudyType = prices.find((price) => price.id === editingId)?.study_type;
+    const studyTypeOptions = useMemo(
+        () => withCurrentValue(catalogTypeOptions(studyTypes), editingStudyType),
+        [studyTypes, editingStudyType],
+    );
+    const studyTypeSelect = useMemo(() => catalogTypeSelectProps(studyTypeOptions), [studyTypeOptions]);
 
     const { control, handleSubmit, reset } = useForm<PriceFormData>({
         resolver: zodResolver(priceSchema),
@@ -368,12 +379,9 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
                                 value={typeof p.value === "string" ? p.value : undefined}
                                 onChange={(v) => p.onChange(v ?? "")}
                                 placeholder="Seleccionar tipo de estudio"
-                                // C-003: alphabetical by the label the user actually scans —
-                                // here "{code} - {name}" — not by API order.
-                                options={sortByLabel(
-                                    studyTypes.map((st) => ({ value: st.id, label: `${st.code} - ${st.name}` })),
-                                    (option) => option.label,
-                                )}
+                                // C-003 / #69: alphabetical by name, then code — not by API order.
+                                options={studyTypeOptions}
+                                selectProps={studyTypeSelect}
                                 showSearch
                                 error={p.error}
                             />

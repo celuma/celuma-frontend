@@ -16,6 +16,8 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
+import { catalogTypeOptions } from "../lib/catalog_type_options";
+import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
 import { useOrderManagement } from "../hooks/use_capture_management";
 import BlockersNotice from "../components/management/blockers_notice";
 import { createRegistrationSubmission, postForAnswer } from "../lib/registration_submission";
@@ -152,6 +154,10 @@ export default function SampleForm() {
     const [branches, setBranches] = useState<Array<{ id: string; name?: string; code?: string; timezone?: string }>>([]);
     const [loadingBranches, setLoadingBranches] = useState(false);
     const sampleTypes = useActiveSampleTypes();
+    // Céluma 1.5 (#69): stable alphabetical order, search by name or code, complete names.
+    // Eligibility is unchanged: only active sample types are offered.
+    const sampleTypeOptions = useMemo(() => catalogTypeOptions(sampleTypes.types), [sampleTypes.types]);
+    const sampleTypeSelect = useMemo(() => catalogTypeSelectProps(sampleTypeOptions), [sampleTypeOptions]);
     // Céluma 1.5 (#67): one key for this form until a registration succeeds (see order_form.tsx).
     const submission = useMemo(() => createRegistrationSubmission<CreateSampleResponse, RowCodeState[]>(), []);
     const [outcomeUnknown, setOutcomeUnknown] = useState(false);
@@ -420,7 +426,8 @@ export default function SampleForm() {
                                                 value={typeof p.value === "string" && p.value ? p.value : undefined}
                                                 onChange={(val) => p.onChange(val ?? "")}
                                                 placeholder="Seleccione el tipo de muestra"
-                                                options={sampleTypes.types.map((t) => ({ value: t.id, label: t.name }))}
+                                                options={sampleTypeOptions}
+                                                selectProps={sampleTypeSelect}
                                                 showSearch
                                                 loading={sampleTypes.loading}
                                                 disabled={sampleTypes.empty}

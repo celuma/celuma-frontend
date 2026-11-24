@@ -153,7 +153,9 @@ async function fillOrder(container: HTMLElement, sampleTypes: string[]) {
     await pickOption(selectByCaption(container, "Tipo de estudio"), "Histopatología (HIS)");
     for (const [i, name] of sampleTypes.entries()) {
         if (i > 0) fireEvent.click(screen.getByText("Agregar otra muestra"));
-        await pickOption(selectByCaption(container, "Tipo de muestra", i), name);
+        // Céluma 1.5 (#69): sample-type options read "Nombre (CÓDIGO)", like study types.
+        const code = SAMPLE_TYPES.find((t) => t.name === name)?.code;
+        await pickOption(selectByCaption(container, "Tipo de muestra", i), `${name} (${code})`);
         await setReceived(container, i);
     }
 }
@@ -181,7 +183,7 @@ describe("unified registration — report template", () => {
         await pickOption(selectByCaption(container, "Plantilla del reporte"), T.cit.name);
         expect(help()).toMatch(/Elegida para esta orden/);
         // The sample type changes (another default): the deliberate choice is not overwritten.
-        await pickOption(selectByCaption(container, "Tipo de muestra"), "Tejido");
+        await pickOption(selectByCaption(container, "Tipo de muestra"), "Tejido (TEJ)");
         expect(shownTemplate(container)).toBe(T.cit.name);
         expect(help()).toMatch(/Sin esta elección se usaría Plantilla Tejido \(sugerida por el tipo de muestra\)/);
 

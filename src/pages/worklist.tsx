@@ -16,7 +16,7 @@ import {
 import SidebarCeluma from "../components/ui/sidebar_menu";
 import PageHeader from "../components/ui/page_header";
 import logo from "../images/celuma-isotipo.png";
-import { tokens, cardStyle } from "../components/design/tokens";
+import { tokens, cardStyle, listPageColumnStyle } from "../components/design/tokens";
 import { getMyWorklist, type WorklistItem, type WorklistResponse } from "../services/worklist_service";
 import { matchesQuery, validateSearchQuery } from "../lib/search";
 import { CelumaTable } from "../components/ui/table";
@@ -367,7 +367,7 @@ function Worklist() {
                 logoSrc={logo}
             />
             <Layout.Content style={{ padding: tokens.contentPadding, background: tokens.bg, fontFamily: tokens.textFont }}>
-                <div style={{ maxWidth: tokens.maxWidth, margin: "0 auto", display: "grid", gap: tokens.gap }}>
+                <div style={listPageColumnStyle}>
                     <PageHeader title="Mi Lista de Trabajo" subtitle="Tus asignaciones y revisiones pendientes" />
                     <Card style={cardStyle}>
                         {noticeOpen && listView.returned && returnedPlacement && (

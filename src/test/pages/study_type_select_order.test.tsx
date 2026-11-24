@@ -14,10 +14,11 @@
  * These tests feed a deliberately unsorted catalogue and assert the rendered
  * option order. They fail against the pre-fix pages.
  *
- * Note the two screens compose their visible label differently — "name (code)"
- * when registering an order, "code - name" when adding a price — so the
- * *expected* order differs between them. That is the point: each dropdown is
- * alphabetical by the string the user actually scans, not by some hidden key.
+ * Céluma 1.5 (#69) unified both screens on the shared catalog-type options
+ * (`src/lib/catalog_type_options.ts`): each option shows the complete name with
+ * its code, "name (code)", and both dropdowns are alphabetical by that name
+ * (then code). Before #69 the price screen showed "code - name" and was
+ * therefore ordered by code; that ordering is retired on purpose.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, waitFor } from "@testing-library/react";
@@ -45,22 +46,13 @@ const UNSORTED_STUDY_TYPES = [
     { id: "st-eco", code: "NNN", name: "ecografía mamaria", is_active: true },
 ];
 
-/** "{name} ({code})" — what `order_form.tsx` shows. */
+/** "{name} ({code})" — what `order_form.tsx` and `price_catalog.tsx` show. */
 const EXPECTED_BY_NAME = [
     "anatomía patológica (MMM)",
     "Citología Urinaria (ZZZ)",
     "ecografía mamaria (NNN)",
     "Épsilon Dérmico (BBB)",
     "Zeta Histológica (AAA)",
-];
-
-/** "{code} - {name}" — what `price_catalog.tsx` shows. */
-const EXPECTED_BY_CODE = [
-    "AAA - Zeta Histológica",
-    "BBB - Épsilon Dérmico",
-    "MMM - anatomía patológica",
-    "NNN - ecografía mamaria",
-    "ZZZ - Citología Urinaria",
 ];
 
 function jsonResponse(body: unknown) {
@@ -196,9 +188,9 @@ describe("C-003 — add price: study options are alphabetical", () => {
 
         const options = await openSelectAndReadOptions(studySelect(document.body));
 
-        expect(options).toEqual(EXPECTED_BY_CODE);
+        expect(options).toEqual(EXPECTED_BY_NAME);
         expect(options).not.toEqual(
-            UNSORTED_STUDY_TYPES.map((st) => `${st.code} - ${st.name}`)
+            UNSORTED_STUDY_TYPES.map((st) => `${st.name} (${st.code})`)
         );
         expect(container).toBeTruthy();
     });
@@ -217,7 +209,7 @@ describe("C-003 — add price: study options are alphabetical", () => {
 
         await openSelectAndReadOptions(studySelect(document.body));
         const target = Array.from(document.querySelectorAll(".ant-select-item-option")).find(
-            (option) => option.textContent?.includes("MMM - anatomía patológica")
+            (option) => option.textContent?.trim() === "anatomía patológica (MMM)"
         );
         fireEvent.click(target!);
 
