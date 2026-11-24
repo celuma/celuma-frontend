@@ -11,7 +11,7 @@ import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import PageHeader from "../components/ui/page_header";
 import { CelumaTable } from "../components/ui/table";
-import { PatientCell, renderStatusChip, renderLabels, getInitials, getAvatarColor } from "../components/ui/table_helpers";
+import { PatientCell, renderStatusChip, renderLabels, renderSampleCodes, getInitials, getAvatarColor } from "../components/ui/table_helpers";
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
@@ -48,6 +48,8 @@ type OrdersListResponse = {
         report_id?: string | null;
         invoice_id?: string | null;
         sample_count: number;
+        /** Codes of the order's visible samples, in sample-code order; [] without samples (Céluma 1.5, #80). */
+        sample_codes?: string[];
         has_report: boolean;
         has_invoice: boolean;
         labels?: Array<{ id: string; name: string; color: string }>;
@@ -169,6 +171,13 @@ export default function OrdersList() {
             width: 120,
             sorter: true,
             sortOrder: header.sortOrder("order_code"),
+        },
+        // Céluma 1.5 (#80): every visible sample's code; the server search also matches each one.
+        {
+            title: "Códigos de muestra",
+            key: "sample_codes",
+            width: 220,
+            render: (_: unknown, r: OrderRow) => renderSampleCodes(r.sample_codes),
         },
         { 
             title: "Paciente", 

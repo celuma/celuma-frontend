@@ -349,6 +349,41 @@ export const renderInvoiceStatusChip = (status: string) => {
 };
 
 /**
+ * Céluma 1.5 (#80): the codes of an order's samples, one compact chip per code,
+ * wrapping onto as many lines as needed so every code stays visible (a search
+ * may have matched any of them). An order without samples shows "Sin muestras".
+ */
+export const renderSampleCodes = (codes: readonly string[] | null | undefined) => {
+    if (!codes || codes.length === 0) {
+        return <span style={{ color: "#888", fontSize: 12 }}>Sin muestras</span>;
+    }
+    return (
+        <ul
+            aria-label="Códigos de muestra"
+            style={{ display: "flex", flexWrap: "wrap", gap: 4, listStyle: "none", margin: 0, padding: 0 }}
+        >
+            {codes.map((code, index) => (
+                <li
+                    // A corrected capture may repeat a code: the index keeps keys unique.
+                    key={`${code}-${index}`}
+                    style={{
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        background: "#f1f5f9",
+                        color: "#0d1b2a",
+                        fontSize: 12,
+                        fontVariantNumeric: "tabular-nums",
+                        whiteSpace: "nowrap",
+                    }}
+                >
+                    {code}
+                </li>
+            ))}
+        </ul>
+    );
+};
+
+/**
  * Renders labels as chips (only own labels, not inherited)
  */
 export const renderLabels = (
