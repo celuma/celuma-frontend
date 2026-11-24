@@ -120,6 +120,12 @@ function mockDefaults(overrides: Partial<OrderReportDefaults> = {}) {
     } as OrderReportDefaults);
 }
 
+/** The first test of this file pays the editor's cold first mount (≈ 0.4 s in isolation, 1.1–1.5 s on
+ * CI under the full suite), so Testing Library's 1 s default `waitFor` is too short there. This is
+ * not product slowness: no timer sits on the path, only first-render work. Same convention as
+ * `SLOW` in report_editor_spelling.test.tsx; kept within Vitest's 5 s test timeout. */
+const EDITOR_MOUNT_TIMEOUT = { timeout: 5000 };
+
 function renderEditor() {
     return render(
         <MemoryRouter initialEntries={[`/reports/new?orderId=${ORDER_ID}`]}>
@@ -155,7 +161,7 @@ describe("ReportEditor — V2 startup (issue F)", () => {
         // V2 mounted with the resolved presentation, not Legacy.
         await waitFor(() => {
             expect(document.body.textContent).toContain("Laboratorio Del Membrete");
-        });
+        }, EDITOR_MOUNT_TIMEOUT);
         expect(screen.getByTestId("letterhead-resolution-source").textContent)
             .toContain("Predeterminado del laboratorio");
     });
