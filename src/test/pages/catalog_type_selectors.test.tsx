@@ -65,6 +65,15 @@ function stubApi(prices: unknown[] = []): Calls {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         calls.urls.push(url);
+        // The numbering preview is a read-only POST: answer it before the generic write echo, or the
+        // component gets a preview without `valid`/`errors` once its 350 ms debounce fires (PR #128 CI).
+        if (url.includes("/v1/numbering/preview")) {
+            return json({
+                entity_kind: "sample", valid: true, errors: [], format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2, scheme: "monthly",
+                timezone: "America/Mexico_City", period_year: 2026, period_month: 11, base_code: "BPC",
+                examples: [{ sequence: 1, code: "BPC011126" }], estimate: { sequence: 1, code: "BPC011126", reserved: false, skipped_occupied: 0 }, notice: "n",
+            });
+        }
         if (init?.method && init.method !== "GET") {
             const body = init.body ? JSON.parse(String(init.body)) : {};
             calls.writes.push({ url, method: init.method, body });
@@ -76,13 +85,6 @@ function stubApi(prices: unknown[] = []): Calls {
                 start_value: 1, scope: "tenant", timezone: "America/Mexico_City", is_default: true, registration: "automatic", legacy_manual_policy: false,
             });
             return json({ order: cfg("order"), sample: cfg("sample") });
-        }
-        if (url.includes("/v1/numbering/preview")) {
-            return json({
-                entity_kind: "sample", valid: true, errors: [], format: "{BASE}{SEQ}{MM}{YY}", sequence_min_width: 2, scheme: "monthly",
-                timezone: "America/Mexico_City", period_year: 2026, period_month: 11, base_code: "BPC",
-                examples: [{ sequence: 1, code: "BPC011126" }], estimate: { sequence: 1, code: "BPC011126", reserved: false, skipped_occupied: 0 }, notice: "n",
-            });
         }
         if (url.includes("/v1/numbering/")) return json({});
         if (url.includes("/v1/sample-types/")) {
