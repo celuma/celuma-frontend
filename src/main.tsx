@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import { App as AntApp, ConfigProvider } from "antd";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+    createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider,
+} from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import CelumaNotificationProxy from "./components/ui/celuma_notification_proxy";
@@ -57,33 +59,14 @@ import RequirePermission from "./components/auth/require_permission";
 import RequireAuth from "./components/auth/require_auth";
 import InternalReportRender from "./components/report/internal_report_render";
 import NotificationsPage from "./pages/notifications";
-import { NotificationProvider } from "./providers/notification_provider";
+import RootLayout from "./components/layout/root_layout";
 
-createRoot(document.getElementById("root")!).render(
-    <ConfigProvider theme={{
-        token: {
-            colorPrimary: "#49b6ad",
-            colorLink: "#49b6ad",
-            colorLinkHover: "#3da8a0",
-            borderRadius: 8,
-        },
-        components: {
-            Button: { borderRadius: 8 },
-            Menu: { darkItemBg: "transparent", darkItemSelectedBg: "rgba(255,255,255,0.22)" },
-        },
-    }}>
-    <AntApp>
-        <CelumaNotificationProxy />
-        <BrowserRouter>
-        {/* Céluma 1.3 Phase 3, Block C. The single owner of Notification Center
-            state — unread count, recent items and the one polling interval.
-            Mounted here, above <Routes>, rather than inside SidebarCeluma:
-            every page renders its own sidebar, so state living there would be
-            torn down and re-polled on every navigation. Public routes are
-            inside it too, harmlessly — it polls only while a session token is
-            stored, so the login screen makes no notification request. */}
-        <NotificationProvider>
-        <Routes>
+// Céluma 1.5 (#68): a data router, so the report editor can block in-app
+// navigation while it holds unsaved edits (`useBlocker` only works under
+// `RouterProvider`). The route tree is unchanged under the root layout.
+const router = createBrowserRouter(
+    createRoutesFromElements(
+        <Route element={<RootLayout />}>
             {/* Public routes */}
             <Route path="/" element={<App />} />
             <Route path="/login" element={<Login />} />
@@ -196,9 +179,26 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/study-types" element={<RequirePermission permission="lab:read"><StudyTypes /></RequirePermission>} />
             <Route path="/report-templates" element={<RequirePermission permission="lab:read"><ReportTemplates /></RequirePermission>} />
             <Route path="/users" element={<RequirePermission permission="admin:manage_users"><UsersManagement /></RequirePermission>} />
-        </Routes>
-        </NotificationProvider>
-        </BrowserRouter>
+        </Route>,
+    ),
+);
+
+createRoot(document.getElementById("root")!).render(
+    <ConfigProvider theme={{
+        token: {
+            colorPrimary: "#49b6ad",
+            colorLink: "#49b6ad",
+            colorLinkHover: "#3da8a0",
+            borderRadius: 8,
+        },
+        components: {
+            Button: { borderRadius: 8 },
+            Menu: { darkItemBg: "transparent", darkItemSelectedBg: "rgba(255,255,255,0.22)" },
+        },
+    }}>
+    <AntApp>
+        <CelumaNotificationProxy />
+        <RouterProvider router={router} />
     </AntApp>
     </ConfigProvider>
 );
