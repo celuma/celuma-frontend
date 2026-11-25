@@ -46,6 +46,7 @@ import type { SampleTypeRef } from "../models/sample_type";
 import { getInitials, getAvatarColor, formatLocalDateTime, renderUserMention } from "../components/comments/comment_utils";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
+import { automaticSampleStateSuffix } from "../lib/sample_state_trigger";
 
 // Predefined label colors (same as in LabelsSection)
 const LABEL_COLORS = [
@@ -422,7 +423,7 @@ export default function SampleDetailPage() {
                 const newState = meta.new_state as string;
                 const oldConfig = SAMPLE_STATE_CONFIG[oldState] || { color: "#6b7280", bg: "#f3f4f6", label: oldState, icon: null };
                 const newConfig = SAMPLE_STATE_CONFIG[newState] || { color: "#6b7280", bg: "#f3f4f6", label: newState, icon: null };
-                const trigger = meta.trigger === "first_image_upload" ? " (automático)" : "";
+                const trigger = automaticSampleStateSuffix(meta.trigger);
                 
                 return (
                     <span>
