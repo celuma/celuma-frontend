@@ -8,6 +8,7 @@ import RemoveCaptureDialog from "../components/management/remove_capture_dialog"
 import { useOrderManagement } from "../hooks/use_capture_management";
 import { removeOrder } from "../services/order_management_service";
 import { getErrorMessage, formatHttpError } from "../lib/api_error";
+import { blockerMessage } from "../lib/management_blockers";
 import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import {
     ReloadOutlined, FilePdfOutlined,
@@ -663,7 +664,7 @@ export default function OrderDetail() {
                         icon={<PlusOutlined />}
                         disabled={management?.sample_creation?.allowed === false}
                         title={management?.sample_creation?.allowed === false
-                            ? (management.sample_creation.blockers[0]?.message ?? "No se pueden agregar muestras ahora.")
+                            ? (management.sample_creation.blockers[0] ? blockerMessage(management.sample_creation.blockers[0]) : "No se pueden agregar muestras ahora.")
                             : undefined}
                         data-testid="add-sample"
                         onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}

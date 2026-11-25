@@ -98,7 +98,7 @@ import { getInitials, getAvatarColor } from "../comments/comment_utils";
 import CommentInput from "../comments/comment_input";
 import { useUserProfile } from "../../hooks/use_user_profile";
 import { PERMS } from "../../lib/rbac";
-import { getErrorMessage, formatHttpError, spanishOr } from "../../lib/api_error";
+import { getErrorMessage, formatHttpError, sanitizeErrorMessage, spanishOr } from "../../lib/api_error";
 import { reviewSubmissionPrecheck, type ReviewBlocker } from "../../lib/review_submission";
 import ReviewSubmissionBlockers from "./review_submission_blockers";
 
@@ -431,9 +431,9 @@ const ReportEditor: React.FC = () => {
     // version is current, so the editor reloads (reloadToken) afterwards.
     const [reloadToken, setReloadToken] = useState(0);
     const [amendmentNote, setAmendmentNote] = useState("");
-    // Céluma 1.5 (#65): the server's refusal of the last submission, tied to the version it refused.
-    // Saving creates a new version, so a refusal that saving fixes disappears by itself.
-    const [submitRejection, setSubmitRejection] = useState<{ blocker: ReviewBlocker; versionNo: number | undefined } | null>(null);
+    // Céluma 1.5 (#65): the server's refusal of the last submission. It stays listed until the next
+    // attempt or a successful save (most refusals are fixed by saving; the server re-checks on the next submit).
+    const [submitRejection, setSubmitRejection] = useState<ReviewBlocker | null>(null);
     const submissionBlockersRef = useRef<HTMLDivElement>(null);
     const [isAmendDialogVisible, setIsAmendDialogVisible] = useState(false);
     const [amendError, setAmendError] = useState<string | null>(null);
@@ -905,7 +905,7 @@ const ReportEditor: React.FC = () => {
                         } catch (stErr) {
                             studyTypeReadable = false;
                             setV2BlockedReason(classifyConfigFailure(stErr));
-                            setV2BlockedDetail(stErr instanceof Error ? stErr.message : null);
+                            setV2BlockedDetail(getErrorMessage(stErr, "") || null);
                             setV2ConfigBlocked(true);
                         }
                     }
@@ -982,7 +982,7 @@ const ReportEditor: React.FC = () => {
                             }
                         } catch (cfgErr) {
                             setV2BlockedReason(classifyConfigFailure(cfgErr));
-                            setV2BlockedDetail(cfgErr instanceof Error ? cfgErr.message : null);
+                            setV2BlockedDetail(getErrorMessage(cfgErr, "") || null);
                             setV2ConfigBlocked(true);
                         }
                     }
@@ -1496,6 +1496,7 @@ const ReportEditor: React.FC = () => {
             // Fifth remediation: the letterhead change is persisted, so it is
             // no longer pending (and the "leave without saving" warning ends).
             setLetterheadDirty(false);
+            setSubmitRejection(null);
             message.success("Reporte guardado");
             if (saved.order_id) navigate(`/orders/${saved.order_id}`);
         } catch (err) {
@@ -1562,10 +1563,9 @@ const ReportEditor: React.FC = () => {
 
     const submissionBlockers = useMemo<ReviewBlocker[]>(() => {
         if (envelope?.status !== "DRAFT") return [];
-        const rejection = submitRejection && submitRejection.versionNo === envelope?.version_no ? submitRejection.blocker : null;
-        if (!rejection) return submitPrecheck;
-        return [rejection, ...submitPrecheck.filter((b) => b.id !== rejection.id)];
-    }, [envelope?.status, envelope?.version_no, submitRejection, submitPrecheck]);
+        if (!submitRejection) return submitPrecheck;
+        return [submitRejection, ...submitPrecheck.filter((b) => b.id !== submitRejection.id)];
+    }, [envelope?.status, submitRejection, submitPrecheck]);
 
     /** Takes the user to the section a blocker belongs to. */
     const goToBlocker = useCallback((blocker: ReviewBlocker) => {
@@ -1641,7 +1641,7 @@ const ReportEditor: React.FC = () => {
             // Céluma 1.5 (#65): the server's refusal names the affected section (sample codes of #12, retired
             // images, letterhead, reviewers, amendment note…) and stays listed until it is fixed.
             if (err instanceof ReportSubmitError) {
-                setSubmitRejection({ blocker: err.blocker, versionNo: envelope.version_no });
+                setSubmitRejection(err.blocker);
                 showCelumaWarning(err.blocker.title, err.blocker.detail);
                 focusFirstSection(err.blocker);
                 return;
@@ -1746,7 +1746,7 @@ const ReportEditor: React.FC = () => {
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
                 // Nothing changed on the server: stay in the dialog.
-                setReopenConfirmError(err.message);
+                setReopenConfirmError(getErrorMessage(err, "No se pudo reabrir el reporte."));
                 return;
             }
             showCelumaApiError(err, "No se pudo reabrir el reporte.");
@@ -1769,7 +1769,7 @@ const ReportEditor: React.FC = () => {
             setReloadToken((n) => n + 1);
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
-                setAmendError(err.message);
+                setAmendError(getErrorMessage(err, "No se pudo abrir la enmienda."));
                 return;
             }
             showCelumaApiError(err, "No se pudo abrir la enmienda.");
@@ -1790,7 +1790,7 @@ const ReportEditor: React.FC = () => {
             setReloadToken((n) => n + 1);
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
-                setCancelAmendError(err.message);
+                setCancelAmendError(getErrorMessage(err, "No se pudo cancelar la enmienda."));
                 return;
             }
             showCelumaApiError(err, "No se pudo cancelar la enmienda.");
@@ -2005,7 +2005,7 @@ const ReportEditor: React.FC = () => {
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
                 // Nothing was signed: stay in the dialog and say why.
-                setSignConfirmError(err.message);
+                setSignConfirmError(getErrorMessage(err, "No se pudo firmar y publicar el reporte."));
                 return;
             }
             setIsSignConfirmVisible(false);
@@ -2478,7 +2478,7 @@ const ReportEditor: React.FC = () => {
                     {envelope?.status === "APPROVED" && envelope?.pdf_error_message && (
                         <div style={{ marginTop: 8 }}>
                             <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                                No se pudo firmar y publicar: {envelope.pdf_error_message}
+                                No se pudo firmar y publicar: {sanitizeErrorMessage(envelope.pdf_error_message, "ocurrió un error al generar el PDF oficial. Inténtalo de nuevo.")}
                             </Typography.Text>
                         </div>
                     )}

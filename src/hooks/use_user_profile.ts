@@ -61,11 +61,11 @@ export function useUserProfile() {
                     setSessionExpired(true);
                     setAuthStatus("unauthenticated");
                 } else {
-                    setError(`Error ${res.status}: no se pudo cargar el perfil`);
+                    setError(res.status >= 500 ? "Error del servidor: no se pudo cargar el perfil. Inténtalo de nuevo más tarde." : "No se pudo cargar el perfil.");
                     setAuthStatus("error");
                 }
             } catch (err) {
-                setError(getErrorMessage(err, "Error de red"));
+                setError(getErrorMessage(err, "No se pudo conectar con el servidor para cargar el perfil."));
                 setAuthStatus("error");
             }
         };

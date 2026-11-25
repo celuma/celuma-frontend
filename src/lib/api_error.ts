@@ -226,12 +226,51 @@ export function httpStatusMessage(status: number): string {
     return GENERIC_ERROR_MESSAGE;
 }
 
+/**
+ * Spanish messages for structured `{code, message}` refusals whose `message`
+ * the backend writes in English (numbering, catalog transfer). A Spanish
+ * message from the server still wins: it is usually more specific.
+ */
+const CODE_MSG_ES: Record<string, string> = {
+    numbering_branch_code_unsafe: "El código de la sucursal está vacío o tiene caracteres no permitidos en un código generado (letras, dígitos, «.», «_» y «-»).",
+    numbering_code_too_long: "El código generado sería demasiado largo; acorta el código base o el formato.",
+    numbering_receipt_date_invalid: "La fecha de recepción no es válida en la zona horaria de la numeración.",
+    numbering_receipt_date_required: "La fecha de recepción de la muestra es obligatoria para asignarle un código.",
+    numbering_exhausted: "No se encontró un código libre; revisa el formato de numeración y los códigos existentes.",
+    numbering_invalid_config: "La configuración de numeración no es válida.",
+    numbering_manual_policy_unsupported: "Esta política de códigos manuales no es compatible.",
+    invalid_document: "El archivo no es una exportación válida de Céluma.",
+    unsupported_schema: "El archivo no es una exportación de catálogo de Céluma.",
+    unsupported_version: "La versión del archivo exportado no es compatible con esta versión de Céluma.",
+    unsupported_catalog_kind: "El tipo de catálogo del archivo no es compatible.",
+    too_many_items: "El archivo o la selección tiene demasiados registros.",
+    body_too_large: "El documento es demasiado grande.",
+    empty_selection: "Selecciona al menos un registro.",
+    invalid_id: "Alguno de los registros seleccionados no es válido.",
+    unknown_index: "Alguno de los registros seleccionados no es válido.",
+    invalid_selection: "Alguno de los registros seleccionados no es válido.",
+    study_type_not_found: "Uno o más tipos de estudio ya no existen.",
+    preview_stale: "El catálogo cambió desde la vista previa; revisa la nueva vista previa.",
+    conflicts: "Los registros seleccionados entran en conflicto con el catálogo de destino; no se creó nada.",
+    concurrent_conflict: "Los registros seleccionados entran en conflicto con el catálogo de destino; no se creó nada.",
+    order_not_directly_modifiable: "Esta orden ya no puede modificarse directamente. Revisa los motivos indicados en la orden.",
+    order_in_review: "No se pueden agregar muestras mientras la orden o su reporte están en revisión.",
+};
+
 /** A backend detail made safe to show, or null when it cannot be shown in Spanish. */
 function safeDetail(raw: string | null): string | null {
     if (!raw) return null;
     const localized = localizeBackendMessage(raw).trim();
     if (!localized || localized.length > 400) return null;
     return looksSpanish(localized) ? localized : null;
+}
+
+/** The Spanish detail of a raw response body: the server's own text, else a known code's message. */
+function safeBodyDetail(bodyText: string): string | null {
+    const detail = safeDetail(parseFastApiDetail(bodyText));
+    if (detail) return detail;
+    const code = parseFastApiCode(bodyText);
+    return code ? CODE_MSG_ES[code] ?? null : null;
 }
 
 /**
@@ -241,7 +280,7 @@ function safeDetail(raw: string | null): string | null {
  */
 export function formatHttpError(status: number, bodyText: string): string {
     if (status >= 500) return httpStatusMessage(status);
-    return safeDetail(parseFastApiDetail(bodyText)) ?? httpStatusMessage(status);
+    return safeBodyDetail(bodyText) ?? httpStatusMessage(status);
 }
 
 const NETWORK_PATTERN = /failed to fetch|networkerror|network ?error|load failed|network request failed|err_connection|econnrefused|err_internet_disconnected|the internet connection appears to be offline/i;
@@ -260,7 +299,9 @@ function isEnglish(text: string): boolean {
  * `fallback` is the context-specific message used when nothing better can be said.
  */
 export function sanitizeErrorMessage(raw: string, fallback: string = GENERIC_ERROR_MESSAGE, status?: number): string {
-    const text = (raw ?? "").trim();
+    // A Spanish message with the status appended for debugging ("No se pudo cargar el historial (404)")
+    // reads fine without it: the code is technical noise for the user.
+    const text = (raw ?? "").trim().replace(/\s*\((?:HTTP\s*)?[1-5]\d{2}\)(?=\.?$)/, "");
     if (!text) return status ? httpStatusMessage(status) : fallback;
     if (text === "Session expired") return SESSION_EXPIRED_MESSAGE;
     if (NETWORK_PATTERN.test(text)) return NETWORK_ERROR_MESSAGE;
@@ -269,7 +310,7 @@ export function sanitizeErrorMessage(raw: string, fallback: string = GENERIC_ERR
     // A raw body (JSON or markup) thrown as the message.
     if (/^[{[<]/.test(text)) {
         if (status !== undefined && status >= 500) return httpStatusMessage(status);
-        return safeDetail(parseFastApiDetail(text)) ?? (status ? httpStatusMessage(status) : fallback);
+        return safeBodyDetail(text) ?? (status ? httpStatusMessage(status) : fallback);
     }
 
     // A message that embeds an HTTP status and maybe a body.
@@ -280,7 +321,7 @@ export function sanitizeErrorMessage(raw: string, fallback: string = GENERIC_ERR
         const isRawBody = /^[{[<]/.test(body);
         if (body === "" || isRawBody || REASON_PHRASE.test(body) || isEnglish(body)) {
             if (code >= 500) return httpStatusMessage(code);
-            const detail = isRawBody ? safeDetail(parseFastApiDetail(body)) : safeDetail(body);
+            const detail = isRawBody ? safeBodyDetail(body) : safeDetail(body);
             return detail ?? fallbackFor(code, fallback);
         }
     }
@@ -303,8 +344,10 @@ function fallbackFor(status: number, fallback: string): string {
  */
 export function getErrorMessage(err: unknown, fallback: string = GENERIC_ERROR_MESSAGE): string {
     if (err instanceof Error) {
-        const status = (err as { status?: unknown }).status;
-        return sanitizeErrorMessage(err.message, fallback, typeof status === "number" ? status : undefined);
+        const { status, code } = err as { status?: unknown; code?: unknown };
+        // An API error that carries a known machine code says more than the caller's generic fallback.
+        const byCode = typeof code === "string" ? CODE_MSG_ES[code] : undefined;
+        return sanitizeErrorMessage(err.message, byCode ?? fallback, typeof status === "number" ? status : undefined);
     }
     if (typeof err === "string") return sanitizeErrorMessage(err, fallback);
     return fallback;

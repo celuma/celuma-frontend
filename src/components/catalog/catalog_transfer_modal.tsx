@@ -14,6 +14,7 @@ import {
 } from "../../services/sample_type_service";
 import type { ConflictPolicy, TransferItem, TransferPreview, TransferResult, TransferStatus } from "../../models/sample_type";
 import { getErrorMessage } from "../../lib/api_error";
+import { transferIssueMessage } from "../../lib/catalog_transfer_messages";
 
 /**
  * Preview → confirm flow shared by "Importar JSON" and "Copiar a tipos de
@@ -160,7 +161,7 @@ export default function CatalogTransferModal({ open, source, onClose, onDone }: 
                 <div style={{ display: "grid", gap: 4 }}>
                     <Tag color={STATUS_LABEL[item.status].color} style={{ width: "fit-content" }}>{STATUS_LABEL[item.status].text}</Tag>
                     {[...item.issues, ...item.warnings].map((m, i) => (
-                        <span key={i} style={{ fontSize: 12, color: tokens.textSecondary }}>{m.message}</span>
+                        <span key={i} style={{ fontSize: 12, color: tokens.textSecondary }}>{transferIssueMessage(m)}</span>
                     ))}
                 </div>
             ),

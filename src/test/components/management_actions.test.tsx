@@ -127,7 +127,10 @@ describe("order edit page", () => {
     it("explains a closed window and disables saving", async () => {
         stub({ orderEdit: action({ allowed: false, blockers: [{ code: "order_phase", message: "The order is in REVIEW" }] }) });
         at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
-        expect((await screen.findByTestId("order-edit-blockers")).textContent).toContain("The order is in REVIEW");
+        // Céluma 1.5 (#65): the English blocker is shown in Spanish from its code.
+        const blockers = (await screen.findByTestId("order-edit-blockers")).textContent;
+        expect(blockers).toContain("La orden está en Revisión; los cambios directos solo se permiten de Recepción a Diagnóstico.");
+        expect(blockers).not.toContain("The order is in REVIEW");
         expect((screen.getByText("Guardar cambios").closest("button") as HTMLButtonElement).disabled).toBe(true);
     });
 });
@@ -190,7 +193,7 @@ describe("sample edit page", () => {
     it("outside the edit window only the description is offered", async () => {
         const calls = stub({ sampleCorrection: action({ allowed: false, blockers: [{ code: "order_phase", message: "The order is in REVIEW" }] }) });
         at("/samples/s1/edit", "/samples/:sampleId/edit", <SampleEditForm />);
-        expect((await screen.findByTestId("sample-blockers")).textContent).toContain("The order is in REVIEW");
+        expect((await screen.findByTestId("sample-blockers")).textContent).toContain("La orden está en Revisión; los cambios directos solo se permiten de Recepción a Diagnóstico.");
         expect(screen.queryByText("Fecha de recepción")).toBeNull();
         expect(screen.queryByDisplayValue("BX-1")).toBeNull();
         fireEvent.change(screen.getByLabelText("Descripción"), { target: { value: "nota tardía" } });
