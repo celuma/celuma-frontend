@@ -121,7 +121,8 @@ describe("useServerList", () => {
     it("surfaces an error without keeping the spinner", async () => {
         const fetchPage = vi.fn(async () => { throw new Error("500 Internal Server Error"); });
         const { result } = renderHook(() => useServerList<Row>({ fetchPage }));
-        await waitFor(() => expect(result.current.error).toBe("500 Internal Server Error"));
+        // Céluma 1.5 (#65): a status line is never shown; the user gets Spanish.
+        await waitFor(() => expect(result.current.error).toBe("Error del servidor. Inténtalo de nuevo más tarde."));
         expect(result.current.loading).toBe(false);
     });
 });

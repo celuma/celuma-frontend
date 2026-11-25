@@ -42,6 +42,7 @@ const BACKEND_MSG_ES: Record<string, string> = {
     "Branch code already exists for this tenant": "Ya existe una sucursal con ese código.",
     "An order without a patient needs at least one requesting physician": "Una orden sin paciente necesita al menos un médico solicitante.",
     "Report is not yet available": "El reporte aún no está disponible.",
+    "Cannot generate a PDF for a published or retracted report": "No se puede generar el PDF de un reporte publicado o retractado.",
     "Report access blocked due to pending payment": "El reporte no está disponible porque hay un pago pendiente.",
     "PDF not available for this report": "El PDF de este reporte no está disponible.",
     "You are not authorized to view this report": "No tienes permiso para ver este reporte.",
@@ -283,7 +284,7 @@ export function formatHttpError(status: number, bodyText: string): string {
     return safeBodyDetail(bodyText) ?? httpStatusMessage(status);
 }
 
-const NETWORK_PATTERN = /failed to fetch|networkerror|network ?error|load failed|network request failed|err_connection|econnrefused|err_internet_disconnected|the internet connection appears to be offline/i;
+const NETWORK_PATTERN = /failed to fetch|networkerror|network ?error|\bload failed|network request failed|err_connection|econnrefused|err_internet_disconnected|the internet connection appears to be offline/i;
 const STACK_PATTERN = /\n\s+at\s|Traceback \(most recent call last\)|^\s*(?:TypeError|ReferenceError|SyntaxError|RangeError):/m;
 /** "Error al X: 409 - {…}", "Error al X: 409 Conflict", "404 Not Found", "Request failed: 500", "HTTP 500", "500". */
 const STATUS_PATTERN = /^(?:[^:\n]{0,160}:\s*)?(?:HTTP\s+|Error\s+)?([45]\d{2})(?:\s*[-–]\s*|\s+|$)([\s\S]*)$/;

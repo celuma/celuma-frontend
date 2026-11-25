@@ -174,6 +174,8 @@ describe("api_error — sanitizeErrorMessage", () => {
         for (const raw of ["Failed to fetch", "TypeError: Failed to fetch", "NetworkError when attempting to fetch resource.", "Load failed"]) {
             expect(sanitizeErrorMessage(raw)).toBe(NETWORK_ERROR_MESSAGE);
         }
+        // Safari's "Load failed" is a network error; an "Upload failed" is not.
+        expect(sanitizeErrorMessage("Upload failed", "Error al subir la foto.")).toBe("Error al subir la foto.");
     });
 
     it("the apiFetch session sentinel reads as an expired session", () => {
