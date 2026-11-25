@@ -21,6 +21,8 @@ import {
     type ListQuery,
 } from "../services/list_service";
 import { getErrorMessage } from "../lib/api_error";
+import { currentHistoryIdx } from "../lib/list_return";
+import type { ReportReturnState } from "../components/report/report_return_link";
 
 type ReportsListResponse = {
     reports: Array<{
@@ -69,7 +71,7 @@ const fetchReports = (query: ListQuery, signal: AbortSignal) =>
 export default function ReportsList() {
     usePageTitle();
     const navigate = useNavigate();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const [searchParams] = useSearchParams();
     // Status filter, optionally seeded from the URL (?status=DRAFT) e.g. when arriving from the dashboard cards
     const [initialStatus] = useState<string[] | null>(() => {
@@ -215,7 +217,13 @@ export default function ReportsList() {
                             columns={columns}
                             rowKey={(r) => r.id}
                             loading={list.loading}
-                            onRowClick={(record) => navigate(`/reports/${record.id}`)}
+                            onRowClick={(record) => {
+                                // The editor's "Volver a Reportes" returns to this view.
+                                const state: ReportReturnState = {
+                                    reportReturn: { url: pathname + search, fromIdx: currentHistoryIdx() },
+                                };
+                                navigate(`/reports/${record.id}`, { state });
+                            }}
                             emptyText="Sin reportes"
                             searchable
                             searchPlaceholder="Buscar en reportes"
