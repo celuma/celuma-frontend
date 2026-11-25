@@ -5,7 +5,8 @@ import PageHeader from "../components/ui/page_header";
 import CelumaButton from "../components/ui/button";
 import { getErrorMessage } from "../lib/api_error";
 import { apiGet } from "../lib/api_fetch";
-import { getNumberingConfigs, previewNumbering, saveNumberingConfig } from "../services/numbering_service";
+import { getNumberingConfigs, listTypeNumbering, previewNumbering, saveNumberingConfig } from "../services/numbering_service";
+import TypeNumberingCard from "../components/numbering/type_numbering_card";
 import { listSampleTypes } from "../services/sample_type_service";
 import { catalogTypeOptions } from "../lib/catalog_type_options";
 import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
@@ -17,6 +18,7 @@ import {
     type NumberingKind,
     type NumberingPreview,
     type NumberingScope,
+    type TypeNumberingList,
 } from "../models/numbering";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -29,13 +31,17 @@ interface CatalogOption {
 
 const KIND_TEXT: Record<NumberingKind, { title: string; subtitle: string; scopeLabel: string }> = {
     order: {
-        title: "Órdenes",
-        subtitle: "Un contador por tipo de estudio y mes. El prefijo es el código del tipo de estudio.",
+        title: "Órdenes: numeración del laboratorio",
+        subtitle:
+            "Un contador por tipo de estudio y mes. El prefijo es el código del tipo de estudio. Es la numeración predeterminada: " +
+            "la usan los tipos de estudio sin numeración propia.",
         scopeLabel: "Tipo de estudio de ejemplo",
     },
     sample: {
-        title: "Muestras",
-        subtitle: "Un contador por tipo de muestra y mes, independiente del de las órdenes. El prefijo es el código del tipo de muestra.",
+        title: "Muestras: numeración del laboratorio",
+        subtitle:
+            "Un contador por tipo de muestra y mes, independiente del de las órdenes. El prefijo es el código del tipo de muestra. " +
+            "Es la numeración predeterminada: la usan los tipos de muestra sin numeración propia.",
         scopeLabel: "Tipo de muestra de ejemplo",
     },
 };
@@ -48,6 +54,8 @@ interface CardProps {
     kind: NumberingKind;
     config: NumberingConfig;
     options: CatalogOption[];
+    /** #64: ids of the types of this kind that have their own numbering (the laboratory preview does not apply to them). */
+    ownTypeIds?: ReadonlySet<string>;
     onSaved: (config: NumberingConfig) => void;
 }
 
@@ -59,7 +67,7 @@ function detectSeparator(format: string, scope: NumberingScope): Separator {
     return "custom";
 }
 
-function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
+function NumberingKindCard({ kind, config, options, ownTypeIds, onSaved }: CardProps) {
     const text = KIND_TEXT[kind];
     const zoneOptions = useMemo(() => timezoneOptions().map((z) => ({ value: z, label: z })), []);
     const [active, setActive] = useState(config.active);
@@ -110,6 +118,8 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
         const timer = setTimeout(() => {
             previewNumbering({
                 entity_kind: kind, active, format, sequence_min_width: width, start_value: startValue, scope, timezone, scope_id: scopeId,
+                // #64: this card edits the LABORATORY's numbering, so preview it even for a type with its own.
+                layer: "laboratory",
             })
                 .then((p) => {
                     if (!alive) return;
@@ -252,6 +262,12 @@ function NumberingKindCard({ kind, config, options, onSaved }: CardProps) {
                             data-testid={`preview-type-${kind}`}
                         />
                     )}
+                    {scopeId && ownTypeIds?.has(scopeId) && (
+                        <Alert
+                            type="info" showIcon data-testid={`own-type-note-${kind}`}
+                            message="Este tipo tiene numeración propia: la vista previa muestra la numeración del laboratorio, que usaría si se la quitas."
+                        />
+                    )}
                     {previewError && <Alert type="error" showIcon message={previewError} />}
                     {preview && !preview.valid && <Alert type="error" showIcon message={preview.errors.join("; ")} data-testid={`errors-${kind}`} />}
                     {preview?.valid && (
@@ -303,6 +319,30 @@ export default function NumberingSettings({ embedded = true }: { embedded?: bool
     const [studyTypes, setStudyTypes] = useState<CatalogOption[]>([]);
     const [sampleTypes, setSampleTypes] = useState<CatalogOption[]>([]);
     const [error, setError] = useState<string | null>(null);
+    // #64: per-type numbering, reloaded after any save (a laboratory change alters what inheriting types use).
+    const [typeLists, setTypeLists] = useState<{ order: TypeNumberingList | null; sample: TypeNumberingList | null }>({ order: null, sample: null });
+    const [typeErrors, setTypeErrors] = useState<{ order: string | null; sample: string | null }>({ order: null, sample: null });
+    const [typeReload, setTypeReload] = useState(0);
+
+    useEffect(() => {
+        let alive = true;
+        for (const kind of ["order", "sample"] as const) {
+            listTypeNumbering(kind)
+                .then((list) => {
+                    if (!alive) return;
+                    setTypeLists((prev) => ({ ...prev, [kind]: list }));
+                    setTypeErrors((prev) => ({ ...prev, [kind]: null }));
+                })
+                .catch((err) => alive && setTypeErrors((prev) => ({ ...prev, [kind]: getErrorMessage(err) })));
+        }
+        return () => { alive = false; };
+    }, [typeReload]);
+
+    const ownTypeIds = useMemo(() => ({
+        order: new Set((typeLists.order?.types ?? []).filter((t) => t.source === "type").map((t) => t.type_id)),
+        sample: new Set((typeLists.sample?.types ?? []).filter((t) => t.source === "type").map((t) => t.type_id)),
+    }), [typeLists]);
+    const reloadTypes = () => setTypeReload((n) => n + 1);
 
     useEffect(() => {
         getNumberingConfigs().then(setConfigs).catch((err) => setError(getErrorMessage(err)));
@@ -318,19 +358,21 @@ export default function NumberingSettings({ embedded = true }: { embedded?: bool
         <div style={{ display: "grid", gap: tokens.gap }}>
             <PageHeader
                 title="Numeración"
-                subtitle="Códigos automáticos mensuales de órdenes y muestras. Los cambios aplican solo a registros nuevos."
+                subtitle="Códigos automáticos mensuales de órdenes y muestras, con numeración opcional por tipo. Los cambios aplican solo a registros nuevos."
             />
             {error && <Alert type="error" showIcon message={error} />}
             {configs && (
                 <>
                     <NumberingKindCard
-                        kind="order" config={configs.order} options={options.order}
-                        onSaved={(c) => setConfigs((prev) => (prev ? { ...prev, order: c } : prev))}
+                        kind="order" config={configs.order} options={options.order} ownTypeIds={ownTypeIds.order}
+                        onSaved={(c) => { setConfigs((prev) => (prev ? { ...prev, order: c } : prev)); reloadTypes(); }}
                     />
+                    <TypeNumberingCard kind="order" list={typeLists.order} error={typeErrors.order} onChanged={reloadTypes} />
                     <NumberingKindCard
-                        kind="sample" config={configs.sample} options={options.sample}
-                        onSaved={(c) => setConfigs((prev) => (prev ? { ...prev, sample: c } : prev))}
+                        kind="sample" config={configs.sample} options={options.sample} ownTypeIds={ownTypeIds.sample}
+                        onSaved={(c) => { setConfigs((prev) => (prev ? { ...prev, sample: c } : prev)); reloadTypes(); }}
                     />
+                    <TypeNumberingCard kind="sample" list={typeLists.sample} error={typeErrors.sample} onChanged={reloadTypes} />
                 </>
             )}
         </div>

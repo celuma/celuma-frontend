@@ -101,6 +101,7 @@ const PRESERVE_LABELS: Record<string, string> = {
     report_sections: "Secciones predefinidas",
     numbering_configs: "Configuración de numeración",
     numbering_counters: "Contadores de numeración",
+    numbering_type_configs: "Numeración por tipo de estudio o de muestra",
     shared_assets_kept: "Archivos compartidos o de configuración conservados",
 };
 
