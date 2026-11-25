@@ -105,16 +105,20 @@ function InAppNavigationGuard({ when, shouldBlock }: { when: boolean; shouldBloc
             open={blocker.state === "blocked"}
             title="Tienes cambios sin guardar"
             onCancel={() => blocker.reset?.()}
+            // Same footer as the editor's other dialogs: small buttons, the
+            // secondary (danger) action first and the primary one last.
             footer={[
-                <CelumaButton key="stay" type="primary" onClick={() => blocker.reset?.()} data-testid="unsaved-stay">
-                    Quedarme en el reporte
-                </CelumaButton>,
-                <CelumaButton key="leave" danger onClick={() => blocker.proceed?.()} data-testid="unsaved-leave">
+                <CelumaButton key="leave" size="small" danger onClick={() => blocker.proceed?.()} data-testid="unsaved-leave">
                     Salir sin guardar
+                </CelumaButton>,
+                <CelumaButton key="stay" size="small" type="primary" onClick={() => blocker.reset?.()} data-testid="unsaved-stay">
+                    Quedarme en el reporte
                 </CelumaButton>,
             ]}
         >
-            Si sales ahora, se perderán los cambios que no has guardado en este reporte.
+            <div style={{ color: tokens.textSecondary }}>
+                Si sales ahora, se perderán los cambios que no has guardado en este reporte.
+            </div>
         </CelumaModal>
     );
 }
