@@ -5,6 +5,7 @@ import { PlusOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-
 import { uploadReportImage, deleteReportImage, type UploadImageResponse } from "../../services/report_service";
 import { useNotice } from "../../hooks/use_notice";
 import { ACCEPT_EXTENSIONS, MAX_MB_NONRAW, MAX_MB_RAW, sampleImageFileError } from "../../lib/sample_image_formats";
+import { getErrorMessage } from "../../lib/api_error";
 
 export type ReportImage = {
     id?: string;
@@ -117,7 +118,7 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                 onSuccess?.({}, {} as never);
                 message.success("Imagen subida correctamente.");
             } catch (error) {
-                const msg = error instanceof Error ? error.message : "Error al subir imagen.";
+                const msg = getErrorMessage(error, "Error al subir imagen.");
                 onError?.(error as Error);
                 message.error(msg);
             }
@@ -134,7 +135,7 @@ export default function ReportImages({ sampleId, value, onChange, maxCount = 8, 
                 await deleteReportImage(sampleId, item.id);
             } catch (error) {
                 message.error(
-                    error instanceof Error ? error.message : "No se pudo eliminar la imagen en el servidor."
+                    getErrorMessage(error, "No se pudo eliminar la imagen en el servidor.")
                 );
                 return;
             }

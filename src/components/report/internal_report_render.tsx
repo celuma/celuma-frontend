@@ -113,6 +113,8 @@ export default function InternalReportRender() {
             })
             .catch((err: unknown) => {
                 if (!cancelled) {
+                    // Not a user page: the headless renderer and its logs need the technical detail, so it
+                    // is shown unsanitized (Céluma 1.5, #65 deliberately leaves this route out).
                     setError(err instanceof Error ? err.message : "Error al cargar el reporte");
                 }
             });

@@ -646,7 +646,10 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
             sampleCreation: { allowed: false, blockers: [{ code: "order_in_review", message: "The order is in review; samples cannot be added until the review ends" }] },
         });
         const { container, findByTestId } = renderSampleForm(`/samples/register?orderId=${ORDER_ID}`);
-        expect((await findByTestId("sample-creation-blockers")).textContent).toContain("samples cannot be added");
+        // Céluma 1.5 (#65): the English blocker is shown in Spanish from its code.
+        const reasons = (await findByTestId("sample-creation-blockers")).textContent;
+        expect(reasons).toContain("La orden está en revisión; no se pueden agregar muestras hasta que termine la revisión.");
+        expect(reasons).not.toContain("samples cannot be added");
         const submit = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Registrar")) as HTMLButtonElement;
         expect(submit.disabled).toBe(true);
         expect(posts).toHaveLength(0);
@@ -688,8 +691,10 @@ describe("CEL-131-07 — prefill, error surfacing and cancel behaviour survive",
         fireEvent.submit(container.querySelector("form")!);
 
         await waitFor(() => {
-            expect(container.textContent).toContain("inactive and cannot be used for new samples");
+            // Céluma 1.5 (#65): the English backend detail is translated, never shown as is.
+            expect(container.textContent).toContain("El tipo de muestra está desactivado y no puede usarse en muestras nuevas.");
         });
+        expect(container.textContent).not.toContain("inactive and cannot be used");
         expect(navigateMock).not.toHaveBeenCalled();
     });
 
@@ -856,7 +861,7 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         expect(body).not.toHaveProperty("requesting_physician_ids");
     });
 
-    it("a structured API refusal {code, message} is shown as its message", async () => {
+    it("a structured API refusal {code, message} is shown as its message, in Spanish", async () => {
         stubApi({ ok: false, body: { detail: { code: "numbering_exhausted", message: "Could not find a free code after 10000 attempts" } } });
         const { container } = renderSampleForm();
         await waitFor(() => expect(container.querySelectorAll(".ant-select").length).toBeGreaterThan(2));
@@ -865,7 +870,9 @@ describe("#8 — registration forms have no code inputs (codes are always genera
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Biopsia");
         await setReceived(container);
         fireEvent.submit(container.querySelector("form")!);
-        await waitFor(() => expect(container.textContent).toContain("Could not find a free code"));
+        // Céluma 1.5 (#65): the English message of a known code is replaced by its Spanish one.
+        await waitFor(() => expect(container.textContent).toContain("No se encontró un código libre; revisa el formato de numeración y los códigos existentes."));
+        expect(container.textContent).not.toContain("Could not find a free code");
     });
 });
 

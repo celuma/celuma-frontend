@@ -15,6 +15,7 @@ import { getInitials, getAvatarColor, stringSorter } from "../components/ui/tabl
 import { usePageTitle } from "../hooks/use_page_title";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -29,7 +30,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -72,7 +73,7 @@ export default function RequestingPhysiciansList() {
                 const data = await getJSON<RequestingPhysicianRow[]>("/v1/requesting-physicians/?active_only=false");
                 setRows(data || []);
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                setError(getErrorMessage(err, "Ocurrió un error inesperado."));
             } finally {
                 setLoading(false);
             }

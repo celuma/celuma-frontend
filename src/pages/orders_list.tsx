@@ -29,6 +29,7 @@ import { useListView } from "../hooks/use_list_view";
 import { activeFilters, type ListViewSpec, type ListViewState } from "../lib/list_view_state";
 import ReturnedRecordNotice from "../components/lists/returned_record_notice";
 import { placementOf } from "../lib/list_return";
+import { getErrorMessage } from "../lib/api_error";
 
 type OrdersListResponse = {
     orders: Array<{
@@ -133,7 +134,7 @@ export default function OrdersList() {
         getJSON<OrderFilterOptions>("/v1/laboratory/orders/filter-options", controller.signal)
             .then(setOptions)
             .catch((err) => {
-                if (!controller.signal.aborted) setOptionsError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!controller.signal.aborted) setOptionsError(getErrorMessage(err, "Ocurrió un error inesperado."));
             });
         return () => controller.abort();
     }, []);

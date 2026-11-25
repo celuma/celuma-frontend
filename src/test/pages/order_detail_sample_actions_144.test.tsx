@@ -68,7 +68,8 @@ describe("Agregar Muestra follows the server", () => {
         renderPage();
         const button = await addSampleButton();
         await waitFor(() => expect(button.disabled).toBe(true));
-        expect(button.title).toContain("in review");
+        // Céluma 1.5 (#65): the reason is shown in Spanish from its code.
+        expect(button.title).toBe("La orden está en revisión; no se pueden agregar muestras hasta que termine la revisión.");
     });
 
     it("is enabled when the server allows it", async () => {

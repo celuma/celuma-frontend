@@ -11,12 +11,11 @@ import FloatingCaptionPassword from "../components/ui/floating_caption_password"
 import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { cardTitleStyle, cardStyle, tokens } from "../components/design/tokens";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
 }
-
-interface ApiError { message?: string }
 
 async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Promise<TRes> {
     const res = await fetch(`${getApiBase()}${path}`, {
@@ -28,7 +27,7 @@ async function postJSON<TReq extends object, TRes>(path: string, body: TReq): Pr
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* */ }
     if (!res.ok) {
-        const msg = (parsed as ApiError | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(msg);
     }
     return parsed as TRes;
@@ -141,7 +140,7 @@ export default function RegisterAllOneClick() {
 
             navigate("/login", { replace: true });
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Error desconocido");
+            setError(getErrorMessage(e, "Error desconocido"));
         } finally {
             setLoading(false);
         }

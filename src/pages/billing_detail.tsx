@@ -11,6 +11,7 @@ import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
 import CelumaModal from "../components/ui/celuma_modal";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { PERMS } from "../lib/rbac";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -134,7 +135,7 @@ function BillingDetail() {
             const detail = await getJSON<InvoiceDetail>(`/v1/billing/orders/${orderId}/invoice`);
             setInvoice(detail);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al cargar factura");
+            message.error(getErrorMessage(error, "Error al cargar factura"));
         } finally {
             setLoading(false);
         }
@@ -158,7 +159,7 @@ function BillingDetail() {
             form.resetFields();
             await loadInvoice();
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al registrar pago");
+            message.error(getErrorMessage(error, "Error al registrar pago"));
         }
     };
     
@@ -183,7 +184,7 @@ function BillingDetail() {
             editForm.resetFields();
             await loadInvoice();
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al actualizar item");
+            message.error(getErrorMessage(error, "Error al actualizar item"));
         }
     };
 

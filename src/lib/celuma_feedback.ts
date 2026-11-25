@@ -50,7 +50,7 @@ export function showCelumaWarning(message: string, description?: string): void {
  */
 export function showCelumaApiError(err: unknown, fallback = "Ocurrió un error inesperado."): void {
     if (isSessionExpiredError(err)) return;
-    const msg = getErrorMessage(err) || fallback;
+    const msg = getErrorMessage(err, fallback);
     api().error({ message: "Error", description: msg, placement: PLACEMENT, duration: 5, className: CLASS });
 }
 

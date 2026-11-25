@@ -14,6 +14,7 @@ import { matchesQuery } from "../lib/search";
 import { getInitials, getAvatarColor, stringSorter } from "../components/ui/table_helpers";
 import { roleDisplayName, roleColor } from "../lib/rbac";
 import { usePageTitle } from "../hooks/use_page_title";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 const codeChipStyle: CSSProperties = {
     background: tokens.secondary,
@@ -62,7 +63,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -77,7 +78,7 @@ async function putJSON<TReq extends object, TRes>(path: string, body: TReq): Pro
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -133,7 +134,7 @@ function BranchDetail({ embedded = false }: Props) {
                 setBranch(detail);
                 setUsers(branchUsers || []);
             })
-            .catch((err) => setError(err instanceof Error ? err.message : "Ocurrió un error inesperado."))
+            .catch((err) => setError(getErrorMessage(err, "Ocurrió un error inesperado.")))
             .finally(() => setLoading(false));
     }, [branchId]);
 
@@ -204,7 +205,7 @@ function BranchDetail({ embedded = false }: Props) {
             setBranch({ ...branch, is_active: next });
             setConfirmOpen(false);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "No se pudo actualizar el estado de la sucursal.");
+            setError(getErrorMessage(err, "No se pudo actualizar el estado de la sucursal."));
         } finally {
             setToggling(false);
         }

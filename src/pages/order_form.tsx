@@ -48,6 +48,7 @@ import ReportTemplateField from "../components/order/report_template_field";
 import { describeTemplateOrigin, suggestReportTemplate } from "../lib/report_template_suggestion";
 import { getReportTemplates } from "../services/report_service";
 import type { ReportTemplateRef } from "../models/report_letterhead";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -75,7 +76,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -444,7 +445,7 @@ export default function OrderForm() {
             const state: RegistrationNoticeState | undefined = notice ? { registrationNotice: notice } : undefined;
             navigate(`/orders/${created.order.id}`, state ? { replace: true, state } : { replace: true });
         } catch (err) {
-            setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            setServerError(getErrorMessage(err, "Ocurrió un error inesperado."));
         } finally {
             setLoading(false);
         }
