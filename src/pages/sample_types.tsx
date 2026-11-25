@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useForm } from "react-hook-form";
@@ -34,6 +34,9 @@ import {
 } from "../services/sample_type_service";
 import type { SampleType } from "../models/sample_type";
 import { getReportTemplates } from "../services/report_service";
+import { useUserProfile } from "../hooks/use_user_profile";
+import TypeNumberingSection from "../components/numbering/type_numbering_section";
+import ConfirmDialog from "../components/ui/confirm_dialog";
 
 const captionLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: tokens.primary, marginBottom: 6 };
 
@@ -73,6 +76,14 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
     const [importOpen, setImportOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+    // Céluma 1.5 (#64): the Numeración section of the editor has its own save boundary. The page is gated on
+    // `admin:manage_catalog`; the section still asks, and the API enforces it on every write.
+    const { hasPermission } = useUserProfile();
+    const canManageCatalog = hasPermission("admin:manage_catalog");
+    const [numberingDirty, setNumberingDirty] = useState(false);
+    const [confirmDropNumbering, setConfirmDropNumbering] = useState(false);
+    const [startNumbering, setStartNumbering] = useState(false);
+    const configureAfterCreate = useRef(false);
 
     const { control, handleSubmit, reset } = useForm<SampleTypeFormData>({
         resolver: zodResolver(sampleTypeSchema),
@@ -83,6 +94,8 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
     const closeModal = () => {
         setModalVisible(false);
         setEditingId(null);
+        setNumberingDirty(false);
+        setStartNumbering(false);
         reset();
     };
 
@@ -124,6 +137,12 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
     };
 
     const handleSave = handleSubmit(async (data) => {
+        // #64: «Guardar cambios» never saves the numbering section; say so before its edits are dropped.
+        if (numberingDirty && !confirmDropNumbering) {
+            setConfirmDropNumbering(true);
+            return;
+        }
+        setConfirmDropNumbering(false);
         setSubmitting(true);
         try {
             const payload = {
@@ -140,12 +159,22 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                 await updateSampleType(editingId, payload);
                 message.success("Tipo de muestra actualizado");
             } else {
-                await createSampleType(payload);
+                const created = await createSampleType(payload);
                 message.success("Tipo de muestra creado");
+                if (configureAfterCreate.current && created?.id) {
+                    // #64: stay in the editor of the new type, with its numbering editor open.
+                    configureAfterCreate.current = false;
+                    setEditingId(created.id);
+                    setStartNumbering(true);
+                    reset({ ...data, description: data.description || "", is_active: data.is_active ?? true });
+                    load();
+                    return;
+                }
             }
             closeModal();
             load();
         } catch (err) {
+            configureAfterCreate.current = false;
             message.error(getErrorMessage(err));
         } finally {
             setSubmitting(false);
@@ -340,9 +369,33 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                             );
                         }}
                     />
+                    <Panel style={{ background: "#fff" }} data-testid="sample-type-numbering-panel">
+                        <TypeNumberingSection
+                            key={editingId ?? "new"}
+                            kind="sample"
+                            typeId={editingId}
+                            typeCode={sampleTypes.find((t) => t.id === editingId)?.code ?? ""}
+                            typeName={sampleTypes.find((t) => t.id === editingId)?.name}
+                            canManage={canManageCatalog}
+                            onDirtyChange={setNumberingDirty}
+                            startEditing={startNumbering}
+                            onCreateAndConfigure={() => { configureAfterCreate.current = true; void handleSave(); }}
+                            creating={submitting}
+                            testId="sample-type-numbering"
+                        />
+                    </Panel>
                     <ModalFormFooter onCancel={closeModal} submitLabel={editingId ? "Guardar cambios" : "Crear"} loading={submitting} />
                 </form>
             </CelumaModal>
+            <ConfirmDialog
+                open={confirmDropNumbering}
+                title="Hay cambios de numeración sin guardar"
+                description="«Guardar cambios» guarda los datos del tipo, no su numeración. Si continúas, los cambios de numeración se descartan."
+                confirmText="Guardar sin la numeración"
+                cancelText="Volver"
+                onCancel={() => setConfirmDropNumbering(false)}
+                onConfirm={() => { setNumberingDirty(false); void handleSave(); }}
+            />
             <CatalogTransferModal
                 open={importOpen}
                 source={{ mode: "import" }}

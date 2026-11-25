@@ -267,8 +267,12 @@ describe("configuration — Numeración (preview type)", () => {
     it("orders the preview's study and sample types alphabetically and finds them by code", async () => {
         stubApi();
         render(<MemoryRouter><NumberingSettings embedded /></MemoryRouter>);
+        fireEvent.click(await screen.findByTestId("tab-sample"));  // #64: each kind has its own tab
         const select = (await screen.findByTestId("preview-type-sample")) as HTMLElement;
-        const root = select.classList.contains("ant-select") ? select : select.closest<HTMLElement>(".ant-select")!;
+        // #64: the preview selector is now a FloatingCaptionSelect (test id on its wrapper).
+        const root = select.classList.contains("ant-select")
+            ? select
+            : (select.closest<HTMLElement>(".ant-select") ?? select.querySelector<HTMLElement>(".ant-select")!);
         fireEvent.mouseDown(root.querySelector(".ant-select-selector")!);
         await waitFor(() => expect(shownOptions(root)).toHaveLength(SAMPLE_TYPES.length));
         expect(optionTexts(root)).toEqual(byName(SAMPLE_TYPES));

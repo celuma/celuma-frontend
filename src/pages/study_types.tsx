@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useForm } from "react-hook-form";
@@ -26,6 +26,8 @@ import { useUserProfile } from "../hooks/use_user_profile";
 import CatalogTransferModal from "../components/catalog/catalog_transfer_modal";
 import { exportCatalog, saveDownload } from "../services/sample_type_service";
 import type { ColumnsType } from "antd/es/table";
+import TypeNumberingSection from "../components/numbering/type_numbering_section";
+import ConfirmDialog from "../components/ui/confirm_dialog";
 
 const captionLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 600, color: tokens.primary, marginBottom: 6 };
 
@@ -160,6 +162,11 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const [copyOpen, setCopyOpen] = useState(false);
     const [copyDone, setCopyDone] = useState(false);
     const [exporting, setExporting] = useState(false);
+    // Céluma 1.5 (#64): the Numeración section of the editor has its own save boundary.
+    const [numberingDirty, setNumberingDirty] = useState(false);
+    const [confirmDropNumbering, setConfirmDropNumbering] = useState(false);
+    const [startNumbering, setStartNumbering] = useState(false);
+    const configureAfterCreate = useRef(false);
 
     const handleExport = async () => {
         setExporting(true);
@@ -181,6 +188,8 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const closeModal = () => {
         setModalVisible(false);
         setEditingId(null);
+        setNumberingDirty(false);
+        setStartNumbering(false);
         reset();
     };
 
@@ -229,6 +238,12 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     };
 
     const handleSave = handleSubmit(async (data) => {
+        // #64: «Guardar cambios» never saves the numbering section; say so before its edits are dropped.
+        if (numberingDirty && !confirmDropNumbering) {
+            setConfirmDropNumbering(true);
+            return;
+        }
+        setConfirmDropNumbering(false);
         setSubmitting(true);
         try {
             const payload = {
@@ -244,12 +259,22 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                 await putJSON(`/v1/study-types/${editingId}`, payload);
                 message.success("Tipo de estudio actualizado");
             } else {
-                await postJSON("/v1/study-types/", payload);
+                const created = await postJSON<StudyType>("/v1/study-types/", payload);
                 message.success("Tipo de estudio creado");
+                if (configureAfterCreate.current && created?.id) {
+                    // #64: stay in the editor of the new type, with its numbering editor open.
+                    configureAfterCreate.current = false;
+                    setEditingId(created.id);
+                    setStartNumbering(true);
+                    reset({ ...data, description: data.description || "", is_active: data.is_active ?? true });
+                    loadStudyTypes();
+                    return;
+                }
             }
             closeModal();
             loadStudyTypes();
         } catch (err) {
+            configureAfterCreate.current = false;
             message.error("Error al guardar tipo de estudio");
             console.error(err);
         } finally {
@@ -465,9 +490,33 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                             );
                         }}
                     />
+                    <Panel style={{ background: "#fff" }} data-testid="study-type-numbering-panel">
+                        <TypeNumberingSection
+                            key={editingId ?? "new"}
+                            kind="order"
+                            typeId={editingId}
+                            typeCode={studyTypes.find((t) => t.id === editingId)?.code ?? ""}
+                            typeName={studyTypes.find((t) => t.id === editingId)?.name}
+                            canManage={canManageCatalog}
+                            onDirtyChange={setNumberingDirty}
+                            startEditing={startNumbering}
+                            onCreateAndConfigure={() => { configureAfterCreate.current = true; void handleSave(); }}
+                            creating={submitting}
+                            testId="study-type-numbering"
+                        />
+                    </Panel>
                     <ModalFormFooter onCancel={closeModal} submitLabel={editingId ? "Guardar cambios" : "Crear"} loading={submitting} />
                 </form>
             </CelumaModal>
+            <ConfirmDialog
+                open={confirmDropNumbering}
+                title="Hay cambios de numeración sin guardar"
+                description="«Guardar cambios» guarda los datos del tipo, no su numeración. Si continúas, los cambios de numeración se descartan."
+                confirmText="Guardar sin la numeración"
+                cancelText="Volver"
+                onCancel={() => setConfirmDropNumbering(false)}
+                onConfirm={() => { setNumberingDirty(false); void handleSave(); }}
+            />
             {canManageCatalog && (
                 <CatalogTransferModal
                     open={copyOpen}
