@@ -196,7 +196,12 @@ describe("numbering settings page", () => {
         vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             if (String(input).includes("/numbering/config/") && init?.method === "PUT" && fail) {
                 fail = false;
-                return json({ detail: { code: "numbering_type_config_conflict", message: "Conflicto: CU" } }, 422);
+                // The backend's real refusal (app/api/v1/numbering.py::_guard_type_configs_for_scope): English message + type codes.
+                return json({ detail: {
+                    code: "numbering_type_config_conflict",
+                    message: "These types have their own numbering whose format does not fit the new counter scope; update or clear them first: CU",
+                    types: ["CU"],
+                } }, 422);
             }
             return base(input, init);
         }));
@@ -205,7 +210,9 @@ describe("numbering settings page", () => {
         fireEvent.change(card("order").getByTestId("start-order"), { target: { value: "40" } });
         await waitFor(() => expect(saveButton("order").disabled).toBe(false), { timeout: 3000 });
         fireEvent.click(saveButton("order"));
-        await waitFor(() => expect(screen.getByTestId("save-error-order").textContent).toContain("Conflicto"));
+        await waitFor(() => expect(screen.getByTestId("save-error-order").textContent).toContain("no es compatible con el nuevo alcance del contador"));
+        expect(screen.getByTestId("save-error-order").textContent).toContain("Tipos: CU.");
+        expect(screen.getByTestId("save-error-order").textContent).not.toMatch(/These types|counter scope/);
         expect((card("order").getByTestId("start-order") as HTMLInputElement).value).toBe("40");
         expect(saveButton("order").textContent).toContain("Reintentar");
         fireEvent.click(saveButton("order"));
