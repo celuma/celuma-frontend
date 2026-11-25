@@ -66,6 +66,42 @@ export function suggestReportTemplate(
     return { status: "NONE", template: null, source: null, candidates: [] };
 }
 
+/**
+ * Which catalog entries stand behind a suggestion (Céluma 1.5, #70): for each template, the names of the
+ * order's sample types linked to it, and the study type's name. Display only — it never decides anything:
+ * the status, the suggested template and the candidates still come from `suggestReportTemplate` (registration)
+ * or from the API (edit), and the form only looks up the ids those return.
+ */
+export interface TemplateOrigin {
+    sampleTypesByTemplate: Record<string, string[]>;
+    studyTypeName: string | null;
+}
+
+export function describeTemplateOrigin(
+    sampleTypeIds: Array<string | null | undefined>,
+    sampleTypes: Array<WithDefaultTemplate & { name: string }>,
+    studyType: { name: string } | null | undefined,
+): TemplateOrigin {
+    const byId = new Map(sampleTypes.map((t) => [t.id, t]));
+    const names = new Map<string, Set<string>>();
+    for (const typeId of new Set(sampleTypeIds.filter((v): v is string => Boolean(v)))) {
+        const type = byId.get(typeId);
+        const templateId = type?.default_template?.id;
+        if (!type || !templateId) continue;
+        if (!names.has(templateId)) names.set(templateId, new Set());
+        names.get(templateId)!.add(type.name);
+    }
+    const sampleTypesByTemplate: Record<string, string[]> = {};
+    for (const [templateId, set] of names) {
+        sampleTypesByTemplate[templateId] = [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    }
+    return { sampleTypesByTemplate, studyTypeName: studyType?.name ?? null };
+}
+
+/** "A", "A y B", "A, B y C". */
+export const joinNames = (names: string[]) =>
+    names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+
 /** Spanish label of a template's origin, for helper text. */
 export const TEMPLATE_SOURCE_LABEL: Record<ReportTemplateSource, string> = {
     ORDER: "elegida para esta orden",

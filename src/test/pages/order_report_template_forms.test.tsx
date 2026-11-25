@@ -41,7 +41,7 @@ const action = (over: Record<string, unknown> = {}) => ({ permitted: true, allow
 
 interface Writes { url: string; method: string; body: Record<string, unknown> }
 
-function stub(over: { studyDefault?: unknown; selection?: unknown; templateAction?: unknown } = {}) {
+function stub(over: { studyDefault?: unknown; selection?: unknown; templateAction?: unknown; orderSampleTypes?: string[]; catalogsFail?: boolean } = {}) {
     const writes: Writes[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -52,6 +52,9 @@ function stub(over: { studyDefault?: unknown; selection?: unknown; templateActio
             return json({ id: "x", ...JSON.parse(String(init.body)) });
         }
         if (url.includes("/v1/reports/templates/")) return json({ templates: Object.values(T) });
+        if (over.catalogsFail && (url.includes("/v1/sample-types/") || url.includes("/v1/study-types/"))) {
+            return json({ detail: "Forbidden" }, 403);
+        }
         if (url.includes("/v1/sample-types/")) return json({ sample_types: SAMPLE_TYPES });
         if (url.includes("/v1/study-types/")) {
             return json({ study_types: [{ id: STUDY_ID, code: "HIS", name: "Histopatología", is_active: true, default_template: over.studyDefault ?? null }] });
@@ -64,8 +67,9 @@ function stub(over: { studyDefault?: unknown; selection?: unknown; templateActio
         }
         if (url.endsWith("/orders/o1/full")) {
             return json({
-                order: { id: "o1", order_code: "CU-1", requesting_physicians: [], expediente: null, notes: null, report_template: over.selection ?? null },
+                order: { id: "o1", order_code: "CU-1", requesting_physicians: [], expediente: null, notes: null, report_template: over.selection ?? null, study_type_id: STUDY_ID },
                 patient: { id: PATIENT_ID },
+                samples: (over.orderSampleTypes ?? []).map((id, i) => ({ id: `smp-${i}`, sample_type: { id } })),
             });
         }
         return json({});
@@ -169,7 +173,8 @@ describe("unified registration — report template", () => {
         const { container } = renderOrderForm();
         await fillOrder(container, ["Biopsia"]);
         await waitFor(() => expect(shownTemplate(container)).toBe(T.bio.name));
-        expect(help()).toMatch(/Sugerida por el tipo de muestra/);
+        // #70: the help names the sample type behind the suggestion.
+        expect(help()).toMatch(/Sugerida por el tipo de muestra Biopsia\. Puedes elegir otra/);
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(unifiedPosts(writes)).toHaveLength(1));
@@ -185,7 +190,7 @@ describe("unified registration — report template", () => {
         // The sample type changes (another default): the deliberate choice is not overwritten.
         await pickOption(selectByCaption(container, "Tipo de muestra"), "Tejido (TEJ)");
         expect(shownTemplate(container)).toBe(T.cit.name);
-        expect(help()).toMatch(/Sin esta elección se usaría Plantilla Tejido \(sugerida por el tipo de muestra\)/);
+        expect(help()).toMatch(/Sin esta elección se usaría Plantilla Tejido \(sugerida por el tipo de muestra Tejido\)/);
 
         fireEvent.submit(container.querySelector("form")!);
         await waitFor(() => expect(unifiedPosts(writes)).toHaveLength(1));
@@ -210,8 +215,12 @@ describe("unified registration — report template", () => {
         const { container } = renderOrderForm();
         await fillOrder(container, ["Tejido", "Biopsia"]);
         const alert = await screen.findByTestId("report-template-ambiguous");
-        // Listed by name, not by sample order; nothing is preselected and the study default does not decide.
-        expect(alert.textContent).toContain("Plantilla Biopsia, Plantilla Tejido");
+        // Listed by name, not by sample order, each with the sample types that suggest it (#70); nothing is
+        // preselected and the study default does not decide.
+        const items = Array.from(screen.getByTestId("report-template-candidates").querySelectorAll("li")).map((li) => li.textContent);
+        expect(items).toEqual(["Plantilla Biopsia: Biopsia", "Plantilla Tejido: Tejido"]);
+        expect(alert.textContent).toContain("Elige aquí la plantilla o corrige el tipo de muestra que no corresponda.");
+        expect(alert.textContent).toContain("No se decide por el orden de las muestras ni por el tipo de estudio.");
         expect(shownTemplate(container)).toBeNull();
 
         fireEvent.submit(container.querySelector("form")!);
@@ -224,12 +233,28 @@ describe("unified registration — report template", () => {
         expect(unifiedPosts(writes)[0].body.report_template_id).toBe(T.tej.id);
     });
 
+    it("correcting the sample type that disagrees resolves the ambiguity into a live suggestion (#70)", async () => {
+        const writes = stub({ studyDefault: T.est });
+        const { container } = renderOrderForm();
+        await fillOrder(container, ["Tejido", "Biopsia"]);
+        await screen.findByTestId("report-template-ambiguous");
+        // The second sample's dropdown is the last one mounted, so pickOption cannot hit another row's option.
+        await pickOption(selectByCaption(container, "Tipo de muestra", 1), "Tejido (TEJ)");
+        await waitFor(() => expect(screen.queryByTestId("report-template-ambiguous")).toBeNull());
+        expect(shownTemplate(container)).toBe(T.tej.name);
+        expect(help()).toMatch(/Sugerida por el tipo de muestra Tejido\./);
+
+        fireEvent.submit(container.querySelector("form")!);
+        await waitFor(() => expect(unifiedPosts(writes)).toHaveLength(1));
+        expect(unifiedPosts(writes)[0].body).not.toHaveProperty("report_template_id");
+    });
+
     it("falls back to the study type's optional template, and registers without any template", async () => {
         stub({ studyDefault: T.est });
         const first = renderOrderForm();
         await fillOrder(first.container, ["Laminilla"]);
         await waitFor(() => expect(shownTemplate(first.container)).toBe(T.est.name));
-        expect(help()).toMatch(/Sugerida por el tipo de estudio/);
+        expect(help()).toMatch(/Sugerida por el tipo de estudio Histopatología\./);
         first.unmount();
 
         const writes = stub();
@@ -253,10 +278,10 @@ const patches = (writes: Writes[]) => writes.filter((w) => w.method === "PATCH")
 
 describe("order edit — report template", () => {
     it("shows the default, sends nothing when untouched", async () => {
-        const writes = stub({ selection: selection() });
+        const writes = stub({ selection: selection(), orderSampleTypes: ["stp-bio", "stp-lam"] });
         const { container } = at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
         await waitFor(() => expect(shownTemplate(container)).toBe(T.bio.name));
-        expect(help()).toMatch(/Sugerida por el tipo de muestra/);
+        await waitFor(() => expect(help()).toMatch(/Sugerida por el tipo de muestra Biopsia\. Puedes elegir otra/));
         fireEvent.click(screen.getByText("Guardar cambios"));
         await waitFor(() => expect(patches(writes)).toHaveLength(1));
         expect(patches(writes)[0].body).not.toHaveProperty("report_template_id");
@@ -298,11 +323,39 @@ describe("order edit — report template", () => {
         expect(patches(writes)[0].body).not.toHaveProperty("report_template_id");
     });
 
-    it("an ambiguous order without a choice says so", async () => {
-        stub({ selection: selection({ status: "AMBIGUOUS", source: null, template: null, candidates: [T.bio, T.tej],
-                                      default_status: "AMBIGUOUS", default_source: null, default_template: null }) });
+    const ambiguous = () => selection({ status: "AMBIGUOUS", source: null, template: null, candidates: [T.bio, T.tej],
+                                        default_status: "AMBIGUOUS", default_source: null, default_template: null });
+    const candidateItems = () =>
+        Array.from(screen.getByTestId("report-template-candidates").querySelectorAll("li")).map((li) => li.textContent);
+
+    it("an ambiguous order without a choice lists each candidate with the sample types behind it (#70)", async () => {
+        stub({ selection: ambiguous(), orderSampleTypes: ["stp-tej", "stp-bio", "stp-lam"] });
         at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
-        expect((await screen.findByTestId("report-template-ambiguous")).textContent).toContain("Plantilla Biopsia, Plantilla Tejido");
+        const alert = await screen.findByTestId("report-template-ambiguous");
+        await waitFor(() => expect(candidateItems()).toEqual(["Plantilla Biopsia: Biopsia", "Plantilla Tejido: Tejido"]));
+        // Samples are not edited here: the only action offered is choosing.
+        expect(alert.textContent).toContain("Elige aquí la plantilla que usará el reporte.");
+        expect(alert.textContent).not.toContain("corrige el tipo de muestra");
+    });
+
+    it("without readable catalogs the API's resolution is still shown, with the generic origin", async () => {
+        stub({ selection: ambiguous(), orderSampleTypes: ["stp-tej", "stp-bio"], catalogsFail: true });
+        at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
+        await screen.findByTestId("report-template-ambiguous");
+        expect(candidateItems()).toEqual(["Plantilla Biopsia", "Plantilla Tejido"]);
+    });
+
+    it("a stored choice over a study-type default names the study type; no default explains why", async () => {
+        stub({ selection: selection({ report_template_id: T.cit.id, source: "ORDER", template: T.cit,
+                                      default_source: "STUDY_TYPE", default_template: T.est }), orderSampleTypes: ["stp-lam"] });
+        const first = at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
+        await waitFor(() => expect(help()).toMatch(/Sin esta elección se usaría Plantilla Estudio \(sugerida por el tipo de estudio Histopatología\)/));
+        first.unmount();
+
+        stub({ selection: selection({ status: "NONE", source: null, template: null,
+                                      default_status: "NONE", default_source: null, default_template: null }) });
+        at("/orders/o1/edit", "/orders/:orderId/edit", <OrderEditForm />);
+        await waitFor(() => expect(help()).toMatch(/Ni los tipos de muestra ni el tipo de estudio sugieren una plantilla: elige una/));
     });
 });
 

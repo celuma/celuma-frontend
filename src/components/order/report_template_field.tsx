@@ -1,7 +1,7 @@
 import { Alert, Button } from "antd";
 import FloatingCaptionSelect from "../ui/floating_caption_select";
 import { tokens } from "../design/tokens";
-import { TEMPLATE_SOURCE_LABEL } from "../../lib/report_template_suggestion";
+import { joinNames, TEMPLATE_SOURCE_LABEL, type TemplateOrigin } from "../../lib/report_template_suggestion";
 import type {
     ReportTemplateRef,
     ReportTemplateSource,
@@ -24,6 +24,9 @@ interface Props {
     /** The active templates of the laboratory (lightweight catalog: no structure). */
     options: ReportTemplateRef[];
     fallback: TemplateFallback;
+    /** Céluma 1.5 (#70): which sample types / study type stand behind the fallback. Display only; when it is
+     *  absent or a template is not in it, the generic origin is shown, as before. */
+    origin?: TemplateOrigin | null;
     mode: "create" | "edit";
     /** The stored explicit choice when it has been deactivated (edit only): shown, never re-offered. */
     inactiveChoice?: ReportTemplateRef | null;
@@ -41,7 +44,7 @@ const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
  * moves the suggestion, never an explicit choice (the parent keeps `value`).
  */
 export default function ReportTemplateField({
-    value, onChange, options, fallback, mode, inactiveChoice, disabled, loading, error,
+    value, onChange, options, fallback, origin, mode, inactiveChoice, disabled, loading, error,
 }: Props) {
     const shown = value ?? fallback.template?.id ?? undefined;
     const byId = new Map<string, ReportTemplateRef>();
@@ -55,9 +58,22 @@ export default function ReportTemplateField({
         .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }))
         .map((t) => ({ value: t.id, label: t.name }));
 
+    const sampleTypesOf = (templateId: string) => origin?.sampleTypesByTemplate[templateId] ?? [];
+    // "sugerida por el tipo de muestra Biopsia" / "por los tipos de muestra A y B" / "por el tipo de estudio X".
+    const sourceLabel = (source: ReportTemplateSource, templateId: string) => {
+        if (source === "SAMPLE_TYPE") {
+            const names = sampleTypesOf(templateId);
+            if (names.length === 1) return `${TEMPLATE_SOURCE_LABEL.SAMPLE_TYPE} ${names[0]}`;
+            if (names.length > 1) return `sugerida por los tipos de muestra ${joinNames(names)}`;
+        }
+        if (source === "STUDY_TYPE" && origin?.studyTypeName) {
+            return `${TEMPLATE_SOURCE_LABEL.STUDY_TYPE} ${origin.studyTypeName}`;
+        }
+        return TEMPLATE_SOURCE_LABEL[source];
+    };
     const fallbackText = () => {
         if (fallback.template && fallback.source) {
-            return `${fallback.template.name} (${TEMPLATE_SOURCE_LABEL[fallback.source]})`;
+            return `${fallback.template.name} (${sourceLabel(fallback.source, fallback.template.id)})`;
         }
         return null;
     };
@@ -83,11 +99,11 @@ export default function ReportTemplateField({
             </span>
         );
     } else if (fallback.status === "RESOLVED" && fallback.template && fallback.source) {
-        help = `${sentence(TEMPLATE_SOURCE_LABEL[fallback.source])}. Puedes elegir otra; tu elección se guarda con la orden.`;
+        help = `${sentence(sourceLabel(fallback.source, fallback.template.id))}. Puedes elegir otra; tu elección se guarda con la orden.`;
     } else if (fallback.status === "NONE") {
         help = mode === "create"
             ? "Ni los tipos de muestra ni el tipo de estudio sugieren una plantilla. Puedes elegirla ahora o después, al corregir la orden."
-            : "No hay plantilla predeterminada: elige una para poder crear el reporte.";
+            : "Ni los tipos de muestra ni el tipo de estudio sugieren una plantilla: elige una para poder crear el reporte.";
     }
 
     return (
@@ -109,7 +125,27 @@ export default function ReportTemplateField({
                 <Alert
                     type="warning" showIcon data-testid="report-template-ambiguous"
                     message="Las muestras sugieren plantillas distintas"
-                    description={`${fallback.candidates.map((c) => c.name).join(", ")}. Elige cuál usará el reporte; no se toma ninguna por el orden de las muestras.`}
+                    description={
+                        <div style={{ display: "grid", gap: 4 }}>
+                            <ul style={{ margin: 0, paddingInlineStart: 20 }} data-testid="report-template-candidates">
+                                {fallback.candidates.map((c) => {
+                                    const names = sampleTypesOf(c.id);
+                                    return (
+                                        <li key={c.id}>
+                                            <strong>{c.name}</strong>
+                                            {names.length > 0 && `: ${joinNames(names)}`}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                            <span>
+                                {mode === "create"
+                                    ? "Elige aquí la plantilla o corrige el tipo de muestra que no corresponda."
+                                    : "Elige aquí la plantilla que usará el reporte."}{" "}
+                                No se decide por el orden de las muestras ni por el tipo de estudio.
+                            </span>
+                        </div>
+                    }
                 />
             )}
             {help && (

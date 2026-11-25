@@ -25,6 +25,8 @@ import ReportTemplateField from "../components/order/report_template_field";
 import { personSelectProps } from "../components/ui/person_select";
 import { patientOption, physicianOptionCompact, type PersonOption, type PhysicianRow } from "../lib/person_options";
 import { getReportTemplates } from "../services/report_service";
+import { listSampleTypes } from "../services/sample_type_service";
+import { describeTemplateOrigin, type TemplateOrigin } from "../lib/report_template_suggestion";
 import type { OrderReportTemplateSelection, ReportTemplateRef } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -48,8 +50,10 @@ type OrderResponse = {
         notes?: string | null;
         /** Céluma 1.4.1; absent on an older API. */
         report_template?: OrderReportTemplateSelection | null;
+        study_type_id?: string | null;
     };
     patient?: { id: string } | null;
+    samples?: Array<{ sample_type?: { id: string } | null }>;
 };
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -79,6 +83,8 @@ export default function OrderEditForm() {
     const [templateSelection, setTemplateSelection] = useState<OrderReportTemplateSelection | null>(null);
     const [templateId, setTemplateId] = useState<string | null>(null);
     const [templates, setTemplates] = useState<ReportTemplateRef[]>([]);
+    // Céluma 1.5 (#70): names behind the default (display only; the API's resolution above decides).
+    const [templateOrigin, setTemplateOrigin] = useState<TemplateOrigin | null>(null);
 
     const { control, handleSubmit, reset } = useForm<OrderEditData>({
         resolver: zodResolver(schema),
@@ -90,12 +96,18 @@ export default function OrderEditForm() {
         if (!orderId) return;
         (async () => {
             try {
-                const [orderRes, physiciansRes, patientsRes, templatesRes] = await Promise.all([
+                const [orderRes, physiciansRes, patientsRes, templatesRes, sampleTypesRes, studyTypesRes] = await Promise.all([
                     apiFetch(`${base}/v1/laboratory/orders/${orderId}/full`),
                     apiFetch(`${base}/v1/requesting-physicians/`),
                     apiFetch(`${base}/v1/patients/`),
                     // Names only; without `reports:read` the choices are the defaults themselves.
                     getReportTemplates(true).catch(() => null),
+                    // Optional explanation of the default: every sample type (an order may keep a deactivated
+                    // one, and the server still counts it) and the study types. Without them the origin stays generic.
+                    listSampleTypes(false).catch(() => null),
+                    apiFetch(`${base}/v1/study-types/`)
+                        .then((r) => (r.ok ? (r.json() as Promise<{ study_types?: Array<{ id: string; name: string }> }>) : null))
+                        .catch(() => null),
                 ]);
                 if (!orderRes.ok) throw new Error(`${orderRes.status} ${orderRes.statusText}`);
                 const detail = (await orderRes.json()) as OrderResponse;
@@ -110,6 +122,11 @@ export default function OrderEditForm() {
                 setTemplateSelection(selection);
                 setTemplateId(selection?.report_template_id ?? null);
                 setTemplates((templatesRes?.templates ?? []).map((t) => ({ id: t.id, name: t.name })));
+                setTemplateOrigin(describeTemplateOrigin(
+                    (detail.samples ?? []).map((smp) => smp.sample_type?.id),
+                    sampleTypesRes ?? [],
+                    studyTypesRes?.study_types?.find((st) => st.id === detail.order.study_type_id),
+                ));
                 if (patientsRes.ok) {
                     const rows = (await patientsRes.json()) as Array<{ id: string; patient_code: string; first_name?: string; last_name?: string }>;
                     setPatients(rows.map(patientOption));
@@ -264,6 +281,7 @@ export default function OrderEditForm() {
                                             source: templateSelection.default_source,
                                             candidates: templateSelection.candidates,
                                         }}
+                                        origin={templateOrigin}
                                         inactiveChoice={templateSelection.status === "INACTIVE" ? templateSelection.template : null}
                                         disabled={templateLocked}
                                     />

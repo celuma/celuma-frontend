@@ -45,7 +45,7 @@ import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../
 import { DEFAULT_NUMBERING_ZONE, receiptZone, todayInZone } from "../lib/receipt_today";
 import { useSampleNumberingZone } from "../hooks/use_sample_numbering_zone";
 import ReportTemplateField from "../components/order/report_template_field";
-import { suggestReportTemplate } from "../lib/report_template_suggestion";
+import { describeTemplateOrigin, suggestReportTemplate } from "../lib/report_template_suggestion";
 import { getReportTemplates } from "../services/report_service";
 import type { ReportTemplateRef } from "../models/report_letterhead";
 
@@ -348,6 +348,15 @@ export default function OrderForm() {
             templates ? new Set(templates.map((t) => t.id)) : null,
         ),
         [watchedSamples, sampleTypes.types, studyTypes, watchedStudyType, templates],
+    );
+    // Céluma 1.5 (#70): which of the chosen sample types (or the study type) explain that suggestion.
+    const templateOrigin = useMemo(
+        () => describeTemplateOrigin(
+            (watchedSamples ?? []).map((s) => s?.sample_type_id),
+            sampleTypes.types,
+            studyTypes.find((st) => st.id === watchedStudyType),
+        ),
+        [watchedSamples, sampleTypes.types, studyTypes, watchedStudyType],
     );
 
     const chooseTemplate = (templateId: string | null) => {
@@ -726,6 +735,7 @@ export default function OrderForm() {
                                         onChange={chooseTemplate}
                                         options={templates ?? []}
                                         fallback={templateSuggestion}
+                                        origin={templateOrigin}
                                         loading={loadingTemplates}
                                         error={templateError}
                                     />
