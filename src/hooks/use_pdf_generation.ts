@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { generateReportPdf, type PdfGenerationStatusResponse } from "../services/report_service";
+import { getErrorMessage } from "../lib/api_error";
 
 /**
  * Céluma 1.3 Phase 2, Block E, Story E12.
@@ -31,7 +32,7 @@ export function usePdfGeneration() {
                 const result = await generateReportPdf(reportId, versionNo);
                 return result;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Error al generar el PDF";
+                const msg = getErrorMessage(err, "Error al generar el PDF");
                 setLastError(msg);
                 throw err;
             } finally {

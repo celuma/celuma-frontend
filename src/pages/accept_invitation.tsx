@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, Form, Input, Button, message, Typography, Spin, Tag } from "antd";
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Title, Paragraph } = Typography;
 
@@ -80,7 +81,7 @@ function AcceptInvitation() {
             message.success("Cuenta creada exitosamente. Redirigiendo al inicio de sesión...");
             setTimeout(() => navigate("/login"), 2000);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al crear cuenta");
+            message.error(getErrorMessage(error, "Error al crear cuenta"));
         } finally {
             setLoading(false);
         }

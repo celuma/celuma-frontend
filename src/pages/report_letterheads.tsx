@@ -34,6 +34,7 @@ import {
 } from "../services/report_letterhead_service";
 import type { ReportLetterheadSummary } from "../models/report_letterhead";
 import { normalizeLetterheadDescription } from "../models/report_letterhead";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 
@@ -90,7 +91,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             const resp = await listReportLetterheads(false);
             setLetterheads(resp.letterheads);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al cargar los membretes");
+            message.error(getErrorMessage(err, "Error al cargar los membretes"));
         } finally {
             setLoading(false);
         }
@@ -126,7 +127,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             setCreateModalOpen(false);
             navigate(`/config/report-letterheads/${created.id}/versions/new`);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al crear el membrete");
+            message.error(getErrorMessage(err, "Error al crear el membrete"));
         } finally {
             setSaving(false);
         }
@@ -157,7 +158,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             setRenamingLetterhead(null);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar el membrete");
+            message.error(getErrorMessage(err, "Error al actualizar el membrete"));
         } finally {
             setRenaming(false);
         }
@@ -189,7 +190,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             setConfirmingDelete(null);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al eliminar el membrete");
+            message.error(getErrorMessage(err, "Error al eliminar el membrete"));
         } finally {
             setBusyId(null);
         }
@@ -204,7 +205,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             setConfirmingDeactivate(null);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al desactivar el membrete");
+            message.error(getErrorMessage(err, "Error al desactivar el membrete"));
         } finally {
             setBusyId(null);
         }
@@ -217,7 +218,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             message.success("Membrete reactivado");
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al reactivar el membrete");
+            message.error(getErrorMessage(err, "Error al reactivar el membrete"));
         } finally {
             setBusyId(null);
         }
@@ -237,7 +238,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
                 `${letterhead.name.replace(/\s+/g, "-")}-v${active.version_number}.cell`
             );
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al exportar el membrete");
+            message.error(getErrorMessage(err, "Error al exportar el membrete"));
         } finally {
             setExportingId(null);
         }
@@ -250,7 +251,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             message.success(`"${letterhead.name}" duplicado`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al duplicar el membrete");
+            message.error(getErrorMessage(err, "Error al duplicar el membrete"));
         } finally {
             setBusyId(null);
         }
@@ -263,7 +264,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             message.success(`"${letterhead.name}" es ahora el membrete predeterminado del tenant`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al marcar como predeterminado");
+            message.error(getErrorMessage(err, "Error al marcar como predeterminado"));
         } finally {
             setBusyId(null);
         }
@@ -282,7 +283,7 @@ function ReportLetterheads({ embedded = false }: ReportLetterheadsProps) {
             );
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al importar el membrete");
+            message.error(getErrorMessage(err, "Error al importar el membrete"));
         } finally {
             setImporting(false);
         }

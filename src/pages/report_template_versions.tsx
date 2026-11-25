@@ -19,6 +19,7 @@ import {
     archiveReportTemplateVersion,
 } from "../services/report_service";
 import type { ReportTemplateVersionSummary } from "../models/report";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 
@@ -84,7 +85,7 @@ function ReportTemplateVersions({ embedded = false }: ReportTemplateVersionsProp
             setTemplateName(template.name);
             setVersions(versionsResp.versions);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al cargar las versiones de la plantilla");
+            message.error(getErrorMessage(err, "Error al cargar las versiones de la plantilla"));
         } finally {
             setLoading(false);
         }
@@ -124,7 +125,7 @@ function ReportTemplateVersions({ embedded = false }: ReportTemplateVersionsProp
             message.success(`Versión ${version.version_number} activada`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al activar la versión");
+            message.error(getErrorMessage(err, "Error al activar la versión"));
         } finally {
             setBusyVersionId(null);
         }
@@ -138,7 +139,7 @@ function ReportTemplateVersions({ embedded = false }: ReportTemplateVersionsProp
             message.success(`Versión ${version.version_number} archivada`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al archivar la versión");
+            message.error(getErrorMessage(err, "Error al archivar la versión"));
         } finally {
             setBusyVersionId(null);
         }

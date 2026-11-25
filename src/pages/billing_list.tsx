@@ -12,6 +12,7 @@ import { CelumaTable } from "../components/ui/table";
 import { usePageTitle } from "../hooks/use_page_title";
 import { renderInvoiceStatusChip } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -64,7 +65,7 @@ function BillingList() {
             const data = await getJSON<Invoice[]>("/v1/billing/invoices/");
             setInvoices(data);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al cargar facturas");
+            message.error(getErrorMessage(error, "Error al cargar facturas"));
         } finally {
             setLoading(false);
         }

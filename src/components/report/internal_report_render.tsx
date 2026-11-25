@@ -4,6 +4,7 @@ import ReportRendererResolver from "./report_renderer_resolver";
 import type { ReportRendererRef } from "./legacy/legacy_report_types";
 import { fetchInternalRenderData } from "../../services/report_service";
 import type { InternalRenderData } from "../../models/report";
+import { getErrorMessage } from "../../lib/api_error";
 
 /**
  * InternalReportRender (Céluma 1.3 Phase 2, Block E, Story E3).
@@ -113,7 +114,7 @@ export default function InternalReportRender() {
             })
             .catch((err: unknown) => {
                 if (!cancelled) {
-                    setError(err instanceof Error ? err.message : "Error al cargar el reporte");
+                    setError(getErrorMessage(err, "Error al cargar el reporte"));
                 }
             });
         return () => {

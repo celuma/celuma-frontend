@@ -48,6 +48,7 @@ import {
     type CleanupPreview,
     type CleanupStatus,
 } from "../models/laboratory_cleanup";
+import { getErrorMessage } from "../lib/api_error";
 
 const POLL_MS = 2000;
 const MIN_REASON = 10;
@@ -365,7 +366,7 @@ export default function LaboratoryCleanup() {
                 setNow(Date.now());
             }
         } catch (err) {
-            if (alive.current) setPreviewError(err instanceof Error ? err.message : "No se pudo generar la vista previa.");
+            if (alive.current) setPreviewError(getErrorMessage(err, "No se pudo generar la vista previa."));
         } finally {
             if (alive.current) setPreviewing(false);
         }
@@ -401,7 +402,7 @@ export default function LaboratoryCleanup() {
                 setPreview(null);
                 setSubmitError("La vista previa ya no es válida porque el contenido cambió o venció. Genera una nueva vista previa.");
             } else {
-                setSubmitError(err instanceof Error ? err.message : "No se pudo iniciar la limpieza.");
+                setSubmitError(getErrorMessage(err, "No se pudo iniciar la limpieza."));
             }
         } finally {
             if (alive.current) setSubmitting(false);
@@ -416,7 +417,7 @@ export default function LaboratoryCleanup() {
         } catch (err) {
             if (alive.current) {
                 setActive((cur) =>
-                    cur ? { ...cur, error_message: err instanceof Error ? err.message : cur.error_message } : cur,
+                    cur ? { ...cur, error_message: err instanceof Error ? getErrorMessage(err, cur.error_message ?? undefined) : cur.error_message } : cur,
                 );
             }
         } finally {

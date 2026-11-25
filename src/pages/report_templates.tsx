@@ -38,6 +38,7 @@ import type {
 } from "../models/report";
 import { buildDefaultTemplateJSON, DEFAULT_BASE_FIELDS, DEFAULT_SECTIONS, LEGACY_PREDEFINED_BASE_HIDDEN, resolveBaseFieldLabel, resolveBaseOrder, resolveSectionOrder, resolveSignatureMetadata } from "../models/report";
 import { TableEditor } from "../components/report/table_editor";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 // Céluma 1.3.1 manual-validation remediation (R3, CEL-131-04): this list was
@@ -513,7 +514,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
                 }))
             );
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al cargar los membretes disponibles");
+            message.error(getErrorMessage(err, "Error al cargar los membretes disponibles"));
         } finally {
             setLetterheadOptionsLoading(false);
         }
@@ -626,9 +627,7 @@ function ReportTemplates({ embedded = false }: ReportTemplatesProps) {
             closePanel();
             loadTemplates();
         } catch (err) {
-            if (err instanceof Error) {
-                message.error(`Error al guardar: ${err.message}`);
-            }
+            message.error(getErrorMessage(err, "No se pudo guardar la plantilla."));
         } finally {
             setSaving(false);
         }

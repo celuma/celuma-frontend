@@ -19,6 +19,7 @@ import {
     getReportVersion,
     triggerBrowserDownload,
 } from "../../services/report_service";
+import { getErrorMessage } from "../../lib/api_error";
 
 /**
  * Céluma 1.4 (#13): the editor's amendment surface.
@@ -103,7 +104,7 @@ function EmissionRow({
                 if (mounted.current) {
                     setIdentification({
                         status: "error",
-                        message: err instanceof Error ? err.message : "No se pudo cargar la identificación de esta emisión.",
+                        message: getErrorMessage(err, "No se pudo cargar la identificación de esta emisión."),
                     });
                 }
             });
@@ -228,7 +229,7 @@ export default function ReportAmendmentPanel({
         getReportEmissions(reportId)
             .then((data) => { if (!cancelled) setHistory(data); })
             .catch((err: unknown) => {
-                if (!cancelled) setHistoryError(err instanceof Error ? err.message : "No se pudo cargar el historial.");
+                if (!cancelled) setHistoryError(getErrorMessage(err, "No se pudo cargar el historial."));
             });
         return () => { cancelled = true; };
     }, [reportId, refreshKey, hasSignedEmission]);
@@ -239,7 +240,7 @@ export default function ReportAmendmentPanel({
             const { pdf_url } = await getOfficialPdfDownloadUrl(reportId, versionNo);
             triggerBrowserDownload(pdf_url, downloadFilename);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "No se pudo descargar el PDF de esa emisión.");
+            message.error(getErrorMessage(err, "No se pudo descargar el PDF de esa emisión."));
         } finally {
             setDownloading(null);
         }

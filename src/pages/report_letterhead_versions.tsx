@@ -21,6 +21,7 @@ import {
 } from "../services/report_letterhead_service";
 import { DownloadOutlined } from "@ant-design/icons";
 import type { ReportLetterheadVersionSummary } from "../models/report_letterhead";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 
@@ -86,7 +87,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
             setLetterheadName(letterhead.name);
             setVersions(versionsResp.versions);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al cargar las versiones del membrete");
+            message.error(getErrorMessage(err, "Error al cargar las versiones del membrete"));
         } finally {
             setLoading(false);
         }
@@ -124,7 +125,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
             message.success(`Versión ${version.version_number} activada`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al activar la versión");
+            message.error(getErrorMessage(err, "Error al activar la versión"));
         } finally {
             setBusyVersionId(null);
         }
@@ -138,7 +139,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
             message.success(`Versión ${version.version_number} archivada`);
             await load();
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al archivar la versión");
+            message.error(getErrorMessage(err, "Error al archivar la versión"));
         } finally {
             setBusyVersionId(null);
         }
@@ -151,7 +152,7 @@ function ReportLetterheadVersions({ embedded = false }: ReportLetterheadVersions
             const filename = `${(letterheadName || "membrete").replace(/\s+/g, "-")}-v${version.version_number}.cell`;
             await exportReportLetterheadVersion(letterheadId, version.id, filename);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al exportar la versión");
+            message.error(getErrorMessage(err, "Error al exportar la versión"));
         } finally {
             setBusyVersionId(null);
         }

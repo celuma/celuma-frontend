@@ -20,6 +20,7 @@ import {
     type FilterOption,
     type ListQuery,
 } from "../services/list_service";
+import { getErrorMessage } from "../lib/api_error";
 
 type ReportsListResponse = {
     reports: Array<{
@@ -91,7 +92,7 @@ export default function ReportsList() {
         getJSON<ReportFilterOptions>("/v1/reports/filter-options", controller.signal)
             .then(setOptions)
             .catch((err) => {
-                if (!controller.signal.aborted) setOptionsError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!controller.signal.aborted) setOptionsError(getErrorMessage(err, "Ocurrió un error inesperado."));
             });
         return () => controller.abort();
     }, []);

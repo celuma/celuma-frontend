@@ -19,6 +19,7 @@ import type {
 import { sampleImageUploadErrorMessage } from "../lib/sample_image_formats";
 import { buildReportPdfFilename } from "../lib/report_filename";
 import { parseFastApiDetail } from "../lib/api_error";
+import { reviewSubmissionRejection, type ReviewBlocker } from "../lib/review_submission";
 import type { OrderReportDefaults, StudyTypeReportDefaults } from "../models/report_letterhead";
 
 const base = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL as string) || "/api";
@@ -439,6 +440,21 @@ export interface ReportActionResponse {
     message: string;
 }
 
+/**
+ * Céluma 1.5 (#65): a refused submission. `blocker` says which editor section
+ * is affected and what to do, in Spanish; the message never carries the raw body.
+ */
+export class ReportSubmitError extends Error {
+    readonly status: number;
+    readonly blocker: ReviewBlocker;
+    constructor(status: number, blocker: ReviewBlocker) {
+        super(blocker.detail);
+        this.name = "ReportSubmitError";
+        this.status = status;
+        this.blocker = blocker;
+    }
+}
+
 export async function submitReport(reportId: string, changelog?: string): Promise<ReportActionResponse> {
     const res = await fetch(`${base}/v1/reports/${reportId}/submit`, {
         method: "POST",
@@ -447,7 +463,7 @@ export async function submitReport(reportId: string, changelog?: string): Promis
     });
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Error al enviar reporte: ${res.status} - ${errText}`);
+        throw new ReportSubmitError(res.status, reviewSubmissionRejection(res.status, errText));
     }
     return await res.json();
 }

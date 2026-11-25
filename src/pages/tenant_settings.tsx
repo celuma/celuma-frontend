@@ -17,6 +17,7 @@ import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import { tokens, cardStyle } from "../components/design/tokens";
 import type { UploadFile } from "antd/es/upload/interface";
 import { extractUploadedFile } from "../lib/upload_helpers";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -213,7 +214,7 @@ function TenantSettings({ embedded = false }: TenantSettingsProps) {
             setTenant(updated);
             message.success(newReviewerId ? "Revisor predeterminado actualizado" : "Revisor predeterminado eliminado");
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "Error al actualizar el revisor predeterminado");
+            message.error(getErrorMessage(e, "Error al actualizar el revisor predeterminado"));
         } finally {
             setSavingDefaultReviewer(false);
         }

@@ -7,6 +7,7 @@ import {
     PERMS,
 } from "../lib/rbac";
 import { getStoredToken, clearStoredAuth } from "../lib/auth_session";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -64,7 +65,7 @@ export function useUserProfile() {
                     setAuthStatus("error");
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Error de red");
+                setError(getErrorMessage(err, "Error de red"));
                 setAuthStatus("error");
             }
         };

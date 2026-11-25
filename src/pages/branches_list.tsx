@@ -13,6 +13,7 @@ import { CelumaTable } from "../components/ui/table";
 import { stringSorter, renderActiveChip, activeFilter } from "../components/ui/table_helpers";
 import { matchesQuery } from "../lib/search";
 import { usePageTitle } from "../hooks/use_page_title";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -27,7 +28,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -58,7 +59,7 @@ function BranchesList({ embedded = false }: Props) {
         setLoading(true);
         getJSON<BranchRow[]>("/v1/branches/")
             .then((data) => setRows(data || []))
-            .catch((err) => setError(err instanceof Error ? err.message : "Ocurrió un error inesperado."))
+            .catch((err) => setError(getErrorMessage(err, "Ocurrió un error inesperado.")))
             .finally(() => setLoading(false));
     }, []);
 

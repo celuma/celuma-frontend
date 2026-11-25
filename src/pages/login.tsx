@@ -17,6 +17,7 @@ import Button from "../components/ui/button";
 import AlertText from "../components/ui/error_text";
 import CelumaModal from "../components/ui/celuma_modal";
 import { usePageTitle } from "../hooks/use_page_title";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 /* --------- Validation --------- */
 const schema = z.object({
@@ -91,7 +92,7 @@ export default function Login() {
             try { json = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
 
             if (!resp.ok) {
-                const msg = (json as { message?: string } | undefined)?.message ?? `${resp.status} ${resp.statusText}`;
+                const msg = formatHttpError(resp.status, JSON.stringify(json ?? ""));
                 throw new Error(msg);
             }
 
@@ -167,7 +168,7 @@ export default function Login() {
 
             navigate(redirectPath, { replace: true });
         } catch (err) {
-            setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            setServerError(getErrorMessage(err, "Ocurrió un error inesperado."));
         }
     });
 

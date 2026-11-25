@@ -9,6 +9,7 @@ import ImageGalleryCard from "../ui/image_gallery_card";
 import ConfirmDialog from "../ui/confirm_dialog";
 import { useNotice } from "../../hooks/use_notice";
 import { ACCEPT_EXTENSIONS, sampleImageFileError } from "../../lib/sample_image_formats";
+import { getErrorMessage } from "../../lib/api_error";
 
 export type SampleImageItem = {
     id: string;
@@ -46,7 +47,7 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
             const list = await fetchReportImages(sampleId);
             setImages(list);
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "No se pudieron cargar las imágenes de la muestra");
+            message.error(getErrorMessage(e, "No se pudieron cargar las imágenes de la muestra"));
         } finally {
             setLoading(false);
         }
@@ -83,7 +84,7 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
             message.success(`"${fileName}" subida correctamente.`);
             await load();
         } catch (err) {
-            const msg = err instanceof Error ? err.message : "Error al subir imagen.";
+            const msg = getErrorMessage(err, "Error al subir imagen.");
             onError?.(err as Error);
             message.error(`Error al subir "${fileName}": ${msg}`);
         } finally {
@@ -101,7 +102,7 @@ export default function SampleImagesPicker({ sampleId, selectedIds, onToggleSele
             await deleteReportImage(sampleId, img.id);
             await load();
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "No se pudo eliminar la imagen");
+            message.error(getErrorMessage(e, "No se pudo eliminar la imagen"));
         } finally {
             setDeleting(false);
             setConfirmDelete(null);

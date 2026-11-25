@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { validateSearchQuery } from "../lib/search";
 import type { ListLocation, ListPage, ListQuery, ListSort } from "../services/list_service";
+import { getErrorMessage } from "../lib/api_error";
 
 /**
  * State for a server-paginated `CelumaTable` (Céluma 1.4, issue #6).
@@ -144,7 +145,7 @@ export function useServerList<T>({
             })
             .catch((err: unknown) => {
                 if (requestId !== latestRequest.current || controller.signal.aborted) return;
-                setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                setError(getErrorMessage(err, "Ocurrió un error inesperado."));
                 setLoading(false);
             });
         return () => controller.abort();

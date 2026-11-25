@@ -13,6 +13,7 @@ import {
     readExportFile,
 } from "../../services/sample_type_service";
 import type { ConflictPolicy, TransferItem, TransferPreview, TransferResult, TransferStatus } from "../../models/sample_type";
+import { getErrorMessage } from "../../lib/api_error";
 
 /**
  * Preview → confirm flow shared by "Importar JSON" and "Copiar a tipos de
@@ -74,7 +75,7 @@ export default function CatalogTransferModal({ open, source, onClose, onDone }: 
             setBusy(true);
             previewCopy(source.studyTypeIds)
                 .then(showPreview)
-                .catch((err) => setError(err instanceof Error ? err.message : "No se pudo generar la vista previa."))
+                .catch((err) => setError(getErrorMessage(err, "No se pudo generar la vista previa.")))
                 .finally(() => setBusy(false));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +92,7 @@ export default function CatalogTransferModal({ open, source, onClose, onDone }: 
             showPreview(await previewImport(parsed));
         } catch (err) {
             setPreview(null);
-            setError(err instanceof Error ? err.message : "No se pudo leer el archivo.");
+            setError(getErrorMessage(err, "No se pudo leer el archivo."));
         } finally {
             setBusy(false);
             if (fileInput.current) fileInput.current.value = "";
@@ -124,7 +125,7 @@ export default function CatalogTransferModal({ open, source, onClose, onDone }: 
                         : "Hay registros en conflicto con el catálogo de destino. No se creó nada: elige omitirlos o quita los conflictos.",
                 );
             } else {
-                setError(err instanceof Error ? err.message : "No se pudo completar la operación.");
+                setError(getErrorMessage(err, "No se pudo completar la operación."));
             }
         } finally {
             setBusy(false);

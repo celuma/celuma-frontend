@@ -23,6 +23,7 @@ import {
     listReportLetterheadVersions,
     getReportLetterheadVersion,
 } from "../services/report_letterhead_service";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 
@@ -103,7 +104,7 @@ function ReportTemplateEditor({ embedded = false }: ReportTemplateEditorProps) {
                 setResolvedPresentation(versionDetail.configuration);
                 setResolvedLetterheadName(defaultLetterhead.name);
             } catch (err) {
-                message.error(err instanceof Error ? err.message : "Error al cargar la plantilla");
+                message.error(getErrorMessage(err, "Error al cargar la plantilla"));
             } finally {
                 setLoading(false);
             }
@@ -129,7 +130,7 @@ function ReportTemplateEditor({ embedded = false }: ReportTemplateEditorProps) {
             setPublishModalOpen(false);
             navigate(`/config/report-templates/${templateId}/versions`);
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al publicar la versión");
+            message.error(getErrorMessage(err, "Error al publicar la versión"));
             setPublishModalOpen(false);
         } finally {
             setPublishing(false);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card, Form, Input, Button, message, Typography, Descriptions, Tag } from "antd";
 import { SearchOutlined, DownloadOutlined } from "@ant-design/icons";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Title, Paragraph } = Typography;
 
@@ -42,7 +43,7 @@ function PatientPortal() {
             const data = await res.json();
             setReport(data);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Error al buscar reporte");
+            setError(getErrorMessage(err, "Error al buscar reporte"));
             message.error("No se encontró el reporte con ese código");
         } finally {
             setLoading(false);
