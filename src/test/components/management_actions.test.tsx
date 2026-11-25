@@ -84,14 +84,18 @@ const at = (path: string, route: string, el: React.ReactElement) =>
 describe("remove capture dialog", () => {
     const dialog = (onConfirm = vi.fn(), error: string | null = null) =>
         render(
-            <RemoveCaptureDialog open title="Retirar orden" consequences={["The code is never reused."]} confirmText="Retirar orden"
+            <RemoveCaptureDialog open title="Retirar orden" consequences={["The code is never reused and no other order is renumbered.", "2 sample(s) are removed with the order; their images stay in storage."]} confirmText="Retirar orden"
                 loading={false} error={error} testId="order-remove-dialog" onConfirm={onConfirm} onCancel={vi.fn()} />,
         );
 
     it("needs a reason, shows the consequences, and confirms with the trimmed reason", () => {
         const onConfirm = vi.fn();
         dialog(onConfirm);
-        expect(screen.getByTestId("order-remove-dialog").textContent).toContain("The code is never reused.");
+        // Céluma 1.5 (#84): the API's English consequences are listed in Spanish.
+        const listed = screen.getByTestId("order-remove-dialog").textContent;
+        expect(listed).toContain("El código no se vuelve a usar y ninguna otra orden se renumera.");
+        expect(listed).toContain("Se retiran 2 muestras con la orden; sus imágenes se conservan en el almacenamiento.");
+        expect(listed).not.toContain("never reused");
         const confirm = screen.getByText("Retirar orden", { selector: "button span, button" }).closest("button")!;
         expect(confirm.disabled).toBe(true);
         fireEvent.change(screen.getByLabelText("Motivo del retiro"), { target: { value: "  orden en el paciente equivocado " } });

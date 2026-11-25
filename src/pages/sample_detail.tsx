@@ -303,7 +303,7 @@ export default function SampleDetailPage() {
             message.success("Muestra retirada. Su código queda fuera de la numeración automática.");
             navigate(`/orders/${detail.order.id}`, { replace: true, state: carriedReturn });
         } catch (err) {
-            setRemoveError(getErrorMessage(err));
+            setRemoveError(getErrorMessage(err, "No se pudo retirar la muestra."));
             setRemoving(false);
         }
     }, [sampleId, detail, navigate, carriedReturn]);

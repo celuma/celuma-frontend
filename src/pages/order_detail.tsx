@@ -595,7 +595,7 @@ export default function OrderDetail() {
             if (ret) navigate(ret.url, { replace: true, state: { celumaRestore: ret.listKey } });
             else navigate("/orders", { replace: true });
         } catch (err) {
-            setRemoveError(getErrorMessage(err));
+            setRemoveError(getErrorMessage(err, "No se pudo retirar la orden."));
             setRemoving(false);
         }
     }, [orderId, navigate, carriedReturn]);
