@@ -41,6 +41,7 @@ import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notic
 import { collectionDateSchema, isValidReceiptDate, receiptDateSchema } from "../lib/receipt_date";
 import { DEFAULT_NUMBERING_ZONE, receiptZone, todayInZone } from "../lib/receipt_today";
 import { useSampleNumberingZone } from "../hooks/use_sample_numbering_zone";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -68,7 +69,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch (err) { console.warn("Non-JSON response", err); }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -292,7 +293,7 @@ export default function SampleForm() {
             const state: RegistrationNoticeState | undefined = notice ? { registrationNotice: notice } : undefined;
             navigate(`/samples/${created.id}`, state ? { replace: true, state } : { replace: true });
         } catch (err) {
-            setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            setServerError(getErrorMessage(err, "Ocurrió un error inesperado."));
             reloadOrderManagement(); // a refused (stale) request refreshes what the form offers
         } finally {
             setLoading(false);

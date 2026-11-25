@@ -23,6 +23,7 @@ import {
     officialPdfFilename,
     getOrderReportDefaults,
     ReportConfigRequestError,
+    ReportSubmitError,
 } from "../../services/report_service";
 import {
     listReportLetterheads,
@@ -97,6 +98,9 @@ import { getInitials, getAvatarColor } from "../comments/comment_utils";
 import CommentInput from "../comments/comment_input";
 import { useUserProfile } from "../../hooks/use_user_profile";
 import { PERMS } from "../../lib/rbac";
+import { getErrorMessage, formatHttpError, sanitizeErrorMessage, spanishOr } from "../../lib/api_error";
+import { reviewSubmissionPrecheck, type ReviewBlocker } from "../../lib/review_submission";
+import ReviewSubmissionBlockers from "./review_submission_blockers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,7 +129,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(msg);
     }
     return parsed as TRes;
@@ -427,6 +431,10 @@ const ReportEditor: React.FC = () => {
     // version is current, so the editor reloads (reloadToken) afterwards.
     const [reloadToken, setReloadToken] = useState(0);
     const [amendmentNote, setAmendmentNote] = useState("");
+    // Céluma 1.5 (#65): the server's refusal of the last submission. It stays listed until the next
+    // attempt or a successful save (most refusals are fixed by saving; the server re-checks on the next submit).
+    const [submitRejection, setSubmitRejection] = useState<ReviewBlocker | null>(null);
+    const submissionBlockersRef = useRef<HTMLDivElement>(null);
     const [isAmendDialogVisible, setIsAmendDialogVisible] = useState(false);
     const [amendError, setAmendError] = useState<string | null>(null);
     const [isAmending, setIsAmending] = useState(false);
@@ -897,7 +905,7 @@ const ReportEditor: React.FC = () => {
                         } catch (stErr) {
                             studyTypeReadable = false;
                             setV2BlockedReason(classifyConfigFailure(stErr));
-                            setV2BlockedDetail(stErr instanceof Error ? stErr.message : null);
+                            setV2BlockedDetail(getErrorMessage(stErr, "") || null);
                             setV2ConfigBlocked(true);
                         }
                     }
@@ -974,7 +982,7 @@ const ReportEditor: React.FC = () => {
                             }
                         } catch (cfgErr) {
                             setV2BlockedReason(classifyConfigFailure(cfgErr));
-                            setV2BlockedDetail(cfgErr instanceof Error ? cfgErr.message : null);
+                            setV2BlockedDetail(getErrorMessage(cfgErr, "") || null);
                             setV2ConfigBlocked(true);
                         }
                     }
@@ -1005,7 +1013,7 @@ const ReportEditor: React.FC = () => {
                     setRequireDigitalSignature(tmplSig.require_digital_signature);
                 }
             } catch (err) {
-                setLoadError(err instanceof Error ? err.message : "No se pudo cargar el reporte");
+                setLoadError(getErrorMessage(err, "No se pudo cargar el reporte"));
             } finally {
                 setLoadingData(false);
             }
@@ -1488,6 +1496,7 @@ const ReportEditor: React.FC = () => {
             // Fifth remediation: the letterhead change is persisted, so it is
             // no longer pending (and the "leave without saving" warning ends).
             setLetterheadDirty(false);
+            setSubmitRejection(null);
             message.success("Reporte guardado");
             if (saved.order_id) navigate(`/orders/${saved.order_id}`);
         } catch (err) {
@@ -1511,7 +1520,7 @@ const ReportEditor: React.FC = () => {
                 );
                 return;
             }
-            message.error(err instanceof Error ? err.message : "No se pudo guardar el reporte");
+            message.error(getErrorMessage(err, "No se pudo guardar el reporte"));
         }
     };
 
@@ -1537,21 +1546,89 @@ const ReportEditor: React.FC = () => {
      * refresh failure therefore leaves a correctly IN_REVIEW report with a
      * stale reviewer list, never a report that looks unsubmitted.
      */
+    // Céluma 1.5 (#65): what stands between this draft and review, from the rules the backend applies on
+    // submission that the editor can already evaluate. Explanatory only — the server re-checks everything.
+    const submitPrecheck = useMemo<ReviewBlocker[]>(() => {
+        if (envelope?.status !== "DRAFT" || legacyAuthoringBlocked) return [];
+        return reviewSubmissionPrecheck({
+            saved: Boolean(envelope?.id),
+            amendmentOpen: Boolean(envelope?.open_amendment),
+            storedChangeNote: envelope?.report?.amendment?.change_note,
+            editorChangeNote: amendmentNote,
+            letterheadUnsaved: letterheadDirty,
+            reviewers: orderReviewers,
+        });
+    }, [envelope?.status, envelope?.id, envelope?.open_amendment, envelope?.report?.amendment?.change_note,
+        legacyAuthoringBlocked, amendmentNote, letterheadDirty, orderReviewers]);
+
+    const submissionBlockers = useMemo<ReviewBlocker[]>(() => {
+        if (envelope?.status !== "DRAFT") return [];
+        if (!submitRejection) return submitPrecheck;
+        return [submitRejection, ...submitPrecheck.filter((b) => b.id !== submitRejection.id)];
+    }, [envelope?.status, submitRejection, submitPrecheck]);
+
+    /** Takes the user to the section a blocker belongs to. */
+    const goToBlocker = useCallback((blocker: ReviewBlocker) => {
+        const focusIn = (el: HTMLElement | null) => {
+            if (!el) return false;
+            el.scrollIntoView?.({ behavior: "smooth", block: "center" });
+            const target = el.matches("input, textarea, button, [tabindex]")
+                ? el
+                : el.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+            (target ?? el).focus?.({ preventScroll: true });
+            return true;
+        };
+        switch (blocker.section) {
+            case "amendment":
+                if (focusIn(document.getElementById("amendment-change-note"))) return;
+                break;
+            case "letterhead":
+                if (focusIn(document.querySelector<HTMLElement>('[data-testid="letterhead-panel"]'))) return;
+                break;
+            case "save":
+            case "samples":
+            case "images":
+                if (focusIn(document.querySelector<HTMLElement>('[data-testid="report-save-top"]'))) return;
+                break;
+            case "reviewers":
+                if (fullData?.order?.id) { navigate(`/orders/${fullData.order.id}`); return; }
+                break;
+            case "status":
+                window.location.reload();
+                return;
+            default:
+                break;
+        }
+        focusIn(submissionBlockersRef.current);
+    }, [fullData?.order?.id, navigate]);
+
+    /** After a blocked submission: focus the section when it is on this page, else the list itself. */
+    const focusFirstSection = useCallback((blocker: ReviewBlocker) => {
+        const inPage = blocker.section === "amendment" || blocker.section === "letterhead"
+            || blocker.section === "save" || blocker.section === "samples" || blocker.section === "images";
+        // Wait a frame so a just-rendered list is in the DOM.
+        requestAnimationFrame(() => {
+            if (inPage) goToBlocker(blocker);
+            else submissionBlockersRef.current?.focus?.();
+        });
+    }, [goToBlocker]);
+
     const handleSubmit = async () => {
         if (!envelope?.id) { message.warning("Guarda el reporte primero"); return; }
-        // Céluma 1.4 (#13): the stored amendment draft needs its change note.
-        if (envelope.open_amendment && !(envelope.report?.amendment?.change_note ?? "").trim()) {
-            showCelumaWarning(
-                "Falta la nota de enmienda",
-                "Escribe y guarda la nota de enmienda antes de enviar a revisión.",
-            );
+        // Céluma 1.5 (#65): requirements the editor can already see stop the submission here and take the
+        // user to the first affected section (the amendment note of #13 is one of them).
+        const pending = submitPrecheck.filter((b) => b.severity === "blocker");
+        if (pending.length > 0) {
+            showCelumaWarning(pending[0].title, pending[0].detail);
+            focusFirstSection(pending[0]);
             return;
         }
         try {
             const result = await submitReport(envelope.id);
+            setSubmitRejection(null);
             const newStatus = (result.status as ReportStatus) ?? "IN_REVIEW";
             setEnvelope((e) => e ? { ...e, status: newStatus } : e);
-            message.success(result.message);
+            message.success(spanishOr(result.message, "Reporte enviado a revisión."));
             try {
                 const full = await getReportFull(envelope.id);
                 setFullData(full);
@@ -1561,23 +1638,15 @@ const ReportEditor: React.FC = () => {
                 // like a failed submission.
             }
         } catch (err) {
-            // Céluma 1.4 (#12): a sample code was corrected after the last save. The preview already shows
-            // the current codes; saving stores them, then the submission goes through.
-            if (err instanceof Error && err.message.includes("report_sample_codes_stale")) {
-                showCelumaWarning(
-                    "Los códigos de muestra cambiaron",
-                    "La orden tiene códigos de muestra nuevos desde el último guardado. Guarda el reporte y vuelve a enviarlo a revisión.",
-                );
+            // Céluma 1.5 (#65): the server's refusal names the affected section (sample codes of #12, retired
+            // images, letterhead, reviewers, amendment note…) and stays listed until it is fixed.
+            if (err instanceof ReportSubmitError) {
+                setSubmitRejection(err.blocker);
+                showCelumaWarning(err.blocker.title, err.blocker.detail);
+                focusFirstSection(err.blocker);
                 return;
             }
-            if (err instanceof Error && err.message.includes("report_sample_images_stale")) {
-                showCelumaWarning(
-                    "Se retiraron imágenes de la orden",
-                    "Guarda el borrador para aplicar el cambio y vuelve a enviarlo a revisión.",
-                );
-                return;
-            }
-            showCelumaApiError(err, "Error al enviar el reporte.");
+            showCelumaApiError(err, "No se pudo enviar el reporte a revisión.");
         }
     };
 
@@ -1629,8 +1698,8 @@ const ReportEditor: React.FC = () => {
             setEnvelope((e) => e ? { ...e, status: result.status as ReportStatus } : e);
             setIsApproveModalVisible(false);
             setApproveComment("");
-            message.success(result.message);
-        } catch (err) { message.error(err instanceof Error ? err.message : "Error al aprobar"); }
+            message.success(spanishOr(result.message, "Reporte aprobado."));
+        } catch (err) { message.error(getErrorMessage(err, "Error al aprobar")); }
     };
 
     const handleRequestChanges = async () => {
@@ -1640,8 +1709,8 @@ const ReportEditor: React.FC = () => {
             setEnvelope((e) => e ? { ...e, status: result.status as ReportStatus } : e);
             setIsChangesModalVisible(false);
             setChangesComment("");
-            message.success(result.message);
-        } catch (err) { message.error(err instanceof Error ? err.message : "Error al solicitar cambios"); }
+            message.success(spanishOr(result.message, "Se solicitaron cambios; el reporte volvió a borrador."));
+        } catch (err) { message.error(getErrorMessage(err, "Error al solicitar cambios")); }
     };
 
     /**
@@ -1664,7 +1733,7 @@ const ReportEditor: React.FC = () => {
             const newStatus = (result.status as ReportStatus) ?? "DRAFT";
             setEnvelope((e) => (e ? { ...e, status: newStatus } : e));
             setIsReopenConfirmVisible(false);
-            message.success(result.message || "Reporte reabierto.");
+            message.success(spanishOr(result.message, "Reporte reabierto."));
             try {
                 const full = await getReportFull(envelope.id);
                 setFullData(full);
@@ -1677,7 +1746,7 @@ const ReportEditor: React.FC = () => {
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
                 // Nothing changed on the server: stay in the dialog.
-                setReopenConfirmError(err.message);
+                setReopenConfirmError(getErrorMessage(err, "No se pudo reabrir el reporte."));
                 return;
             }
             showCelumaApiError(err, "No se pudo reabrir el reporte.");
@@ -1696,11 +1765,11 @@ const ReportEditor: React.FC = () => {
                 password, reason, category: category as AmendmentCategory,
             });
             setIsAmendDialogVisible(false);
-            message.success(result.message);
+            message.success(spanishOr(result.message, "Enmienda abierta."));
             setReloadToken((n) => n + 1);
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
-                setAmendError(err.message);
+                setAmendError(getErrorMessage(err, "No se pudo abrir la enmienda."));
                 return;
             }
             showCelumaApiError(err, "No se pudo abrir la enmienda.");
@@ -1717,11 +1786,11 @@ const ReportEditor: React.FC = () => {
         try {
             const result = await cancelReportAmendment(envelope.id, openAmendment.id, { password, reason });
             setIsCancelAmendVisible(false);
-            message.success(result.message);
+            message.success(spanishOr(result.message, "Enmienda cancelada."));
             setReloadToken((n) => n + 1);
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
-                setCancelAmendError(err.message);
+                setCancelAmendError(getErrorMessage(err, "No se pudo cancelar la enmienda."));
                 return;
             }
             showCelumaApiError(err, "No se pudo cancelar la enmienda.");
@@ -1820,12 +1889,12 @@ const ReportEditor: React.FC = () => {
                 } else if (err.status === 409) {
                     message.error("El PDF oficial aún no está listo. Inténtalo de nuevo en unos segundos.");
                 } else {
-                    message.error(err.message || "No se pudo obtener el enlace de descarga del PDF oficial.");
+                    message.error(getErrorMessage(err, "No se pudo obtener el enlace de descarga del PDF oficial."));
                 }
                 return;
             }
             message.error(
-                err instanceof Error ? err.message : "Error al descargar el PDF oficial"
+                getErrorMessage(err, "Error al descargar el PDF oficial")
             );
         } finally {
             setIsDownloadingPdf(false);
@@ -1913,7 +1982,7 @@ const ReportEditor: React.FC = () => {
                     }
                     : e
             );
-            message.success(result.message || "Reporte firmado y publicado. PDF oficial disponible.");
+            message.success(spanishOr(result.message, "Reporte firmado y publicado. PDF oficial disponible."));
             try {
                 const full = await getReportFull(envelope.id);
                 // §8: the refresh enriches (signature, resolved resources,
@@ -1936,7 +2005,7 @@ const ReportEditor: React.FC = () => {
         } catch (err) {
             if (isPasswordConfirmationError(err)) {
                 // Nothing was signed: stay in the dialog and say why.
-                setSignConfirmError(err.message);
+                setSignConfirmError(getErrorMessage(err, "No se pudo firmar y publicar el reporte."));
                 return;
             }
             setIsSignConfirmVisible(false);
@@ -2392,6 +2461,11 @@ const ReportEditor: React.FC = () => {
                             )}
                         </div>
                     )}
+                    <ReviewSubmissionBlockers
+                        ref={submissionBlockersRef}
+                        blockers={submissionBlockers}
+                        onGo={goToBlocker}
+                    />
                     {userHasPermission(PERMS.REPORTS_READ) && envelope?.status !== "PUBLISHED" && (
                         <div style={{ marginTop: 8 }}>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -2404,7 +2478,7 @@ const ReportEditor: React.FC = () => {
                     {envelope?.status === "APPROVED" && envelope?.pdf_error_message && (
                         <div style={{ marginTop: 8 }}>
                             <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                                No se pudo firmar y publicar: {envelope.pdf_error_message}
+                                No se pudo firmar y publicar: {sanitizeErrorMessage(envelope.pdf_error_message, "ocurrió un error al generar el PDF oficial. Inténtalo de nuevo.")}
                             </Typography.Text>
                         </div>
                     )}

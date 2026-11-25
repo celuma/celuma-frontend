@@ -1,4 +1,5 @@
-/**
+
+import { formatHttpError } from "../lib/api_error";/**
  * Server-paginated list requests (Céluma 1.4, issues #6/#7).
  *
  * Contract: `celuma-engineering/specs/lists/search-and-pagination.md`. A list
@@ -21,7 +22,7 @@ export async function getJSON<TRes>(path: string, signal?: AbortSignal): Promise
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;

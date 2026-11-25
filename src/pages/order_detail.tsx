@@ -7,7 +7,8 @@ import { TEMPLATE_SOURCE_LABEL } from "../lib/report_template_suggestion";
 import RemoveCaptureDialog from "../components/management/remove_capture_dialog";
 import { useOrderManagement } from "../hooks/use_capture_management";
 import { removeOrder } from "../services/order_management_service";
-import { getErrorMessage } from "../lib/api_error";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
+import { blockerMessage } from "../lib/management_blockers";
 import { Layout, Card, Avatar, Empty, message, Timeline, Badge, Tooltip } from "antd";
 import {
     ReloadOutlined, FilePdfOutlined,
@@ -91,7 +92,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -360,7 +361,7 @@ export default function OrderDetail() {
                     await loadLatestReport(foundReportId);
                 }
             } catch (err) {
-                if (!silent) setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!silent) setError(getErrorMessage(err, "Ocurrió un error inesperado."));
             } finally {
                 if (!silent) setLoading(false);
             }
@@ -420,7 +421,7 @@ export default function OrderDetail() {
             await refresh({ silent: true });
             message.success("Asignados actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar asignados");
+            message.error(getErrorMessage(err, "Error al actualizar asignados"));
             throw err;
         }
     }, [orderId, refresh]);
@@ -432,7 +433,7 @@ export default function OrderDetail() {
             await refresh({ silent: true });
             message.success("Revisores actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar revisores");
+            message.error(getErrorMessage(err, "Error al actualizar revisores"));
             throw err;
         }
     }, [orderId, refresh]);
@@ -444,7 +445,7 @@ export default function OrderDetail() {
             await refresh({ silent: true });
             message.success("Etiquetas actualizadas");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar etiquetas");
+            message.error(getErrorMessage(err, "Error al actualizar etiquetas"));
             throw err;
         }
     }, [orderId, refresh]);
@@ -543,7 +544,7 @@ export default function OrderDetail() {
                 const responseText = await res.text();
                 let parsed: unknown = undefined;
                 try { parsed = responseText ? JSON.parse(responseText) : undefined; } catch { /* ignore */ }
-                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
                 throw new Error(msg);
             }
             message.success("Comentario agregado");
@@ -552,7 +553,7 @@ export default function OrderDetail() {
             await loadConversation({ forceScrollToBottom: true, silent: false });
             await refreshTimeline(); // Update timeline without reloading entire page
         } catch (e) {
-            const errMsg = e instanceof Error ? e.message : "Error al agregar comentario";
+            const errMsg = getErrorMessage(e, "Error al agregar comentario");
             message.error(errMsg);
             throw e;
         } finally {
@@ -594,7 +595,7 @@ export default function OrderDetail() {
             if (ret) navigate(ret.url, { replace: true, state: { celumaRestore: ret.listKey } });
             else navigate("/orders", { replace: true });
         } catch (err) {
-            setRemoveError(getErrorMessage(err));
+            setRemoveError(getErrorMessage(err, "No se pudo retirar la orden."));
             setRemoving(false);
         }
     }, [orderId, navigate, carriedReturn]);
@@ -663,7 +664,7 @@ export default function OrderDetail() {
                         icon={<PlusOutlined />}
                         disabled={management?.sample_creation?.allowed === false}
                         title={management?.sample_creation?.allowed === false
-                            ? (management.sample_creation.blockers[0]?.message ?? "No se pueden agregar muestras ahora.")
+                            ? (management.sample_creation.blockers[0] ? blockerMessage(management.sample_creation.blockers[0]) : "No se pueden agregar muestras ahora.")
                             : undefined}
                         data-testid="add-sample"
                         onClick={() => data && navigate(`/samples/register?orderId=${data.order.id}`)}

@@ -48,6 +48,7 @@ import {
     type CleanupPreview,
     type CleanupStatus,
 } from "../models/laboratory_cleanup";
+import { getErrorMessage, sanitizeErrorMessage, spanishOr } from "../lib/api_error";
 
 const POLL_MS = 2000;
 const MIN_REASON = 10;
@@ -204,7 +205,7 @@ function OperationProgress({ op, busy, onRetry, onCancel }: {
                         message={op.phase === "OBJECTS" ? "Faltan archivos por eliminar" : "La limpieza se interrumpió"}
                         description={
                             <>
-                                {op.error_message ?? "Ocurrió un error."}{" "}
+                                {sanitizeErrorMessage(op.error_message ?? "", "Ocurrió un error.")}{" "}
                                 {op.phase === "OBJECTS"
                                     ? "La base de datos ya está limpia y el laboratorio ya opera; el reintento solo procesa los archivos pendientes."
                                     : "No se eliminó ningún dato; puedes reintentar o cancelar."}
@@ -217,7 +218,7 @@ function OperationProgress({ op, busy, onRetry, onCancel }: {
                 <CelumaAlert
                     type="info"
                     message="Limpieza cancelada"
-                    description={`${op.error_message ?? ""} No se eliminó ningún dato. El laboratorio vuelve a operar con normalidad.`.trim()}
+                    description={`${op.error_message ? sanitizeErrorMessage(op.error_message, "") : ""} No se eliminó ningún dato. El laboratorio vuelve a operar con normalidad.`.trim()}
                     style={{ marginTop: 12 }}
                 />
             )}
@@ -365,7 +366,7 @@ export default function LaboratoryCleanup() {
                 setNow(Date.now());
             }
         } catch (err) {
-            if (alive.current) setPreviewError(err instanceof Error ? err.message : "No se pudo generar la vista previa.");
+            if (alive.current) setPreviewError(getErrorMessage(err, "No se pudo generar la vista previa."));
         } finally {
             if (alive.current) setPreviewing(false);
         }
@@ -401,7 +402,7 @@ export default function LaboratoryCleanup() {
                 setPreview(null);
                 setSubmitError("La vista previa ya no es válida porque el contenido cambió o venció. Genera una nueva vista previa.");
             } else {
-                setSubmitError(err instanceof Error ? err.message : "No se pudo iniciar la limpieza.");
+                setSubmitError(getErrorMessage(err, "No se pudo iniciar la limpieza."));
             }
         } finally {
             if (alive.current) setSubmitting(false);
@@ -416,7 +417,7 @@ export default function LaboratoryCleanup() {
         } catch (err) {
             if (alive.current) {
                 setActive((cur) =>
-                    cur ? { ...cur, error_message: err instanceof Error ? err.message : cur.error_message } : cur,
+                    cur ? { ...cur, error_message: err instanceof Error ? getErrorMessage(err, cur.error_message ?? undefined) : cur.error_message } : cur,
                 );
             }
         } finally {
@@ -489,7 +490,7 @@ export default function LaboratoryCleanup() {
                             <CelumaAlert
                                 type="error"
                                 message="La limpieza no puede iniciar todavía"
-                                description={<ul style={{ margin: 0, paddingLeft: 18 }}>{preview.blockers.map((b) => <li key={b.code}>{b.message}</li>)}</ul>}
+                                description={<ul style={{ margin: 0, paddingLeft: 18 }}>{preview.blockers.map((b) => <li key={b.code}>{spanishOr(b.message, "Hay una condición que impide iniciar la limpieza.")}</li>)}</ul>}
                             />
                         </div>
                     )}
@@ -498,7 +499,7 @@ export default function LaboratoryCleanup() {
                             <CelumaAlert
                                 type="warning"
                                 message="Ten en cuenta"
-                                description={<ul style={{ margin: 0, paddingLeft: 18 }}>{preview.warnings.map((w) => <li key={w.code}>{w.message}</li>)}</ul>}
+                                description={<ul style={{ margin: 0, paddingLeft: 18 }}>{preview.warnings.map((w) => <li key={w.code}>{spanishOr(w.message, "Revisa el alcance de la limpieza antes de continuar.")}</li>)}</ul>}
                             />
                         </div>
                     )}

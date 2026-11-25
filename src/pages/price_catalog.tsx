@@ -24,6 +24,7 @@ import { matchesQuery } from "../lib/search";
 import { catalogTypeOptions, withCurrentValue } from "../lib/catalog_type_options";
 import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
 import type { ColumnsType } from "antd/es/table";
+import { getErrorMessage } from "../lib/api_error";
 
 const priceSchema = z.object({
     study_type_id: z.string().trim().nonempty("El tipo de estudio es requerido."),
@@ -245,7 +246,7 @@ function PriceCatalog({ embedded = false }: PriceCatalogProps) {
             closeModal();
             await loadPrices();
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al guardar precio");
+            message.error(getErrorMessage(error, "Error al guardar precio"));
         } finally {
             setSubmitting(false);
         }

@@ -7,6 +7,7 @@ import {
     PERMS,
 } from "../lib/rbac";
 import { getStoredToken, clearStoredAuth } from "../lib/auth_session";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -60,11 +61,11 @@ export function useUserProfile() {
                     setSessionExpired(true);
                     setAuthStatus("unauthenticated");
                 } else {
-                    setError(`Error ${res.status}: no se pudo cargar el perfil`);
+                    setError(res.status >= 500 ? "Error del servidor: no se pudo cargar el perfil. Inténtalo de nuevo más tarde." : "No se pudo cargar el perfil.");
                     setAuthStatus("error");
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Error de red");
+                setError(getErrorMessage(err, "No se pudo conectar con el servidor para cargar el perfil."));
                 setAuthStatus("error");
             }
         };

@@ -39,7 +39,9 @@ describe("registration errors → fields and rows (Céluma 1.5, #67)", () => {
     it("an error that names no known field stays in the summary", () => {
         const problem = registrationProblem(403, { detail: "Cannot create orders for a different tenant" }, known);
         expect(problem.fields).toEqual([]);
-        expect(problem.summary).toContain("No tienes permiso");
+        // Céluma 1.5 (#65): the English detail is translated, not replaced by a bare "no permission".
+        expect(problem.summary).toContain("No puedes modificar datos de otro laboratorio.");
+        expect(problem.summary).not.toContain("different tenant");
         expect(problem.summary).toContain("se conservaron");
     });
 });

@@ -22,6 +22,7 @@ import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
+import { getErrorMessage } from "../lib/api_error";
 
 const REVIEWER_ROLE = "reviewer";
 // Only users who already hold one of these roles may be promoted to Revisor.
@@ -153,7 +154,7 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
             setSelectedUserId(undefined);
             await loadData();
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "Error al asignar rol");
+            message.error(getErrorMessage(e, "Error al asignar rol"));
         } finally {
             setSubmitting(false);
         }
@@ -168,7 +169,7 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
                 message.success("Rol Revisor removido");
                 await loadData();
             } catch (e) {
-                message.error(e instanceof Error ? e.message : "Error al remover rol");
+                message.error(getErrorMessage(e, "Error al remover rol"));
             }
             return;
         }
@@ -178,7 +179,7 @@ function ReviewersManagement({ embedded = false }: ReviewersManagementProps) {
             message.success(`${target.full_name} ya no es revisor`);
             await loadData();
         } catch (e) {
-            message.error(e instanceof Error ? e.message : "Error al remover rol");
+            message.error(getErrorMessage(e, "Error al remover rol"));
         }
     };
 

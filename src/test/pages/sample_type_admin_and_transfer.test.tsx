@@ -301,7 +301,9 @@ describe("JSON import flow", () => {
         const boxes = Array.from(document.querySelectorAll<HTMLInputElement>(".ant-table-tbody input[type=checkbox]"));
         expect(boxes.map((b) => b.checked)).toEqual([true, false, false]); // only ready is pre-selected
         expect(boxes[2].disabled).toBe(true); // invalid can never be selected
-        expect(screen.getByText("code is required")).toBeInTheDocument();
+        // Céluma 1.5 (#65): per-record issues are shown in Spanish from their code.
+        expect(screen.getByText("El código es obligatorio.")).toBeInTheDocument();
+        expect(screen.queryByText("code is required")).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: /Crear 1 tipo/ }));
         await screen.findByText(/1 tipo\(s\) de muestra creado\(s\)/);
@@ -358,7 +360,9 @@ describe("JSON import flow", () => {
         stub(() => json({ detail: { code: "unsupported_version", message: "Unsupported export version 2; supported: 1" } }, 422));
         render(<CatalogTransferModal open source={{ mode: "import" }} onClose={vi.fn()} onDone={vi.fn()} />);
         choose(fileOf(JSON.stringify({ ...DOC, version: 2 })));
-        expect(await screen.findByText("Unsupported export version 2; supported: 1")).toBeInTheDocument();
+        // Céluma 1.5 (#65): the English message of a known code is shown in Spanish.
+        expect(await screen.findByText("La versión del archivo exportado no es compatible con esta versión de Céluma.")).toBeInTheDocument();
+        expect(screen.queryByText(/Unsupported export version/)).toBeNull();
         expect(screen.queryByTestId("transfer-summary")).toBeNull();
     });
 });

@@ -4,7 +4,7 @@ import RegistrationNotice from "../components/order/registration_notice";
 import { useCarriedReturnState } from "../hooks/use_carried_return_state";
 import { useSampleManagement } from "../hooks/use_capture_management";
 import { removeSample } from "../services/order_management_service";
-import { getErrorMessage } from "../lib/api_error";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Layout, Card, Image, message, Avatar, Tooltip, Timeline, Badge, Empty } from "antd";
 import type { UploadProps } from "antd";
@@ -77,7 +77,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -206,7 +206,7 @@ export default function SampleDetailPage() {
             setImages(imgs);
             setEvents(evts.events);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            setError(getErrorMessage(err, "Ocurrió un error inesperado."));
         } finally {
             setLoading(false);
         }
@@ -234,7 +234,7 @@ export default function SampleDetailPage() {
             await refresh();
             message.success("Assignees actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar assignees");
+            message.error(getErrorMessage(err, "Error al actualizar assignees"));
             throw err;
         }
     }, [sampleId, refresh]);
@@ -251,7 +251,7 @@ export default function SampleDetailPage() {
             await refresh();
             message.success("Labels actualizados");
         } catch (err: unknown) {
-            message.error(err instanceof Error ? err.message : "Error al actualizar labels");
+            message.error(getErrorMessage(err, "Error al actualizar labels"));
             throw err;
         }
     }, [sampleId, refresh, detail]);
@@ -280,14 +280,14 @@ export default function SampleDetailPage() {
                 const text = await res.text();
                 let parsed: unknown = undefined;
                 try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
                 throw new Error(msg);
             }
             const stateConfig = SAMPLE_STATE_CONFIG[newState] || SAMPLE_STATE_CONFIG.RECEIVED;
             message.success(`Estado cambiado a "${stateConfig.label}"`);
             await refresh();
         } catch (e) {
-            const errMsg = e instanceof Error ? e.message : "Error al actualizar el estado";
+            const errMsg = getErrorMessage(e, "Error al actualizar el estado");
             message.error(errMsg);
         } finally {
             setUpdatingState(false);
@@ -303,7 +303,7 @@ export default function SampleDetailPage() {
             message.success("Muestra retirada. Su código queda fuera de la numeración automática.");
             navigate(`/orders/${detail.order.id}`, { replace: true, state: carriedReturn });
         } catch (err) {
-            setRemoveError(getErrorMessage(err));
+            setRemoveError(getErrorMessage(err, "No se pudo retirar la muestra."));
             setRemoving(false);
         }
     }, [sampleId, detail, navigate, carriedReturn]);
@@ -325,13 +325,13 @@ export default function SampleDetailPage() {
                 const text = await res.text();
                 let parsed: unknown = undefined;
                 try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
-                const msg = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+                const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
                 throw new Error(msg);
             }
             message.success("Imagen eliminada");
             await refresh();
         } catch (e) {
-            const errMsg = e instanceof Error ? e.message : "Error al eliminar la imagen";
+            const errMsg = getErrorMessage(e, "Error al eliminar la imagen");
             message.error(errMsg);
         } finally {
             setDeletingImageId(null);
@@ -377,7 +377,7 @@ export default function SampleDetailPage() {
                 options.onSuccess?.({}, undefined as unknown as XMLHttpRequest);
                 await refresh();
             } catch (e) {
-                const errMsg = e instanceof Error ? e.message : "Error al subir la imagen";
+                const errMsg = getErrorMessage(e, "Error al subir la imagen");
                 notice.error(`Error al subir "${fileName}": ${errMsg}`);
                 options.onError?.(new ProgressEvent("error"));
             } finally {

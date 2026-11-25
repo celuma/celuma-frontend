@@ -3,6 +3,7 @@ import { Card, Table, Button, message, Typography, Tag } from "antd";
 import { DownloadOutlined } from "@ant-design/icons";
 import { tokens, cardStyle } from "../components/design/tokens";
 import type { ColumnsType } from "antd/es/table";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Title } = Typography;
 
@@ -59,7 +60,7 @@ function PhysicianPortal() {
             const data = await getJSON<{ pdf_url: string }>(`/v1/portal/physician/orders/${orderId}/report`);
             window.open(data.pdf_url, "_blank");
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Error al descargar reporte");
+            message.error(getErrorMessage(error, "Error al descargar reporte"));
         }
     };
 

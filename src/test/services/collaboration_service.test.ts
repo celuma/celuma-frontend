@@ -38,7 +38,8 @@ describe("getLabUsers", () => {
         vi.stubGlobal("fetch", vi.fn()
             .mockResolvedValueOnce(page([user(1)], "1"))
             .mockResolvedValueOnce(new Response("", { status: 503 })));
-        await expect(getLabUsers()).rejects.toThrow("503");
+        // Céluma 1.5 (#65): the refusal is a Spanish message, not the bare status.
+        await expect(getLabUsers()).rejects.toThrow("Error del servidor. Inténtalo de nuevo más tarde.");
     });
 
     it("deduplicates users across pages", async () => {

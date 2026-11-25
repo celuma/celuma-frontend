@@ -1,4 +1,5 @@
-/**
+
+import { formatHttpError } from "../lib/api_error";/**
  * Collaboration Service - Handles assignees, reviewers, and labels
  */
 
@@ -15,7 +16,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -66,7 +67,7 @@ async function postJSON<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -85,7 +86,7 @@ async function deleteJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;

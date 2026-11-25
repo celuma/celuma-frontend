@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../lib/api_fetch";
+import { getErrorMessage } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -50,7 +51,7 @@ export function useDashboardData() {
             } catch (err) {
                 // apiFetch already redirects on 401; only non-auth errors reach here
                 if (err instanceof Error && err.message !== "Session expired") {
-                    setError(err.message || "Error al cargar los datos del dashboard");
+                    setError(getErrorMessage(err, "Error al cargar los datos del dashboard"));
                 }
             } finally {
                 setLoading(false);

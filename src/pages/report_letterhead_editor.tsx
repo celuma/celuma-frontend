@@ -37,6 +37,7 @@ import {
     saveCurrentReportLetterheadVersion,
     uploadReportLetterheadLogo,
 } from "../services/report_letterhead_service";
+import { getErrorMessage } from "../lib/api_error";
 
 const { Text } = Typography;
 
@@ -253,7 +254,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 setPresentation(draft ?? seed);
                 setInitialPresentation(seed);
             } catch (err) {
-                message.error(err instanceof Error ? err.message : "Error al cargar el membrete");
+                message.error(getErrorMessage(err, "Error al cargar el membrete"));
             } finally {
                 setLoading(false);
             }
@@ -361,7 +362,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
             setPreviewLogoUrl(resp.url);
             message.success("Logo actualizado");
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al subir el logo");
+            message.error(getErrorMessage(err, "Error al subir el logo"));
         } finally {
             setUploadingLogo(false);
         }
@@ -384,7 +385,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
             setPreviewFooterLogoUrl(resp.url);
             message.success("Logo de pie actualizado");
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al subir el logo de pie");
+            message.error(getErrorMessage(err, "Error al subir el logo de pie"));
         } finally {
             setUploadingFooterLogo(false);
         }
@@ -446,7 +447,7 @@ function ReportLetterheadEditor({ embedded = false }: ReportLetterheadEditorProp
                 navigate(`/config/report-letterheads/${letterheadId}/versions`);
             }
         } catch (err) {
-            message.error(err instanceof Error ? err.message : "Error al guardar el membrete");
+            message.error(getErrorMessage(err, "Error al guardar el membrete"));
             setPublishModalOpen(false);
         } finally {
             setPublishing(false);

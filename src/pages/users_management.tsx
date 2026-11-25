@@ -28,6 +28,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useUserProfile } from "../hooks/use_user_profile";
 import { usePageTitle } from "../hooks/use_page_title";
 import { roleDisplayName, roleColor, hasFullBranchAccess } from "../lib/rbac";
+import { getErrorMessage } from "../lib/api_error";
 
 const getInitials = (fullName?: string | null): string => {
     if (!fullName) return "U";
@@ -276,7 +277,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             createUserForm.reset();
             await loadData();
         } catch (e) {
-            setCreateError(e instanceof Error ? e.message : "Error al crear usuario");
+            setCreateError(getErrorMessage(e, "Error al crear usuario"));
         }
     });
 
@@ -311,7 +312,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             setEditingUser(null);
             await loadData();
         } catch (e) {
-            setEditError(e instanceof Error ? e.message : "Error al actualizar usuario");
+            setEditError(getErrorMessage(e, "Error al actualizar usuario"));
         }
     });
 
@@ -339,7 +340,7 @@ function UsersManagement({ embedded = false }: UsersManagementProps) {
             setInviteModalVisible(false);
             inviteUserForm.reset();
         } catch (e) {
-            setInviteError(e instanceof Error ? e.message : "Error al enviar invitación");
+            setInviteError(getErrorMessage(e, "Error al enviar invitación"));
         }
     });
 

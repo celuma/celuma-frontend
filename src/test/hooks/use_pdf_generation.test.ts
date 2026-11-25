@@ -65,8 +65,9 @@ describe("usePdfGeneration", () => {
         });
 
         expect(result.current.isRequesting).toBe(false);
+        // Céluma 1.5 (#65): the reason is kept, in Spanish.
         expect(result.current.lastError).toBe(
-            "Cannot generate a PDF for a published or retracted report"
+            "No se puede generar el PDF de un reporte publicado o retractado."
         );
     });
 });

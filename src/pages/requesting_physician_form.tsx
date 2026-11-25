@@ -15,6 +15,7 @@ import Button from "../components/ui/button";
 import ErrorText from "../components/ui/error_text";
 import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
+import { getErrorMessage, formatHttpError } from "../lib/api_error";
 
 function getApiBase(): string {
     return import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || "/api");
@@ -40,7 +41,7 @@ async function requestJSON<TReq extends object, TRes>(method: "POST" | "PUT", pa
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -55,7 +56,7 @@ async function getJSON<TRes>(path: string): Promise<TRes> {
     let parsed: unknown = undefined;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { /* ignore */ }
     if (!res.ok) {
-        const message = (parsed as { message?: string } | undefined)?.message ?? `${res.status} ${res.statusText}`;
+        const message = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
         throw new Error(message);
     }
     return parsed as TRes;
@@ -138,7 +139,7 @@ export default function RequestingPhysicianForm() {
             if (!session.tenantId) return;
             const data = await getJSON<Array<{ id: string; name?: string; code?: string }>>(`/v1/tenants/${session.tenantId}/branches`);
             setBranches(data || []);
-        })().catch((err) => setServerError(err instanceof Error ? err.message : "No se pudieron cargar las sucursales."));
+        })().catch((err) => setServerError(getErrorMessage(err, "No se pudieron cargar las sucursales.")));
     }, [session.tenantId]);
 
     useEffect(() => {
@@ -159,7 +160,7 @@ export default function RequestingPhysicianForm() {
                 is_active: detail.is_active,
             });
         })()
-            .catch((err) => setServerError(err instanceof Error ? err.message : "No se pudo cargar el médico solicitante."))
+            .catch((err) => setServerError(getErrorMessage(err, "No se pudo cargar el médico solicitante.")))
             .finally(() => setLoading(false));
     }, [physicianId, reset]);
 
@@ -185,7 +186,7 @@ export default function RequestingPhysicianForm() {
                 : await requestJSON<typeof payload, RequestingPhysicianResponse>("POST", "/v1/requesting-physicians/", payload);
             navigate(`/requesting-physicians/${saved.id}`, { replace: true });
         } catch (err) {
-            setServerError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+            setServerError(getErrorMessage(err, "Ocurrió un error inesperado."));
         } finally {
             setLoading(false);
         }

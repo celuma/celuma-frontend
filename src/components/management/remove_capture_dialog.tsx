@@ -3,11 +3,12 @@ import ConfirmDialog from "../ui/confirm_dialog";
 import CelumaTextArea from "../ui/textarea_field";
 import ErrorText from "../ui/error_text";
 import { tokens } from "../design/tokens";
+import { removalConsequences } from "../../lib/removal_consequences";
 
 interface Props {
     open: boolean;
     title: string;
-    /** What the removal does (from the API); shown as a short list. */
+    /** What the removal does (from the API, in English); shown in Spanish as a short list (#84). */
     consequences: string[];
     confirmText: string;
     loading: boolean;
@@ -21,6 +22,7 @@ interface Props {
 export default function RemoveCaptureDialog({ open, title, consequences, confirmText, loading, error, testId, onConfirm, onCancel }: Props) {
     const [reason, setReason] = useState("");
     useEffect(() => { if (open) setReason(""); }, [open]);
+    const lines = removalConsequences(consequences);
 
     return (
         <ConfirmDialog
@@ -35,9 +37,9 @@ export default function RemoveCaptureDialog({ open, title, consequences, confirm
             onCancel={onCancel}
         >
             <div style={{ display: "grid", gap: 12 }} data-testid={testId}>
-                {consequences.length > 0 && (
+                {lines.length > 0 && (
                     <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: tokens.textSecondary, lineHeight: 1.5 }}>
-                        {consequences.map((c) => <li key={c}>{c}</li>)}
+                        {lines.map((c) => <li key={c}>{c}</li>)}
                     </ul>
                 )}
                 <CelumaTextArea

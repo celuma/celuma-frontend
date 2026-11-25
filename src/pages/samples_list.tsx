@@ -36,6 +36,7 @@ import { activeFilters, type ListViewSpec, type ListViewState } from "../lib/lis
 import ReturnedRecordNotice from "../components/lists/returned_record_notice";
 import { placementOf } from "../lib/list_return";
 import { UNTYPED_FILTER_VALUE, UNTYPED_LABEL, type SampleTypeRef } from "../models/sample_type";
+import { getErrorMessage } from "../lib/api_error";
 
 type SampleRow = {
     id: string;
@@ -129,7 +130,7 @@ export default function SamplesList() {
         getJSON<SampleFilterOptions>("/v1/laboratory/samples/filter-options", controller.signal)
             .then(setOptions)
             .catch((err) => {
-                if (!controller.signal.aborted) setOptionsError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+                if (!controller.signal.aborted) setOptionsError(getErrorMessage(err, "Ocurrió un error inesperado."));
             });
         return () => controller.abort();
     }, []);
