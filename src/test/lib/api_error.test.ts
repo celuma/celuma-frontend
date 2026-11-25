@@ -127,6 +127,21 @@ describe("api_error — formatHttpError", () => {
             .toBe("No se pueden agregar muestras mientras la orden o su reporte están en revisión.");
     });
 
+    it("explains a numbering scope conflict in Spanish and keeps the type codes it names", () => {
+        const conflict = (types: unknown) => body({
+            code: "numbering_type_config_conflict",
+            message: "These types have their own numbering whose format does not fit the new counter scope; update or clear them first: CU, BX",
+            types,
+        });
+        const es = "Hay tipos con numeración propia cuyo formato no es compatible con el nuevo alcance del contador; actualízalos o usa la del laboratorio antes de cambiarlo.";
+        expect(formatHttpError(422, conflict(["BX", "CU"]))).toBe(`${es} Tipos: BX, CU.`);
+        // Unsafe or missing entries are dropped, never echoed.
+        expect(formatHttpError(422, conflict(["<b>x</b>", "CU", 3]))).toBe(`${es} Tipos: CU.`);
+        expect(formatHttpError(422, conflict(undefined))).toBe(es);
+        // A generic validation refusal keeps the safe Spanish fallback.
+        expect(formatHttpError(422, body({ code: "something_else", message: "Conflicto: CU" }))).toBe(httpStatusMessage(422));
+    });
+
     it("an empty or markup body gives the status message", () => {
         expect(formatHttpError(404, "")).toBe("No se encontró el recurso solicitado.");
         expect(formatHttpError(413, "<html>Request Entity Too Large</html>")).toBe(httpStatusMessage(413));

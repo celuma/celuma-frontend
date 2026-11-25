@@ -70,6 +70,12 @@ export interface NumberingPreviewRequest {
      * period shown, exactly as the registration will. Never consumes a number.
      */
     reference_date?: string;
+    /**
+     * #64. With `scope_id`: `effective` (default) starts from what that type really uses (its own configuration,
+     * else the laboratory's); `laboratory` starts from the laboratory's numbering only, ignoring the type's own
+     * configuration (what the type would use if it were cleared). Candidate fields apply on top of either.
+     */
+    layer?: "effective" | "laboratory";
 }
 
 export interface NumberingPreview {
@@ -90,6 +96,8 @@ export interface NumberingPreview {
     /** Read-only estimate; `reserved` is always false. */
     estimate: { sequence: number; code: string; reserved: boolean; skipped_occupied: number } | null;
     notice: string;
+    /** #64: where the format, width and start value of the preview came from (before any candidate field). */
+    config_source?: NumberingConfigSource;
 }
 
 /** The default format of the issue: base code + sequence (min. 2 digits) + MM + YY, no separators. */
@@ -148,4 +156,52 @@ export interface SampleCodeSuggestionResponse {
     scheme: "monthly" | "legacy";
     suggestions: SampleCodeSuggestion[];
     notice: string;
+}
+
+// ── Numbering by study type / sample type (Céluma 1.5, #64) ──────────────────────────────────────────────
+
+/**
+ * Where the format, minimum width and start value of a type come from: its own optional configuration
+ * (`type`) or the laboratory's numbering of that kind (`laboratory`, the default). Activation, counter scope
+ * and numbering timezone are always the laboratory's.
+ */
+export type NumberingConfigSource = "type" | "laboratory";
+
+/** The settings a type may override. Everything else is inherited from the laboratory. */
+export interface TypeNumberingInput {
+    format: string;
+    sequence_min_width: number;
+    start_value: number;
+}
+
+export interface TypeNumberingOverride extends TypeNumberingInput {
+    updated_at: string | null;
+    updated_by: string | null;
+}
+
+/** What a type actually numbers with right now (override applied, inherited fields included). */
+export interface EffectiveTypeNumbering extends TypeNumberingInput {
+    active: boolean;
+    scope: NumberingScope;
+    timezone: string;
+    scheme: "monthly" | "legacy";
+}
+
+export interface TypeNumberingEntry {
+    entity_kind: NumberingKind;
+    type_id: string;
+    code: string;
+    name: string;
+    is_active: boolean;
+    source: NumberingConfigSource;
+    /** null = the type inherits the laboratory's numbering. */
+    override: TypeNumberingOverride | null;
+    effective: EffectiveTypeNumbering;
+}
+
+export interface TypeNumberingList {
+    entity_kind: NumberingKind;
+    /** The laboratory's numbering of this kind: the default every type without its own configuration uses. */
+    laboratory: EffectiveTypeNumbering;
+    types: TypeNumberingEntry[];
 }

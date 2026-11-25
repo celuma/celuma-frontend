@@ -240,6 +240,7 @@ const CODE_MSG_ES: Record<string, string> = {
     numbering_exhausted: "No se encontró un código libre; revisa el formato de numeración y los códigos existentes.",
     numbering_invalid_config: "La configuración de numeración no es válida.",
     numbering_manual_policy_unsupported: "Esta política de códigos manuales no es compatible.",
+    numbering_type_config_conflict: "Hay tipos con numeración propia cuyo formato no es compatible con el nuevo alcance del contador; actualízalos o usa la del laboratorio antes de cambiarlo.",
     invalid_document: "El archivo no es una exportación válida de Céluma.",
     unsupported_schema: "El archivo no es una exportación de catálogo de Céluma.",
     unsupported_version: "La versión del archivo exportado no es compatible con esta versión de Céluma.",
@@ -266,12 +267,31 @@ function safeDetail(raw: string | null): string | null {
     return looksSpanish(localized) ? localized : null;
 }
 
+/** Codes whose refusal names the catalog types it is about (`detail.types`); the message lists them. */
+const CODES_LISTING_TYPES = new Set(["numbering_type_config_conflict"]);
+/** A catalog type code, as the backend sends it: short and with no markup or spaces. */
+const TYPE_CODE = /^[A-Za-z0-9._-]{1,32}$/;
+
+/** The catalog type codes a structured refusal names, when they are safe to show (at most 20). */
+function bodyTypeCodes(bodyText: string): string[] {
+    try {
+        const types = (JSON.parse(bodyText) as { detail?: { types?: unknown } } | null)?.detail?.types;
+        if (!Array.isArray(types)) return [];
+        return types.filter((t): t is string => typeof t === "string" && TYPE_CODE.test(t)).slice(0, 20);
+    } catch {
+        return [];
+    }
+}
+
 /** The Spanish detail of a raw response body: the server's own text, else a known code's message. */
 function safeBodyDetail(bodyText: string): string | null {
     const detail = safeDetail(parseFastApiDetail(bodyText));
     if (detail) return detail;
     const code = parseFastApiCode(bodyText);
-    return code ? CODE_MSG_ES[code] ?? null : null;
+    const message = code ? CODE_MSG_ES[code] ?? null : null;
+    if (!message || !code || !CODES_LISTING_TYPES.has(code)) return message;
+    const types = bodyTypeCodes(bodyText);
+    return types.length ? `${message} Tipos: ${types.join(", ")}.` : message;
 }
 
 /**
