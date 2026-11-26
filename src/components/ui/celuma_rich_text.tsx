@@ -8,7 +8,8 @@ import { SpellingSummary } from "../spelling/spelling_summary";
 
 type Props = {
     value: string;
-    onChange: (html: string) => void;
+    /** `source` is Quill's: "user" for edits, "api"/"silent" for programmatic changes. */
+    onChange: (html: string, source?: string) => void;
     readOnly?: boolean;
     placeholder?: string;
     /** Quill modules (toolbar config…). Defaults to a Céluma-friendly rich toolbar. */
@@ -135,7 +136,7 @@ export default function CelumaRichText({
                 ref={quillRef}
                 theme="snow"
                 value={value}
-                onChange={onChange}
+                onChange={(html, _delta, source) => onChange(html, source)}
                 readOnly={readOnly}
                 placeholder={placeholder}
                 modules={modules}

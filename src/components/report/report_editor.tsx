@@ -86,6 +86,9 @@ import Panel from "../ui/panel";
 import EmptyState from "../ui/empty_state";
 import CelumaTextArea from "../ui/textarea_field";
 import CelumaRichText from "../ui/celuma_rich_text";
+import ReportReturnLink from "./report_return_link";
+import { ReportSaveStatusIndicator, UnsavedChangesGuard } from "./report_save_status";
+import { deriveReportSaveStatus, isNetworkFailure, type ReportSaveFailure } from "./report_save_state";
 import CelumaSwitch from "../ui/celuma_switch";
 import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
@@ -308,7 +311,8 @@ const fieldCaptionStyle: CSSProperties = {
 
 const ReportEditor: React.FC = () => {
     const { reportId } = useParams<{ reportId: string }>();
-    const { search } = useLocation();
+    const location = useLocation();
+    const { search } = location;
     const prefilledOrderId = useMemo(() => new URLSearchParams(search).get("orderId") ?? "", [search]);
     const navigate = useNavigate();
     const session = useMemo(() => getSessionContext(), []);
@@ -445,6 +449,31 @@ const ReportEditor: React.FC = () => {
     // "Guardar" buttons read. The editor previously had no save loading state
     // at all, so a second click simply fired a second request.
     const [isSaving, setIsSaving] = useState(false);
+    // Céluma 1.5 (#68): save state. `editRevision` counts authored edits and
+    // is incremented ONLY by user actions (`markEdited`), never by loading or
+    // initialization, so opening a saved draft is not dirty. A save records the
+    // revision it sent; the draft stays dirty if the author kept editing while
+    // it was in flight. The refs mirror the state for the navigation guard,
+    // which must read the current value at navigation time.
+    const [editRevision, setEditRevision] = useState(0);
+    const [savedRevision, setSavedRevision] = useState(0);
+    const editRevisionRef = useRef(0);
+    const savedRevisionRef = useRef(0);
+    const [saveFailure, setSaveFailure] = useState<ReportSaveFailure | null>(null);
+    const [savedOnce, setSavedOnce] = useState<boolean>(
+        () => (location.state as { reportSaved?: boolean } | null)?.reportSaved === true,
+    );
+    const markEdited = useCallback(() => {
+        editRevisionRef.current += 1;
+        setEditRevision(editRevisionRef.current);
+    }, []);
+    const markSaved = useCallback((revision: number) => {
+        savedRevisionRef.current = revision;
+        setSavedRevision(revision);
+    }, []);
+    const hasUnsavedEdits = useCallback(
+        () => editRevisionRef.current !== savedRevisionRef.current, [],
+    );
 
     // Modal for table section editing
     const [tableModal, setTableModal] = useState<{ key: string; label: string } | null>(null);
@@ -731,6 +760,9 @@ const ReportEditor: React.FC = () => {
         (async () => {
             setLoadingData(true);
             setLoadError(null);
+            // #68: whatever is loaded now is the saved baseline.
+            markSaved(editRevisionRef.current);
+            setSaveFailure(null);
             try {
                 if (reportId) {
                     // ---- Edit existing report ----
@@ -1018,7 +1050,7 @@ const ReportEditor: React.FC = () => {
                 setLoadingData(false);
             }
         })();
-    }, [reportId, prefilledOrderId, session.tenantId, reloadToken]);
+    }, [reportId, prefilledOrderId, session.tenantId, reloadToken, markSaved]);
 
     // Fifth post-Phase 2 remediation (Observation A). The bootstrap above
     // loads letterheads only in the NEW-report (`prefilledOrderId`) branch.
@@ -1064,19 +1096,10 @@ const ReportEditor: React.FC = () => {
         return () => { cancelled = true; };
     }, [reportId, loadingData, envelope?.schema_version, envelope?.letterhead_version_id]);
 
-    // Fifth remediation (§4.4): warn before leaving with an unsaved letterhead
-    // change. The editor had no dirty-state tracking; this covers exactly the
-    // case introduced by this remediation without attempting to track the
-    // entire form.
-    useEffect(() => {
-        if (!letterheadDirty) return;
-        const handler = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            e.returnValue = "";
-        };
-        window.addEventListener("beforeunload", handler);
-        return () => window.removeEventListener("beforeunload", handler);
-    }, [letterheadDirty]);
+    // Fifth remediation (§4.4) warned before leaving with an unsaved letterhead
+    // change only. Céluma 1.5 (#68): `UnsavedChangesGuard` now covers every
+    // authored edit, the letterhead included (`handleChangeLetterheadVersion`
+    // marks the draft edited).
 
     // User role fetched via useUserProfile hook above (no separate effect needed)
 
@@ -1401,6 +1424,7 @@ const ReportEditor: React.FC = () => {
             setLetterheadResolutionSource("EXPLICIT");
             setSelectedLetterheadResources(versionDetail.resolved_resources ?? null);
             setLetterheadDirty(option.value !== (envelope?.letterhead_version_id ?? null));
+            if (option.value !== selectedLetterheadVersionId) markEdited();
         } catch {
             message.error("Error al cargar el membrete seleccionado");
         } finally {
@@ -1458,20 +1482,40 @@ const ReportEditor: React.FC = () => {
     const handleSave = async () => {
         if (isSaving) return;
         setIsSaving(true);
+        // #68: the revision this save carries. Edits made while it is in
+        // flight increment `editRevisionRef` and remain unsaved afterwards.
+        const sentRevision = editRevisionRef.current;
         try {
-            await runSave();
-        } catch {
-            // Every failure path inside `runSave` has already reported itself
-            // to the user (`showCelumaApiError` / `message.error`). This only
-            // stops a rejected presentation save from escaping the click
-            // handler as an unhandled rejection; it must not add a second
-            // message or swallow anything silently.
+            const outcome = await runSave();
+            if (outcome.ok) {
+                markSaved(sentRevision);
+                setSaveFailure(null);
+                setSavedOnce(true);
+                // A new report gets its own editor URL, so the next save adds a
+                // version instead of creating another report. The guard reads
+                // the refs, so this redirect is not blocked.
+                if (outcome.createdId) {
+                    navigate(`/reports/${outcome.createdId}`, {
+                        replace: true,
+                        state: { ...(location.state as object | null), reportSaved: true },
+                    });
+                }
+            }
+        } catch (err) {
+            // A rejected presentation save has already reported itself
+            // (`showCelumaApiError`); it only needs the persistent state.
+            setSaveFailure(toSaveFailure(err));
         } finally {
             setIsSaving(false);
         }
     };
 
-    const runSave = async () => {
+    const toSaveFailure = (err: unknown): ReportSaveFailure =>
+        isNetworkFailure(err)
+            ? { kind: "network", message: "", retryable: true }
+            : { kind: "server", message: getErrorMessage(err, ""), retryable: true };
+
+    const runSave = async (): Promise<{ ok: boolean; createdId?: string }> => {
         // R1: a user may now be inside the reviewer's presentation window AND
         // be the author of the DRAFT. Both halves are saved, presentation
         // FIRST — the content route carries the PERSISTED presentation
@@ -1480,25 +1524,27 @@ const ReportEditor: React.FC = () => {
         // writing it before means the content save carries the new values.
         if (isReviewerPresentationWindow) {
             await handleSavePresentation({ silent: canSaveContent });
-            if (!canSaveContent) return;
+            if (!canSaveContent) return { ok: true };
         }
         try {
             const env = buildEnvelope();
-            let saved: ReportEnvelope;
+            let createdId: string | undefined;
             if (!env.id) {
-                saved = await saveReport(env);
+                const saved = await saveReport(env);
                 setEnvelope(saved);
+                createdId = saved.id;
             } else {
                 await saveReportVersion(env);
-                saved = { ...env, status: "DRAFT" as ReportStatus };
-                setEnvelope(saved);
+                setEnvelope({ ...env, status: "DRAFT" as ReportStatus });
             }
             // Fifth remediation: the letterhead change is persisted, so it is
-            // no longer pending (and the "leave without saving" warning ends).
+            // no longer pending.
             setLetterheadDirty(false);
             setSubmitRejection(null);
             message.success("Reporte guardado");
-            if (saved.order_id) navigate(`/orders/${saved.order_id}`);
+            // Céluma 1.5 (#68): the author stays in the editor after saving
+            // (it used to redirect to the order) and sees "Guardado".
+            return { ok: true, createdId };
         } catch (err) {
             // Céluma 1.3.1 Block C (C-8): the stale-template conflict gets its
             // own message, because the generic one ("no se pudo guardar") would
@@ -1507,20 +1553,30 @@ const ReportEditor: React.FC = () => {
             // Deliberately NOT done here: retrying against the new template
             // (that is the silent substitution this guard exists to prevent),
             // merging the two structures, or clearing the editor. The author's
-            // content stays exactly where it is — the existing failure path
-            // already neither navigates away nor resets state, so an author who
-            // hits this can copy their work out before reloading. That is the
-            // most a hotfix should do; a real draft-recovery flow is not in
-            // 1.3.1's scope.
+            // content stays exactly where it is, so an author who hits this
+            // can copy their work out before reloading. Retrying the same
+            // request cannot succeed, so no retry is offered.
             if (err instanceof StaleReportTemplateError) {
                 showCelumaApiError(
                     err,
                     "La plantilla de este reporte cambió mientras lo editabas. " +
                         "Vuelve a cargar el reporte para continuar con la plantilla actualizada.",
                 );
-                return;
+                setSaveFailure({
+                    kind: "server",
+                    message: "la plantilla cambió; vuelve a cargar el reporte",
+                    retryable: false,
+                });
+                return { ok: false };
             }
-            message.error(getErrorMessage(err, "No se pudo guardar el reporte"));
+            const failure = toSaveFailure(err);
+            message.error(
+                failure.kind === "network"
+                    ? "No se pudo guardar el reporte: sin conexión con el servidor."
+                    : getErrorMessage(err, "No se pudo guardar el reporte"),
+            );
+            setSaveFailure(failure);
+            return { ok: false };
         }
     };
 
@@ -1836,6 +1892,19 @@ const ReportEditor: React.FC = () => {
      *  itself is — and so the element is not constructed twice per render. */
     const bottomSaveButton = renderSaveButton("report-save-bottom");
 
+    // Céluma 1.5 (#68): visible save state, only where saving is possible —
+    // read-only, signed and published reports show no indicator and no guard.
+    const canSaveAnything = !isReadOnly || isReviewerPresentationWindow;
+    const saveStatus = deriveReportSaveStatus({
+        saving: isSaving,
+        dirty: editRevision !== savedRevision,
+        failure: saveFailure,
+        savedOnce,
+    });
+    const saveStatusIndicator = canSaveAnything ? (
+        <ReportSaveStatusIndicator status={saveStatus} failure={saveFailure} onRetry={handleSave} />
+    ) : null;
+
     const promptUploadSignature = () => {
         showCelumaWarning(NO_SIGNATURE_TITLE, NO_SIGNATURE_DESCRIPTION);
         Modal.warning({
@@ -2022,6 +2091,7 @@ const ReportEditor: React.FC = () => {
     // Figure mutations resolve the figure by identity (image id + occurrence)
     // against the latest array, never by the on-screen index.
     const updateImageCaption = (sectionKey: string, ref: FigureRef, caption: string) => {
+        markEdited();
         setSectionContent((prev) => ({
             ...prev,
             [sectionKey]: setFigureCaption((prev[sectionKey] ?? []) as TemplateImageItem[], ref, caption),
@@ -2029,6 +2099,7 @@ const ReportEditor: React.FC = () => {
     };
 
     const removeImage = (sectionKey: string, ref: FigureRef) => {
+        markEdited();
         setSectionContent((prev) => ({
             ...prev,
             [sectionKey]: removeFigure((prev[sectionKey] ?? []) as TemplateImageItem[], ref),
@@ -2036,6 +2107,7 @@ const ReportEditor: React.FC = () => {
     };
 
     const moveImage = (sectionKey: string, ref: FigureRef, delta: -1 | 1) => {
+        markEdited();
         pendingFigureFocus.current = { key: ref, direction: delta < 0 ? "up" : "down" };
         setSectionContent((prev) => ({
             ...prev,
@@ -2198,6 +2270,7 @@ const ReportEditor: React.FC = () => {
     // report gets its own session: ignore decisions never carry over.
     return (
         <SpellingProvider enabled={canSaveContent} scopeKey={reportId ? `report:${reportId}` : `new:${prefilledOrderId}`}>
+            <UnsavedChangesGuard when={canSaveAnything} shouldBlock={hasUnsavedEdits} />
             <style>{letterStyles}</style>
             <style>{`
               .re-two-column { display: grid; gap: ${columnGapValue}; grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -2213,6 +2286,8 @@ const ReportEditor: React.FC = () => {
               .quill-table-editor .ql-container { min-height: 120px; }
             `}</style>
 
+            {/* The way back: to the Reports list if opened from it, else to the order. */}
+            <ReportReturnLink orderId={order?.id} />
             <div style={{ display: "grid", gap: tokens.gap }}>
 
                 {/* ============================================================
@@ -2288,7 +2363,13 @@ const ReportEditor: React.FC = () => {
                     <Divider style={{ margin: "18px 0 16px" }} />
                     <CelumaSteps steps={REPORT_STEPS} current={getReportStep(envelope?.status)} />
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-                        {renderSaveButton("report-save-top")}
+                        {canSaveAnything && (
+                            // #68: the save status sits right under its button.
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+                                {renderSaveButton("report-save-top")}
+                                {saveStatusIndicator}
+                            </div>
+                        )}
                         {envelope?.status === "DRAFT" && !legacyAuthoringBlocked && (
                             <CelumaButton type="primary" size="small" icon={<SendOutlined />} onClick={handleSubmit}>
                                 Enviar a Revisión
@@ -2528,6 +2609,7 @@ const ReportEditor: React.FC = () => {
                                                     }
                                                     allowDelete={false}
                                                     onToggleSelect={(img, selected) => {
+                                                        markEdited();
                                                         setSectionContent((prev) => {
                                                             const imgs = [...((prev[imagesSectionKey] ?? []) as TemplateImageItem[])];
                                                             const exists = imgs.some((p) => p.id === img.id);
@@ -2604,7 +2686,7 @@ const ReportEditor: React.FC = () => {
                                     hasSignedEmission={Boolean(envelope.delivered_emission)}
                                     changeNote={amendmentNote}
                                     changeNoteEditable={!isReadOnly}
-                                    onChangeNote={setAmendmentNote}
+                                    onChangeNote={(note) => { setAmendmentNote(note); markEdited(); }}
                                     canCancelAmendment={canCancelAmendment}
                                     onCancelAmendment={() => {
                                         setCancelAmendError(null);
@@ -2740,7 +2822,7 @@ const ReportEditor: React.FC = () => {
                                             label="Nombre del reporte"
                                             value={reportTitle}
                                             disabled={isReadOnly}
-                                            onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); }}
+                                            onChange={(e) => { setReportTitle(e.target.value); setTitleWasManuallySet(true); markEdited(); }}
                                             spelling={{ fieldId: "title", label: "Nombre del reporte" }}
                                         />
                                         {/* #29: custom base fields get no spelling assistance — the template
@@ -2754,9 +2836,10 @@ const ReportEditor: React.FC = () => {
                                                         value={baseValues[key] ?? ""}
                                                         disabled={isReadOnly}
                                                         type={field.type === "numeric" ? "number" : "text"}
-                                                        onChange={(e) =>
-                                                            setBaseValues((prev) => ({ ...prev, [key]: e.target.value }))
-                                                        }
+                                                        onChange={(e) => {
+                                                            setBaseValues((prev) => ({ ...prev, [key]: e.target.value }));
+                                                            markEdited();
+                                                        }}
                                                     />
                                                 ))}
                                             </div>
@@ -2775,9 +2858,12 @@ const ReportEditor: React.FC = () => {
                                                 <div style={fieldCaptionStyle}>{section.label}</div>
                                                 <CelumaRichText
                                                     value={val}
-                                                    onChange={(html) =>
-                                                        setSectionContent((prev) => ({ ...prev, [key]: html }))
-                                                    }
+                                                    onChange={(html, source) => {
+                                                        setSectionContent((prev) => ({ ...prev, [key]: html }));
+                                                        // Quill also reports its own normalization of a
+                                                        // loaded value ("api"); only user edits count.
+                                                        if (source === "user") markEdited();
+                                                    }}
                                                     readOnly={isReadOnly}
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
                                                     spelling={{ fieldId: `section:${key}`, label: `Sección: ${section.label}` }}
@@ -2826,9 +2912,10 @@ const ReportEditor: React.FC = () => {
                                                     value={val}
                                                     disabled={isReadOnly}
                                                     rows={3}
-                                                    onChange={(v) =>
-                                                        setSectionContent((prev) => ({ ...prev, [key]: v }))
-                                                    }
+                                                    onChange={(v) => {
+                                                        setSectionContent((prev) => ({ ...prev, [key]: v }));
+                                                        markEdited();
+                                                    }}
                                                     placeholder={`Escribe ${section.label.toLowerCase()}…`}
                                                     spelling={{ fieldId: `section:${key}`, label: `Sección: ${section.label}` }}
                                                 />
@@ -2844,9 +2931,10 @@ const ReportEditor: React.FC = () => {
                                                     type="number"
                                                     value={val}
                                                     disabled={isReadOnly}
-                                                    onChange={(e) =>
-                                                        setSectionContent((prev) => ({ ...prev, [key]: e.target.value }))
-                                                    }
+                                                    onChange={(e) => {
+                                                        setSectionContent((prev) => ({ ...prev, [key]: e.target.value }));
+                                                        markEdited();
+                                                    }}
                                                 />
                                             </div>
                                         );
@@ -2975,6 +3063,7 @@ const ReportEditor: React.FC = () => {
                                                 checked={showSignatureSection}
                                                 disabled={!canEditPresentation}
                                                 onChange={(checked) => {
+                                                    markEdited();
                                                     setShowSignatureSection(checked);
                                                     if (!checked) setRequireDigitalSignature(false);
                                                 }}
@@ -2992,7 +3081,7 @@ const ReportEditor: React.FC = () => {
                                             <CelumaSwitch
                                                 checked={requireDigitalSignature}
                                                 disabled={!canEditPresentation || !showSignatureSection}
-                                                onChange={setRequireDigitalSignature}
+                                                onChange={(checked) => { setRequireDigitalSignature(checked); markEdited(); }}
                                             />
                                         </div>
                                     </Panel>
@@ -3011,8 +3100,9 @@ const ReportEditor: React.FC = () => {
                                 {bottomSaveButton && (
                                     <>
                                         <Divider />
-                                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                                             {bottomSaveButton}
+                                            {saveStatusIndicator}
                                         </div>
                                     </>
                                 )}
@@ -3053,7 +3143,10 @@ const ReportEditor: React.FC = () => {
                 footer={[
                     <CelumaButton key="cancel" size="small" danger onClick={() => setTableModal(null)}>Cancelar</CelumaButton>,
                     <CelumaButton key="save" size="small" type="primary" onClick={() => {
-                        if (tableModal) setSectionContent((prev) => ({ ...prev, [tableModal.key]: tableDraft }));
+                        if (tableModal) {
+                            setSectionContent((prev) => ({ ...prev, [tableModal.key]: tableDraft }));
+                            markEdited();
+                        }
                         setTableModal(null);
                     }}>Guardar</CelumaButton>,
                 ]}
