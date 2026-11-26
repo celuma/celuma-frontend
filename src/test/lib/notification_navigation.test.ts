@@ -65,3 +65,14 @@ describe("resolveNotificationRoute — unsupported or incomplete", () => {
         expect(UNSUPPORTED_RESOURCE_MESSAGE).toContain("no se puede abrir");
     });
 });
+
+describe("resolveNotificationRoute — conversation notices (Céluma 1.5, #98)", () => {
+    it("opens the order on its conversation tab", () => {
+        expect(resolveNotificationRoute("order", ID, "ORDER_COMMENT_ADDED")).toBe(`/orders/${ID}?tab=conversation`);
+    });
+
+    it("leaves every other order notice on the plain route", () => {
+        expect(resolveNotificationRoute("order", ID, "ASSIGNMENT_ADDED")).toBe(`/orders/${ID}`);
+        expect(resolveNotificationRoute("sample", ID, "ORDER_COMMENT_ADDED")).toBe(`/samples/${ID}`);
+    });
+});

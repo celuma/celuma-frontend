@@ -158,6 +158,9 @@ export const NOTIFICATION_TYPE_DESCRIPTIONS_BY_LOCALE: Record<
             "Cuando los usuarios internos del laboratorio se acercan al límite configurado.",
         USER_LIMIT_REACHED:
             "Cuando los usuarios internos del laboratorio alcanzan el límite configurado.",
+        // Céluma 1.5 (#98). The email says only that there is a new message; the text stays in Céluma.
+        ORDER_COMMENT_ADDED:
+            "Cuando alguien escribe en la conversación de una orden en la que participas o te menciona.",
     },
 };
 

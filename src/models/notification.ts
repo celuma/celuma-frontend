@@ -53,6 +53,8 @@ export const NOTIFICATION_TYPES = [
     "STORAGE_LIMIT_REACHED",
     "USER_LIMIT_APPROACHING",
     "USER_LIMIT_REACHED",
+    // Céluma 1.5 (#98): a new message in an order conversation. Same position as in the backend enum.
+    "ORDER_COMMENT_ADDED",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -200,6 +202,7 @@ export const NOTIFICATION_TYPE_LABELS_BY_LOCALE: Record<
         STORAGE_LIMIT_REACHED: "Límite de almacenamiento alcanzado",
         USER_LIMIT_APPROACHING: "Usuarios cercanos al límite",
         USER_LIMIT_REACHED: "Límite de usuarios alcanzado",
+        ORDER_COMMENT_ADDED: "Nuevo comentario",
     },
 };
 
@@ -243,6 +246,8 @@ export const NOTIFICATION_TYPE_CHIP: Record<NotificationType, { color: string; b
     STORAGE_LIMIT_REACHED: { color: "#ef4444", bg: "#fef2f2" },
     USER_LIMIT_APPROACHING: { color: "#f59e0b", bg: "#fffbeb" },
     USER_LIMIT_REACHED: { color: "#ef4444", bg: "#fef2f2" },
+    // Céluma 1.5 (#98): identity teal family, dark-teal ink (#1f7a75) for text on light.
+    ORDER_COMMENT_ADDED: { color: "#1f7a75", bg: "#e6f7f7" },
 };
 
 export const UNKNOWN_NOTIFICATION_TYPE_CHIP = { color: "#6b7280", bg: "#f3f4f6" };

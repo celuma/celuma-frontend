@@ -68,6 +68,8 @@ describe("enum sets match the Block B contract", () => {
             "STORAGE_LIMIT_REACHED",
             "USER_LIMIT_APPROACHING",
             "USER_LIMIT_REACHED",
+            // Céluma 1.5 (#98): conversation messages.
+            "ORDER_COMMENT_ADDED",
         ]);
     });
 
