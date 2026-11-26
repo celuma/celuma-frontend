@@ -39,6 +39,14 @@ const CASES = [
 
 /** See legacy_v2_parity.visual.spec.ts: Legacy clips a section taller than a page, V2 splits it (#19). */
 const OVERSIZE_SECTION_CASES = new Set<string>(["multipage"]);
+/**
+ * Céluma 1.5 (#61, owner decision 2026-11-25): V2 lays out rich-text lists with its own
+ * indentation (one 6 mm step per level, marker hanging against the text) and no list margins,
+ * while the frozen Legacy renderer keeps the browser's default list layout. A case whose content
+ * has a list therefore differs in pixels by design; its text, page count and page breaks are still
+ * compared strictly. V2 list layout is covered by rich_text_list_layout.visual.spec.ts.
+ */
+const LIST_LAYOUT_DIFFERS_CASES = new Set<string>(["sections"]);
 
 /** Rasterization scale. 2 ≈ 144 dpi: sufficient for a half-millimeter shift
  *  to be visible without making tests slow. */
@@ -223,6 +231,7 @@ for (const { key, description } of CASES) {
             expect(isBlank(legacyPages[i], legacy.perPageText[i]), `Legacy p.${i + 1} is blank`).toBe(false);
             expect(isBlank(v2Pages[i], v2.perPageText[i]), `V2 p.${i + 1} is blank`).toBe(false);
 
+            if (LIST_LAYOUT_DIFFERS_CASES.has(key)) continue;
             const ratio = diffRatio(legacyPages[i], v2Pages[i]);
             expect(
                 ratio,

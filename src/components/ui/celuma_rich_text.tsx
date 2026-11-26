@@ -1,7 +1,22 @@
-import { useCallback, useRef } from "react";
-import ReactQuill from "react-quill-new";
+import { useCallback, useEffect, useRef } from "react";
+import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { tokens } from "../design/tokens";
+import {
+    RICH_TEXT_BASE_SIZE_PT,
+    RICH_TEXT_EDITOR_FORMATS,
+    RICH_TEXT_LINE_HEIGHTS,
+    RICH_TEXT_LINE_HEIGHT_CLASS,
+    RICH_TEXT_LINE_HEIGHT_FORMAT,
+    RICH_TEXT_LINE_HEIGHT_VALUES,
+    RICH_TEXT_POINT_VAR,
+    RICH_TEXT_SIZES_PT,
+    RICH_TEXT_SIZE_PICKER,
+    RICH_TEXT_SIZE_VALUES,
+    richTextEditorListCss,
+    richTextFormatCss,
+    richTextSizeValue,
+} from "../report/rich_text_formats";
 import type { SpellingFieldOptions } from "../spelling/spelling_context";
 import { useQuillSpelling } from "../spelling/quill_spelling";
 import { SpellingSummary } from "../spelling/spelling_summary";
@@ -14,6 +29,12 @@ type Props = {
     placeholder?: string;
     /** Quill modules (toolbar config…). Defaults to a Céluma-friendly rich toolbar. */
     modules?: Record<string, unknown>;
+    /**
+     * Formats the editor keeps (Quill's `formats` allow-list). Anything else —
+     * typically colours or fonts pasted from another program — is dropped, so
+     * only formatting the report renderers support can be stored.
+     */
+    formats?: string[];
     /** Min height of the editor area. */
     minHeight?: number;
     /**
@@ -24,11 +45,135 @@ type Props = {
     spelling?: SpellingFieldOptions;
 };
 
+/*
+ * Céluma 1.5 (#60): font sizes are point sizes from a fixed list, stored as
+ * `ql-size-<N>pt` classes. Quill's size format is global, so its allow-list is
+ * replaced once here; the stock small/large/huge values are no longer sizes.
+ */
+const SizeClass = Quill.import("attributors/class/size") as { whitelist: string[] | undefined };
+SizeClass.whitelist = [...RICH_TEXT_SIZE_VALUES];
+Quill.register(SizeClass as never, true);
+
+/*
+ * Céluma 1.5 (#63): line spacing per paragraph. Quill has no such format, so a
+ * block-scoped class attributor is registered: `ql-line-height-115` on the
+ * paragraph, heading or list item; the 1.5 default stores nothing.
+ */
+const Parchment = Quill.import("parchment") as {
+    ClassAttributor: new (attrName: string, keyName: string, options: { scope: number; whitelist: string[] }) => unknown;
+    Scope: { BLOCK: number };
+};
+const LineHeightClass = new Parchment.ClassAttributor(RICH_TEXT_LINE_HEIGHT_FORMAT, RICH_TEXT_LINE_HEIGHT_CLASS, {
+    scope: Parchment.Scope.BLOCK,
+    whitelist: RICH_TEXT_LINE_HEIGHT_VALUES,
+});
+Quill.register(LineHeightClass as never, true);
+
+/** One report point in editor pixels: the editor shows 10 pt prose at 14 px. */
+const EDITOR_FONT_PX = 14;
+const EDITOR_POINT_PX = EDITOR_FONT_PX / RICH_TEXT_BASE_SIZE_PT;
+
+/** `.ql-picker-label` and `.ql-picker-item` of a picker option, for its text. */
+function pickerOption(picker: string, value: string | null): string {
+    const attr = value == null ? ":not([data-value])" : `[data-value="${value}"]`;
+    const base = `.celuma-quill .ql-snow .ql-picker.ql-${picker}`;
+    return `${base} .ql-picker-label${attr}::before, ${base} .ql-picker-item${attr}::before`;
+}
+
+/**
+ * Spanish option names for the toolbar pickers (quill.snow.css ships them in
+ * English). The size picker names "no size" by the size it renders at (10 pt)
+ * and lists every option in the toolbar's own type size, so the list reads as
+ * plain choices rather than a preview.
+ */
+const PICKER_CSS = [
+    `${pickerOption("header", null)} { content: "Normal"; }`,
+    ...[1, 2, 3].map((level) => `${pickerOption("header", String(level))} { content: "Título ${level}"; }`),
+    `${pickerOption("size", null)} { content: "${RICH_TEXT_BASE_SIZE_PT} pt"; }`,
+    ...RICH_TEXT_SIZES_PT.map((pt) => `${pickerOption("size", richTextSizeValue(pt))} { content: "${pt} pt"; }`),
+    ...RICH_TEXT_LINE_HEIGHTS.map(
+        (o) => `${pickerOption(RICH_TEXT_LINE_HEIGHT_FORMAT, o.value || null)} { content: "${o.label}"; }`,
+    ),
+    // The closed picker shows a spacing glyph before the value so it reads as line spacing.
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} { width: 72px; }`,
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-label { padding-left: 22px; }`,
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .celuma-line-spacing-glyph { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-size: 13px; line-height: 1; }`,
+].join("\n");
+
+/**
+ * Spanish names for the toolbar buttons Quill leaves unnamed: shown as a
+ * tooltip on hover (`title`) and announced by screen readers (`aria-label`).
+ */
+const TOOLBAR_BUTTON_NAMES: ReadonlyArray<[selector: string, name: string]> = [
+    ["button.ql-bold", "Negrita"],
+    ["button.ql-italic", "Cursiva"],
+    ["button.ql-underline", "Subrayado"],
+    ['button.ql-script[value="sub"]', "Subíndice"],
+    ['button.ql-script[value="super"]', "Superíndice"],
+    ['button.ql-list[value="ordered"]', "Lista numerada"],
+    ['button.ql-list[value="bullet"]', "Lista con viñetas"],
+    ["button.ql-link", "Insertar enlace"],
+    ["button.ql-clean", "Quitar formato"],
+];
+
+function labelToolbar(toolbar: HTMLElement | null | undefined) {
+    if (!toolbar) return;
+    const name = (el: Element | null, text: string) => {
+        if (!el) return;
+        el.setAttribute("aria-label", text);
+        el.setAttribute("title", text);
+    };
+    for (const [selector, text] of TOOLBAR_BUTTON_NAMES) name(toolbar.querySelector(selector), text);
+    name(toolbar.querySelector(".ql-picker.ql-header .ql-picker-label"), "Estilo de párrafo");
+    toolbar.querySelectorAll(".ql-picker.ql-header .ql-picker-item").forEach((item) => {
+        const value = item.getAttribute("data-value");
+        item.setAttribute("aria-label", value ? `Título ${value}` : "Normal");
+    });
+    name(toolbar.querySelector(".ql-picker.ql-size .ql-picker-label"), "Tamaño de letra");
+    toolbar.querySelectorAll(".ql-picker.ql-size .ql-picker-item").forEach((item) => {
+        const value = item.getAttribute("data-value");
+        item.setAttribute("aria-label", value ? value.replace(/pt$/, " pt") : `${RICH_TEXT_BASE_SIZE_PT} pt`);
+    });
+    // Céluma 1.5 (#62): alignment of the paragraph(s) under the caret or selection.
+    name(toolbar.querySelector(".ql-picker.ql-align .ql-picker-label"), "Alineación del párrafo");
+    toolbar.querySelectorAll(".ql-picker.ql-align .ql-picker-item").forEach((item) => {
+        name(item, ALIGN_NAMES[item.getAttribute("data-value") ?? ""] ?? ALIGN_NAMES[""]);
+    });
+    // Céluma 1.5 (#63): line spacing of the paragraph(s) under the caret or selection.
+    const spacing = toolbar.querySelector(`.ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-label`);
+    name(spacing, "Interlineado");
+    if (spacing && !spacing.querySelector(".celuma-line-spacing-glyph")) {
+        const glyph = document.createElement("span");
+        glyph.className = "celuma-line-spacing-glyph";
+        glyph.setAttribute("aria-hidden", "true");
+        glyph.textContent = "↕";
+        spacing.prepend(glyph);
+    }
+    toolbar.querySelectorAll(`.ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-item`).forEach((item) => {
+        const value = item.getAttribute("data-value");
+        const option = RICH_TEXT_LINE_HEIGHTS.find((o) => (o.value || null) === value);
+        name(item, `Interlineado ${option?.label ?? ""}`.trim());
+    });
+}
+
+const ALIGN_NAMES: Record<string, string> = {
+    "": "Alinear a la izquierda",
+    center: "Centrar",
+    right: "Alinear a la derecha",
+    justify: "Justificar",
+};
+
 const DEFAULT_MODULES = {
     toolbar: {
         container: [
-            [{ header: [1, 2, 3, false] }],
+            [
+                { header: [1, 2, 3, false] },
+                { size: [...RICH_TEXT_SIZE_PICKER] },
+                { [RICH_TEXT_LINE_HEIGHT_FORMAT]: RICH_TEXT_LINE_HEIGHTS.map((o) => o.value) },
+            ],
             ["bold", "italic", "underline"],
+            [{ script: "sub" }, { script: "super" }],
+            [{ align: [] }],
             [{ list: "ordered" }, { list: "bullet" }],
             ["link"],
             ["clean"],
@@ -49,6 +194,7 @@ export default function CelumaRichText({
     readOnly = false,
     placeholder,
     modules = DEFAULT_MODULES,
+    formats = RICH_TEXT_EDITOR_FORMATS,
     minHeight = 140,
     spelling,
 }: Props) {
@@ -62,6 +208,9 @@ export default function CelumaRichText({
         }
     }, []);
     const assist = useQuillSpelling({ spelling, getQuill, wrapperRef, readOnly });
+    useEffect(() => {
+        labelToolbar(wrapperRef.current?.querySelector<HTMLElement>(".ql-toolbar"));
+    }, [modules]);
     const editor = (
         <div className="celuma-quill" ref={wrapperRef} style={spelling ? { position: "relative" } : undefined}>
             <style>{`
@@ -91,7 +240,12 @@ export default function CelumaRichText({
                     min-height: ${minHeight}px;
                     color: ${tokens.textPrimary};
                     line-height: 1.6;
+                    ${RICH_TEXT_POINT_VAR}: ${EDITOR_POINT_PX}px;
                 }
+                ${richTextFormatCss(".celuma-quill .ql-editor")}
+                ${richTextEditorListCss(".celuma-quill .ql-editor")}
+                .celuma-quill .ql-snow .ql-picker.ql-size { width: 84px; }
+                ${PICKER_CSS}
                 .celuma-quill .ql-editor.ql-blank::before {
                     color: #9ca3af;
                     font-style: normal;
@@ -140,6 +294,7 @@ export default function CelumaRichText({
                 readOnly={readOnly}
                 placeholder={placeholder}
                 modules={modules}
+                formats={formats}
             />
             {assist.layer}
             {assist.description}

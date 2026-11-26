@@ -30,6 +30,14 @@ const OVERSIZE_SECTION_CASES = new Set<string>(["multipage"]);
 const NO_PIXEL_GOLDEN_CASES = new Set<string>(["multipagefit"]);
 /** V2 draws a compact per-page signature where Legacy draws a terminal block (#14): different by design. */
 const SIGNATURE_DIFFERS_CASES = new Set<string>(["signed"]);
+/**
+ * Céluma 1.5 (#61, owner decision 2026-11-25): V2 lays out rich-text lists with its own
+ * indentation (one 6 mm step per level, marker hanging against the text) and no list margins,
+ * while the frozen Legacy renderer keeps the browser's default list layout. A case whose content
+ * has a list therefore differs in pixels by design; its text, page count and page breaks are still
+ * compared strictly. V2 list layout is covered by rich_text_list_layout.visual.spec.ts.
+ */
+const LIST_LAYOUT_DIFFERS_CASES = new Set<string>(["sections"]);
 
 /**
  * Fourth post-Phase 2 remediation — Legacy ↔ V2 VISUAL PARITY (§15 and §16
@@ -194,6 +202,7 @@ for (const { key, description } of LEGACY_V2_PARITY_CASES) {
         test.skip(OVERSIZE_SECTION_CASES.has(key), "V2 splits a section taller than a page (#19); Legacy clips it, so the pixels differ by design");
         test.skip(SIGNATURE_DIFFERS_CASES.has(key), "V2's compact per-page signature (#14) intentionally differs from Legacy's terminal block; the signature is covered by report_composition and signature_autograph specs");
         test.skip(NO_PIXEL_GOLDEN_CASES.has(key), "no committed Legacy golden for this case; geometry and PDF parity cover it");
+        test.skip(LIST_LAYOUT_DIFFERS_CASES.has(key), "V2's list layout (#61) intentionally differs from Legacy's browser defaults; geometry and PDF text parity still apply");
         // First, establish the baseline from Legacy...
         await page.goto(`/?fixture=${legacyFixture}`);
         await page.waitForSelector('[data-ready="true"]');
