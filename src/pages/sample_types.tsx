@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Layout, Card, Button, message, Space, Switch } from "antd";
+import { EditOutlined, DeleteOutlined, StopOutlined } from "@ant-design/icons";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +19,11 @@ import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import CelumaTextArea from "../components/ui/textarea_field";
 import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
-import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
+import { renderCatalogStateChip, catalogStateFilter, renderDateCell } from "../components/ui/table_helpers";
+import CelumaSwitch from "../components/ui/celuma_switch";
+import RemoveCatalogTypeDialog from "../components/catalog/remove_catalog_type_dialog";
+// #94: antd's static `message` does not render under React 19 here; these context-aware toasts do.
+import { showCelumaApiError, showCelumaSuccess } from "../lib/celuma_feedback";
 import { matchesQuery } from "../lib/search";
 import type { ColumnsType } from "antd/es/table";
 import { getErrorMessage } from "../lib/api_error";
@@ -84,6 +88,13 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
     const [confirmDropNumbering, setConfirmDropNumbering] = useState(false);
     const [startNumbering, setStartNumbering] = useState(false);
     const configureAfterCreate = useRef(false);
+    // Céluma 1.5 (#94): deactivation and removal are two different, separately confirmed actions.
+    const [deactivating, setDeactivating] = useState<SampleType | null>(null);
+    const [deactivateBusy, setDeactivateBusy] = useState(false);
+    const [removing, setRemoving] = useState<SampleType | null>(null);
+    const [showRemoved, setShowRemoved] = useState(false);
+    // Read by the loader without making it depend on state (it also runs from the mount effect).
+    const showRemovedRef = useRef(false);
 
     const { control, handleSubmit, reset } = useForm<SampleTypeFormData>({
         resolver: zodResolver(sampleTypeSchema),
@@ -99,10 +110,10 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
         reset();
     };
 
-    const load = async () => {
+    const load = async (withRemoved = showRemovedRef.current) => {
         setLoading(true);
         try {
-            setSampleTypes(await listSampleTypes(false));
+            setSampleTypes(await listSampleTypes(false, withRemoved));
         } catch {
             message.error("Error al cargar tipos de muestra");
         } finally {
@@ -175,19 +186,24 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
             load();
         } catch (err) {
             configureAfterCreate.current = false;
-            message.error(getErrorMessage(err));
+            showCelumaApiError(err, "Error al guardar tipo de muestra");
         } finally {
             setSubmitting(false);
         }
     });
 
-    const handleDeactivate = async (id: string) => {
+    const handleDeactivate = async () => {
+        if (!deactivating) return;
+        setDeactivateBusy(true);
         try {
-            await deactivateSampleType(id);
-            message.success("Tipo de muestra desactivado");
+            await deactivateSampleType(deactivating.id);
+            showCelumaSuccess("Tipo de muestra desactivado", "Sigue en el catálogo; puedes reactivarlo desde «Editar».");
+            setDeactivating(null);
             load();
         } catch (err) {
-            message.error(getErrorMessage(err));
+            showCelumaApiError(err, "No se pudo desactivar el tipo de muestra.");
+        } finally {
+            setDeactivateBusy(false);
         }
     };
 
@@ -236,9 +252,9 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
             title: "Estado",
             dataIndex: "is_active",
             key: "is_active",
-            width: 100,
-            ...activeFilter(),
-            render: (is_active: boolean) => renderActiveChip(is_active),
+            width: 110,
+            ...catalogStateFilter<SampleType>(),
+            render: (_: boolean, record: SampleType) => renderCatalogStateChip(record),
         },
         {
             title: "Fecha de creación",
@@ -251,18 +267,23 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
         {
             title: "Acciones",
             key: "actions",
-            width: 120,
-            render: (_, record) => (
+            width: 140,
+            render: (_, record) => record.is_removed ? (
+                <span style={{ fontSize: 12, color: tokens.textSecondary }} data-testid={`code-state-${record.code}`}>
+                    {record.code_released ? "Código liberado para otro tipo" : "Código reservado por su historial"}
+                </span>
+            ) : (
                 <Space>
-                    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small" title="Editar" />
-                    <Popconfirm
-                        title="¿Desactivar este tipo de muestra? Las muestras existentes lo conservan."
-                        onConfirm={() => handleDeactivate(record.id)}
-                        okText="Sí"
-                        cancelText="No"
-                    >
-                        <Button type="text" danger icon={<DeleteOutlined />} size="small" title="Desactivar" />
-                    </Popconfirm>
+                    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small"
+                        title="Editar" aria-label={`Editar ${record.name}`} />
+                    {record.is_active && (
+                        <Button type="text" icon={<StopOutlined />} onClick={() => setDeactivating(record)} size="small"
+                            title="Desactivar" aria-label={`Desactivar ${record.name}`} data-testid={`deactivate-${record.code}`} />
+                    )}
+                    {canManageCatalog && (
+                        <Button type="text" danger icon={<DeleteOutlined />} onClick={() => setRemoving(record)} size="small"
+                            title="Eliminar del catálogo" aria-label={`Eliminar ${record.name} del catálogo`} data-testid={`remove-${record.code}`} />
+                    )}
                 </Space>
             ),
         },
@@ -283,6 +304,13 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                     }
                 />
                 <Card style={cardStyle}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: tokens.textSecondary, marginBottom: 12 }}>
+                        <CelumaSwitch
+                            size="small" checked={showRemoved} aria-label="Mostrar tipos eliminados" data-testid="show-removed-sample-types"
+                            onChange={(checked) => { showRemovedRef.current = checked; setShowRemoved(checked); void load(checked); }}
+                        />
+                        Mostrar eliminados (solo consulta)
+                    </label>
                     <CelumaTable
                         columns={columns}
                         dataSource={sampleTypes}
@@ -395,6 +423,36 @@ function SampleTypes({ embedded = false }: SampleTypesProps) {
                 cancelText="Volver"
                 onCancel={() => setConfirmDropNumbering(false)}
                 onConfirm={() => { setNumberingDirty(false); void handleSave(); }}
+            />
+            <ConfirmDialog
+                open={deactivating !== null}
+                title={`¿Desactivar «${deactivating?.name ?? ""}»?`}
+                description="Deja de poder elegirse para muestras nuevas, pero sigue en el catálogo y puedes reactivarlo cuando quieras desde «Editar»."
+                confirmText="Desactivar"
+                cancelText="Cancelar"
+                loading={deactivateBusy}
+                onCancel={() => setDeactivating(null)}
+                onConfirm={() => void handleDeactivate()}
+            >
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13, color: tokens.textSecondary }}>
+                    <li>Las muestras existentes lo conservan y lo muestran como inactivo.</li>
+                    <li>Para quitarlo del catálogo de forma definitiva usa «Eliminar del catálogo».</li>
+                </ul>
+            </ConfirmDialog>
+            <RemoveCatalogTypeDialog
+                kind="sample_types"
+                target={removing}
+                onCancel={() => setRemoving(null)}
+                onRemoved={(result) => {
+                    setRemoving(null);
+                    showCelumaSuccess(result.already_removed
+                        ? "El tipo de muestra ya estaba eliminado del catálogo"
+                        : "Tipo de muestra eliminado del catálogo",
+                        result.code_released
+                            ? `No tenía muestras: el código «${result.code}» queda libre para otro tipo de muestra.`
+                            : `Sus muestras lo conservan; el código «${result.code}» sigue reservado.`);
+                    load();
+                }}
             />
             <CatalogTransferModal
                 open={importOpen}

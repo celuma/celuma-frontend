@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Layout, Card, Button, message, Space, Popconfirm, Switch } from "antd";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Layout, Card, Button, message, Space, Switch } from "antd";
+import { EditOutlined, DeleteOutlined, StopOutlined } from "@ant-design/icons";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +19,11 @@ import FloatingCaptionSelect from "../components/ui/floating_caption_select";
 import CelumaTextArea from "../components/ui/textarea_field";
 import Panel from "../components/ui/panel";
 import ModalFormFooter from "../components/ui/modal_form_footer";
-import { renderActiveChip, activeFilter, renderDateCell } from "../components/ui/table_helpers";
+import { renderCatalogStateChip, catalogStateFilter, renderDateCell } from "../components/ui/table_helpers";
+import CelumaSwitch from "../components/ui/celuma_switch";
+import RemoveCatalogTypeDialog from "../components/catalog/remove_catalog_type_dialog";
+// #94: antd's static `message` does not render under React 19 here; these context-aware toasts do.
+import { showCelumaApiError, showCelumaSuccess } from "../lib/celuma_feedback";
 import { matchesQuery } from "../lib/search";
 import { getErrorMessage } from "../lib/api_error";
 import { useUserProfile } from "../hooks/use_user_profile";
@@ -125,6 +129,11 @@ interface StudyType {
         id: string;
         name: string;
     };
+    /** Céluma 1.5 (#94): removed from the catalog; listed only with «Mostrar eliminados». */
+    is_removed?: boolean;
+    removed_at?: string | null;
+    /** #94: the removal freed its code (no orders, withdrawn included). */
+    code_released?: boolean;
 }
 
 interface StudyTypesListResponse {
@@ -167,6 +176,13 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
     const [confirmDropNumbering, setConfirmDropNumbering] = useState(false);
     const [startNumbering, setStartNumbering] = useState(false);
     const configureAfterCreate = useRef(false);
+    // Céluma 1.5 (#94): deactivation and removal are two different, separately confirmed actions.
+    const [deactivating, setDeactivating] = useState<StudyType | null>(null);
+    const [deactivateBusy, setDeactivateBusy] = useState(false);
+    const [removing, setRemoving] = useState<StudyType | null>(null);
+    const [showRemoved, setShowRemoved] = useState(false);
+    // Read by the loader without making it depend on state (it also runs from the mount effect).
+    const showRemovedRef = useRef(false);
 
     const handleExport = async () => {
         setExporting(true);
@@ -198,11 +214,14 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
         loadTemplates();
     }, []);
 
-    const loadStudyTypes = async () => {
+    const loadStudyTypes = async (withRemoved = showRemovedRef.current) => {
         setLoading(true);
         try {
-            const data = await getJSON<StudyTypesListResponse>("/v1/study-types/?active_only=false");
+            const data = await getJSON<StudyTypesListResponse>(
+                `/v1/study-types/?active_only=false${withRemoved ? "&include_removed=true" : ""}`);
             setStudyTypes(data.study_types);
+            // A removed type cannot be copied: drop it from a pending selection.
+            setSelectedIds((ids) => ids.filter((id) => data.study_types.some((t) => t.id === id && !t.is_removed)));
         } catch {
             message.error("Error al cargar tipos de estudio");
         } finally {
@@ -275,20 +294,28 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             loadStudyTypes();
         } catch (err) {
             configureAfterCreate.current = false;
-            message.error("Error al guardar tipo de estudio");
+            // #94: say why (e.g. a code reserved by a removed type) instead of a generic failure.
+            showCelumaApiError(err, "Error al guardar tipo de estudio");
             console.error(err);
         } finally {
             setSubmitting(false);
         }
     });
 
-    const handleDelete = async (id: string) => {
+    // `DELETE` without `hard_delete` deactivates (the type stays in the catalog); it never removed anything,
+    // so its confirmation used to be mislabelled «eliminado». Removal is `RemoveCatalogTypeDialog` (#94).
+    const handleDeactivate = async () => {
+        if (!deactivating) return;
+        setDeactivateBusy(true);
         try {
-            await deleteJSON(`/v1/study-types/${id}`);
-            message.success("Tipo de estudio eliminado");
+            await deleteJSON(`/v1/study-types/${deactivating.id}`);
+            showCelumaSuccess("Tipo de estudio desactivado", "Sigue en el catálogo; puedes reactivarlo desde «Editar».");
+            setDeactivating(null);
             loadStudyTypes();
-        } catch {
-            message.error("Error al eliminar tipo de estudio");
+        } catch (err) {
+            showCelumaApiError(err, "No se pudo desactivar el tipo de estudio.");
+        } finally {
+            setDeactivateBusy(false);
         }
     };
 
@@ -342,9 +369,9 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
             title: "Estado",
             dataIndex: "is_active",
             key: "is_active",
-            width: 100,
-            ...activeFilter(),
-            render: (is_active: boolean) => renderActiveChip(is_active),
+            width: 110,
+            ...catalogStateFilter<StudyType>(),
+            render: (_: boolean, record: StudyType) => renderCatalogStateChip(record),
         },
         {
             title: "Fecha de creación",
@@ -357,30 +384,23 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
         {
             title: "Acciones",
             key: "actions",
-            width: 120,
-            render: (_, record) => (
+            width: 140,
+            render: (_, record) => record.is_removed ? (
+                <span style={{ fontSize: 12, color: tokens.textSecondary }} data-testid={`code-state-${record.code}`}>
+                    {record.code_released ? "Código liberado para otro tipo" : "Código reservado por su historial"}
+                </span>
+            ) : (
                 <Space>
-                    <Button
-                        type="text"
-                        icon={<EditOutlined />}
-                        onClick={() => handleEdit(record)}
-                        size="small"
-                        title="Editar"
-                    />
-                    <Popconfirm
-                        title="¿Desactivar este tipo de estudio?"
-                        onConfirm={() => handleDelete(record.id)}
-                        okText="Sí"
-                        cancelText="No"
-                    >
-                        <Button 
-                            type="text" 
-                            danger 
-                            icon={<DeleteOutlined />}
-                            size="small"
-                            title="Desactivar"
-                        />
-                    </Popconfirm>
+                    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small"
+                        title="Editar" aria-label={`Editar ${record.name}`} />
+                    {record.is_active && (
+                        <Button type="text" icon={<StopOutlined />} onClick={() => setDeactivating(record)} size="small"
+                            title="Desactivar" aria-label={`Desactivar ${record.name}`} data-testid={`deactivate-${record.code}`} />
+                    )}
+                    {canManageCatalog && (
+                        <Button type="text" danger icon={<DeleteOutlined />} onClick={() => setRemoving(record)} size="small"
+                            title="Eliminar del catálogo" aria-label={`Eliminar ${record.name} del catálogo`} data-testid={`remove-${record.code}`} />
+                    )}
                 </Space>
             ),
         },
@@ -409,6 +429,13 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                     }
                 />
                 <Card style={cardStyle}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: tokens.textSecondary, marginBottom: 12 }}>
+                        <CelumaSwitch
+                            size="small" checked={showRemoved} aria-label="Mostrar tipos eliminados" data-testid="show-removed-study-types"
+                            onChange={(checked) => { showRemovedRef.current = checked; setShowRemoved(checked); void loadStudyTypes(checked); }}
+                        />
+                        Mostrar eliminados (solo consulta)
+                    </label>
                     <CelumaTable
                         columns={columns}
                         dataSource={studyTypes}
@@ -422,6 +449,8 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                         rowSelection={canManageCatalog ? {
                             selectedRowKeys: selectedIds,
                             onChange: (keys) => setSelectedIds(keys as string[]),
+                            // #94: a removed type cannot be copied to sample types (the API refuses it too).
+                            getCheckboxProps: (record: StudyType) => ({ disabled: !!record.is_removed }),
                         } : undefined}
                     />
                 </Card>
@@ -516,6 +545,36 @@ function StudyTypes({ embedded = false }: StudyTypesProps) {
                 cancelText="Volver"
                 onCancel={() => setConfirmDropNumbering(false)}
                 onConfirm={() => { setNumberingDirty(false); void handleSave(); }}
+            />
+            <ConfirmDialog
+                open={deactivating !== null}
+                title={`¿Desactivar «${deactivating?.name ?? ""}»?`}
+                description="Deja de estar disponible para órdenes nuevas, pero sigue en el catálogo y puedes reactivarlo cuando quieras desde «Editar»."
+                confirmText="Desactivar"
+                cancelText="Cancelar"
+                loading={deactivateBusy}
+                onCancel={() => setDeactivating(null)}
+                onConfirm={() => void handleDeactivate()}
+            >
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13, color: tokens.textSecondary }}>
+                    <li>Las órdenes existentes lo conservan.</li>
+                    <li>Para quitarlo del catálogo de forma definitiva usa «Eliminar del catálogo».</li>
+                </ul>
+            </ConfirmDialog>
+            <RemoveCatalogTypeDialog
+                kind="study_types"
+                target={removing}
+                onCancel={() => setRemoving(null)}
+                onRemoved={(result) => {
+                    setRemoving(null);
+                    showCelumaSuccess(result.already_removed
+                        ? "El tipo de estudio ya estaba eliminado del catálogo"
+                        : "Tipo de estudio eliminado del catálogo",
+                        result.code_released
+                            ? `No tenía órdenes: el código «${result.code}» queda libre para otro tipo de estudio.`
+                            : `Sus órdenes lo conservan; el código «${result.code}» sigue reservado.`);
+                    loadStudyTypes();
+                }}
             />
             {canManageCatalog && (
                 <CatalogTransferModal

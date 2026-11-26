@@ -12,6 +12,8 @@ export interface SampleTypeRef {
     name: string;
     /** false = deactivated but still referenced: readable, not selectable for new samples. */
     is_active: boolean;
+    /** Céluma 1.5 (#94): removed from the catalog; the reference still resolves and is shown as removed. */
+    is_removed?: boolean;
 }
 
 /** Display text of a sample without a catalog type. */
@@ -30,6 +32,40 @@ export interface SampleType {
     created_at: string;
     default_report_template_id?: string | null;
     default_template?: { id: string; name: string } | null;
+    /** Céluma 1.5 (#94): removed from the catalog (always inactive too). Only listed with `includeRemoved`. */
+    is_removed?: boolean;
+    removed_at?: string | null;
+    /** #94: the removal freed its code for another type (it had no orders/samples, withdrawn included). */
+    code_released?: boolean;
+}
+
+/** Which catalog a removal targets (#94). */
+export type RemovableCatalog = "study_types" | "sample_types";
+
+/** Answer of `POST /{study,sample}-types/{id}/remove` (#94). */
+export interface CatalogTypeRemoval {
+    id: string;
+    code: string;
+    name: string;
+    is_active: boolean;
+    is_removed: boolean;
+    removed_at: string | null;
+    /** true when the type had already been removed (nothing was written). */
+    already_removed: boolean;
+    /** What still references the type (counted, never changed): orders, samples, prices… */
+    references: Record<string, number>;
+    /** #94: true = no historical order/sample: the code is free for a DIFFERENT type; false = reserved. */
+    code_released: boolean;
+}
+
+/** `GET /{study,sample}-types/{id}/removal-impact` (#94): what a removal would do now (informative). */
+export interface CatalogTypeRemovalImpact {
+    id: string;
+    code: string;
+    already_removed: boolean;
+    references: Record<string, number>;
+    code_will_be_released: boolean;
+    code_released: boolean;
 }
 
 export interface SampleTypesListResponse {

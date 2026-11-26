@@ -53,7 +53,10 @@ const ISSUE_ES: Record<string, (issue: TransferIssue) => string> = {
     },
     code_exists: (i) => {
         const code = quoted(i.message);
-        const inactive = /\(inactive\)/i.test(i.message ?? "") ? " (inactivo)" : "";
+        // Céluma 1.5 (#94): a code of a type removed from the catalog stays reserved.
+        const inactive = /\(removed/i.test(i.message ?? "")
+            ? " (eliminado del catálogo; el código sigue reservado por sus muestras)"
+            : /\(inactive\)/i.test(i.message ?? "") ? " (inactivo)" : "";
         return code
             ? `Ya existe un tipo de muestra con el código «${code}»${inactive}.`
             : `Ya existe un tipo de muestra con este código${inactive}.`;

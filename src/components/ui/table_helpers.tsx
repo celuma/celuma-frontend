@@ -48,10 +48,12 @@ export const getSampleTypeConfig = (type: string) => {
 /**
  * Text for a sample's type: the catalog name, "Sin tipo" for a legacy sample
  * without one (Céluma 1.4, #17), with "(inactivo)" for a deactivated type that
- * the sample still references.
+ * the sample still references and "(eliminado)" for one removed from the
+ * catalog (Céluma 1.5, #94).
  */
 export const sampleTypeLabel = (sampleType: SampleTypeRef | null | undefined): string => {
     if (!sampleType) return UNTYPED_LABEL;
+    if (sampleType.is_removed) return `${sampleType.name} (eliminado)`;
     return sampleType.is_active ? sampleType.name : `${sampleType.name} (inactivo)`;
 };
 
@@ -198,6 +200,42 @@ export const renderActiveChip = (isActive: boolean) => {
 };
 
 /** Standard antd column `filters`/`onFilter` pair for an Activo/Inactivo boolean field. */
+/**
+ * State of a catalog type (Céluma 1.5, #94): "Eliminado" (removed from the catalog, shown only when the
+ * administration view asks for removed types) is a state of its own, never shown as just "Inactivo".
+ */
+export const renderCatalogStateChip = (record: { is_active: boolean; is_removed?: boolean }) => {
+    if (!record.is_removed) return renderActiveChip(record.is_active);
+    return (
+        <span
+            data-testid="catalog-state-removed"
+            style={{
+                backgroundColor: "#f3f4f6",
+                color: "#4b5563",
+                border: "1px dashed #9ca3af",
+                borderRadius: 12,
+                fontSize: 11,
+                fontWeight: 500,
+                padding: "3px 10px",
+                display: "inline-block",
+            }}
+        >
+            Eliminado
+        </span>
+    );
+};
+
+/** Estado column filter for catalog types, including "Eliminado" (#94). */
+export const catalogStateFilter = <T extends { is_active: boolean; is_removed?: boolean }>() => ({
+    filters: [
+        { text: "Activo", value: "active" },
+        { text: "Inactivo", value: "inactive" },
+        { text: "Eliminado", value: "removed" },
+    ],
+    onFilter: (value: boolean | React.Key, record: T) =>
+        value === "removed" ? !!record.is_removed : !record.is_removed && record.is_active === (value === "active"),
+});
+
 export const activeFilter = <T extends { is_active: boolean } = { is_active: boolean }>() => ({
     filters: [
         { text: "Activo", value: true },
