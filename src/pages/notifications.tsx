@@ -152,7 +152,7 @@ export default function NotificationsPage() {
 
     const handleSelect = useCallback(
         (item: NotificationListItem) => {
-            const route = resolveNotificationRoute(item.resource_type, item.resource_id);
+            const route = resolveNotificationRoute(item.resource_type, item.resource_id, item.type);
 
             if (isUnread(item)) {
                 // Optimistic locally, so the row updates before the round trip.

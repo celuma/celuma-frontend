@@ -49,9 +49,8 @@ import {
     updateOrderReviewers, 
     updateOrderLabels 
 } from "../services/collaboration_service";
-import CommentInput from "../components/comments/comment_input";
-import ConversationThread from "../components/comments/conversation_thread";
-import type { CommentData } from "../components/comments/comment_item";
+import OrderConversation from "../components/comments/order_conversation";
+import { ORDER_CONVERSATION_TAB } from "../lib/notification_navigation";
 import { 
     getInitials, 
     getAvatarColor, 
@@ -184,7 +183,7 @@ export default function OrderDetail() {
     const navigate = useNavigate();
     // Céluma 1.5 (#66): opened from a list → "Volver a …" and related records keep that return.
     const carriedReturn = useCarriedReturnState();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const { orderId } = useParams();
 
     const [loading, setLoading] = useState(true);
@@ -194,7 +193,13 @@ export default function OrderDetail() {
     const [latestReport, setLatestReport] = useState<ReportEnvelope | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
     const previewRef = useRef<ReportPreviewRef>(null);
-    const [activeTab, setActiveTab] = useState("timeline");
+    // Céluma 1.5 (#98): a conversation notification opens `/orders/{id}?tab=conversation`.
+    const [activeTab, setActiveTab] = useState(() =>
+        new URLSearchParams(search).get("tab") === ORDER_CONVERSATION_TAB ? ORDER_CONVERSATION_TAB : "timeline",
+    );
+    useEffect(() => {
+        if (new URLSearchParams(search).get("tab") === ORDER_CONVERSATION_TAB) setActiveTab(ORDER_CONVERSATION_TAB);
+    }, [search, orderId]);
     const [timeline, setTimeline] = useState<Array<{
         id: string;
         event_type: string;
@@ -213,32 +218,11 @@ export default function OrderDetail() {
     const [removeError, setRemoveError] = useState<string | null>(null);
     const { state: management } = useOrderManagement(orderId, `${data?.order.status}|${data?.samples.length}`);
     
-    // Conversation state
-    const [conversation, setConversation] = useState<Array<{
-        id: string;
-        user_id: string;
-        user_name: string;
-        user_avatar?: string | null;
-        text: string;
-        mentions: string[];
-        mentioned_users?: Array<{
-            user_id: string;
-            username: string;
-            name: string;
-            avatar?: string | null;
-        }>;
-        created_at: string;
-    }>>([]);
-    const [commentText, setCommentText] = useState("");
-    const [submittingComment, setSubmittingComment] = useState(false);
-    const [loadingConversation, setLoadingConversation] = useState(false);
-
     // Collaboration states
     const [allLabels, setAllLabels] = useState<Label[]>([]);
     const [allUsers, setAllUsers] = useState<LabUser[]>([]);
     const [allReviewerUsers, setAllReviewerUsers] = useState<LabUser[]>([]);
 
-    const conversationScrollRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
     
     // Get current user profile for avatar, name and permissions
@@ -259,27 +243,9 @@ export default function OrderDetail() {
     const canManageLabels = hasPermission(PERMS.MANAGE_LABELS);
     const canUpdateOrder = hasPermission(PERMS.UPDATE_ORDER);
     const canRemoveCapture = hasPermission(PERMS.REMOVE_CAPTURE);
+    // Céluma 1.5 (#88): writing needs lab:manage_comments (server-enforced); readers see why.
+    const canComment = hasPermission(PERMS.MANAGE_COMMENTS);
     
-    // Scroll to bottom of conversation
-    const scrollToBottom = useCallback(() => {
-        // Use requestAnimationFrame and multiple attempts to ensure scroll reaches bottom
-        requestAnimationFrame(() => {
-            if (conversationScrollRef.current) {
-                conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
-            }
-            setTimeout(() => {
-                if (conversationScrollRef.current) {
-                    conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
-                }
-            }, 50);
-            setTimeout(() => {
-                if (conversationScrollRef.current) {
-                    conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
-                }
-            }, 200);
-        });
-    }, []);
-
     // Function to load the latest report by report ID
     const loadLatestReport = async (rId: string) => {
         setReportLoading(true);
@@ -368,14 +334,6 @@ export default function OrderDetail() {
             }
     }, [orderId]);
 
-    // Check if user is scrolled to bottom (with some tolerance)
-    const isScrolledToBottom = useCallback(() => {
-        if (!conversationScrollRef.current) return false;
-        const { scrollTop, scrollHeight, clientHeight } = conversationScrollRef.current;
-        // Consider "at bottom" if within 100px of bottom
-        return scrollHeight - scrollTop - clientHeight < 100;
-    }, []);
-
     // Refresh only timeline (lightweight update)
     const refreshTimeline = useCallback(async () => {
         if (!orderId) return;
@@ -451,138 +409,10 @@ export default function OrderDetail() {
         }
     }, [orderId, refresh]);
 
-    // Load conversation with smart scroll behavior
-    const loadConversation = useCallback(async (options?: { forceScrollToBottom?: boolean; silent?: boolean }) => {
-        if (!orderId) return;
-        
-        // Save scroll position before loading
-        const wasAtBottom = isScrolledToBottom();
-        
-        if (!options?.silent) {
-            setLoadingConversation(true);
-        }
-        
-        try {
-            const response = await getJSON<{ 
-                items: Array<{
-                    id: string;
-                    created_by: string;
-                    created_by_name?: string | null;
-                    created_by_avatar?: string | null;
-                    text: string;
-                    mentions: string[];
-                    mentioned_users?: Array<{
-                        user_id: string;
-                        username: string;
-                        name: string;
-                        avatar?: string | null;
-                    }>;
-                    created_at: string;
-                }>;
-                page_info: {
-                    has_more: boolean;
-                    next_before?: string | null;
-                    next_after?: string | null;
-                };
-            }>(`/v1/laboratory/orders/${orderId}/comments`);
-            
-            // Map backend fields to frontend format
-            const mappedComments = (response.items || []).map(item => ({
-                id: item.id,
-                user_id: item.created_by,
-                user_name: item.created_by_name || "Unknown User",
-                user_avatar: item.created_by_avatar,
-                text: item.text,
-                mentions: item.mentions,
-                mentioned_users: item.mentioned_users,
-                created_at: item.created_at,
-            }));
-            
-            setConversation(mappedComments);
-            
-            // Only scroll to bottom if: forced, was at bottom, or first load
-            if (options?.forceScrollToBottom || wasAtBottom || conversation.length === 0) {
-                scrollToBottom();
-            }
-        } catch (err) {
-            if (!options?.silent) {
-                showCelumaApiError(err, "Error al cargar la conversación.");
-            }
-        } finally {
-            if (!options?.silent) {
-                setLoadingConversation(false);
-            }
-        }
-    }, [orderId, scrollToBottom, isScrolledToBottom, conversation.length]);
-    
-    // Refresh conversation and timeline without affecting scroll or other parts
-    const refreshConversationAndTimeline = useCallback(async () => {
-        await Promise.all([
-            loadConversation({ silent: true }),
-            refreshTimeline()
-        ]);
-    }, [loadConversation, refreshTimeline]);
-    
-    // Add comment to conversation
-    const addComment = useCallback(async (text: string, mentionIds: string[]) => {
-        if (!orderId || !text.trim()) return;
-        setSubmittingComment(true);
-        try {
-            const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-            const res = await fetch(`${getApiBase()}/v1/laboratory/orders/${orderId}/comments`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: token } : {}),
-                },
-                body: JSON.stringify({ 
-                    text,
-                    mentions: mentionIds
-                }),
-                credentials: "include",
-            });
-            if (!res.ok) {
-                const responseText = await res.text();
-                let parsed: unknown = undefined;
-                try { parsed = responseText ? JSON.parse(responseText) : undefined; } catch { /* ignore */ }
-                const msg = formatHttpError(res.status, JSON.stringify(parsed ?? ""));
-                throw new Error(msg);
-            }
-            message.success("Comentario agregado");
-            setCommentText("");
-            // Force scroll to bottom after adding new comment
-            await loadConversation({ forceScrollToBottom: true, silent: false });
-            await refreshTimeline(); // Update timeline without reloading entire page
-        } catch (e) {
-            const errMsg = getErrorMessage(e, "Error al agregar comentario");
-            message.error(errMsg);
-            throw e;
-        } finally {
-            setSubmittingComment(false);
-        }
-    }, [orderId, loadConversation, refreshTimeline]);
-
     useEffect(() => {
         refresh();
         loadCollaborationData();
     }, [refresh, loadCollaborationData]);
-    
-    // Load conversation when tab changes to conversation (first load scrolls to bottom)
-    useEffect(() => {
-        if (activeTab === "conversation" && orderId) {
-            loadConversation({ forceScrollToBottom: true });
-        }
-    }, [activeTab, orderId, loadConversation]);
-    
-    // Auto-refresh conversation and timeline every 30 seconds (preserves scroll position)
-    useEffect(() => {
-        if (activeTab !== "conversation") return;
-        const interval = setInterval(() => {
-            // Silent refresh - only updates content, preserves scroll unless user is at bottom
-            refreshConversationAndTimeline();
-        }, 30000); // 30 seconds
-        return () => clearInterval(interval);
-    }, [activeTab, refreshConversationAndTimeline]);
     
     const handleRemoveOrder = useCallback(async (reason: string) => {
         if (!orderId) return;
@@ -914,56 +744,16 @@ export default function OrderDetail() {
     );
 
 
-    // Convert conversation to CommentData format
-    const conversationData: CommentData[] = useMemo(() => {
-        return conversation.map(c => ({
-            id: c.id,
-            user_id: c.user_id,
-            user_name: c.user_name,
-            user_avatar: c.user_avatar,
-            text: c.text,
-            mentions: c.mentions,
-            mentioned_users: c.mentioned_users,
-            created_at: c.created_at,
-        }));
-    }, [conversation]);
-
-    // Conversation content JSX (not a function component to avoid re-renders)
-    const conversationContentJSX = (
-        <div
-            style={{
-                border: "2px solid #eef1f0",
-                borderRadius: tokens.radius,
-                background: "#fff",
-                height: 600,
-                maxHeight: "72vh",
-                display: "flex",
-                flexDirection: "column",
-                overflow: "hidden",
-            }}
-        >
-            {/* Chat-style grouped message thread */}
-            <ConversationThread
-                ref={conversationScrollRef}
-                messages={conversationData}
-                currentUserId={currentUserProfile?.id}
-                loading={loadingConversation}
-            />
-
-            {/* Composer — unified within the same panel, Telegram-style integrated send */}
-            <div style={{ borderTop: "1px solid #eef1f0", padding: "12px 14px", background: "#fbfdfc", display: "flex" }}>
-                <CommentInput
-                    variant="chat"
-                    value={commentText}
-                    onChange={setCommentText}
-                    onSubmit={addComment}
-                    loading={submittingComment}
-                    placeholder="Escribe un mensaje… Usa @ para mencionar a alguien"
-                    rows={1}
-                />
-            </div>
-        </div>
-    );
+    // Céluma 1.5 (#88/#96): the conversation owns its loading, paging, sending and retries.
+    const conversationContentJSX = orderId ? (
+        <OrderConversation
+            orderId={orderId}
+            currentUserId={currentUserProfile?.id}
+            canComment={canComment}
+            active={activeTab === "conversation"}
+            onSent={refreshTimeline}
+        />
+    ) : null;
 
     // Sidebar content as a JSX value (NOT a nested component). Rendering it as a
     // component (`<SidebarContent/>`) gave it a fresh identity on every OrderDetail
@@ -1873,9 +1663,12 @@ export default function OrderDetail() {
                                             }
                                             case "COMMENT_ADDED": {
                                                 const preview = meta.comment_preview as string || "";
+                                                // Céluma 1.5 (#96): image-only messages have no preview, only a count.
+                                                const images = Number(meta.attachments_count) || 0;
                                                 return (
                                                     <span>
                                                         Agregó un comentario
+                                                        {images > 0 && ` con ${images === 1 ? "1 imagen" : `${images} imágenes`}`}
                                                         {preview && (
                                                             <span style={{ color: "#888", fontStyle: "italic", marginLeft: 4 }}>
                                                                 : "{preview}"

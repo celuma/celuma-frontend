@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useId } from "react";
 import { Avatar } from "antd";
 import { SendOutlined, LoadingOutlined } from "@ant-design/icons";
 import { searchMentionUsers, type MentionUser } from "./comment_service";
@@ -10,7 +10,7 @@ import CelumaButton from "../ui/button";
 export type CommentInputProps = {
     value: string;
     onChange: (value: string) => void;
-    onSubmit: (text: string, mentionIds: string[]) => Promise<void>;
+    onSubmit: (text: string, mentionIds: string[]) => Promise<void> | void;
     placeholder?: string;
     rows?: number;
     disabled?: boolean;
@@ -21,6 +21,11 @@ export type CommentInputProps = {
     hideSubmitButton?: boolean;
     /** "chat" → integrated icon-only send button inside the field, no tip line. */
     variant?: "default" | "chat";
+    /** Accessible name of the text field (Spanish). */
+    ariaLabel?: string;
+    /** Allow sending with empty text (e.g. the message carries images). */
+    canSubmitEmpty?: boolean;
+    maxLength?: number;
 };
 
 export const CommentInput: React.FC<CommentInputProps> = ({
@@ -36,6 +41,9 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     autoFocus = false,
     hideSubmitButton = false,
     variant = "default",
+    ariaLabel,
+    canSubmitEmpty = false,
+    maxLength,
 }) => {
     const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
     const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -43,8 +51,11 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     const [loadingMentions, setLoadingMentions] = useState(false);
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const [mentionMap, setMentionMap] = useState<Record<string, { id: string; name: string; avatar?: string | null }>>({});
+    // Céluma 1.5 (#96): the mention list is operable from the keyboard (↑/↓, Enter/Tab, Esc).
+    const [activeMention, setActiveMention] = useState(0);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const isChat = variant === "chat";
+    const listboxId = useId();
 
     // Search users for mentions
     const performMentionSearch = useCallback(async (query: string) => {
@@ -52,6 +63,7 @@ export const CommentInput: React.FC<CommentInputProps> = ({
         try {
             const users = await searchMentionUsers(query);
             setMentionUsers(users);
+            setActiveMention(0);
         } catch (err) {
             console.error("Error searching users:", err);
             setMentionUsers([]);
@@ -121,30 +133,45 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     }, [value, mentionStartIndex, mentionSearch, onChange]);
 
     // Handle submit
+    const canSubmit = (!!value.trim() || canSubmitEmpty) && !loading && !disabled;
     const handleSubmit = useCallback(async () => {
-        if (!value.trim() || loading) return;
+        if (!canSubmit) return;
         const mentionIds = extractMentionIdsFromMap(value, mentionMap);
         await onSubmit(value, mentionIds);
         setMentionMap({});
-    }, [value, loading, mentionMap, onSubmit]);
+    }, [canSubmit, value, mentionMap, onSubmit]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (showMentionPopover && mentionUsers.length > 0) {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const delta = e.key === "ArrowDown" ? 1 : -1;
+                setActiveMention((i) => (i + delta + mentionUsers.length) % mentionUsers.length);
+                return;
+            }
+            if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) || e.key === "Tab") {
+                e.preventDefault();
+                handleSelectMention(mentionUsers[Math.min(activeMention, mentionUsers.length - 1)]);
+                return;
+            }
+        }
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             handleSubmit();
         }
         if (e.key === "Escape" && showMentionPopover) {
+            e.preventDefault();
             setShowMentionPopover(false);
         }
-    }, [handleSubmit, showMentionPopover]);
+    }, [handleSubmit, showMentionPopover, mentionUsers, activeMention, handleSelectMention]);
 
     const sendButton = !hideSubmitButton && isChat ? (
         <CelumaButton
             type="primary"
-            size="xsmall"
+            size="small"
             icon={loading ? <LoadingOutlined /> : <SendOutlined />}
             aria-label={submitButtonText}
-            disabled={!value.trim() || disabled || loading}
+            disabled={!canSubmit}
             onClick={handleSubmit}
         />
     ) : undefined;
@@ -153,7 +180,11 @@ export const CommentInput: React.FC<CommentInputProps> = ({
         <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
             {/* Mention dropdown — positioned ABOVE the field */}
             {showMentionPopover && (
-                <div style={{
+                <div
+                    id={listboxId}
+                    role="listbox"
+                    aria-label="Personas para mencionar"
+                    style={{
                     position: "absolute",
                     bottom: "calc(100% + 6px)",
                     left: 0,
@@ -179,15 +210,18 @@ export const CommentInput: React.FC<CommentInputProps> = ({
                         mentionUsers.map((user, index) => (
                             <div
                                 key={user.id}
+                                role="option"
+                                aria-selected={index === activeMention}
                                 style={{
                                     cursor: "pointer",
                                     padding: "8px 12px",
                                     borderBottom: index < mentionUsers.length - 1 ? "1px solid #f3f4f6" : "none",
                                     transition: "background-color 0.15s",
+                                    backgroundColor: index === activeMention ? "#e6f7f7" : "transparent",
                                 }}
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => handleSelectMention(user)}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f1f9f8"}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                                onMouseEnter={() => setActiveMention(index)}
                             >
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     <Avatar
@@ -227,6 +261,9 @@ export const CommentInput: React.FC<CommentInputProps> = ({
                 disabled={disabled}
                 autoFocus={autoFocus}
                 action={sendButton}
+                ariaLabel={ariaLabel}
+                maxLength={maxLength}
+                showCount={false}
             />
 
             {/* Default variant footer (tip + button) — chat variant integrates the send button instead */}
@@ -242,7 +279,7 @@ export const CommentInput: React.FC<CommentInputProps> = ({
                         size="small"
                         onClick={handleSubmit}
                         loading={loading}
-                        disabled={!value.trim() || disabled}
+                        disabled={!canSubmit && !loading}
                         icon={<SendOutlined />}
                     >
                         {submitButtonText}

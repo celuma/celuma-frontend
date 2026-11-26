@@ -81,7 +81,7 @@ function NotificationPanel({
      */
     const handleSelect = useCallback(
         (item: NotificationListItem) => {
-            const route = resolveNotificationRoute(item.resource_type, item.resource_id);
+            const route = resolveNotificationRoute(item.resource_type, item.resource_id, item.type);
 
             if (isUnread(item)) {
                 void markRead(item.recipient_id).catch((err) => {

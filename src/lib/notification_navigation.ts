@@ -65,6 +65,7 @@ const RESOURCE_ROUTES: Record<NotificationResourceType, (id: string) => string> 
 export function resolveNotificationRoute(
     resourceType: string | null | undefined,
     resourceId: string | null | undefined,
+    notificationType?: string | null,
 ): string | null {
     if (!resourceType || !resourceId) return null;
 
@@ -73,8 +74,17 @@ export function resolveNotificationRoute(
 
     if (!isKnownNotificationResourceType(resourceType)) return null;
 
-    return RESOURCE_ROUTES[resourceType](encodeURIComponent(id));
+    const route = RESOURCE_ROUTES[resourceType](encodeURIComponent(id));
+    // Céluma 1.5 (#98): a conversation notice opens the order on its conversation tab.
+    // Still a plain route: the order page and the conversation API re-check access.
+    if (resourceType === "order" && notificationType === "ORDER_COMMENT_ADDED") {
+        return `${route}?tab=${ORDER_CONVERSATION_TAB}`;
+    }
+    return route;
 }
+
+/** The order page's conversation tab key, as read from `?tab=` (Céluma 1.5, #98). */
+export const ORDER_CONVERSATION_TAB = "conversation";
 
 /** True when this notification can be opened in this build. */
 export function isNotificationNavigable(
