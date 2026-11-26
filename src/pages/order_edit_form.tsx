@@ -104,8 +104,9 @@ export default function OrderEditForm() {
                     getReportTemplates(true).catch(() => null),
                     // Optional explanation of the default: every sample type (an order may keep a deactivated
                     // one, and the server still counts it) and the study types. Without them the origin stays generic.
-                    listSampleTypes(false).catch(() => null),
-                    apiFetch(`${base}/v1/study-types/`)
+                    // Céluma 1.5 (#94): removed types too — an existing order still resolves them.
+                    listSampleTypes(false, true).catch(() => null),
+                    apiFetch(`${base}/v1/study-types/?active_only=false&include_removed=true`)
                         .then((r) => (r.ok ? (r.json() as Promise<{ study_types?: Array<{ id: string; name: string }> }>) : null))
                         .catch(() => null),
                 ]);

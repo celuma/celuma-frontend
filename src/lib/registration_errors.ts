@@ -59,6 +59,9 @@ const CODE_MESSAGES: Record<string, string> = {
     study_type_not_in_tenant: "El tipo de estudio no pertenece a tu laboratorio.",
     sample_type_not_found: "Este tipo de muestra ya no está en el catálogo. Elija otro.",
     sample_type_inactive: "Este tipo de muestra fue desactivado. Elija otro.",
+    // Céluma 1.5 (#94): removed from the catalog (not only deactivated).
+    sample_type_removed: "Este tipo de muestra fue eliminado del catálogo. Elija otro.",
+    study_type_removed: "Este tipo de estudio fue eliminado del catálogo. Elija otro.",
     report_template_not_found: "La plantilla elegida ya no está disponible.",
     report_template_invalid: "La plantilla elegida no se puede usar. Elija otra.",
     manual_code_permission_required: "No tiene permiso para escribir códigos de muestra. Use el código automático.",

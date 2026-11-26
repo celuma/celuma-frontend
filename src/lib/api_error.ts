@@ -110,6 +110,11 @@ function entityEs(raw: string): string | null {
 /** Pattern rules for the families of English backend messages. */
 const BACKEND_PATTERNS_ES: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     [/^permission required\b/i, () => "No tienes permiso para realizar esta acción."],
+    // Céluma 1.5 (#94): catalog type removal.
+    [/^(Study|Sample) type with code '(.+)' already exists: the code belongs to a type removed from the catalog/i, (m) =>
+        `El código «${m[2]}» pertenece a un tipo de ${m[1].toLowerCase() === "study" ? "estudio eliminado del catálogo que tiene órdenes registradas" : "muestra eliminado del catálogo que tiene muestras registradas"} (incluidas las retiradas), por eso sigue reservado; usa otro código.`],
+    [/^(Study|Sample) type '(.+)' was removed from the catalog/i, (m) =>
+        `El tipo de ${m[1].toLowerCase() === "study" ? "estudio" : "muestra"} «${m[2]}» fue eliminado del catálogo y ya no se puede usar.`],
     [/^(.+?) not found(?: (?:or not in tenant|for this (?:order|case|report)))?\.?$/i, (m) => {
         const entity = entityEs(m[1]);
         return entity ? `${entity} no existe o ya no está disponible.` : "No se encontró el recurso solicitado.";
@@ -252,6 +257,9 @@ const CODE_MSG_ES: Record<string, string> = {
     unknown_index: "Alguno de los registros seleccionados no es válido.",
     invalid_selection: "Alguno de los registros seleccionados no es válido.",
     study_type_not_found: "Uno o más tipos de estudio ya no existen.",
+    study_type_removed: "El tipo de estudio fue eliminado del catálogo: ya no se puede usar, editar ni copiar.",
+    sample_type_removed: "El tipo de muestra fue eliminado del catálogo: ya no se puede usar ni editar.",
+    removal_reason_too_long: "El motivo admite como máximo 500 caracteres.",
     preview_stale: "El catálogo cambió desde la vista previa; revisa la nueva vista previa.",
     conflicts: "Los registros seleccionados entran en conflicto con el catálogo de destino; no se creó nada.",
     concurrent_conflict: "Los registros seleccionados entran en conflicto con el catálogo de destino; no se creó nada.",

@@ -14,6 +14,9 @@ import { apiFetch } from "../lib/api_fetch";
 import { formatHttpError } from "../lib/api_error";
 import type {
     CatalogKind,
+    CatalogTypeRemoval,
+    CatalogTypeRemovalImpact,
+    RemovableCatalog,
     ConflictPolicy,
     SampleType,
     SampleTypesListResponse,
@@ -61,8 +64,13 @@ async function json<T>(res: Response): Promise<T> {
     return (await res.json()) as T;
 }
 
-export async function listSampleTypes(activeOnly = true): Promise<SampleType[]> {
-    const res = await apiFetch(`${SAMPLE_TYPES}/?active_only=${activeOnly}`);
+/**
+ * `includeRemoved` (Céluma 1.5, #94) also returns types removed from the catalog. Only for explaining
+ * historical records; a removed type is never offered as a choice.
+ */
+export async function listSampleTypes(activeOnly = true, includeRemoved = false): Promise<SampleType[]> {
+    const removed = includeRemoved ? "&include_removed=true" : "";
+    const res = await apiFetch(`${SAMPLE_TYPES}/?active_only=${activeOnly}${removed}`);
     return (await json<SampleTypesListResponse>(res)).sample_types ?? [];
 }
 
@@ -87,6 +95,23 @@ export async function updateSampleType(id: string, input: Partial<SampleTypeInpu
 export async function deactivateSampleType(id: string): Promise<void> {
     const res = await apiFetch(`${SAMPLE_TYPES}/${id}`, { method: "DELETE" });
     if (!res.ok) throw await failure(res);
+}
+
+/**
+ * Remove a study type or sample type from the catalog (Céluma 1.5, #94; `admin:manage_catalog`).
+ * Distinct from deactivation: the type is kept for its existing records, hidden from the catalog and
+ * refused for new ones. Repeating it is harmless (`already_removed`).
+ */
+export async function removeCatalogType(kind: RemovableCatalog, id: string, reason?: string): Promise<CatalogTypeRemoval> {
+    const root = kind === "study_types" ? STUDY_TYPES : SAMPLE_TYPES;
+    const body = reason && reason.trim() ? { reason: reason.trim() } : {};
+    return json<CatalogTypeRemoval>(await apiFetch(`${root}/${id}/remove`, { method: "POST", body: JSON.stringify(body) }));
+}
+
+/** What removing the type would do now (#94): reference counts and whether its code would be freed. */
+export async function getRemovalImpact(kind: RemovableCatalog, id: string): Promise<CatalogTypeRemovalImpact> {
+    const root = kind === "study_types" ? STUDY_TYPES : SAMPLE_TYPES;
+    return json<CatalogTypeRemovalImpact>(await apiFetch(`${root}/${id}/removal-impact`));
 }
 
 /** The export file the API produced, ready to be saved. */
