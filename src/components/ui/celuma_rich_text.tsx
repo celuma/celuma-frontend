@@ -108,7 +108,19 @@ function labelToolbar(toolbar: HTMLElement | null | undefined) {
         const value = item.getAttribute("data-value");
         item.setAttribute("aria-label", value ? value.replace(/pt$/, " pt") : `${RICH_TEXT_BASE_SIZE_PT} pt`);
     });
+    // Céluma 1.5 (#62): alignment of the paragraph(s) under the caret or selection.
+    name(toolbar.querySelector(".ql-picker.ql-align .ql-picker-label"), "Alineación del párrafo");
+    toolbar.querySelectorAll(".ql-picker.ql-align .ql-picker-item").forEach((item) => {
+        name(item, ALIGN_NAMES[item.getAttribute("data-value") ?? ""] ?? ALIGN_NAMES[""]);
+    });
 }
+
+const ALIGN_NAMES: Record<string, string> = {
+    "": "Alinear a la izquierda",
+    center: "Centrar",
+    right: "Alinear a la derecha",
+    justify: "Justificar",
+};
 
 const DEFAULT_MODULES = {
     toolbar: {
@@ -116,6 +128,7 @@ const DEFAULT_MODULES = {
             [{ header: [1, 2, 3, false] }, { size: [...RICH_TEXT_SIZE_PICKER] }],
             ["bold", "italic", "underline"],
             [{ script: "sub" }, { script: "super" }],
+            [{ align: [] }],
             [{ list: "ordered" }, { list: "bullet" }],
             ["link"],
             ["clean"],

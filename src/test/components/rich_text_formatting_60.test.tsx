@@ -256,3 +256,34 @@ describe("#61 — list layout rules", () => {
         expect(css).toContain("text-align: right;");
     });
 });
+
+describe("#62 — paragraph alignment", () => {
+    const scope = `.${RICH_TEXT_CONTENT_CLASS}`;
+
+    it("gives every stored alignment class its meaning in the report, left being the default", () => {
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-align-center { text-align: center; }`);
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-align-right { text-align: right; }`);
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-align-justify { text-align: justify; }`);
+        expect(RICH_TEXT_FORMAT_CSS).not.toContain("ql-align-left");
+        expect(RICH_TEXT_FORMAT_CSS).toContain(
+            `${scope} .ql-align-justify[data-text-continues] { text-align-last: justify; }`,
+        );
+    });
+
+    it("keeps alignment in the editor and offers the control with Spanish names", () => {
+        expect(RICH_TEXT_EDITOR_FORMATS).toContain("align");
+        render(
+            <CelumaRichText
+                value='<p class="ql-align-justify">Justificado.</p><p>Izquierda.</p><p class="ql-align-center">Centro.</p>'
+                onChange={() => {}}
+            />,
+        );
+        const paragraphs = Array.from(document.querySelectorAll(".ql-editor p"));
+        expect(paragraphs.map((p) => p.className)).toEqual(["ql-align-justify", "", "ql-align-center"]);
+        expect(screen.getByRole("button", { name: "Alineación del párrafo" })).toHaveAttribute("title", "Alineación del párrafo");
+        const items = Array.from(document.querySelectorAll(".ql-picker.ql-align .ql-picker-item"));
+        expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
+            "Alinear a la izquierda", "Centrar", "Alinear a la derecha", "Justificar",
+        ]);
+    });
+});

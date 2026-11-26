@@ -23,7 +23,8 @@
  *      a block takes the same room on a fresh page whether it is placed whole or split;
  *   5. a text unit (a paragraph, list item, heading or any block holding only inline content) taller than
  *      a page is split between words, keeping its inline formatting (bold, links...) and its order; the
- *      continuation keeps the same element;
+ *      continuation keeps the same element, and every fragment but the last is marked
+ *      `data-text-continues` (its last line is not the paragraph's last line);
  *   6. a unit that cannot be divided and does not fit even alone on an empty page (an oversize figure
  *      row, a table row, an image) is still placed (never dropped) and counted in `overflowedUnits`;
  *      the caller MUST treat that as a layout failure (the renderer marks the page host and the official
@@ -65,6 +66,11 @@ export const ATOMIC_ATTR = "data-page-atomic";
 export const KEEP_WITH_NEXT_ATTR = "data-keep-with-next";
 /** A purely decorative rule: omitted when it would be the first thing on a continuation page. */
 export const SEPARATOR_ATTR = "data-page-separator";
+/**
+ * Set on every fragment of a text unit split by rule 5 except its last (Céluma 1.5, #62): the
+ * fragment's last line continues on the next page, so it is not the end of the paragraph.
+ */
+export const TEXT_CONTINUES_ATTR = "data-text-continues";
 
 const ATOMIC_INLINE_TAGS = new Set(["BR", "IMG", "SVG", "CANVAS", "INPUT", "HR"]);
 
@@ -306,7 +312,11 @@ export function paginateSource(root: HTMLElement, hooks: PaginationHooks): Pagin
                 continuation = true;
                 continue;
             }
-            attach([build(lo)], chain, emptyPlacement(), false);
+            const piece = build(lo);
+            // Céluma 1.5 (#62): a fragment that the unit continues after is not the unit's end, so
+            // its last line is not a paragraph's last line (a justified paragraph justifies it too).
+            if (from + lo < tokens.length) piece.setAttribute(TEXT_CONTINUES_ATTR, "true");
+            attach([piece], chain, emptyPlacement(), false);
             from += lo;
             continuation = true;
             if (from < tokens.length) startPage();

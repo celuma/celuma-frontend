@@ -686,6 +686,60 @@ export const v2RichTextLists: ReportEnvelope = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#62) — paragraph alignment, as Quill stores it (`ql-align-*`
+// class on the block). Shared with the editor harness. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const ALIGN_TAIL =
+    " con una descripción sintética que ocupa varias líneas del renglón para comprobar cómo se reparte"
+    + " el espacio entre palabras en cada línea completa y cómo termina la última línea del párrafo.";
+
+/** Short and wrapped paragraphs with every alignment, a blank line, a heading and a list item. */
+export const ALIGNMENT_HTML =
+    "<p>Izquierda corta.</p>"
+    + `<p class="ql-align-justify">Justificado largo${ALIGN_TAIL}</p>`
+    + `<p>Izquierda larga${ALIGN_TAIL}${ALIGN_TAIL}</p>`
+    + "<p><br></p>"
+    + '<p class="ql-align-center">Centrado corto.</p>'
+    + '<p class="ql-align-right">Derecha corta.</p>'
+    + '<h2 class="ql-align-center">Título centrado</h2>'
+    + `<ol><li data-list="bullet" class="ql-align-justify"><span class="ql-ui" contenteditable="false"></span>Viñeta justificada${ALIGN_TAIL}</li></ol>`
+    + "<p>Párrafo final sin alineación.</p>";
+
+/** One justified paragraph taller than a page: numbered sentences to audit the split. */
+const JUSTIFIED_ACROSS_PAGES_HTML = '<p class="ql-align-justify">' + Array.from({ length: 150 }, (_, i) =>
+    `Oración ${String(i + 1).padStart(3, "0")} del párrafo justificado sintético que cruza de página. `,
+).join("") + "</p>";
+
+const v2RichTextAlignmentContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0062" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Dos" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: ALIGNMENT_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: JUSTIFIED_ACROSS_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #62 left/center/right/justify, wrapped lines, a justified list item and a split justified paragraph. */
+export const v2RichTextAlignment: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-62",
+    title: "Reporte V2 — alineación de párrafos",
+    template: templateFrom(v2RichTextAlignmentContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextAlignmentContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextAlignmentContent) },
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -702,4 +756,5 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2QuillRichText,
     v2RichTextFormatting,
     v2RichTextLists,
+    v2RichTextAlignment,
 };

@@ -34,6 +34,7 @@
  */
 
 import { RICH_TEXT_CONTENT_CLASS } from "./rich_text_render";
+import { TEXT_CONTINUES_ATTR } from "./versioned/report_pagination";
 
 /** Point size of rich-text prose in the V2 report (the "Normal" size). */
 export const RICH_TEXT_BASE_SIZE_PT = 10;
@@ -66,7 +67,7 @@ export const RICH_TEXT_SIZE_PICKER: ReadonlyArray<string | false> = [
  * formatting the report renderers give a meaning to can be stored.
  */
 export const RICH_TEXT_EDITOR_FORMATS: string[] = [
-    "header", "bold", "italic", "underline", "script", "size", "list", "indent", "link",
+    "header", "bold", "italic", "underline", "script", "size", "align", "list", "indent", "link",
 ];
 
 /** CSS variable holding the length of one report point on a given surface. */
@@ -165,8 +166,27 @@ export function richTextEditorListCss(scope: string): string {
     return rules.join("\n");
 }
 
+/**
+ * Céluma 1.5 (#62) — paragraph alignment. Quill stores it as a class on the
+ * block (paragraph, heading or list item): `ql-align-center`, `-right` or
+ * `-justify`; a block without one is left-aligned, the report's default, so
+ * existing prose keeps its alignment. Justified text keeps the paragraph's
+ * natural last line, except on a fragment the paginator split off a paragraph
+ * taller than a page: its last line continues on the next page, so it is
+ * justified too and the paragraph reads as if it were not split.
+ */
+export const RICH_TEXT_ALIGNMENTS = ["center", "right", "justify"] as const;
+
+function renderedAlignCss(scope: string): string {
+    return [
+        ...RICH_TEXT_ALIGNMENTS.map((align) => `${scope} .ql-align-${align} { text-align: ${align}; }`),
+        `${scope} .ql-align-justify[${TEXT_CONTINUES_ATTR}] { text-align-last: justify; }`,
+    ].join("\n");
+}
+
 /** Format rules for the V2 renderer's rich-text hosts (preview, PDF, print). */
 export const RICH_TEXT_FORMAT_CSS = [
     richTextFormatCss(`.${RICH_TEXT_CONTENT_CLASS}`),
     renderedListCss(`.${RICH_TEXT_CONTENT_CLASS}`),
+    renderedAlignCss(`.${RICH_TEXT_CONTENT_CLASS}`),
 ].join("\n");
