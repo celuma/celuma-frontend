@@ -14,7 +14,7 @@ import {
     resolvePageComposition,
     resolvePageLayout,
 } from "../../../components/report/versioned/page_layout";
-import { ATOMIC_ATTR, KEEP_WITH_NEXT_ATTR, SEPARATOR_ATTR, paginateSource } from "../../../components/report/versioned/report_pagination";
+import { ATOMIC_ATTR, KEEP_WITH_NEXT_ATTR, SEPARATOR_ATTR, TEXT_CONTINUES_ATTR, paginateSource } from "../../../components/report/versioned/report_pagination";
 import {
     SIGNATURE_BLOCK_WIDTH_MM,
     SIGNATURE_IMAGE_MAX_HEIGHT_MM,
@@ -128,6 +128,21 @@ describe("paginateSource — oversize text and indivisible units (review R1)", (
         expect(pages.length).toBeGreaterThan(2);
         pages.forEach((p) => expect(heightOf(p)).toBeLessThanOrEqual(300));
         expect(pages.map((p) => p.textContent).join("")).toBe(text);
+    });
+
+    it("marks every fragment but the last as continuing and keeps the paragraph's class (#62)", () => {
+        const { pages } = paginate(`<p class="ql-align-justify" data-cpc="1">${words(200)}</p>`, 300);
+        const fragments = pages.flatMap((p) => Array.from(p.querySelectorAll("p")));
+        expect(fragments.length).toBeGreaterThan(2);
+        fragments.forEach((p, i) => {
+            expect(p.className).toBe("ql-align-justify");
+            expect(p.hasAttribute(TEXT_CONTINUES_ATTR), `fragment ${i}`).toBe(i < fragments.length - 1);
+        });
+    });
+
+    it("leaves a paragraph that fits unmarked", () => {
+        const { pages } = paginate(`<p class="ql-align-justify" data-cpc="1">${words(20)}</p>`, 300);
+        expect(pages[0].querySelector("p")!.hasAttribute(TEXT_CONTINUES_ATTR)).toBe(false);
     });
 
     it("keeps inline formatting across the split", () => {

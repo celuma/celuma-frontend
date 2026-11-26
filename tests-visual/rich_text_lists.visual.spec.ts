@@ -86,7 +86,15 @@ test("indentation renders as real nesting, with its own marker types", async ({ 
     const deepest = nested.locator("li > ol").first();
     await expect(deepest).toHaveCount(1);
     const deepestMarker = await deepest.evaluate((el) => getComputedStyle(el).listStyleType);
-    expect(deepestMarker).toBe("decimal");
+    // Céluma 1.5 (#60/#61 owner correction, 2026-11-25): a numbered list
+    // follows the editor's 1. → a. → i. cycle by depth, like bullets change
+    // • → ◦ → ▪. At the third level (ql-indent-2) the editor shows "i.";
+    // before the correction the report fell back to the browser's decimal.
+    expect(deepestMarker).toBe("lower-roman");
+    const bulletMarkers = await Promise.all(
+        [outer, nested].map((list) => list.evaluate((el) => getComputedStyle(el).listStyleType)),
+    );
+    expect(bulletMarkers).toEqual(["disc", "circle"]);
 
     // Nesting must actually indent — the flat ql-indent markup did not.
     const outerBox = await outer.locator("> li").first().boundingBox();

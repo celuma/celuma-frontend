@@ -564,6 +564,240 @@ export const v2QuillRichText: ReportEnvelope = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#60) — author font sizes and sub/superscript, as Quill stores
+// them (`ql-size-<N>pt` spans, native <sub>/<sup>). Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const FORMATTED_PARAGRAPH =
+    '<p>Normal <span class="ql-size-8pt">ocho</span> <span class="ql-size-9pt">nueve</span> '
+    + '<span class="ql-size-11pt">once</span> <span class="ql-size-12pt">doce</span> '
+    + '<span class="ql-size-14pt">catorce</span> <strong><span class="ql-size-16pt">dieciséis</span></strong> '
+    + '<em>cursiva</em> <u>subrayado</u>.</p>'
+    + '<p data-probe="with-scripts">Leucocitos 7.5 ×10<sup>9</sup>/L y CO<sub>2</sub> total.</p>'
+    + '<p data-probe="without-scripts">Leucocitos 7.5 ×109/L y CO2 total.</p>'
+    + '<ol>'
+    + '<li data-list="ordered"><span class="ql-ui" contenteditable="false"></span>Número uno</li>'
+    + '<li data-list="ordered" class="ql-indent-1"><span class="ql-ui" contenteditable="false"></span>Letra a</li>'
+    + '<li data-list="ordered" class="ql-indent-2"><span class="ql-ui" contenteditable="false"></span>Romano i</li>'
+    + '<li data-list="ordered" class="ql-indent-3"><span class="ql-ui" contenteditable="false"></span>Otra vez uno</li>'
+    + '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Viñeta</li>'
+    + '<li data-list="ordered" class="ql-indent-1"><span class="ql-ui" contenteditable="false"></span>Número bajo viñeta</li>'
+    + '</ol>'
+    + '<p><span class="ql-size-16pt">Un tramo largo en dieciséis puntos que debe continuar en la línea siguiente sin perder su tamaño ni encimarse con el texto de alrededor.</span></p>';
+
+/** One paragraph taller than a page: numbered sentences, some sized, so a split can be audited. */
+const LONG_FORMATTED_PARAGRAPH = '<p>' + Array.from({ length: 140 }, (_, i) => {
+    const n = String(i + 1).padStart(3, "0");
+    const sentence = `Frase ${n} de la descripción sintética del fragmento examinado. `;
+    return i % 5 === 0 ? `<span class="ql-size-14pt">${sentence}</span>` : sentence;
+}).join("") + '</p>';
+
+const v2RichTextFormattingContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0060" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: FORMATTED_PARAGRAPH },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: LONG_FORMATTED_PARAGRAPH },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #60 sizes, emphasis, sub/superscript, list markers by depth, wrapping and a page break. */
+export const v2RichTextFormatting: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-60",
+    title: "Reporte V2 — tamaños de letra y sub/superíndice",
+    template: templateFrom(v2RichTextFormattingContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextFormattingContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextFormattingContent) },
+    },
+};
+
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#61) — list layout, as Quill stores lists (one flat <ol>,
+// `data-list` + `ql-indent-N`). Shared with the editor harness so the editor
+// and the report are measured on identical content. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const quillItem = (kind: "bullet" | "ordered", depth: number, text: string) =>
+    `<li data-list="${kind}"${depth ? ` class="ql-indent-${depth}"` : ""}><span class="ql-ui" contenteditable="false"></span>${text}</li>`;
+
+const LONG_ITEM_TAIL =
+    " que continúa con una descripción sintética suficientemente larga para ocupar varias líneas del renglón y comprobar"
+    + " que el texto que salta de línea queda alineado con la primera palabra del elemento y no con la viñeta.";
+
+/** Short, wrapped and nested items of both kinds, then prose. */
+export const LIST_LAYOUT_HTML =
+    "<ol>"
+    + quillItem("bullet", 0, "Elemento corto.")
+    + quillItem("bullet", 0, "Elemento largo" + LONG_ITEM_TAIL)
+    + quillItem("bullet", 1, "Anidado corto.")
+    + quillItem("bullet", 1, "Anidado largo" + LONG_ITEM_TAIL)
+    + quillItem("bullet", 2, "Tercer nivel.")
+    + quillItem("ordered", 0, "Paso uno.")
+    + quillItem("ordered", 0, "Paso largo" + LONG_ITEM_TAIL)
+    + quillItem("ordered", 1, "Subpaso a.")
+    + "</ol>"
+    + "<p>Prosa después de la lista.</p>";
+
+/** A nested bullet list and a numbered list long enough to cross pages. */
+const LIST_ACROSS_PAGES_HTML =
+    "<ol>"
+    + Array.from({ length: 80 }, (_, i) => {
+        const n = String(i + 1).padStart(3, "0");
+        return quillItem("bullet", [0, 1, 2, 1][i % 4], `Viñeta ${n} del listado sintético de hallazgos.`);
+    }).join("")
+    + Array.from({ length: 40 }, (_, i) => quillItem("ordered", 0, `Paso ${String(i + 1).padStart(3, "0")} del protocolo sintético.`)).join("")
+    + "</ol>";
+
+const v2RichTextListsContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0061" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Uno" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: LIST_LAYOUT_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: LIST_ACROSS_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #61 indentation, wrapped-line alignment, item spacing and lists across pages. */
+export const v2RichTextLists: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-61",
+    title: "Reporte V2 — formato de listas",
+    template: templateFrom(v2RichTextListsContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextListsContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextListsContent) },
+    },
+};
+
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#62) — paragraph alignment, as Quill stores it (`ql-align-*`
+// class on the block). Shared with the editor harness. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const ALIGN_TAIL =
+    " con una descripción sintética que ocupa varias líneas del renglón para comprobar cómo se reparte"
+    + " el espacio entre palabras en cada línea completa y cómo termina la última línea del párrafo.";
+
+/** Short and wrapped paragraphs with every alignment, a blank line, a heading and a list item. */
+export const ALIGNMENT_HTML =
+    "<p>Izquierda corta.</p>"
+    + `<p class="ql-align-justify">Justificado largo${ALIGN_TAIL}</p>`
+    + `<p>Izquierda larga${ALIGN_TAIL}${ALIGN_TAIL}</p>`
+    + "<p><br></p>"
+    + '<p class="ql-align-center">Centrado corto.</p>'
+    + '<p class="ql-align-right">Derecha corta.</p>'
+    + '<h2 class="ql-align-center">Título centrado</h2>'
+    + `<ol><li data-list="bullet" class="ql-align-justify"><span class="ql-ui" contenteditable="false"></span>Viñeta justificada${ALIGN_TAIL}</li></ol>`
+    + "<p>Párrafo final sin alineación.</p>";
+
+/** One justified paragraph taller than a page: numbered sentences to audit the split. */
+const JUSTIFIED_ACROSS_PAGES_HTML = '<p class="ql-align-justify">' + Array.from({ length: 150 }, (_, i) =>
+    `Oración ${String(i + 1).padStart(3, "0")} del párrafo justificado sintético que cruza de página. `,
+).join("") + "</p>";
+
+const v2RichTextAlignmentContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0062" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Dos" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: ALIGNMENT_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: JUSTIFIED_ACROSS_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #62 left/center/right/justify, wrapped lines, a justified list item and a split justified paragraph. */
+export const v2RichTextAlignment: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-62",
+    title: "Reporte V2 — alineación de párrafos",
+    template: templateFrom(v2RichTextAlignmentContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextAlignmentContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextAlignmentContent) },
+    },
+};
+
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#63) — author line spacing, as the editor stores it (block class
+// `ql-line-height-<value>`; the 1.5 default stores nothing). Shared with the
+// editor harness. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const SPACING_TAIL =
+    " con una descripción sintética que ocupa varias líneas del renglón para medir la distancia"
+    + " entre una línea y la siguiente dentro del mismo párrafo con el interlineado elegido.";
+
+/** Wrapped paragraphs with every spacing, a blank line, a sized run, a heading and list items. */
+export const LINE_SPACING_HTML =
+    `<p>Predeterminado${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-1">Sencillo${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-115">Uno quince${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-2">Doble${SPACING_TAIL}</p>`
+    + "<p><br></p>"
+    + `<p class="ql-line-height-2">Doble con <span class="ql-size-14pt">texto grande</span>${SPACING_TAIL}</p>`
+    + '<h2 class="ql-line-height-1">Título sencillo</h2>'
+    + "<ol>"
+    + `<li data-list="bullet" class="ql-line-height-2"><span class="ql-ui" contenteditable="false"></span>Viñeta doble${SPACING_TAIL}</li>`
+    + `<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Viñeta predeterminada${SPACING_TAIL}</li>`
+    + "</ol>"
+    + "<p>Párrafo final predeterminado.</p>";
+
+/** Double-spaced paragraphs long enough to cross pages, above the signature band. */
+const DOUBLE_SPACED_PAGES_HTML = Array.from({ length: 24 }, (_, i) =>
+    `<p class="ql-line-height-2">Párrafo ${String(i + 1).padStart(2, "0")} a doble espacio${SPACING_TAIL}</p>`,
+).join("");
+
+const v2RichTextLineSpacingContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0063" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Tres" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: LINE_SPACING_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: DOUBLE_SPACED_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: true, require_digital_signature: false },
+};
+
+/** Covers: #63 line spacing per block, default spacing unchanged, blank lines, pages with the signature band. */
+export const v2RichTextLineSpacing: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-63",
+    title: "Reporte V2 — interlineado",
+    template: templateFrom(v2RichTextLineSpacingContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextLineSpacingContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextLineSpacingContent) },
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -578,4 +812,8 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2MidPublicationSigned,
     v2MidPublicationUnsigned,
     v2QuillRichText,
+    v2RichTextFormatting,
+    v2RichTextLists,
+    v2RichTextAlignment,
+    v2RichTextLineSpacing,
 };
