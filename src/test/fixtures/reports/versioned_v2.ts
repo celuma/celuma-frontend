@@ -621,6 +621,71 @@ export const v2RichTextFormatting: ReportEnvelope = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#61) — list layout, as Quill stores lists (one flat <ol>,
+// `data-list` + `ql-indent-N`). Shared with the editor harness so the editor
+// and the report are measured on identical content. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const quillItem = (kind: "bullet" | "ordered", depth: number, text: string) =>
+    `<li data-list="${kind}"${depth ? ` class="ql-indent-${depth}"` : ""}><span class="ql-ui" contenteditable="false"></span>${text}</li>`;
+
+const LONG_ITEM_TAIL =
+    " que continúa con una descripción sintética suficientemente larga para ocupar varias líneas del renglón y comprobar"
+    + " que el texto que salta de línea queda alineado con la primera palabra del elemento y no con la viñeta.";
+
+/** Short, wrapped and nested items of both kinds, then prose. */
+export const LIST_LAYOUT_HTML =
+    "<ol>"
+    + quillItem("bullet", 0, "Elemento corto.")
+    + quillItem("bullet", 0, "Elemento largo" + LONG_ITEM_TAIL)
+    + quillItem("bullet", 1, "Anidado corto.")
+    + quillItem("bullet", 1, "Anidado largo" + LONG_ITEM_TAIL)
+    + quillItem("bullet", 2, "Tercer nivel.")
+    + quillItem("ordered", 0, "Paso uno.")
+    + quillItem("ordered", 0, "Paso largo" + LONG_ITEM_TAIL)
+    + quillItem("ordered", 1, "Subpaso a.")
+    + "</ol>"
+    + "<p>Prosa después de la lista.</p>";
+
+/** A nested bullet list and a numbered list long enough to cross pages. */
+const LIST_ACROSS_PAGES_HTML =
+    "<ol>"
+    + Array.from({ length: 80 }, (_, i) => {
+        const n = String(i + 1).padStart(3, "0");
+        return quillItem("bullet", [0, 1, 2, 1][i % 4], `Viñeta ${n} del listado sintético de hallazgos.`);
+    }).join("")
+    + Array.from({ length: 40 }, (_, i) => quillItem("ordered", 0, `Paso ${String(i + 1).padStart(3, "0")} del protocolo sintético.`)).join("")
+    + "</ol>";
+
+const v2RichTextListsContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0061" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Uno" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: LIST_LAYOUT_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: LIST_ACROSS_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #61 indentation, wrapped-line alignment, item spacing and lists across pages. */
+export const v2RichTextLists: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-61",
+    title: "Reporte V2 — formato de listas",
+    template: templateFrom(v2RichTextListsContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextListsContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextListsContent) },
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -636,4 +701,5 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2MidPublicationUnsigned,
     v2QuillRichText,
     v2RichTextFormatting,
+    v2RichTextLists,
 };

@@ -99,6 +99,25 @@ const ORDERED_STYLES = ["decimal", "lower-alpha", "lower-roman"] as const;
 const BULLET_STYLES = ["disc", "circle", "square"] as const;
 const BULLET_CHARS = ["\\2022", "\\25E6", "\\25AA"] as const;
 
+/**
+ * Céluma 1.5 (#61) — list layout, the same in the editor and the report.
+ *
+ * Each level is indented by one step of 17 report points (6 mm). The marker
+ * hangs in that step, right-aligned against the item text, so a wrapped line
+ * starts exactly under the first word of its item, never under the marker.
+ * Lists and items add no vertical space of their own: consecutive items sit
+ * on consecutive lines (as in the editor), and a bullet run followed by a
+ * numbered run reads as one list block. Space between a list and the
+ * surrounding prose is paragraph spacing, specified by #63.
+ */
+export const RICH_TEXT_LIST_INDENT_PT = 17;
+/** Gap between a marker and its item text, in em of the item. */
+const LIST_MARKER_GAP_EM = 0.3;
+
+function listIndent(): string {
+    return `calc(${RICH_TEXT_LIST_INDENT_PT} * var(${RICH_TEXT_POINT_VAR}, 1pt))`;
+}
+
 /** `list-style-type` for a numbered or bullet list at `depth` (0 = top level). */
 export function richTextListStyle(kind: "ordered" | "bullet", depth: number): string {
     return kind === "ordered" ? ORDERED_STYLES[depth % 3] : BULLET_STYLES[Math.min(depth, 2)];
@@ -110,7 +129,12 @@ export function richTextListStyle(kind: "ordered" | "bullet", depth: number): st
  * Each deeper selector is more specific, so the deepest matching rule wins.
  */
 function renderedListCss(scope: string): string {
-    const rules: string[] = [];
+    const rules: string[] = [
+        // Every level, top included, is one indent step; the outside marker
+        // hangs inside that step and wrapped lines align with the text.
+        `${scope} ol, ${scope} ul { margin: 0; padding-left: ${listIndent()}; list-style-position: outside; }`,
+        `${scope} li { margin: 0; padding-left: 0; }`,
+    ];
     for (let depth = 0; depth <= RICH_TEXT_LIST_DEPTHS; depth++) {
         const ancestors = ":is(ol, ul) ".repeat(depth);
         rules.push(`${scope} ${ancestors}ol { list-style-type: ${richTextListStyle("ordered", depth)}; }`);
@@ -120,12 +144,21 @@ function renderedListCss(scope: string): string {
 }
 
 /**
- * Editor lists: Quill draws every marker into `.ql-ui::before` and already
- * cycles numbers by `ql-indent-N`; only the bullets need their level glyph.
+ * Editor lists. Quill keeps every item as a flat child of one `<ol>` with its
+ * depth in `ql-indent-N`, and draws the marker into `.ql-ui::before`; it
+ * already cycles numbers by depth, so only the bullets need their level glyph.
+ * The geometry mirrors the report: an item at depth N starts (N + 1) indent
+ * steps in, and its marker is right-aligned in the step before the text.
  */
 export function richTextEditorListCss(scope: string): string {
-    const rules: string[] = [];
+    const indent = listIndent();
+    const rules: string[] = [
+        `${scope} ol { padding-left: 0; }`,
+        `${scope} li[data-list] { padding-left: ${indent}; }`,
+        `${scope} li[data-list] > .ql-ui::before { margin-left: calc(-1 * ${indent}); margin-right: ${LIST_MARKER_GAP_EM}em; width: calc(${indent} - ${LIST_MARKER_GAP_EM}em); text-align: right; }`,
+    ];
     for (let depth = 1; depth <= RICH_TEXT_LIST_DEPTHS; depth++) {
+        rules.push(`${scope} li[data-list].ql-indent-${depth} { padding-left: calc(${depth + 1} * ${indent}); }`);
         const glyph = BULLET_CHARS[Math.min(depth, 2)];
         rules.push(`${scope} li[data-list="bullet"].ql-indent-${depth} > .ql-ui::before { content: "${glyph}"; }`);
     }

@@ -235,3 +235,24 @@ describe("#60 — every V2 surface gives the classes the same meaning", () => {
         }
     });
 });
+
+describe("#61 — list layout rules", () => {
+    const scope = `.${RICH_TEXT_CONTENT_CLASS}`;
+    const step = "calc(17 * var(--celuma-rt-pt, 1pt))";
+
+    it("indents every rendered list level one step, with hanging markers and no list margins", () => {
+        expect(RICH_TEXT_FORMAT_CSS).toContain(
+            `${scope} ol, ${scope} ul { margin: 0; padding-left: ${step}; list-style-position: outside; }`,
+        );
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} li { margin: 0; padding-left: 0; }`);
+    });
+
+    it("gives the editor the same steps, by ql-indent level", () => {
+        render(<CelumaRichText value="" onChange={() => {}} />);
+        const css = Array.from(document.querySelectorAll(".celuma-quill style")).map((s) => s.textContent).join("\n");
+        expect(css).toContain(`.celuma-quill .ql-editor li[data-list] { padding-left: ${step}; }`);
+        expect(css).toContain(`.celuma-quill .ql-editor li[data-list].ql-indent-1 { padding-left: calc(2 * ${step}); }`);
+        expect(css).toContain(`.celuma-quill .ql-editor li[data-list].ql-indent-2 { padding-left: calc(3 * ${step}); }`);
+        expect(css).toContain("text-align: right;");
+    });
+});
