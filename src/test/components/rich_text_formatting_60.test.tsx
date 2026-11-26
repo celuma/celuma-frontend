@@ -287,3 +287,46 @@ describe("#62 — paragraph alignment", () => {
         ]);
     });
 });
+
+describe("#63 — author line spacing", () => {
+    const scope = `.${RICH_TEXT_CONTENT_CLASS}`;
+
+    it("gives each stored spacing its factor and leaves paragraph spacing and the 1.5 default alone", () => {
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-line-height-1 { line-height: 1; }`);
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-line-height-115 { line-height: 1.15; }`);
+        expect(RICH_TEXT_FORMAT_CSS).toContain(`${scope} .ql-line-height-2 { line-height: 2; }`);
+        expect(RICH_TEXT_FORMAT_CSS).not.toMatch(/ql-line-height-15\b/);
+        // Owner decision: existing V2 spacing is not restyled.
+        expect(RICH_TEXT_FORMAT_CSS).not.toMatch(/(^|\s)(p|h[1-6])(,|\s*\{)[^}]*margin/m);
+    });
+
+    it("keeps chosen spacing on load, drops values it does not offer, and names the control in Spanish", () => {
+        expect(RICH_TEXT_EDITOR_FORMATS).toContain("lineheight");
+        render(
+            <CelumaRichText
+                value={
+                    '<p class="ql-line-height-115">A</p><p class="ql-line-height-2">B</p>'
+                    + '<p class="ql-line-height-3">C</p><p>D</p>'
+                }
+                onChange={() => {}}
+            />,
+        );
+        const paragraphs = Array.from(document.querySelectorAll(".ql-editor p"));
+        expect(paragraphs.map((p) => p.className)).toEqual(["ql-line-height-115", "ql-line-height-2", "", ""]);
+        expect(screen.getByRole("button", { name: "Interlineado" })).toHaveAttribute("title", "Interlineado");
+        const items = Array.from(document.querySelectorAll(".ql-picker.ql-lineheight .ql-picker-item"));
+        expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
+            "Interlineado 1.0", "Interlineado 1.15", "Interlineado 1.5", "Interlineado 2.0",
+        ]);
+    });
+});
+
+describe("toolbar order (owner correction, 2026-11-25)", () => {
+    it("places line spacing immediately to the right of font size", () => {
+        render(<CelumaRichText value="" onChange={() => {}} />);
+        const pickers = Array.from(document.querySelectorAll(".ql-toolbar .ql-picker")).map((p) =>
+            Array.from(p.classList).find((c) => c !== "ql-picker" && c.startsWith("ql-") && c !== "ql-icon-picker"),
+        );
+        expect(pickers).toEqual(["ql-header", "ql-size", "ql-lineheight", "ql-align"]);
+    });
+});

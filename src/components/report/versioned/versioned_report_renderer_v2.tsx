@@ -7,7 +7,7 @@ import {
     RICH_TEXT_CONTENT_CSS,
     normalizeRichTextForRender,
 } from "../rich_text_render";
-import { RICH_TEXT_FORMAT_CSS } from "../rich_text_formats";
+import { RICH_TEXT_BASE_SIZE_PT, RICH_TEXT_DEFAULT_LINE_HEIGHT, RICH_TEXT_FORMAT_CSS } from "../rich_text_formats";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
 import type { PageLayout } from "./page_layout";
@@ -1043,7 +1043,7 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                                         agree with the editor. */}
                                     <div
                                         className={RICH_TEXT_CONTENT_CLASS}
-                                        style={{ fontSize: "10pt", lineHeight: 1.5 }}
+                                        style={{ fontSize: `${RICH_TEXT_BASE_SIZE_PT}pt`, lineHeight: RICH_TEXT_DEFAULT_LINE_HEIGHT }}
                                         dangerouslySetInnerHTML={{ __html: normalizeRichTextForRender(rawContent) }}
                                     />
                                 </div>

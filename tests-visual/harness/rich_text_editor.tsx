@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import CelumaRichText from "../../src/components/ui/celuma_rich_text";
-import { ALIGNMENT_HTML, LIST_LAYOUT_HTML } from "../../src/test/fixtures/reports/versioned_v2";
+import { ALIGNMENT_HTML, LINE_SPACING_HTML, LIST_LAYOUT_HTML } from "../../src/test/fixtures/reports/versioned_v2";
 
 /**
  * Céluma 1.5 (#61, #62) — real-browser harness for the rich-text EDITOR alone.
@@ -13,11 +13,12 @@ import { ALIGNMENT_HTML, LIST_LAYOUT_HTML } from "../../src/test/fixtures/report
  * `harness-html` exposes the HTML the editor would save; `harness-reopen`
  * mounts a fresh editor from that HTML, as reopening a saved draft does.
  *
- * Usage: /rich_text_editor.html?content=lists|alignment
+ * Usage: /rich_text_editor.html?content=lists|alignment|spacing
  */
 const CONTENT: Record<string, string> = {
     lists: LIST_LAYOUT_HTML,
     alignment: ALIGNMENT_HTML,
+    spacing: LINE_SPACING_HTML,
 };
 
 const key = new URLSearchParams(window.location.search).get("content") ?? "lists";

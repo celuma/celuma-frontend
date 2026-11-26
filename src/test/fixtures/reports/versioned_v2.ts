@@ -740,6 +740,64 @@ export const v2RichTextAlignment: ReportEnvelope = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#63) — author line spacing, as the editor stores it (block class
+// `ql-line-height-<value>`; the 1.5 default stores nothing). Shared with the
+// editor harness. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const SPACING_TAIL =
+    " con una descripción sintética que ocupa varias líneas del renglón para medir la distancia"
+    + " entre una línea y la siguiente dentro del mismo párrafo con el interlineado elegido.";
+
+/** Wrapped paragraphs with every spacing, a blank line, a sized run, a heading and list items. */
+export const LINE_SPACING_HTML =
+    `<p>Predeterminado${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-1">Sencillo${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-115">Uno quince${SPACING_TAIL}</p>`
+    + `<p class="ql-line-height-2">Doble${SPACING_TAIL}</p>`
+    + "<p><br></p>"
+    + `<p class="ql-line-height-2">Doble con <span class="ql-size-14pt">texto grande</span>${SPACING_TAIL}</p>`
+    + '<h2 class="ql-line-height-1">Título sencillo</h2>'
+    + "<ol>"
+    + `<li data-list="bullet" class="ql-line-height-2"><span class="ql-ui" contenteditable="false"></span>Viñeta doble${SPACING_TAIL}</li>`
+    + `<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Viñeta predeterminada${SPACING_TAIL}</li>`
+    + "</ol>"
+    + "<p>Párrafo final predeterminado.</p>";
+
+/** Double-spaced paragraphs long enough to cross pages, above the signature band. */
+const DOUBLE_SPACED_PAGES_HTML = Array.from({ length: 24 }, (_, i) =>
+    `<p class="ql-line-height-2">Párrafo ${String(i + 1).padStart(2, "0")} a doble espacio${SPACING_TAIL}</p>`,
+).join("");
+
+const v2RichTextLineSpacingContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0063" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta y Tres" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: LINE_SPACING_HTML },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: DOUBLE_SPACED_PAGES_HTML },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: true, require_digital_signature: false },
+};
+
+/** Covers: #63 line spacing per block, default spacing unchanged, blank lines, pages with the signature band. */
+export const v2RichTextLineSpacing: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-63",
+    title: "Reporte V2 — interlineado",
+    template: templateFrom(v2RichTextLineSpacingContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextLineSpacingContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextLineSpacingContent) },
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -757,4 +815,5 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2RichTextFormatting,
     v2RichTextLists,
     v2RichTextAlignment,
+    v2RichTextLineSpacing,
 };

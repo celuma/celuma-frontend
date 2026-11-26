@@ -5,6 +5,10 @@ import { tokens } from "../design/tokens";
 import {
     RICH_TEXT_BASE_SIZE_PT,
     RICH_TEXT_EDITOR_FORMATS,
+    RICH_TEXT_LINE_HEIGHTS,
+    RICH_TEXT_LINE_HEIGHT_CLASS,
+    RICH_TEXT_LINE_HEIGHT_FORMAT,
+    RICH_TEXT_LINE_HEIGHT_VALUES,
     RICH_TEXT_POINT_VAR,
     RICH_TEXT_SIZES_PT,
     RICH_TEXT_SIZE_PICKER,
@@ -50,6 +54,21 @@ const SizeClass = Quill.import("attributors/class/size") as { whitelist: string[
 SizeClass.whitelist = [...RICH_TEXT_SIZE_VALUES];
 Quill.register(SizeClass as never, true);
 
+/*
+ * Céluma 1.5 (#63): line spacing per paragraph. Quill has no such format, so a
+ * block-scoped class attributor is registered: `ql-line-height-115` on the
+ * paragraph, heading or list item; the 1.5 default stores nothing.
+ */
+const Parchment = Quill.import("parchment") as {
+    ClassAttributor: new (attrName: string, keyName: string, options: { scope: number; whitelist: string[] }) => unknown;
+    Scope: { BLOCK: number };
+};
+const LineHeightClass = new Parchment.ClassAttributor(RICH_TEXT_LINE_HEIGHT_FORMAT, RICH_TEXT_LINE_HEIGHT_CLASS, {
+    scope: Parchment.Scope.BLOCK,
+    whitelist: RICH_TEXT_LINE_HEIGHT_VALUES,
+});
+Quill.register(LineHeightClass as never, true);
+
 /** One report point in editor pixels: the editor shows 10 pt prose at 14 px. */
 const EDITOR_FONT_PX = 14;
 const EDITOR_POINT_PX = EDITOR_FONT_PX / RICH_TEXT_BASE_SIZE_PT;
@@ -72,6 +91,13 @@ const PICKER_CSS = [
     ...[1, 2, 3].map((level) => `${pickerOption("header", String(level))} { content: "Título ${level}"; }`),
     `${pickerOption("size", null)} { content: "${RICH_TEXT_BASE_SIZE_PT} pt"; }`,
     ...RICH_TEXT_SIZES_PT.map((pt) => `${pickerOption("size", richTextSizeValue(pt))} { content: "${pt} pt"; }`),
+    ...RICH_TEXT_LINE_HEIGHTS.map(
+        (o) => `${pickerOption(RICH_TEXT_LINE_HEIGHT_FORMAT, o.value || null)} { content: "${o.label}"; }`,
+    ),
+    // The closed picker shows a spacing glyph before the value so it reads as line spacing.
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} { width: 72px; }`,
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-label { padding-left: 22px; }`,
+    `.celuma-quill .ql-snow .ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .celuma-line-spacing-glyph { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-size: 13px; line-height: 1; }`,
 ].join("\n");
 
 /**
@@ -113,6 +139,21 @@ function labelToolbar(toolbar: HTMLElement | null | undefined) {
     toolbar.querySelectorAll(".ql-picker.ql-align .ql-picker-item").forEach((item) => {
         name(item, ALIGN_NAMES[item.getAttribute("data-value") ?? ""] ?? ALIGN_NAMES[""]);
     });
+    // Céluma 1.5 (#63): line spacing of the paragraph(s) under the caret or selection.
+    const spacing = toolbar.querySelector(`.ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-label`);
+    name(spacing, "Interlineado");
+    if (spacing && !spacing.querySelector(".celuma-line-spacing-glyph")) {
+        const glyph = document.createElement("span");
+        glyph.className = "celuma-line-spacing-glyph";
+        glyph.setAttribute("aria-hidden", "true");
+        glyph.textContent = "↕";
+        spacing.prepend(glyph);
+    }
+    toolbar.querySelectorAll(`.ql-picker.ql-${RICH_TEXT_LINE_HEIGHT_FORMAT} .ql-picker-item`).forEach((item) => {
+        const value = item.getAttribute("data-value");
+        const option = RICH_TEXT_LINE_HEIGHTS.find((o) => (o.value || null) === value);
+        name(item, `Interlineado ${option?.label ?? ""}`.trim());
+    });
 }
 
 const ALIGN_NAMES: Record<string, string> = {
@@ -125,7 +166,11 @@ const ALIGN_NAMES: Record<string, string> = {
 const DEFAULT_MODULES = {
     toolbar: {
         container: [
-            [{ header: [1, 2, 3, false] }, { size: [...RICH_TEXT_SIZE_PICKER] }],
+            [
+                { header: [1, 2, 3, false] },
+                { size: [...RICH_TEXT_SIZE_PICKER] },
+                { [RICH_TEXT_LINE_HEIGHT_FORMAT]: RICH_TEXT_LINE_HEIGHTS.map((o) => o.value) },
+            ],
             ["bold", "italic", "underline"],
             [{ script: "sub" }, { script: "super" }],
             [{ align: [] }],

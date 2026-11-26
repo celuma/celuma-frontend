@@ -67,8 +67,30 @@ export const RICH_TEXT_SIZE_PICKER: ReadonlyArray<string | false> = [
  * formatting the report renderers give a meaning to can be stored.
  */
 export const RICH_TEXT_EDITOR_FORMATS: string[] = [
-    "header", "bold", "italic", "underline", "script", "size", "align", "list", "indent", "link",
+    "header", "bold", "italic", "underline", "script", "size", "align", "lineheight", "list", "indent", "link",
 ];
+
+/**
+ * Céluma 1.5 (#63) — line spacing, chosen by the author per paragraph.
+ *
+ * A factor of the text's own size (unitless `line-height`), so a line holding
+ * larger text grows with it. 1.5 is the default: a paragraph without a choice
+ * stores nothing and keeps the 1.5 the report always used. Quill has no such
+ * format; the editor registers a block-scoped class attributor named
+ * `lineheight` (class `ql-line-height-<value>`, e.g. `ql-line-height-115` for 1.15; Quill reads a class name up to its last dash, so a value never contains one).
+ */
+export const RICH_TEXT_DEFAULT_LINE_HEIGHT = 1.5;
+export const RICH_TEXT_LINE_HEIGHTS: ReadonlyArray<{ value: string | false; factor: number; label: string }> = [
+    { value: "1", factor: 1, label: "1.0" },
+    { value: "115", factor: 1.15, label: "1.15" },
+    { value: false, factor: RICH_TEXT_DEFAULT_LINE_HEIGHT, label: "1.5" },
+    { value: "2", factor: 2, label: "2.0" },
+];
+/** Quill name and class prefix of the line-spacing format. */
+export const RICH_TEXT_LINE_HEIGHT_FORMAT = "lineheight";
+export const RICH_TEXT_LINE_HEIGHT_CLASS = "ql-line-height";
+/** Every stored line-spacing value; the default stores none. */
+export const RICH_TEXT_LINE_HEIGHT_VALUES: string[] = RICH_TEXT_LINE_HEIGHTS.flatMap((o) => (o.value ? [o.value] : []));
 
 /** CSS variable holding the length of one report point on a given surface. */
 export const RICH_TEXT_POINT_VAR = "--celuma-rt-pt";
@@ -83,7 +105,10 @@ export function richTextFormatCss(scope: string): string {
     const sizes = RICH_TEXT_SIZES_PT.map(
         (pt) => `${scope} .ql-size-${richTextSizeValue(pt)} { font-size: calc(${pt} * var(${RICH_TEXT_POINT_VAR}, 1pt)); }`,
     );
-    return [...sizes, `${scope} sub, ${scope} sup { line-height: 0; }`].join("\n");
+    const lineHeights = RICH_TEXT_LINE_HEIGHTS.flatMap((o) =>
+        o.value ? [`${scope} .${RICH_TEXT_LINE_HEIGHT_CLASS}-${o.value} { line-height: ${o.factor}; }`] : [],
+    );
+    return [...sizes, `${scope} sub, ${scope} sup { line-height: 0; }`, ...lineHeights].join("\n");
 }
 
 /**
@@ -184,7 +209,14 @@ function renderedAlignCss(scope: string): string {
     ].join("\n");
 }
 
-/** Format rules for the V2 renderer's rich-text hosts (preview, PDF, print). */
+/**
+ * Format rules for the V2 renderer's rich-text hosts (preview, PDF, print).
+ *
+ * Céluma 1.5 (#63, owner decision 2026-11-25): paragraph spacing and the
+ * default line spacing are deliberately NOT restyled — V2 reports keep the
+ * spacing they always had; only a line spacing the author chooses changes a
+ * paragraph.
+ */
 export const RICH_TEXT_FORMAT_CSS = [
     richTextFormatCss(`.${RICH_TEXT_CONTENT_CLASS}`),
     renderedListCss(`.${RICH_TEXT_CONTENT_CLASS}`),
