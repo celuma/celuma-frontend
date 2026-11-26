@@ -564,6 +564,63 @@ export const v2QuillRichText: ReportEnvelope = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Céluma 1.5 (#60) — author font sizes and sub/superscript, as Quill stores
+// them (`ql-size-<N>pt` spans, native <sub>/<sup>). Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+const FORMATTED_PARAGRAPH =
+    '<p>Normal <span class="ql-size-8pt">ocho</span> <span class="ql-size-9pt">nueve</span> '
+    + '<span class="ql-size-11pt">once</span> <span class="ql-size-12pt">doce</span> '
+    + '<span class="ql-size-14pt">catorce</span> <strong><span class="ql-size-16pt">dieciséis</span></strong> '
+    + '<em>cursiva</em> <u>subrayado</u>.</p>'
+    + '<p data-probe="with-scripts">Leucocitos 7.5 ×10<sup>9</sup>/L y CO<sub>2</sub> total.</p>'
+    + '<p data-probe="without-scripts">Leucocitos 7.5 ×109/L y CO2 total.</p>'
+    + '<ol>'
+    + '<li data-list="ordered"><span class="ql-ui" contenteditable="false"></span>Número uno</li>'
+    + '<li data-list="ordered" class="ql-indent-1"><span class="ql-ui" contenteditable="false"></span>Letra a</li>'
+    + '<li data-list="ordered" class="ql-indent-2"><span class="ql-ui" contenteditable="false"></span>Romano i</li>'
+    + '<li data-list="ordered" class="ql-indent-3"><span class="ql-ui" contenteditable="false"></span>Otra vez uno</li>'
+    + '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Viñeta</li>'
+    + '<li data-list="ordered" class="ql-indent-1"><span class="ql-ui" contenteditable="false"></span>Número bajo viñeta</li>'
+    + '</ol>'
+    + '<p><span class="ql-size-16pt">Un tramo largo en dieciséis puntos que debe continuar en la línea siguiente sin perder su tamaño ni encimarse con el texto de alrededor.</span></p>';
+
+/** One paragraph taller than a page: numbered sentences, some sized, so a split can be audited. */
+const LONG_FORMATTED_PARAGRAPH = '<p>' + Array.from({ length: 140 }, (_, i) => {
+    const n = String(i + 1).padStart(3, "0");
+    const sentence = `Frase ${n} de la descripción sintética del fragmento examinado. `;
+    return i % 5 === 0 ? `<span class="ql-size-14pt">${sentence}</span>` : sentence;
+}).join("") + '</p>';
+
+const v2RichTextFormattingContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0060" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Sesenta" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: FORMATTED_PARAGRAPH },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: LONG_FORMATTED_PARAGRAPH },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #60 sizes, emphasis, sub/superscript, list markers by depth, wrapping and a page break. */
+export const v2RichTextFormatting: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-60",
+    title: "Reporte V2 — tamaños de letra y sub/superíndice",
+    template: templateFrom(v2RichTextFormattingContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextFormattingContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextFormattingContent) },
+    },
+};
+
 export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2CompleteBranding,
     v2MinimalNeutral,
@@ -578,4 +635,5 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2MidPublicationSigned,
     v2MidPublicationUnsigned,
     v2QuillRichText,
+    v2RichTextFormatting,
 };

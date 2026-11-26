@@ -7,6 +7,7 @@ import {
     RICH_TEXT_CONTENT_CSS,
     normalizeRichTextForRender,
 } from "../rich_text_render";
+import { RICH_TEXT_FORMAT_CSS } from "../rich_text_formats";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
 import type { PageLayout } from "./page_layout";
@@ -731,8 +732,11 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 // page, not in the document stylesheet, because
                 // `use_local_print.ts` clones page elements into a bare iframe
                 // and a document-level rule would not survive that copy.
+                // Céluma 1.5 (#60): the author's formatting (font sizes,
+                // sub/superscript) travels the same way, so every surface
+                // gives the stored classes the same meaning.
                 const richTextStyle = document.createElement("style");
-                richTextStyle.textContent = RICH_TEXT_CONTENT_CSS;
+                richTextStyle.textContent = [RICH_TEXT_CONTENT_CSS, RICH_TEXT_FORMAT_CSS].join("\n");
                 page.appendChild(richTextStyle);
 
                 host.appendChild(page);
