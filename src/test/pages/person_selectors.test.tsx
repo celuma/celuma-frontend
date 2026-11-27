@@ -150,7 +150,28 @@ describe("Registrar caso — Paciente and Médicos solicitantes", () => {
         fireEvent.change(input(select), { target: { value: "PAC-001" } });
         await waitFor(() => expect(texts(select)).toEqual(["PAC-001 - Ana Ruiz"]));
         key(select, "Enter");
-        await waitFor(() => expect(select.querySelector(".ant-select-selection-item")?.textContent).toBe("PAC-001 - Ana Ruiz"));
+        // Céluma 1.5 (#85 follow-up): the closed field shows the name with the code as a chip, like
+        // Tipo de estudio; the code's parentheses are visually hidden, so it reads "Ana Ruiz (PAC-001)".
+        await waitFor(() => expect(select.querySelector(".ct-selected__name")?.textContent).toBe("Ana Ruiz"));
+        expect(select.querySelector(".ct-selected__code")?.textContent).toBe(" (PAC-001)");
+        expect(select.querySelector(".ant-select-selection-item")?.textContent).toBe("Ana Ruiz (PAC-001)");
+        expect(select.querySelector(".ct-selected")?.getAttribute("title")).toBe("PAC-001 - Ana Ruiz");
+    });
+
+    it("shows the same trailing check on the selected row in Paciente and Médicos solicitantes", async () => {
+        const { container } = await renderForm();
+        for (const caption of ["Paciente", "Médicos solicitantes"]) {
+            const select = selectByCaption(container, caption);
+            await open(select);
+            key(select, "Enter");
+            await open(select);
+            await waitFor(() => {
+                const selected = options(select).filter((o) => o.classList.contains("ant-select-item-option-selected"));
+                expect(selected).toHaveLength(1);
+                expect(selected[0].querySelector(".ant-select-item-option-state .anticon-check")).not.toBeNull();
+            });
+            fireEvent.keyDown(input(select), { key: "Escape" });
+        }
     });
 
     it("shows physician details on their own line, keeps label chips, removes a chip, searches details", async () => {
