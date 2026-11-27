@@ -19,7 +19,7 @@ import { tokens, cardStyle } from "../components/design/tokens";
 import { usePageTitle } from "../hooks/use_page_title";
 import { catalogTypeOptions } from "../lib/catalog_type_options";
 import { catalogTypeSelectProps } from "../components/ui/catalog_type_select";
-import { personSelectProps } from "../components/ui/person_select";
+import { patientSelectProps, personSelectProps } from "../components/ui/person_select";
 import { patientOption, physicianOption, type PersonOption } from "../lib/person_options";
 import { useActiveSampleTypes } from "../hooks/use_active_sample_types";
 import SampleTypeSetupNotice from "../components/catalog/sample_type_setup_notice";
@@ -341,6 +341,7 @@ export default function OrderForm() {
     const sampleTypeOptions = useMemo(() => catalogTypeOptions(sampleTypes.types), [sampleTypes.types]);
     const sampleTypeSelect = useMemo(() => catalogTypeSelectProps(sampleTypeOptions), [sampleTypeOptions]);
     const personSelect = useMemo(() => personSelectProps(), []);
+    const patientSelect = useMemo(() => patientSelectProps(patients), [patients]);
     const templateSuggestion = useMemo(
         () => suggestReportTemplate(
             (watchedSamples ?? []).map((s) => s?.sample_type_id),
@@ -526,7 +527,7 @@ export default function OrderForm() {
                                                 onChange={(val) => p.onChange(val ?? "")}
                                                 placeholder="Seleccione un paciente"
                                                 options={patients}
-                                                selectProps={personSelect}
+                                                selectProps={patientSelect}
                                                 showSearch
                                                 loading={loadingPatients}
                                                 disabled={Boolean(prefilledPatientId)}

@@ -1,5 +1,8 @@
 import React from "react";
-import { CheckCircleOutlined, InboxOutlined, SettingOutlined, ExperimentOutlined } from "@ant-design/icons";
+import {
+    AuditOutlined, CheckCircleOutlined, CheckOutlined, ClockCircleOutlined, ExperimentOutlined, FormOutlined,
+    InboxOutlined, SettingOutlined, SignatureOutlined, ToolOutlined,
+} from "@ant-design/icons";
 
 // Order status configuration - matches backend OrderStatus enum
 export const ORDER_STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
@@ -31,6 +34,23 @@ export const REPORT_STATUS_CONFIG: Record<string, { color: string; bg: string; l
     // Review statuses (for report reviews in worklist)
     PENDING: { color: "#f59e0b", bg: "#fffbeb", label: "Pendiente" },
     REJECTED: { color: "#ef4444", bg: "#fef2f2", label: "Rechazado" },
+};
+
+/**
+ * Céluma 1.5 (#85): the step a worklist row asks of the user ("Siguiente paso"), kept apart
+ * from the record's state (`*_STATUS_CONFIG`) and the review decision. Same soft-background +
+ * ink + icon pattern, but every ink is the 700 tone of its family so the 12 px label reaches
+ * at least 4.5:1 on its background (measured: review 4.84, sign 6.48, work/write 4.66,
+ * waiting/none 9.37). Only the worklist uses it; the shared status palette is unchanged.
+ */
+export const NEXT_STEP_CONFIG: Record<string, { color: string; bg: string; label: string; icon: React.ReactNode }> = {
+    review: { color: "#b45309", bg: "#fffbeb", label: "Por revisar", icon: <AuditOutlined /> },
+    sign: { color: "#6d28d9", bg: "#f5f3ff", label: "Por firmar", icon: <SignatureOutlined /> },
+    work: { color: "#1f7a75", bg: "#eaf7f5", label: "Por atender", icon: <ToolOutlined /> },
+    write: { color: "#1f7a75", bg: "#eaf7f5", label: "Por redactar", icon: <FormOutlined /> },
+    waiting_review: { color: "#374151", bg: "#f3f4f6", label: "En espera de revisión", icon: <ClockCircleOutlined /> },
+    waiting_signature: { color: "#374151", bg: "#f3f4f6", label: "En espera de firma", icon: <ClockCircleOutlined /> },
+    none: { color: "#374151", bg: "#f3f4f6", label: "Sin acción pendiente", icon: <CheckOutlined /> },
 };
 
 // Predefined label colors (same as in LabelsSection)

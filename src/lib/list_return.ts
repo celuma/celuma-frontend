@@ -105,13 +105,16 @@ export function restoreFromState(state: unknown): ListKey | null {
  *  - `other_page`: still matches, but this ordering now puts it on another page.
  *  - `no_match`: no longer matches the kept search and filters (its status changed, it was
  *    removed, …). The view is kept as it was; the user decides what to do.
- *  - `not_listed`: (worklist) no longer one of the user's pending items.
+ *  - `not_listed`: (worklist) no longer in the user's worklist at all (unassigned, removed).
+ *  - `not_pending`: (worklist, Céluma 1.5 #85) still in the worklist, but nothing is pending for
+ *    the user any more, so it left "Pendientes" and is in "Todas". `state` is the record's state.
  */
 export type ReturnedPlacement =
     | { kind: "here" }
     | { kind: "other_page"; page: number }
     | { kind: "no_match" }
-    | { kind: "not_listed" };
+    | { kind: "not_listed" }
+    | { kind: "not_pending"; state?: string };
 
 /** Placement from the API's `located` answer (server-paginated lists). */
 export function placementOf(

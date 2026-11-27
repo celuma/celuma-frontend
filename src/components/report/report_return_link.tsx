@@ -1,7 +1,8 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { tokens } from "../design/tokens";
-import { currentHistoryIdx } from "../../lib/list_return";
+import { currentHistoryIdx, returnFromState } from "../../lib/list_return";
+import ListReturnLink from "../lists/list_return_link";
 
 /** History state the Reports list puts on the report it opens (Céluma 1.5). */
 export interface ReportReturnState {
@@ -10,12 +11,15 @@ export interface ReportReturnState {
 
 /**
  * The report editor's way back (Céluma 1.5): "Volver a Reportes" when the report
- * was opened from the Reports list, otherwise "Volver a la orden". Unsaved edits
- * are guarded like any other in-app navigation (`UnsavedChangesGuard`).
+ * was opened from the Reports list, "Volver a Lista de trabajo" when it was opened
+ * from Mi Lista de Trabajo (#85: the worklist's own return context, the same link the
+ * order and sample pages show), otherwise "Volver a la orden". Unsaved edits are
+ * guarded like any other in-app navigation (`UnsavedChangesGuard`).
  */
 export default function ReportReturnLink({ orderId }: { orderId?: string | null }) {
     const location = useLocation();
     const navigate = useNavigate();
+    if (returnFromState(location.state)?.listKey === "worklist") return <ListReturnLink />;
     const fromList = (location.state as ReportReturnState | null)?.reportReturn;
     const fromReports = fromList && typeof fromList.url === "string" ? fromList : null;
     if (!fromReports && !orderId) return null;

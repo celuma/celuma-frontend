@@ -143,8 +143,51 @@ styling inline**.
   borderless inside). Single value (`value: string`).
 - **`floating_caption_multiselect.tsx` → `FloatingCaptionMultiSelect`**: multi-select
   sibling (`value: string[]`). Same teal outline + floating caption, but
-  **auto-grows** so selected tags fit; tags use teal tint. Use for roles, branches, etc.,
+  **auto-grows** so selected tags fit; tags are the neutral code chip (see below). Use for roles, branches, etc.,
   so multi-selects look like the rest of the fields.
+- **Dropdown field family (Céluma 1.5, #85 follow-up)**: both selects take their outline,
+  focus, caption and popup from **`floating_caption_field.ts`** + **`floating_caption_select.css`**,
+  so every dropdown looks the same and pages never style them on their own. Reference:
+  *Tipo de estudio* in Registrar orden.
+  - **One focus treatment, on the outer field.** Hover, pointer focus and open: border
+    `#3da8a0` + soft 3px ring (`rgba(73,182,173,.20)`). **Keyboard focus** (focus that
+    arrived by keyboard, or any key pressed in the field) darkens the same 2px border to
+    `#1f7a75` (5.1:1 on white; the resting `#49b6ad` is 2.45:1) with the same ring. No outline is drawn on the antd Select
+    inside, and pages must not add one (`outline`, `outline-offset` or a second ring).
+    Error, warning and success keep their colours, a darker shade on keyboard focus
+    (`#c62a2f`, `#b45309`, `#047857`).
+  - **Caption.** Resting: centred in the 52px inner box like a placeholder (15px, grey).
+    Floated: 12px/600 at `scale(.85)`, its centre on the **middle of the top border**
+    (`top: -1px; translateY(-50%)`), with a white background as the cutout. Same rule in
+    both wrappers, however tall the field grows.
+  - **Values on the centre line.** The single value, the search input/caret, one row of
+    chips, and the arrow/clear icons share the field's vertical centre (56px box, 52px
+    inside). The multi-select pads **6px on every side**, so one chip row (24px + 2px
+    margins) is centred and extra rows grow the box **symmetrically** (10px above the
+    first chip and below the last). The search input's row is the same 24px as a chip row.
+    Its remove ×, the clear icon and the chevron keep their targets (the selector reserves
+    28px at the end).
+  - **Selected chips = the catalog code chip.** Multi-select chips (Médicos solicitantes,
+    Worklist filters, roles…) look like the code chip of Tipo de estudio (`.ct-selected__code`):
+    borderless, `#f1f5f9` fill, `#4b5563` ink (6.9:1), radius 6, 6px side padding, 12px text
+    on a 20px line. A chip is as wide as its label; a label longer than the field **wraps
+    inside the chip** instead of being cut. The remove × (antd's, unchanged behaviour) is a
+    16px target at the end, `#6b7280`, darker on hover.
+  - **Popup.** Shared class `fc-select-popup`: radius 12, 4px padding, 8px option radius,
+    and long option labels **wrap** instead of being cut. Catalog selectors
+    (`catalogTypeSelectProps`, study/sample types) and person selectors
+    (`personSelectProps`, patients/physicians) add `ct-popup`: the popup may grow wider than
+    the field (up to 560px / the viewport), each option shows the full name with its **code
+    chip** at the end, and the closed catalog field truncates the name but never the code.
+    **Person rows** (`personSelectProps`, Paciente and Médicos solicitantes) share one renderer:
+    the name at the left, optional metadata (specialty · institution) on a smaller grey line
+    below, the code pill at the right, and the selected row in antd's soft teal with the name
+    in bold and a **trailing check** (also in single selects, via `menuItemSelectedIcon`).
+    **Paciente's closed field** (`patientSelectProps`, Registrar orden) uses the Tipo de estudio
+    pattern: the name as the main label plus the code chip (when there is a code); a patient
+    without a name keeps the plain label. Search still matches the full label.
+    Other selects (filters, sort, branches, roles) keep plain text options; do not invent a
+    code chip for options that have none.
 - **`floating_caption_date.tsx` → `FloatingCaptionDate`**: date picker with floating
   caption and **teal-themed calendar** (selected day teal fill, today with ring,
   hover tint, rounded popup). Replaces the generic DatePicker.

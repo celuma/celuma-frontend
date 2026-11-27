@@ -105,24 +105,25 @@ describe("Orders list — server pagination", () => {
 });
 
 describe("Worklist — loads the whole per-user list", () => {
-    it("follows has_more until every item is loaded", async () => {
+    // Céluma 1.5 (#85): one consistent snapshot (`scope=all`) instead of following has_more page
+    // by page, which lost or repeated rows that changed between the requests.
+    it("asks once for the whole list and pages it in the browser", async () => {
         const item = (n: number) => ({
-            id: `a${n}`, kind: "assignment", item_type: "sample", item_id: `s${n}`, display_id: `CU27${n}`,
-            item_status: "RECEIVED", assigned_at: "2026-10-01T10:00:00Z", link: `/samples/s${n}`,
+            id: `a${String(n).padStart(3, "0")}`, kind: "assignment", item_type: "sample", item_id: `s${n}`, display_id: `CU27${n}`,
+            item_status: "RECEIVED", entity_status: "RECEIVED", next_step: "work", waiting_on: null, actionable: true,
+            assigned_at: "2026-10-01T10:00:00Z", link: `/samples/s${n}`,
         });
-        const fetchMock = stubFetch((url) => {
-            const page = Number(new URL(url, "http://x").searchParams.get("page"));
-            return page === 1
-                ? { items: Array.from({ length: 100 }, (_, i) => item(i)), total: 101, page: 1, page_size: 100, has_more: true }
-                : { items: [item(100)], total: 101, page: 2, page_size: 100, has_more: false };
-        });
+        const fetchMock = stubFetch(() => ({
+            items: Array.from({ length: 101 }, (_, i) => item(i)), total: 101, page: 1, page_size: 101,
+            has_more: false, scope: "all", as_of: "2026-10-01T10:00:00Z",
+        }));
         render(<MemoryRouter><Worklist /></MemoryRouter>);
 
-        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-        const urls = fetchMock.mock.calls.map(([input]) => String(input));
-        expect(urls[0]).toContain("page=1&page_size=100");
-        expect(urls[1]).toContain("page=2&page_size=100");
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/v1\/me\/worklist\?scope=all$/);
         // 101 items at 20 per page → six pages in the table.
         expect(await screen.findByRole("button", { name: "Página 6" })).toBeInTheDocument();
+        expect(screen.getByTestId("worklist-summary")).toHaveTextContent("101 pendientes · 1–20 · Página 1 de 6");
     });
 });
+

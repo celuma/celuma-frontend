@@ -211,3 +211,25 @@ html, body {
 .celuma-table .ant-table-pagination.ant-pagination {
   display: none !important;
 }
+
+/* ── Mi Lista de Trabajo (Céluma 1.5, #85) ─────────────────────────────
+   Scoped to the worklist only. A visible 3px #1f7a75 focus ring (5.12:1 on white), the
+   same one the conversation component uses, for the view toggle, the row links and the chips.
+   The filter dropdowns draw no outline here: they use the shared field focus treatment
+   (floating_caption_field.ts, CELUMA_DESIGN_SYSTEM.md §4). The record code is a real link (keyboard, new tab); it is
+   underlined on hover/focus so it is not told apart by color alone. */
+.celuma-worklist a.celuma-worklist-link {
+  text-decoration: none;
+  border-radius: 4px;
+}
+.celuma-worklist a.celuma-worklist-link:hover,
+.celuma-worklist a.celuma-worklist-link:focus-visible {
+  text-decoration: underline;
+}
+.celuma-worklist a:focus-visible,
+.celuma-worklist button:focus-visible,
+.celuma-worklist .ant-btn:not(:disabled):focus-visible {
+  /* !important: antd's own button focus ring (a pale #c1dbd6, ~1.4:1) would otherwise win. */
+  outline: 3px solid #1f7a75 !important;
+  outline-offset: 2px !important;
+}

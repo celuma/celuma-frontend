@@ -40,6 +40,17 @@ export interface WorklistItem {
     order_code?: string | null;
     tags?: string[] | null;
     link: string;
+    /**
+     * Céluma 1.5 (#85). Three separate facts: the record's workflow state (for a review row,
+     * the report's status), the user's own review decision (review rows only) and the step
+     * that falls to the user now. `waiting_on` names whose step is next on an assignment the
+     * user cannot advance. `actionable` is true exactly when `next_step` is set ("Pendientes").
+     */
+    entity_status?: string | null;
+    review_decision?: "PENDING" | "APPROVED" | "REJECTED" | null;
+    next_step?: "review" | "sign" | "work" | null;
+    waiting_on?: "review" | "signature" | null;
+    actionable?: boolean;
 }
 
 export interface WorklistResponse {
@@ -48,6 +59,39 @@ export interface WorklistResponse {
     page: number;
     page_size: number;
     has_more: boolean;
+    /** `"all"` when the API returned the whole list from one snapshot (`scope=all`). */
+    scope?: "all" | null;
+    /** Start of that snapshot (ISO). */
+    as_of?: string | null;
+}
+
+/** The whole personal worklist, read by the API from one consistent snapshot. */
+export interface WorklistSnapshot {
+    items: WorklistItem[];
+    asOf: string | null;
+}
+
+/**
+ * Céluma 1.5 (#85): one request for the user's whole worklist (`scope=all`). The API builds it
+ * inside one REPEATABLE READ transaction, so rows that change while it loads can never be lost
+ * or repeated the way a page-by-page download could. A response that is not that complete
+ * snapshot — e.g. an older API that ignores `scope` and answers one page — is refused instead of
+ * being shown as if it were the whole list.
+ */
+export async function getMyWorklistSnapshot(signal?: AbortSignal): Promise<WorklistSnapshot> {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = token;
+    const res = await fetch(`${base}/v1/me/worklist?scope=all`, { headers, signal });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error loading worklist: ${res.status} - ${errText}`);
+    }
+    const data: WorklistResponse = await res.json();
+    if (data.scope !== "all" || data.has_more || !Array.isArray(data.items) || data.items.length !== data.total) {
+        throw new Error("Incomplete worklist response: expected the whole list (scope=all)");
+    }
+    return { items: data.items, asOf: data.as_of ?? null };
 }
 
 export interface AssignmentResponse {

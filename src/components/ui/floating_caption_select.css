@@ -1,0 +1,184 @@
+/*
+ * Céluma 1.5 (#85 follow-up): the floating-caption dropdown family, single and multiple.
+ * One field-level treatment (floating_caption_field.ts): the wrapper's 2px border + soft ring is the
+ * only focus indicator, so the antd Select inside never draws an outline of its own. Values, chips,
+ * the search input/caret and the trailing icons share the field's vertical centre line.
+ * `--fc-ink` is the current border colour (set by the wrapper); icons follow it.
+ */
+
+.fc-select,
+.fc-multiselect {
+    display: block !important;
+    width: 100% !important;
+    outline: none !important;
+}
+
+.fc-select .ant-select-selector,
+.fc-multiselect .ant-select-selector {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.fc-select.ant-select-focused .ant-select-selector,
+.fc-select.ant-select-open .ant-select-selector,
+.fc-multiselect.ant-select-focused .ant-select-selector,
+.fc-multiselect.ant-select-open .ant-select-selector {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.fc-select .ant-select-arrow,
+.fc-select .ant-select-clear,
+.fc-multiselect .ant-select-arrow,
+.fc-multiselect .ant-select-clear {
+    color: var(--fc-ink, #49b6ad);
+}
+
+.fc-select .ant-select-clear,
+.fc-multiselect .ant-select-clear {
+    background: #fff;
+}
+
+/* ── Single ─────────────────────────────────────────────────────────────── */
+
+.fc-select {
+    height: 52px !important;
+}
+
+.fc-select .ant-select-selector {
+    height: 52px !important;
+    padding: 0 12px !important;
+}
+
+/* The end padding keeps long text (and a catalog code chip) clear of the arrow/clear icon. */
+.fc-select .ant-select-selection-item {
+    font-size: 15px !important;
+    line-height: 52px !important;
+    color: #0d1b2a;
+    padding: 0 22px 0 0 !important;
+}
+
+.fc-select .ant-select-selection-search {
+    inset-inline-start: 12px !important;
+    inset-inline-end: 12px !important;
+}
+
+.fc-select .ant-select-selection-search-input {
+    font-size: 15px !important;
+    line-height: 52px !important;
+    height: 52px !important;
+    color: #0d1b2a;
+}
+
+.fc-select .ant-select-selection-placeholder {
+    font-size: 15px !important;
+    line-height: 52px !important;
+    color: transparent !important;
+}
+
+/* ── Multiple ───────────────────────────────────────────────────────────── */
+
+/* The wrapper pads 6px on every side, so one row of chips (24px + 2px margins) sits on the centre
+   of the 52px inner box and further rows grow it symmetrically. The end padding keeps chips (and
+   their remove ×) clear of the clear/arrow icon. */
+.fc-multiselect .ant-select-selector {
+    padding: 0 28px 0 6px !important;
+    min-height: 40px !important;
+}
+
+/* antd anchors the chip row to the top of the selector; centre it like the arrow. */
+.fc-multiselect .ant-select-selection-wrap {
+    align-self: center !important;
+}
+
+.fc-multiselect .ant-select-selection-overflow {
+    align-items: center;
+}
+
+/* Selected chips match the catalog code chip of Tipo de estudio (`.ct-selected__code`):
+   borderless, neutral #f1f5f9 fill, #4b5563 ink (6.9:1), radius 6, 6px side padding, 12px text
+   on a 20px line. The chip is as wide as its label; a label longer than the field wraps inside
+   the chip instead of being cut, so long names stay readable. The remove × stays at the end. */
+.fc-multiselect .ant-select-selection-item {
+    background: #f1f5f9 !important;
+    border: none !important;
+    color: #4b5563 !important;
+    border-radius: 6px !important;
+    padding: 0 4px 0 6px !important;
+    height: auto !important;
+    min-height: 20px;
+    line-height: 20px !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
+    font-variant-numeric: tabular-nums;
+    align-items: center;
+    max-width: 100%;
+}
+
+.fc-multiselect .ant-select-selection-item-content {
+    min-width: 0;
+    /* !important: antd's own `white-space: pre` on the chip text would otherwise keep it on one line. */
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    text-overflow: clip !important;
+    line-height: 20px;
+    margin-inline-end: 2px;
+}
+
+/* antd's remove ×, unchanged in behaviour (click; Backspace removes the last chip): a 16px target, darker on hover. */
+.fc-multiselect .ant-select-selection-item-remove {
+    flex: 0 0 auto;
+    align-self: center;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    color: #6b7280 !important;
+}
+
+.fc-multiselect .ant-select-selection-item-remove:hover {
+    color: #1f2937 !important;
+    background: #e2e8f0;
+}
+
+/* The search input's row matches a chip row (24px: a 20px chip + 2px margins), so the space above
+   the first chip and below the last stays equal. */
+.fc-multiselect .ant-select-selection-overflow-item-suffix {
+    margin-block: 0 !important;
+}
+
+.fc-multiselect .ant-select-selection-search-input {
+    font-size: 15px !important;
+    color: #0d1b2a;
+}
+
+.fc-multiselect .ant-select-selection-placeholder {
+    font-size: 15px !important;
+    color: transparent !important;
+}
+
+/* ── Popup (shared by both; catalog/person popups add `ct-popup`) ──────── */
+
+.fc-select-popup.ant-select-dropdown {
+    border-radius: 12px;
+    padding: 4px;
+}
+
+.fc-select-popup .ant-select-item {
+    border-radius: 8px;
+}
+
+/* Long option labels wrap instead of being cut, as in Tipo de estudio. */
+.fc-select-popup .ant-select-item-option-content {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}

@@ -9,15 +9,19 @@ interface Props {
     onGoToPage?: (page: number) => void;
     onOpen?: () => void;
     onClearFilters?: () => void;
+    /** Worklist: switch to "Todas", where a record that is no longer pending still is. */
+    onShowAll?: () => void;
     onDismiss: () => void;
     /** Whether the kept view has a search or filters (wording, and the "clear" action). */
     filtered: boolean;
 }
 
-export default function ReturnedRecordNotice({ subject, placement, onGoToPage, onOpen, onClearFilters, onDismiss, filtered }: Props) {
+export default function ReturnedRecordNotice({ subject, placement, onGoToPage, onOpen, onClearFilters, onShowAll, onDismiss, filtered }: Props) {
     if (placement.kind === "here") return null;
     const message =
-        placement.kind === "other_page"
+        placement.kind === "not_pending"
+            ? `${subject} ya no está pendiente${placement.state ? ` (${placement.state})` : ""}. Sigue disponible en Todas.`
+            : placement.kind === "other_page"
             ? `${subject} ahora aparece en la página ${placement.page} con este orden.`
             : placement.kind === "no_match"
                 ? filtered
@@ -32,6 +36,9 @@ export default function ReturnedRecordNotice({ subject, placement, onGoToPage, o
                     <CelumaButton size="small" onClick={() => onGoToPage(placement.page)}>
                         Ir a la página {placement.page}
                     </CelumaButton>
+                )}
+                {placement.kind === "not_pending" && onShowAll && (
+                    <CelumaButton size="small" onClick={onShowAll}>Ver en Todas</CelumaButton>
                 )}
                 {placement.kind !== "other_page" && onOpen && (
                     <CelumaButton size="small" onClick={onOpen}>Abrir de nuevo</CelumaButton>
