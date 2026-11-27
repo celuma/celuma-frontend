@@ -48,6 +48,23 @@ export interface ReportSectionText {
     label: string;
     type: "text" | "richtext" | "table" | "numeric";
     content: string;          // empty in template, html/text in report
+    /** Céluma 1.5 (#90): a per-report choice, meaningful only for a `table` section in report
+     *  content (never in a template). `false` leaves the section — heading and table — out of the
+     *  rendered report while its content is kept for authoring. Absent = included, so every report
+     *  written before the option exists renders exactly as before. */
+    include_in_report?: boolean;
+}
+
+/**
+ * Céluma 1.5 (#90): whether a section of a V2 report's content is drawn in the rendered report.
+ * Only a table section can be excluded, and only by an explicit `include_in_report: false`.
+ */
+export function isSectionIncludedInReport(
+    section: { type?: string } | null | undefined,
+    saved: object | null | undefined,
+): boolean {
+    const flag = (saved as { include_in_report?: unknown } | null | undefined)?.include_in_report;
+    return !(section?.type === "table" && flag === false);
 }
 
 /** A custom text-based section created by the user */
