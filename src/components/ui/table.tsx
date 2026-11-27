@@ -56,6 +56,18 @@ export interface CelumaTableProps<T> extends Omit<TableProps<T>, 'dataSource' | 
     /** Max width of the search field. Defaults to 420 (it grows to fill, capped here). */
     searchWidth?: number | string;
     /**
+     * Céluma 1.5 (#85), opt-in: content rendered under the search row and above the rows
+     * (filters, active-filter chips, a count). Lists without it render exactly as before.
+     */
+    toolbar?: ReactNode;
+    /**
+     * Opt-in: what to show instead of the illustrated `Empty` when there are no rows (e.g.
+     * an `EmptyState` that tells "nothing pending" from "no matches" and offers an action).
+     */
+    emptyContent?: ReactNode;
+    /** Opt-in: let the search row wrap `searchExtra` under the field on narrow screens. */
+    searchRowWrap?: boolean;
+    /**
      * Server-driven mode (Céluma 1.4). `dataSource` is then one page that the
      * API already searched, filtered and sorted over the whole collection, so
      * the table neither sorts, filters, searches nor slices it locally. Pair it
@@ -115,6 +127,9 @@ export function CelumaTable<T>({
     searchFilter,
     searchExtra,
     searchWidth = 420,
+    toolbar,
+    emptyContent,
+    searchRowWrap = false,
     server,
     ...rest
 }: CelumaTableProps<T>) {
@@ -219,7 +234,7 @@ export function CelumaTable<T>({
     return (
         <div>
             {searchable && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, ...(searchRowWrap ? { flexWrap: "wrap" as const } : {}) }}>
                     <SearchField
                         small
                         value={searchText}
@@ -235,6 +250,7 @@ export function CelumaTable<T>({
                     <AlertText variant="warning" mt={0}>{searchProblem.message}</AlertText>
                 </div>
             )}
+            {toolbar}
             <Table<T>
                 className={["celuma-table", className].filter(Boolean).join(" ")}
                 loading={loading}
@@ -249,7 +265,7 @@ export function CelumaTable<T>({
                     ...locale,
                     // Always use the illustrated Empty state (with icon), regardless of any
                     // string emptyText a page may pass in its locale.
-                    emptyText: <Empty description={emptyText} />,
+                    emptyText: emptyContent ?? <Empty description={emptyText} />,
                 }}
                 onRow={(record) => ({
                     onClick: () => onRowClick?.(record),

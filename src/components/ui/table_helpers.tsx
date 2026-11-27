@@ -12,7 +12,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { UNTYPED_LABEL, type SampleTypeRef } from "../../models/sample_type";
-import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, INVOICE_STATUS_CONFIG, LABEL_COLORS } from "./status_configs";
+import { ORDER_STATUS_CONFIG, SAMPLE_STATE_CONFIG, REPORT_STATUS_CONFIG, INVOICE_STATUS_CONFIG, LABEL_COLORS, NEXT_STEP_CONFIG } from "./status_configs";
 
 // Re-export utility functions from comment_utils for consistency
 export { getInitials, getAvatarColor } from "../comments/comment_utils";
@@ -362,6 +362,35 @@ export const renderStatusChip = (
         }}>
             {config.label}
         </div>
+    );
+};
+
+/**
+ * Céluma 1.5 (#85): the worklist's "Siguiente paso" chip — icon + text (never color alone),
+ * 12 px, ink/background from `NEXT_STEP_CONFIG`.
+ */
+export const renderNextStepChip = (key: string) => {
+    const config = NEXT_STEP_CONFIG[key] ?? NEXT_STEP_CONFIG.none;
+    return (
+        <span
+            data-next-step={key}
+            style={{
+                backgroundColor: config.bg,
+                color: config.color,
+                borderRadius: 12,
+                fontSize: 12,
+                fontWeight: 600,
+                lineHeight: 1.35,
+                padding: "4px 10px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                maxWidth: "100%",
+            }}
+        >
+            <span aria-hidden="true" style={{ display: "inline-flex" }}>{config.icon}</span>
+            {config.label}
+        </span>
     );
 };
 

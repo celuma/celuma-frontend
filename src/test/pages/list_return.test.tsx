@@ -13,6 +13,7 @@ import OrdersList from "../../pages/orders_list";
 import SamplesList from "../../pages/samples_list";
 import Worklist from "../../pages/worklist";
 import ListReturnLink from "../../components/lists/list_return_link";
+import ReportReturnLink from "../../components/report/report_return_link";
 import { useUserProfile } from "../../hooks/use_user_profile";
 
 vi.mock("../../hooks/use_user_profile");
@@ -70,6 +71,17 @@ function FakeDetail() {
     );
 }
 
+/** A stand-in report editor: the real report return link, plus a browser-Back button. */
+function FakeReport() {
+    const navigate = useNavigate();
+    return (
+        <div>
+            <ReportReturnLink orderId="o-77" />
+            <button onClick={() => navigate(-1)}>Atrás del navegador</button>
+        </div>
+    );
+}
+
 function renderApp(initial: string) {
     return render(
         <MemoryRouter initialEntries={[initial]}>
@@ -80,6 +92,7 @@ function renderApp(initial: string) {
                 <Route path="/samples" element={<SamplesList />} />
                 <Route path="/samples/:id" element={<FakeDetail />} />
                 <Route path="/worklist" element={<Worklist />} />
+                <Route path="/reports/:id" element={<FakeReport />} />
             </Routes>
         </MemoryRouter>,
     );
@@ -226,44 +239,92 @@ describe("Samples list — returning from a sample", () => {
 });
 
 describe("Worklist — returning from a case", () => {
-    const item = (id: string, status: string, code: string) => ({
+    // Céluma 1.5 (#85): one snapshot (`scope=all`) whose rows say whether a step falls to the user.
+    const item = (id: string, code: string, status: string, pending = true, extra: Record<string, unknown> = {}) => ({
         id, kind: "assignment", item_type: "lab_order", item_id: `o-${id}`, display_id: code, item_status: status,
+        entity_status: status, next_step: pending ? "work" : null, waiting_on: null, actionable: pending,
         assigned_at: "2026-11-20T10:00:00Z", patient_id: "p1", patient_name: "Paciente Sintético", patient_code: "P-1",
-        order_code: code, tags: [], link: `/orders/o-${id}`,
+        order_code: code, tags: [], link: `/orders/o-${id}`, ...extra,
     });
 
     function stubWorklist(sequence: Array<ReturnType<typeof item>[]>) {
         let call = 0;
-        vi.stubGlobal("fetch", vi.fn(async () => {
+        const fetchMock = vi.fn(async () => {
             const items = sequence[Math.min(call++, sequence.length - 1)];
-            return jsonResponse({ items, total: items.length, page: 1, page_size: 100, has_more: false });
-        }));
+            return jsonResponse({ items, total: items.length, page: 1, page_size: items.length, has_more: false, scope: "all", as_of: "2026-11-20T10:00:00Z" });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        return fetchMock;
     }
 
-    it("keeps the default status filter in the URL and says when the case left it after a status change", async () => {
+    it("opens Pendientes on a bare URL and says when the case left it, with a way to Todas", async () => {
         stubWorklist([
-            [item("w1", "PROCESSING", "CU-01"), item("w2", "RECEIVED", "CU-02"), item("w3", "READY", "CU-03")],
-            [item("w1", "READY", "CU-01"), item("w2", "RECEIVED", "CU-02"), item("w3", "READY", "CU-03")],
+            [item("w1", "CU-01", "PROCESSING"), item("w2", "CU-02", "RECEIVED"), item("w3", "CU-03", "RELEASED", false)],
+            [item("w1", "CU-01", "RELEASED", false), item("w2", "CU-02", "RECEIVED"), item("w3", "CU-03", "RELEASED", false)],
         ]);
         renderApp("/worklist");
         expect(await screen.findByText("CU-01")).toBeInTheDocument();
-        expect(screen.queryByText("CU-03")).toBeNull(); // completed: hidden by the default filter
-        await waitFor(() => expect(currentLocation).toBe("/worklist?item_status=PROCESSING&item_status=RECEIVED"));
+        expect(screen.queryByText("CU-03")).toBeNull(); // nothing pending: only in Todas
+        expect(currentLocation).toBe("/worklist"); // no default is written into the URL any more
         fireEvent.click(rowOf("CU-01"));
         fireEvent.click(await screen.findByText("Volver a Lista de trabajo"));
-        expect(await screen.findByText(/El elemento CU-01 ya no coincide/)).toBeInTheDocument();
-        expect(currentLocation).toBe("/worklist?item_status=PROCESSING&item_status=RECEIVED");
+        expect(await screen.findByText("El elemento CU-01 ya no está pendiente (Liberada). Sigue disponible en Todas.")).toBeInTheDocument();
         expect(screen.queryByText("CU-01")).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Ver en Todas" }));
+        expect(await screen.findByText("CU-01")).toBeInTheDocument();
+        await waitFor(() => expect(currentLocation).toBe("/worklist?vista=todas"));
+        expect(rowOf("CU-01")).toHaveClass("celuma-row-returned");
     }, SLOW_TEST_MS);
 
     it("says when the case is no longer in the user's worklist at all", async () => {
         stubWorklist([
-            [item("w1", "PROCESSING", "CU-01"), item("w2", "RECEIVED", "CU-02")],
-            [item("w2", "RECEIVED", "CU-02")],
+            [item("w1", "CU-01", "PROCESSING"), item("w2", "CU-02", "RECEIVED")],
+            [item("w2", "CU-02", "RECEIVED")],
         ]);
         renderApp("/worklist");
         fireEvent.click(rowOf(await screen.findByText("CU-01").then((el) => el.textContent!)));
         fireEvent.click(await screen.findByText("Atrás del navegador"));
         expect(await screen.findByText(/El elemento CU-01 ya no está en tu lista de trabajo/)).toBeInTheDocument();
     }, SLOW_TEST_MS);
+
+    it("a pre-1.5 link keeps its status filter: Todas, the same rows, a removable chip", async () => {
+        stubWorklist([[
+            item("w1", "CU-01", "PROCESSING"), item("w2", "CU-02", "RECEIVED"),
+            item("w3", "CU-03", "RELEASED", false), item("w4", "CU-04", "RECEIVED", false, { waiting_on: null }),
+        ]]);
+        renderApp("/worklist?item_status=PROCESSING&item_status=RECEIVED&page=1");
+        expect(await screen.findByText("CU-01")).toBeInTheDocument();
+        expect(screen.getByText("CU-02")).toBeInTheDocument();
+        expect(screen.getByText("CU-04")).toBeInTheDocument(); // matched the old filter, not pending: still shown
+        expect(screen.queryByText("CU-03")).toBeNull();
+        expect(screen.getByText("Abrimos esta vista guardada con su filtro de estado anterior.")).toBeInTheDocument();
+        await waitFor(() => expect(currentLocation).toBe("/worklist?item_status=PROCESSING&item_status=RECEIVED&vista=todas"));
+        fireEvent.click(screen.getByRole("button", { name: "Quitar filtro Estado (vista anterior): En Proceso, Recibida" }));
+        expect(await screen.findByText("CU-03")).toBeInTheDocument();
+        await waitFor(() => expect(currentLocation).toBe("/worklist?vista=todas"));
+    }, SLOW_TEST_MS);
+
+    it("an explicitly cleared pre-1.5 status filter opens Todas unfiltered", async () => {
+        stubWorklist([[item("w1", "CU-01", "PROCESSING"), item("w3", "CU-03", "RELEASED", false)]]);
+        renderApp("/worklist?item_status=");
+        expect(await screen.findByText("CU-03")).toBeInTheDocument();
+        expect(screen.getByText("CU-01")).toBeInTheDocument();
+        await waitFor(() => expect(currentLocation).toBe("/worklist?vista=todas"));
+    }, SLOW_TEST_MS);
+
+    it("a report opened from the worklist offers 'Volver a Lista de trabajo' and restores the view", async () => {
+        const report = item("r1", "CU-09", "IN_REVIEW", true, {
+            kind: "review", item_type: "report", link: "/reports/rep-1", next_step: "review", review_decision: "PENDING",
+        });
+        stubWorklist([[report, item("w2", "CU-02", "RECEIVED")]]);
+        renderApp("/worklist?q=CU-09");
+        fireEvent.click(rowOf(await screen.findByText("CU-09").then((el) => el.textContent!)));
+        const back = await screen.findByText("Volver a Lista de trabajo");
+        expect(screen.queryByText("Volver a la orden")).toBeNull();
+        fireEvent.click(back);
+        expect(await screen.findByText("CU-09")).toBeInTheDocument();
+        expect(currentLocation).toBe("/worklist?q=CU-09");
+        expect(rowOf("CU-09")).toHaveClass("celuma-row-returned");
+    }, SLOW_TEST_MS);
 });
+

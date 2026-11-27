@@ -22,6 +22,11 @@ export type ActionButtonItem =
           tooltip?: string;
           /** Active/selected state — solid teal fill, white text. */
           active?: boolean;
+          /**
+           * Céluma 1.5 (#85), opt-in: a toggle (e.g. a view switch) rather than a page link —
+           * the button reports `aria-pressed` instead of `aria-current="page"`.
+           */
+          pressed?: boolean;
           /** Danger styling — red on hover. */
           danger?: boolean;
           /** Disabled — muted, non-interactive. */
@@ -32,7 +37,7 @@ export type ActionButtonItem =
           ariaLabel?: string;
       };
 
-type PanelButtonProps = Exclude<ActionButtonItem, { divider: true }> & { size?: PanelSize };
+type PanelButtonProps = Exclude<ActionButtonItem, { divider: true }> & { size?: PanelSize; activeInk?: string };
 
 // Per-size metrics so the pill can line up with `default` / `xsmall` buttons.
 const SIZES = {
@@ -42,7 +47,7 @@ const SIZES = {
 } as const;
 
 /** A single borderless, tinted button that lives inside the segmented pill. */
-function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, ariaLabel, size = "default" }: PanelButtonProps) {
+function PanelButton({ icon, label, tooltip, active, pressed, danger, disabled, onClick, ariaLabel, size = "default", activeInk }: PanelButtonProps) {
     const [hover, setHover] = useState(false);
     const sz = SIZES[size];
 
@@ -53,7 +58,7 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
     } else if (active) {
         // Soft teal anchor — present but not saturated, so it doesn't shout.
         background = TEAL.tint;
-        color = TEAL.base;
+        color = activeInk ?? TEAL.base;
     } else if (danger) {
         // "Negative" affordance: persistently red-tinted (like a danger button) so the
         // destructiveness reads at rest, deepening on hover — not just a neutral icon.
@@ -68,7 +73,8 @@ function PanelButton({ icon, label, tooltip, active, danger, disabled, onClick, 
         <button
             type="button"
             aria-label={ariaLabel ?? tooltip}
-            aria-current={active ? "page" : undefined}
+            aria-current={pressed === undefined && active ? "page" : undefined}
+            aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
             onMouseEnter={() => !disabled && setHover(true)}
@@ -115,6 +121,11 @@ type Props = {
     autoDividers?: boolean;
     /** `xsmall` shrinks the pill to line up with `size="xsmall"` buttons. */
     size?: PanelSize;
+    /**
+     * Céluma 1.5 (#85), opt-in: text color of the active button. The default teal on the teal
+     * tint is about 2.2:1; `#1f7a75` reaches 4.66:1. Omitted, nothing changes.
+     */
+    activeInk?: string;
 };
 
 /**
@@ -130,7 +141,7 @@ type Props = {
  * ]} />
  * ```
  */
-export default function ActionButtonPanel({ actions, autoDividers = true, size = "default" }: Props) {
+export default function ActionButtonPanel({ actions, autoDividers = true, size = "default", activeInk }: Props) {
     const rendered: ReactNode[] = [];
     let realCount = 0;
 
@@ -143,7 +154,7 @@ export default function ActionButtonPanel({ actions, autoDividers = true, size =
             rendered.push(<Divider key={`auto-divider-${index}`} size={size} />);
         }
         realCount += 1;
-        rendered.push(<PanelButton key={index} size={size} {...action} />);
+        rendered.push(<PanelButton key={index} size={size} activeInk={activeInk} {...action} />);
     });
 
     // Tighten the outer pill for the smaller sizes so it lines up with chips/labels.

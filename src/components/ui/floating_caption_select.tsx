@@ -31,6 +31,11 @@ type Props = {
     /** Céluma 1.5 (#69): search, option and popup behaviour of a specific
      *  catalog (see `catalogTypeSelectProps`). `filterOption` replaces the
      *  default match on the label. */
+    /**
+     * Céluma 1.5 (#85), opt-in: accessible name of the field's input (the floating caption is
+     * not a <label> of it). Omitted, nothing changes.
+     */
+    ariaLabel?: string;
     selectProps?: Pick<SelectProps, "filterOption" | "optionRender" | "labelRender" | "popupMatchSelectWidth" | "classNames">;
 };
 
@@ -55,6 +60,7 @@ export default function FloatingCaptionSelect({
     style,
     loading = false,
     "data-testid": dataTestId,
+    ariaLabel,
     selectProps,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -199,6 +205,7 @@ export default function FloatingCaptionSelect({
                 <Select
                     {...selectProps}
                     className={`fcs-${uid}`}
+                    aria-label={ariaLabel}
                     value={value === "" ? undefined : value}
                     onChange={(v) => onChange?.(v)}
                     options={options}

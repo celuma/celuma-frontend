@@ -23,6 +23,11 @@ type Props = {
     allowClear?: boolean;
     style?: React.CSSProperties;
     /** Céluma 1.5 (#69 review): option and popup presentation (see `personSelectProps`). */
+    /**
+     * Céluma 1.5 (#85), opt-in: accessible name of the field's input (the floating caption is
+     * not a <label> of it). Omitted, nothing changes.
+     */
+    ariaLabel?: string;
     selectProps?: Pick<SelectProps, "optionRender" | "popupMatchSelectWidth" | "classNames">;
 };
 
@@ -45,6 +50,7 @@ export default function FloatingCaptionMultiSelect({
     disabled,
     allowClear = true,
     style,
+    ariaLabel,
     selectProps,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -196,6 +202,7 @@ export default function FloatingCaptionMultiSelect({
                     {...selectProps}
                     mode="multiple"
                     className={`fcms-${uid}`}
+                    aria-label={ariaLabel}
                     value={value ?? []}
                     onChange={(v) => onChange?.(v as string[])}
                     options={options}
