@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type CSSProperties } from "react";
 import type { ReportEnvelope, ReportSectionText, TemplateImageItem, TemplateOrderInput } from "../../../models/report";
-import { normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
+import { isSectionIncludedInReport, normalizeReportTemplateJSON, PREDEFINED_BASE_KEYS, resolveBaseFieldLabel, resolveDisplayOrder, resolveSignatureMetadata } from "../../../models/report";
 import { markdownTableToHtml } from "../table_utils";
 import {
     RICH_TEXT_CONTENT_CLASS,
@@ -865,6 +865,8 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                 const v = tmpl.sections[k];
                 if (!v?.is_visible) return null;
                 const savedSection = contentData.sections[k];
+                // Céluma 1.5 (#90): a table the author excluded is not drawn at all (no heading, no gap).
+                if (!isSectionIncludedInReport(v, savedSection)) return null;
                 return { key: k, section: v, savedContent: savedSection };
             })
             .filter((row): row is { key: string; section: NonNullable<typeof tmpl.sections[string]>; savedContent: typeof contentData.sections[string] } => row !== null);

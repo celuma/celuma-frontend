@@ -62,6 +62,7 @@ import type {
 import {
     AMENDMENT_CATEGORY_LABELS,
     buildEmptyReportContent,
+    isSectionIncludedInReport,
     DESCRIPTION_SECTION_KEYS,
     normalizeReportTemplateJSON,
     mergePersistedContentIntoTemplateSnapshot,
@@ -162,6 +163,8 @@ const EMPTY_TEMPLATE_JSON: ReportTemplateJSON = normalizeReportTemplateJSON({ ba
 interface AuthoredContent {
     baseValues: Record<string, string>;
     sectionContent: Record<string, string | TemplateImageItem[]>;
+    /** Céluma 1.5 (#90): table sections the author left out of the rendered report. */
+    excludedTables: Record<string, true>;
     reportTitle: string;
 }
 
@@ -335,6 +338,8 @@ const ReportEditor: React.FC = () => {
     const [baseValues, setBaseValues] = useState<Record<string, string>>({});
     // section content: key → string for text/richtext/table/numeric, or TemplateImageItem[] for images
     const [sectionContent, setSectionContent] = useState<Record<string, string | TemplateImageItem[]>>({});
+    // Céluma 1.5 (#90): table sections excluded from the rendered report (absent = included).
+    const [excludedTables, setExcludedTables] = useState<Record<string, true>>({});
 
     // Which figure control must hold focus after a reorder (see moveImage).
     const pendingFigureFocus = useRef<{ key: string; direction: "up" | "down" } | null>(null);
@@ -893,6 +898,11 @@ const ReportEditor: React.FC = () => {
                         }
                     });
                     setSectionContent(sc);
+                    const excluded: Record<string, true> = {};
+                    Object.entries(effectiveTmpl.sections).forEach(([k, v]) => {
+                        if (!isSectionIncludedInReport(v, savedSections[k])) excluded[k] = true;
+                    });
+                    setExcludedTables(excluded);
 
                     // Initialize signature toggles: prefer saved content, fall back to template defaults.
                     const savedSig = resolveSignatureMetadata(full.report?.report ?? null);
@@ -1038,6 +1048,7 @@ const ReportEditor: React.FC = () => {
                         }
                     });
                     setSectionContent(sc);
+                    setExcludedTables({});
 
                     // Inherit signature toggles from the template defaults for new reports.
                     const tmplSig = resolveSignatureMetadata(tmplNew);
@@ -1226,6 +1237,13 @@ const ReportEditor: React.FC = () => {
                 (report.sections[k] as { content: string }).content = v;
             }
         });
+        // Céluma 1.5 (#90): only an explicit exclusion is written; an included table carries no flag.
+        Object.entries(report.sections).forEach(([k, section]) => {
+            if (section.type !== "table") return;
+            const text = section as ReportSectionText;
+            if (content.excludedTables[k]) text.include_in_report = false;
+            else delete text.include_in_report;
+        });
 
         // Preserve any signature_url the backend embedded at sign-time so saving
         // a draft after signing does not strip it from the JSON body.
@@ -1361,8 +1379,8 @@ const ReportEditor: React.FC = () => {
     ]);
 
     const buildEnvelope = useCallback(
-        (): ReportEnvelope => composeEnvelope({ baseValues, sectionContent, reportTitle }),
-        [composeEnvelope, baseValues, sectionContent, reportTitle],
+        (): ReportEnvelope => composeEnvelope({ baseValues, sectionContent, excludedTables, reportTitle }),
+        [composeEnvelope, baseValues, sectionContent, excludedTables, reportTitle],
     );
 
     // Live preview envelope.
@@ -1374,8 +1392,8 @@ const ReportEditor: React.FC = () => {
     // order data…) still applies at once, because `composeEnvelope` depends on them directly. The
     // inputs, save, submit and local print never read this settled copy.
     const liveContent = useMemo<AuthoredContent>(
-        () => ({ baseValues, sectionContent, reportTitle }),
-        [baseValues, sectionContent, reportTitle],
+        () => ({ baseValues, sectionContent, excludedTables, reportTitle }),
+        [baseValues, sectionContent, excludedTables, reportTitle],
     );
     const previewTiming = useMemo(() => {
         let chars = reportTitle.length;
@@ -2873,10 +2891,40 @@ const ReportEditor: React.FC = () => {
                                     }
 
                                     if (section.type === "table") {
+                                        // Céluma 1.5 (#90): the author chooses per report whether the
+                                        // table is printed; the content stays editable either way.
+                                        const included = !excludedTables[key];
+                                        const switchId = `include-table-${key}`;
                                         return (
                                             <div key={key}>
                                                 <div style={fieldCaptionStyle}>{section.label}</div>
                                                 <Panel>
+                                                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                                                        <div style={{ minWidth: 0 }}>
+                                                            <label htmlFor={switchId} style={{ fontWeight: 600, color: tokens.textPrimary, fontSize: 13 }}>
+                                                                Incluir en el reporte
+                                                            </label>
+                                                            {!included && (
+                                                                <div style={{ fontSize: 12.5, color: tokens.textSecondary, marginTop: 2 }}>
+                                                                    Esta tabla no aparecerá en la vista previa, la impresión ni el PDF. Su contenido se conserva.
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <CelumaSwitch
+                                                            id={switchId}
+                                                            checked={included}
+                                                            disabled={isReadOnly}
+                                                            onChange={(checked) => {
+                                                                setExcludedTables((prev) => {
+                                                                    const next = { ...prev };
+                                                                    if (checked) delete next[key];
+                                                                    else next[key] = true;
+                                                                    return next;
+                                                                });
+                                                                markEdited();
+                                                            }}
+                                                        />
+                                                    </div>
                                                     {val ? (
                                                         <div
                                                             style={{ marginBottom: 10, fontSize: 13, overflowX: "auto" }}
