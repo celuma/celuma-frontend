@@ -95,7 +95,12 @@ import SectionTitle from "../ui/section_title";
 import { TableEditor } from "./table_editor";
 import SpellingProvider from "../spelling/spelling_provider";
 import { SpellingStatusNotice } from "../spelling/spelling_summary";
-import { markdownTableToHtml } from "./table_utils";
+import {
+    TABLE_CARD_PREVIEW_COLUMNS,
+    TABLE_CARD_PREVIEW_ROWS,
+    markdownTableToHtml,
+    previewMarkdownTable,
+} from "./table_utils";
 import { tokens } from "../design/tokens";
 import { renderStatusChip, getSampleTypeConfig, sampleTypeLabel } from "../ui/table_helpers";
 import { getInitials, getAvatarColor } from "../comments/comment_utils";
@@ -2925,12 +2930,27 @@ const ReportEditor: React.FC = () => {
                                                             }}
                                                         />
                                                     </div>
-                                                    {val ? (
-                                                        <div
-                                                            style={{ marginBottom: 10, fontSize: 13, overflowX: "auto" }}
-                                                            dangerouslySetInnerHTML={{ __html: markdownTableToHtml(val) }}
-                                                        />
-                                                    ) : (
+                                                    {val ? (() => {
+                                                        // Céluma 1.5 (#91): the card shows only the first columns and rows;
+                                                        // the modal and the report preview show the whole table.
+                                                        const preview = previewMarkdownTable(val);
+                                                        return (
+                                                            <div style={{ marginBottom: 10 }} data-testid={`table-card-preview-${key}`}>
+                                                                <div
+                                                                    style={{ fontSize: 13, overflowX: "auto" }}
+                                                                    dangerouslySetInnerHTML={{ __html: markdownTableToHtml(preview.md) }}
+                                                                />
+                                                                {preview.truncated && (
+                                                                    <div style={{ fontSize: 12.5, color: tokens.textSecondary }}>
+                                                                        {`Se muestran ${Math.min(preview.totalCols, TABLE_CARD_PREVIEW_COLUMNS)} de ${preview.totalCols} columnas y ${Math.min(preview.totalRows, TABLE_CARD_PREVIEW_ROWS)} de ${preview.totalRows} filas. `}
+                                                                        {isReadOnly
+                                                                            ? "La tabla completa aparece en la vista previa del reporte."
+                                                                            : "Abre «Editar tabla» para ver la tabla completa."}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })() : (
                                                         <div style={{ marginBottom: 10, fontSize: 13, color: tokens.textSecondary }}>
                                                             Sin datos. Abre el editor para añadir contenido.
                                                         </div>
