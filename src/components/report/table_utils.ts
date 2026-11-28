@@ -1,3 +1,47 @@
+/**
+ * Céluma 1.5 (#91) — table editor geometry. Every column keeps at least this
+ * width, so a table with many columns scrolls sideways instead of squeezing its
+ * cells; the editor area is capped in height and scrolls vertically.
+ */
+export const TABLE_EDITOR_COLUMN_WIDTH = 180;
+export const TABLE_EDITOR_ACTION_WIDTH = 44;
+export const TABLE_EDITOR_MAX_HEIGHT = "min(60vh, 560px)";
+
+/**
+ * A markdown table cell is one line: a line break would split its row. Typed
+ * Enter inserts nothing and pasted line breaks collapse to one space each.
+ */
+export function flattenCellText(raw: string): string {
+    return raw.replace(/\r\n|\r|\n/g, " ");
+}
+
+/** Céluma 1.5 (#91) — the report editor's table card shows only this corner of the table. */
+export const TABLE_CARD_PREVIEW_COLUMNS = 2;
+export const TABLE_CARD_PREVIEW_ROWS = 2;
+
+/**
+ * The first `maxCols` columns and `maxRows` body rows of a markdown table, as
+ * markdown, plus the totals. Display only: the stored table and every report
+ * render (preview, local print, official PDF) always use the whole table.
+ */
+export function previewMarkdownTable(
+    md: string,
+    maxCols = TABLE_CARD_PREVIEW_COLUMNS,
+    maxRows = TABLE_CARD_PREVIEW_ROWS,
+): { md: string; totalCols: number; totalRows: number; truncated: boolean } {
+    const { headers, rows } = parseMarkdownTable(md);
+    const totalCols = headers.length;
+    const totalRows = rows.length;
+    const shownHeaders = headers.slice(0, maxCols);
+    const shownRows = rows.slice(0, maxRows).map((row) => row.slice(0, maxCols));
+    return {
+        md: serializeMarkdownTable(shownHeaders, shownRows),
+        totalCols,
+        totalRows,
+        truncated: totalCols > maxCols || totalRows > maxRows,
+    };
+}
+
 export function parseMarkdownTable(md: string): { headers: string[]; rows: string[][] } {
     const lines = (md || "").trim().split("\n");
     const isSep = (l: string) => /^\|[\s|:_-]+\|$/.test(l.trim());
