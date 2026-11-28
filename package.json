@@ -19,6 +19,7 @@
     "@hookform/resolvers": "^5.2.1",
     "antd": "^5.27.1",
     "dayjs": "^1.11.18",
+    "katex": "^0.19.1",
     "nspell": "2.1.5",
     "quill": "^2.0.2",
     "react": "^19.1.1",

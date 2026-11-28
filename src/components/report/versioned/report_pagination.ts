@@ -94,7 +94,9 @@ function tokenize(node: Node, chain: HTMLElement[], out: TextToken[]): void {
         if (child.nodeType === Node.TEXT_NODE) {
             (child.textContent ?? "").match(/\s*\S+\s*|\s+/g)?.forEach((text) => out.push({ text, chain }));
         } else if (child instanceof HTMLElement) {
-            if (ATOMIC_INLINE_TAGS.has(child.tagName) || !(child.textContent ?? "").trim()) {
+            // Céluma 1.5 (#95): an inline element marked atomic (a rendered formula) is one token,
+            // never divided between pages.
+            if (ATOMIC_INLINE_TAGS.has(child.tagName) || child.hasAttribute(ATOMIC_ATTR) || !(child.textContent ?? "").trim()) {
                 out.push({ atom: child, chain });
             } else {
                 tokenize(child, [...chain, child], out);

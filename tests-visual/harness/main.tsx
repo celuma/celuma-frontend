@@ -7,6 +7,7 @@ import ReportRendererResolver, {
 } from "../../src/components/report/report_renderer_resolver";
 import InternalReportRender from "../../src/components/report/internal_report_render";
 import type { ReportEnvelope } from "../../src/models/report";
+import { formulaFontsSettled } from "../../src/components/report/rich_text_formula";
 import { allReportFixtures } from "../../src/test/fixtures/reports";
 import { allVersionedV2Fixtures } from "../../src/test/fixtures/reports/versioned_v2";
 import { allVersionedV2LegacyParityFixtures } from "../../src/test/fixtures/reports/versioned_v2_legacy_parity";
@@ -154,6 +155,10 @@ function Harness() {
             requestAnimationFrame(async () => {
                 const host = document.getElementById(hostId);
                 if (host) await waitForImages(host);
+                // Céluma 1.5 (#95): same wait as the official render route — formula fonts, then
+                // the repagination they trigger.
+                await formulaFontsSettled();
+                await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
                 if (!cancelled) setReady(true);
             });
         });

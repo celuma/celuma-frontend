@@ -8,6 +8,15 @@ import {
     normalizeRichTextForRender,
 } from "../rich_text_render";
 import { RICH_TEXT_BASE_SIZE_PT, RICH_TEXT_DEFAULT_LINE_HEIGHT, RICH_TEXT_FORMAT_CSS } from "../rich_text_formats";
+import {
+    FORMULA_CLASS,
+    FORMULA_CSS,
+    FORMULA_STYLE_ATTR,
+    ensureFormulaStyles,
+    formulaFontsReady,
+    loadFormulaFonts,
+    mayContainFormula,
+} from "../rich_text_formula";
 import type { ReportRendererRef, SignerLookupEntry } from "../legacy/legacy_report_types";
 import type { ReportPresentationSnapshotV2, ReportTypographyConfig } from "./versioned_report_types";
 import type { PageLayout } from "./page_layout";
@@ -259,6 +268,19 @@ function escapeHtml(value: string): string {
         .replace(/'/g, "&#39;");
 }
 
+/**
+ * Céluma 1.5 (#95): whether any section content of the report may hold a formula. The section's
+ * type lives in the template, so this only looks at the stored text; a false positive merely
+ * installs the stylesheet and loads the fonts.
+ */
+function reportHasFormula(report: ReportEnvelope): boolean {
+    const sections = (report.report?.sections ?? {}) as Record<string, unknown>;
+    return Object.values(sections).some((section) => {
+        const content = (section as Partial<ReportSectionText> | null)?.content;
+        return typeof content === "string" && mayContainFormula(content);
+    });
+}
+
 interface VersionedReportRendererV2Props {
     report: ReportEnvelope;
     /** Candidates the signature block can use to resolve `report.signed_by`. */
@@ -280,6 +302,23 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
         // FAILURE, never a silently clipped page. The page host also carries `data-layout-error` so the
         // official render route refuses readiness (see internal_report_render.tsx).
         const [overflowedUnits, setOverflowedUnits] = useState(0);
+        // Céluma 1.5 (#95): formulas are measured with KaTeX's fonts, which the browser loads
+        // lazily. A report holding a formula installs the stylesheet, loads the fonts and is
+        // paginated again once they are ready, so page breaks use the real glyph metrics.
+        const hasFormula = reportHasFormula(report);
+        const [formulaFontsVersion, setFormulaFontsVersion] = useState(0);
+        useEffect(() => {
+            if (!hasFormula) return;
+            ensureFormulaStyles();
+            if (formulaFontsReady()) return;
+            let cancelled = false;
+            void loadFormulaFonts().then(() => {
+                if (!cancelled) setFormulaFontsVersion((v) => v + 1);
+            });
+            return () => {
+                cancelled = true;
+            };
+        }, [hasFormula]);
 
         useImperativeHandle(ref, () => ({
             getPages: () => {
@@ -772,7 +811,18 @@ const VersionedReportRendererV2 = forwardRef<VersionedReportRendererV2Ref, Versi
                     if (numEl) numEl.textContent = `Página ${i + 1} de ${pages.length}`;
                 });
             }
-        }, [report, signerLookup]);
+
+            // Céluma 1.5 (#95): a page that holds a formula carries the KaTeX stylesheet itself, for
+            // the same reason as the rich-text rules above (the local print copy is a bare iframe).
+            // Pages without formulas do not pay for it.
+            Array.from(host.children).forEach((p) => {
+                if (!p.querySelector(`.${FORMULA_CLASS}`)) return;
+                const formulaStyle = document.createElement("style");
+                formulaStyle.setAttribute(FORMULA_STYLE_ATTR, "true");
+                formulaStyle.textContent = FORMULA_CSS;
+                p.appendChild(formulaStyle);
+            });
+        }, [report, signerLookup, formulaFontsVersion]);
 
         if (!validation.valid) {
             return (
