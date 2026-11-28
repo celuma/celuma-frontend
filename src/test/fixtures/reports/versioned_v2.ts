@@ -622,6 +622,59 @@ export const v2RichTextFormatting: ReportEnvelope = {
 };
 
 // ---------------------------------------------------------------------------
+// Céluma 1.5 (#95) — LaTeX formulas, as the editor stores them: source in
+// `data-value`, a stale cached drawing inside (which every surface must
+// ignore) and Quill's guard characters. Synthetic prose only.
+// ---------------------------------------------------------------------------
+
+/** Quill's embed guard character (U+FEFF), written as an escape so it stays visible in source. */
+const GUARD = "﻿";
+const quillFormula = (latex: string) =>
+    `<span class="ql-formula" data-value="${latex.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}">${GUARD}<span contenteditable="false"><span class="katex">cache</span></span>${GUARD}</span>`;
+
+const FORMULA_PARAGRAPHS =
+    `<p data-probe="ki67">Índice de proliferación: ${quillFormula("\\frac{\\text{células positivas}}{\\text{células totales}} \\times 100")} = 18 %.</p>`
+    + `<p data-probe="plain-line">Renglón de referencia sin fórmulas para comparar la altura.</p>`
+    + `<p data-probe="inline">Área ${quillFormula("A = \\pi r^{2}")} y desviación ${quillFormula("\\sigma = \\sqrt{\\frac{\\sum_{i=1}^{n} (x_i - \\bar{x})^2}{n - 1}}")} del conteo.</p>`
+    + `<p data-probe="long">Expresión extensa ${quillFormula(Array.from({ length: 24 }, (_, i) => `x_{${i + 1}}`).join(" + ") + " = S")} al final del renglón.</p>`
+    + `<p data-probe="invalid">Fórmula no interpretable: ${quillFormula("\\frac{a}{")} queda legible.</p>`;
+
+/** A paragraph taller than a page with a formula every few sentences, so a split can be audited. */
+const LONG_FORMULA_PARAGRAPH = '<p>' + Array.from({ length: 120 }, (_, i) => {
+    const n = String(i + 1).padStart(3, "0");
+    const sentence = `Frase ${n} de la descripción sintética del fragmento examinado con fórmulas intercaladas. `;
+    return i % 6 === 0 ? `${sentence}${quillFormula(`\\frac{${i + 1}}{100}`)} ` : sentence;
+}).join("") + '</p>';
+
+const v2RichTextFormulaContent: ReportContent = {
+    base: {
+        order_code: { is_visible: true, label: "Código de orden", value: "V2-0095" },
+        patient: { is_visible: true, label: "Paciente", value: "Paciente Sintético V2 Noventa y Cinco" },
+    },
+    sections: {
+        section_macroscopic: { is_visible: true, label: "Macroscópica", type: "richtext", content: FORMULA_PARAGRAPHS },
+        section_microscopic: { is_visible: true, label: "Microscópica", type: "richtext", content: LONG_FORMULA_PARAGRAPH },
+        images: { is_visible: true, label: "Imágenes", type: "images", content: [] },
+    },
+    base_order: ["order_code", "patient"],
+    section_order: ["section_macroscopic", "section_microscopic", "images"],
+    signatureMetadata: { show_signature_section: false, require_digital_signature: false },
+};
+
+/** Covers: #95 formulas inline, a stacked fraction, a long formula wrapping, invalid source and a page break. */
+export const v2RichTextFormula: ReportEnvelope = {
+    ...v2QuillRichText,
+    id: "fixture-v2-95",
+    title: "Reporte V2 — fórmulas",
+    template: templateFrom(v2RichTextFormulaContent) as unknown as ReportEnvelope["template"],
+    report: {
+        ...v2RichTextFormulaContent,
+        schema_version: 2,
+        rendering_snapshot: { ...v2QuillRichTextSnapshot, template: templateFrom(v2RichTextFormulaContent) },
+    },
+};
+
+// ---------------------------------------------------------------------------
 // Céluma 1.5 (#61) — list layout, as Quill stores lists (one flat <ol>,
 // `data-list` + `ql-indent-N`). Shared with the editor harness so the editor
 // and the report are measured on identical content. Synthetic prose only.
@@ -813,6 +866,7 @@ export const allVersionedV2Fixtures: Record<string, ReportEnvelope> = {
     v2MidPublicationUnsigned,
     v2QuillRichText,
     v2RichTextFormatting,
+    v2RichTextFormula,
     v2RichTextLists,
     v2RichTextAlignment,
     v2RichTextLineSpacing,

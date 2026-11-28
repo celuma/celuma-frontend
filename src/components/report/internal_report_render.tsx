@@ -4,6 +4,7 @@ import ReportRendererResolver from "./report_renderer_resolver";
 import type { ReportRendererRef } from "./legacy/legacy_report_types";
 import { fetchInternalRenderData } from "../../services/report_service";
 import type { InternalRenderData } from "../../models/report";
+import { formulaFontsSettled } from "./rich_text_formula";
 
 /**
  * InternalReportRender (Céluma 1.3 Phase 2, Block E, Story E3).
@@ -136,6 +137,10 @@ export default function InternalReportRender() {
                 if ("fonts" in document) {
                     await document.fonts.ready;
                 }
+                // Céluma 1.5 (#95): a report with formulas is paginated again once KaTeX's fonts
+                // load; wait for them and let that repagination commit before reading the pages.
+                await formulaFontsSettled();
+                await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
                 const pages = rendererRef.current?.getPages() ?? [];
                 // Same page-break-after wrapping use_local_print.ts applies to
                 // cloned pages before window.print() — applied here directly to

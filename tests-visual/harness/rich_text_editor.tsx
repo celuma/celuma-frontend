@@ -13,12 +13,14 @@ import { ALIGNMENT_HTML, LINE_SPACING_HTML, LIST_LAYOUT_HTML } from "../../src/t
  * `harness-html` exposes the HTML the editor would save; `harness-reopen`
  * mounts a fresh editor from that HTML, as reopening a saved draft does.
  *
- * Usage: /rich_text_editor.html?content=lists|alignment|spacing
+ * Usage: /rich_text_editor.html?content=lists|alignment|spacing|formula
  */
 const CONTENT: Record<string, string> = {
     lists: LIST_LAYOUT_HTML,
     alignment: ALIGNMENT_HTML,
     spacing: LINE_SPACING_HTML,
+    // Céluma 1.5 (#95): a paragraph with one stored formula to edit, and room to insert another.
+    formula: '<p>Índice: <span class="ql-formula" data-value="\\dfrac{a}{b} \\times 100"></span> = 18 %.</p>',
 };
 
 const key = new URLSearchParams(window.location.search).get("content") ?? "lists";

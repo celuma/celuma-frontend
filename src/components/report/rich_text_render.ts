@@ -73,6 +73,8 @@
  * introduced that the input did not already contain.
  */
 
+import { mayContainFormula, renderFormulasInto } from "./rich_text_formula";
+
 /** Class the renderers put on the element that receives rich-text HTML. */
 export const RICH_TEXT_CONTENT_CLASS = "celuma-rich-content";
 
@@ -252,18 +254,22 @@ function normalizeLists(root: Element): boolean {
  */
 export function normalizeRichTextForRender(html: string): string {
     if (!html) return html;
-    // Cheap bail-out: Quill list markup always carries `data-list`, and only
-    // pretty-printed HTML has whitespace between tags.
-    if (!html.includes("data-list") && !/>\s+</.test(html)) return html;
+    // Cheap bail-out: Quill list markup always carries `data-list`, only
+    // pretty-printed HTML has whitespace between tags, and a formula always
+    // carries its class (Céluma 1.5, #95).
+    if (!html.includes("data-list") && !/>\s+</.test(html) && !mayContainFormula(html)) return html;
 
     const parsed = new DOMParser().parseFromString(`<div id="celuma-rt">${html}</div>`, "text/html");
     const root = parsed.getElementById("celuma-rt");
     if (!root) return html;
 
-    // Lists first: rebuilding them removes the marker spans that would
+    // Formulas first: their cached editor markup is replaced by a fresh
+    // drawing from `data-value`, so no later pass ever sees KaTeX internals.
+    const formulasChanged = renderFormulasInto(root);
+    // Lists next: rebuilding them removes the marker spans that would
     // otherwise look like inline content to the whitespace pass.
     const listsChanged = normalizeLists(root);
     const whitespaceChanged = stripInterBlockWhitespace(root);
 
-    return listsChanged || whitespaceChanged ? root.innerHTML : html;
+    return formulasChanged || listsChanged || whitespaceChanged ? root.innerHTML : html;
 }

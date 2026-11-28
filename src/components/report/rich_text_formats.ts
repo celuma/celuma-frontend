@@ -68,6 +68,8 @@ export const RICH_TEXT_SIZE_PICKER: ReadonlyArray<string | false> = [
  */
 export const RICH_TEXT_EDITOR_FORMATS: string[] = [
     "header", "bold", "italic", "underline", "script", "size", "align", "lineheight", "list", "indent", "link",
+    // Céluma 1.5 (#95): LaTeX formulas (`rich_text_formula.ts`).
+    "formula",
 ];
 
 /**

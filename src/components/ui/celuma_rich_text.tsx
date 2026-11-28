@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { tokens } from "../design/tokens";
@@ -17,6 +17,8 @@ import {
     richTextFormatCss,
     richTextSizeValue,
 } from "../report/rich_text_formats";
+import { FORMULA_CLASS, FORMULA_FORMAT, drawFormula, ensureFormulaStyles } from "../report/rich_text_formula";
+import FormulaDialog from "./formula_dialog";
 import type { SpellingFieldOptions } from "../spelling/spelling_context";
 import { useQuillSpelling } from "../spelling/quill_spelling";
 import { SpellingSummary } from "../spelling/spelling_summary";
@@ -69,6 +71,43 @@ const LineHeightClass = new Parchment.ClassAttributor(RICH_TEXT_LINE_HEIGHT_FORM
 });
 Quill.register(LineHeightClass as never, true);
 
+/*
+ * Céluma 1.5 (#95): formulas. Quill's own formula blot draws through a global
+ * `window.katex` with its own options; this one uses the bundled KaTeX through
+ * `drawFormula`, so the editor, the preview, the PDF and the print copy share
+ * one set of safe options. The LaTeX source in `data-value` is the value.
+ */
+type EmbedStatic = {
+    new (...args: never[]): { value(): Record<string, unknown> };
+    create(value: unknown): Node;
+};
+const Embed = Quill.import("blots/embed") as unknown as EmbedStatic;
+class CelumaFormulaBlot extends Embed {
+    static blotName = FORMULA_FORMAT;
+    static className = FORMULA_CLASS;
+    static tagName = "SPAN";
+    static create(value: unknown): Node {
+        const node = super.create(value) as HTMLElement;
+        if (typeof value === "string") {
+            drawFormula(node, value);
+            node.setAttribute("data-value", value);
+        }
+        return node;
+    }
+    static value(node: HTMLElement): string | null {
+        return node.getAttribute("data-value");
+    }
+    html(): string {
+        const latex = String(this.value()[FORMULA_FORMAT] ?? "");
+        const escaped = latex.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<span>${escaped}</span>`;
+    }
+}
+Quill.register(`formats/${FORMULA_FORMAT}`, CelumaFormulaBlot as never, true);
+
+/** Event the toolbar's formula button sends to its editor (modules stay static for ReactQuill). */
+const FORMULA_REQUEST_EVENT = "celuma-formula-request";
+
 /** One report point in editor pixels: the editor shows 10 pt prose at 14 px. */
 const EDITOR_FONT_PX = 14;
 const EDITOR_POINT_PX = EDITOR_FONT_PX / RICH_TEXT_BASE_SIZE_PT;
@@ -110,6 +149,7 @@ const TOOLBAR_BUTTON_NAMES: ReadonlyArray<[selector: string, name: string]> = [
     ["button.ql-underline", "Subrayado"],
     ['button.ql-script[value="sub"]', "Subíndice"],
     ['button.ql-script[value="super"]', "Superíndice"],
+    ["button.ql-formula", "Fórmula"],
     ['button.ql-list[value="ordered"]', "Lista numerada"],
     ['button.ql-list[value="bullet"]', "Lista con viñetas"],
     ["button.ql-link", "Insertar enlace"],
@@ -172,14 +212,35 @@ const DEFAULT_MODULES = {
                 { [RICH_TEXT_LINE_HEIGHT_FORMAT]: RICH_TEXT_LINE_HEIGHTS.map((o) => o.value) },
             ],
             ["bold", "italic", "underline"],
-            [{ script: "sub" }, { script: "super" }],
+            [{ script: "sub" }, { script: "super" }, FORMULA_FORMAT],
             [{ align: [] }],
             [{ list: "ordered" }, { list: "bullet" }],
             ["link"],
             ["clean"],
         ],
+        handlers: {
+            // Céluma 1.5 (#95): opens the editor's formula dialog instead of Quill's tooltip.
+            [FORMULA_FORMAT](this: { quill: { container: HTMLElement } }) {
+                this.quill.container.dispatchEvent(new CustomEvent(FORMULA_REQUEST_EVENT));
+            },
+        },
     },
 };
+
+type FormulaTarget = { index: number; length: number; value: string; editing: boolean };
+
+type QuillLike = ReturnType<ReactQuill["getEditor"]>;
+
+/** The formula the selection covers exactly, if any (keyboard path to editing one). */
+function selectedFormula(quill: QuillLike, index: number, length: number): string | null {
+    if (length !== 1) return null;
+    const op = quill.getContents(index, 1).ops[0];
+    const insert = op?.insert as Record<string, unknown> | string | undefined;
+    if (insert && typeof insert === "object" && typeof insert[FORMULA_FORMAT] === "string") {
+        return insert[FORMULA_FORMAT] as string;
+    }
+    return null;
+}
 
 /**
  * CelumaRichText — ReactQuill (snow) re-skinned to the Céluma language so the
@@ -211,6 +272,67 @@ export default function CelumaRichText({
     useEffect(() => {
         labelToolbar(wrapperRef.current?.querySelector<HTMLElement>(".ql-toolbar"));
     }, [modules]);
+
+    // Céluma 1.5 (#95): insert a formula from the toolbar, or edit one by clicking it (or by
+    // selecting exactly that formula and pressing the toolbar button).
+    const [formulaTarget, setFormulaTarget] = useState<FormulaTarget | null>(null);
+    // A new dialog per opening, so it never shows what a previous opening left behind.
+    const [formulaOpening, setFormulaOpening] = useState(0);
+    useEffect(() => {
+        if (formats.includes(FORMULA_FORMAT)) ensureFormulaStyles();
+    }, [formats]);
+    useEffect(() => {
+        const quill = getQuill();
+        if (!quill || readOnly) return;
+        const onRequest = () => {
+            const range = quill.getSelection(true) ?? { index: quill.getLength() - 1, length: 0 };
+            const existing = selectedFormula(quill, range.index, range.length);
+            setFormulaOpening((n) => n + 1);
+            setFormulaTarget({ index: range.index, length: range.length, value: existing ?? "", editing: existing != null });
+        };
+        const onClick = (event: MouseEvent) => {
+            const node = (event.target as HTMLElement | null)?.closest?.(`.${FORMULA_CLASS}`);
+            if (!node || !quill.root.contains(node)) return;
+            const blot = Quill.find(node);
+            if (!blot || blot instanceof Quill) return;
+            const index = quill.getIndex(blot as never);
+            const value = node.getAttribute("data-value") ?? "";
+            quill.setSelection(index, 1, "user");
+            setFormulaOpening((n) => n + 1);
+            setFormulaTarget({ index, length: 1, value, editing: true });
+        };
+        quill.container.addEventListener(FORMULA_REQUEST_EVENT, onRequest);
+        quill.root.addEventListener("click", onClick);
+        return () => {
+            quill.container.removeEventListener(FORMULA_REQUEST_EVENT, onRequest);
+            quill.root.removeEventListener("click", onClick);
+        };
+    // `modules`/`formats`: ReactQuill builds a new Quill when they change; listen on the current one.
+    }, [getQuill, readOnly, modules, formats]);
+
+    const closeFormula = () => {
+        setFormulaTarget(null);
+        getQuill()?.focus();
+    };
+    const confirmFormula = (latex: string) => {
+        const quill = getQuill();
+        const target = formulaTarget;
+        setFormulaTarget(null);
+        if (!quill || !target) return;
+        if (target.length > 0) quill.deleteText(target.index, target.length, "user");
+        quill.insertEmbed(target.index, FORMULA_FORMAT, latex, "user");
+        quill.setSelection(target.index + 1, 0, "user");
+    };
+    const formulaDialog = (
+        <FormulaDialog
+            key={formulaOpening}
+            open={formulaTarget != null}
+            initialValue={formulaTarget?.value ?? ""}
+            editing={formulaTarget?.editing ?? false}
+            onConfirm={confirmFormula}
+            onCancel={closeFormula}
+        />
+    );
     const editor = (
         <div className="celuma-quill" ref={wrapperRef} style={spelling ? { position: "relative" } : undefined}>
             <style>{`
@@ -298,6 +420,7 @@ export default function CelumaRichText({
             />
             {assist.layer}
             {assist.description}
+            {formulaDialog}
         </div>
     );
     if (!spelling) return editor;
